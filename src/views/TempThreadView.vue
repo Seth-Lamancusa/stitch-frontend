@@ -24,7 +24,8 @@
       :is-temporary-thread="true"
       :can-interact="canInteract"
       ref="replyBox"
-      @send="sendReply"
+      @send-success="handleSendSuccess"
+      @send-error="handleSendError"
     />
 
     <!-- ChatGPT Import Modal -->
@@ -112,12 +113,12 @@
       </div>
     </div>
     
-    <!-- Loading Overlay -->
-    <div v-if="isImporting" class="loading-overlay">
+    <!-- Loading Overlay (for both sending and importing) -->
+    <div v-if="isCreatingThread" class="loading-overlay">
       <div class="loading-content">
         <div class="import-spinner"></div>
-        <p class="loading-message">Importing from ChatGPT...</p>
-        <p class="loading-submessage">Creating a new thread with your conversation</p>
+        <p class="loading-message">Creating new thread...</p>
+        <p class="loading-submessage">This will only take a moment</p>
       </div>
     </div>
   </div>
@@ -126,12 +127,13 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import ReplyBox from '../components/ReplyBox.vue';
 
 // Setup store and routing
 const store = useStore();
 const router = useRouter();
+const route = useRoute();
 
 // Refs
 const messageList = ref(null);
@@ -150,8 +152,30 @@ const newImportRecipient = ref('');
 
 // Computed properties from store
 const user = computed(() => store.getters['auth/user']);
-const canInteract = computed(() => store.getters['auth/canInteract']);
-const messageId = computed(() => store.getters['navigation/selectedMessageId']);
+const canInteract = computed(() => {
+  console.log("TempThreadView - checking canInteract:", 
+    user.value?.status, 
+    store.getters['auth/isAdmin'], 
+    store.getters['auth/isWhitelisted'],
+    store.getters['auth/canInteract']
+  );
+  
+  // First priority: direct user status check
+  if (user.value?.status === 'admin' || user.value?.status === 'whitelisted') {
+    return true;
+  }
+  
+  // Fallback to the store properties if status isn't available directly
+  // This handles timing issues where status might not be populated yet
+  if (store.getters['auth/isAdmin'] || store.getters['auth/isWhitelisted']) {
+    return true;
+  }
+  
+  return false;
+});
+
+// Add computed property for current reply visibility
+const isPublic = computed(() => store.getters['navigation/replyIsPublic']);
 
 // Computed property to check if import is valid
 const isImportValid = computed(() => {
@@ -162,32 +186,19 @@ const isImportValid = computed(() => {
   return importRecipients.value.length > 0;
 });
 
+// Update the refs
+const isCreatingThread = ref(false);
+
 // Lifecycle hooks
 onMounted(async () => {
-  // Get current temp thread settings
-  const tempThread = store.getters['ui/tempThread'];
+  // Reset visibility settings for new threads
+  console.log(`[TempThreadView] Resetting visibility settings for new thread`);
   
-  if (tempThread) {
-    // Set initial reply settings based on the thread's public/private status
-    store.dispatch('navigation/updateReplyVisibility', tempThread.public);
-    
-    // Clear any existing recipients
-    const currentRecipients = store.getters['navigation/replyRecipients'];
-    if (currentRecipients.length > 0) {
-      currentRecipients.forEach((_, index) => {
-        store.dispatch('navigation/removeRecipient', 0); // Always remove the first item
-      });
-    }
-    
-    // Add any recipients from the temp thread
-    if (tempThread.recipients && tempThread.recipients.length > 0) {
-      tempThread.recipients.forEach(recipient => {
-        store.dispatch('navigation/addRecipient', recipient);
-      });
-    }
-    
-    console.log(`Initialized new thread with visibility: ${tempThread.public ? 'public' : 'private'} and ${tempThread.recipients?.length || 0} recipients`);
-  }
+  // Set default visibility to public and clear recipients in one call
+  store.dispatch('navigation/setVisibilitySettings', {
+    isPublic: true,
+    recipients: []
+  });
   
   // Focus the reply box textarea on mount
   nextTick(() => {
@@ -213,55 +224,29 @@ const cancelThread = () => {
     }
   }
   
-  // Get the temp thread ID before clearing it
-  const tempThreadId = messageId.value;
-  
-  // Remove from UI store
-  store.dispatch('ui/clearTempThread');
-  
-  // Remove from messages store
-  store.dispatch('messages/removeTemporaryThread', tempThreadId);
-  
   // Navigate back to chat list
   router.push('/chat');
 };
 
-const sendReply = async ({ content, isPublic, recipients }) => {
-  if (!content.trim()) return;
-  
-  // Make sure we have a user and email
-  if (!user.value || !user.value.email) {
-    store.commit('ui/SET_ERROR', 'You need to be logged in to send messages.');
-    return;
-  }
-  
+const handleSendSuccess = async (newMessage) => {
   try {
-    const tempThreadId = messageId.value;
-    
-    // Create a new message using the same action as replies
-    const newMessage = await store.dispatch('messages/sendReply', {
-      // No parentId for a new thread
-      content: content,
-      isPrivate: !isPublic,
-      recipients,
-      // Ensure the author is explicitly set to the user's email
-      content_author: user.value.email
-    });
-    
-    // Clean up temporary state
-    store.dispatch('ui/clearTempThread');
-    store.dispatch('messages/removeTemporaryThread', tempThreadId);
-    
-    // IMPORTANT: Immediately subscribe to the new message ID
-    const WebSocketService = await import('../services/WebSocketService').then(m => m.default);
-    WebSocketService.subscribeToMessage(newMessage.id);
+    // Set loading state to show overlay
+    isCreatingThread.value = true;
     
     // Redirect to the new thread
     router.replace({ name: 'thread', params: { id: newMessage.id }});
   } catch (error) {
-    console.error('Error sending message:', error);
-    store.commit('ui/SET_ERROR', 'Failed to send message. Please try again.');
+    console.error('Error handling message success:', error);
+    store.commit('ui/SET_ERROR', 'Failed to complete thread creation.');
+  } finally {
+    // This may not execute if navigation happens first
+    isCreatingThread.value = false;
   }
+};
+
+const handleSendError = (error) => {
+  console.error('Error sending message:', error);
+  store.commit('ui/SET_ERROR', 'Failed to create thread. Please try again.');
 };
 
 // Toggle import recipient selector
@@ -322,7 +307,7 @@ const importFromChatGPT = async () => {
   
   try {
     // Set loading state
-    isImporting.value = true;
+    isCreatingThread.value = true;
     
     // Close the modal but show a loading overlay
     showImportModal.value = false;
@@ -330,19 +315,12 @@ const importFromChatGPT = async () => {
     // Clean up modal event listeners when closing
     document.removeEventListener('click', handleImportClickOutside);
     
-    // Get the temp thread ID
-    const tempThreadId = messageId.value;
-    
     // Import the conversation using the dedicated endpoint
     const newMessage = await store.dispatch('messages/importChatGPT', {
       content: chatgptContent.value,
       isPublic: importIsPublic.value,
       recipients: importRecipients.value
     });
-    
-    // Clean up temporary state
-    store.dispatch('ui/clearTempThread');
-    store.dispatch('messages/removeTemporaryThread', tempThreadId);
     
     // Reset all import state
     chatgptContent.value = '';
@@ -355,7 +333,7 @@ const importFromChatGPT = async () => {
     store.commit('ui/SET_ERROR', 'Failed to import from ChatGPT');
   } finally {
     // Reset loading state
-    isImporting.value = false;
+    isCreatingThread.value = false;
   }
 };
 </script>

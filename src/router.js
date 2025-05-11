@@ -5,6 +5,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 // Import components
 import ListView from './views/ListView.vue';
 import ThreadView from './views/ThreadView.vue';
+import TempThreadView from './views/TempThreadView.vue';
 
 const routes = [
   {
@@ -22,6 +23,12 @@ const routes = [
     name: 'thread',
     component: ThreadView,
     meta: { requiresAuth: false }
+  },
+  {
+    path: '/new-thread',
+    name: 'new-thread',
+    component: TempThreadView,
+    meta: { requiresAuth: true }
   },
   // Redirect from /chat to /messages to maintain backward compatibility
   {

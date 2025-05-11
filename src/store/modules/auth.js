@@ -1,7 +1,7 @@
 import { getFirebaseAuth, initializeFirebase } from '../../firebase.js'
 import WhitelistService from '../../services/WhitelistService'
 import UserService from '../../services/UserService'
-import { updateProfile as firebaseUpdateProfile } from 'firebase/auth'
+import { updateProfile as firebaseUpdateProfile, onAuthStateChanged } from 'firebase/auth'
 
 export default {
   namespaced: true,
@@ -16,7 +16,23 @@ export default {
   
   mutations: {
     SET_USER(state, user) {
-      state.user = user;
+      // If user is null, clear the state
+      if (!user) {
+        state.user = null;
+        state.isAuthenticated = false;
+        return;
+      }
+      
+      // Always ensure these fields are defined with proper fallbacks
+      state.user = {
+        uid: user.uid,
+        email: user.email || '',
+        displayName: user.displayName || '',
+        user_tag: user.user_tag || '',
+        photoURL: user.photoURL || null,
+        status: user.status || 'unverified'
+      };
+      
       state.isAuthenticated = !!user;
     },
     
@@ -44,6 +60,7 @@ export default {
   },
   
   actions: {
+    // Centralized auth initialization - only called once from main.js or App.vue
     async initAuth({ commit, dispatch }) {
       try {
         await initializeFirebase();
@@ -51,8 +68,18 @@ export default {
         
         if (auth) {
           return new Promise((resolve) => {
-            const unsubscribe = auth.onAuthStateChanged((userData) => {
+            // Set a timeout to prevent infinite loading if auth state never resolves
+            const authTimeout = setTimeout(() => {
+              console.warn("Auth state didn't resolve in time, forcing auth ready state");
+              commit('SET_AUTH_READY', true);
+              resolve();
+            }, 5000);
+            
+            const unsubscribe = auth.onAuthStateChanged(async (userData) => {
+              clearTimeout(authTimeout);
+              
               if (userData) {
+                // Set basic user data immediately
                 commit('SET_USER', {
                   uid: userData.uid,
                   email: userData.email,
@@ -60,11 +87,9 @@ export default {
                   photoURL: userData.photoURL
                 });
                 
+                // Fetch complete user data in one go
                 if (userData.email) {
-                  dispatch('checkWhitelistStatus', userData.email);
-                  dispatch('checkAdminStatus', userData.email);
-                  // Also fetch complete user info from backend
-                  dispatch('fetchUserData', userData.uid);
+                  await dispatch('fetchCompleteUserData', userData);
                 }
               } else {
                 commit('SET_USER', null);
@@ -74,7 +99,7 @@ export default {
               
               commit('SET_AUTH_READY', true);
               resolve();
-              // Don't unsubscribe - we want to keep listening
+              // Keep listening for auth changes
             });
           });
         } else {
@@ -83,6 +108,22 @@ export default {
       } catch (error) {
         console.error('Failed to initialize auth:', error);
         commit('SET_AUTH_READY', true);
+      }
+    },
+    
+    // New action that combines all user data fetching in one place
+    async fetchCompleteUserData({ commit, dispatch }, userData) {
+      try {
+        // Register user if needed (this will either create or fetch)
+        await dispatch('registerUser', userData);
+        
+        // Get complete profile from backend
+        await dispatch('fetchUserData', userData.uid);
+        
+        // Don't need explicit whitelist/admin checks here anymore
+        // as fetchUserData already sets these based on user.status
+      } catch (error) {
+        console.error('Error fetching complete user data:', error);
       }
     },
     
@@ -99,22 +140,40 @@ export default {
     },
     
     setUser({ commit, dispatch }, userData) {
-      commit('SET_USER', userData);
-      
-      if (userData && userData.email) {
-        dispatch('checkWhitelistStatus', userData.email);
-        dispatch('checkAdminStatus', userData.email);
-        dispatch('fetchUserData', userData.uid);
+      if (userData) {
+        // Ensure we have a consistent user object with all required fields
+        const userWithDefaults = {
+          uid: userData.uid,
+          email: userData.email || '',
+          displayName: userData.displayName || '',
+          photoURL: userData.photoURL || null,
+          user_tag: userData.user_tag || '',
+          status: userData.status || 'unverified'
+        };
+        
+        commit('SET_USER', userWithDefaults);
+        
+        if (userData.email) {
+          // Fetch complete data rather than just checking status
+          dispatch('fetchCompleteUserData', userData);
+        }
+      } else {
+        commit('SET_USER', null);
+        commit('SET_WHITELIST_STATUS', false);
+        commit('SET_ADMIN_STATUS', false);
       }
     },
     
+    // Keep these for compatibility, but they're now mainly used internally
     async checkWhitelistStatus({ commit }, email) {
       try {
         const isWhitelisted = await WhitelistService.checkWhitelistStatus(email);
         commit('SET_WHITELIST_STATUS', isWhitelisted);
+        return isWhitelisted;
       } catch (error) {
         console.error('Error checking whitelist status:', error);
         commit('SET_WHITELIST_STATUS', false);
+        return false;
       }
     },
     
@@ -122,12 +181,15 @@ export default {
       try {
         const isAdmin = await WhitelistService.checkAdminStatus(email);
         commit('SET_ADMIN_STATUS', isAdmin);
+        return isAdmin;
       } catch (error) {
         console.error('Error checking admin status:', error);
         commit('SET_ADMIN_STATUS', false);
+        return false;
       }
     },
     
+    // Rest of the actions remain the same
     async updateProfile({ commit, state, dispatch }, { displayName, user_tag }) {
       try {
         const auth = getFirebaseAuth();
@@ -279,6 +341,10 @@ export default {
     isWhitelisted: state => state.isWhitelisted,
     isAdmin: state => state.isAdmin,
     authReady: state => state.authReady,
-    canInteract: state => state.isAuthenticated && state.isWhitelisted
+    canInteract: state => {
+      if (!state.isAuthenticated || !state.user) return false;
+      // Check user status directly instead of isWhitelisted flag
+      return state.user.status === 'admin' || state.user.status === 'whitelisted';
+    }
   }
 }

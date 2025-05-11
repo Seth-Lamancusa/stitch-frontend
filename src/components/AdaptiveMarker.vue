@@ -4,8 +4,14 @@
     :class="[state, position, { visible: isVisible }]"
     ref="markerElement"
   >
+    <!-- Waiting state - not yet scrolled into view -->
+    <div v-if="state === 'waiting'" class="marker-content waiting-state">
+      <div class="end-marker"></div>
+      <span class="marker-text">{{ position === 'top' ? 'Scroll up for more' : 'Scroll down for more' }}</span>
+    </div>
+    
     <!-- Loading state -->
-    <div v-if="state === 'loading'" class="marker-content loading-state">
+    <div v-else-if="state === 'loading'" class="marker-content loading-state">
       <span class="loading-spinner"></span>
       <span class="marker-text">{{ loadingText }}</span>
     </div>
@@ -21,7 +27,6 @@
       <span class="error-icon">⚠️</span>
       <span class="marker-text">{{ errorText }}</span>
       <button 
-        v-if="showRetry"
         @click="$emit('retry')" 
         class="retry-button"
       >
@@ -36,11 +41,11 @@ export default {
   name: 'AdaptiveMarker',
   
   props: {
-    // State determines what type of marker to show
+    // Required state for the marker
     state: {
       type: String,
-      default: 'loading',
-      validator: value => ['loading', 'end', 'error'].includes(value)
+      required: true,
+      validator: value => ['waiting', 'loading', 'end', 'error'].includes(value)
     },
     
     // Position determines text content and styling
@@ -62,13 +67,7 @@ export default {
       default: 'Failed to load content'
     },
     
-    // Whether to show retry button in error state
-    showRetry: {
-      type: Boolean,
-      default: true
-    },
-
-    // Added for the new loadingText computation
+    // Class name for custom styles
     className: {
       type: String,
       default: ''
@@ -78,7 +77,8 @@ export default {
   data() {
     return {
       isVisible: false,
-      observer: null
+      observer: null,
+      hasEmittedLoad: false // Track if we've emitted load-more for this render cycle
     };
   },
   
@@ -103,91 +103,100 @@ export default {
   },
   
   mounted() {
-    this.setupObserver();
+    // Nothing to observe for end or error state
+    if (this.state === 'end' || this.state === 'error') {
+      this.isVisible = true;
+      return;
+    }
+    
+    // Set up the observer for waiting state
+    if (this.active && this.state === 'waiting') {
+      this.setupObserver();
+    }
   },
   
   beforeUnmount() {
+    // Clean up the observer
     if (this.observer) {
       this.observer.disconnect();
+      this.observer = null;
+    }
+  },
+  
+  watch: {
+    // Update if state or active changes
+    state(newState) {
+      // Reset for new render cycle
+      this.hasEmittedLoad = false;
+      
+      // Clean up old observer if exists
+      if (this.observer) {
+        this.observer.disconnect();
+        this.observer = null;
+      }
+      
+      // Nothing to observe for end or error states
+      if (newState === 'end' || newState === 'error') {
+        this.isVisible = true;
+        return;
+      }
+      
+      // Set up observer for waiting state
+      if (this.active && newState === 'waiting') {
+        this.$nextTick(() => {
+          this.setupObserver();
+        });
+      }
+    },
+    
+    active(newValue) {
+      // Clean up if becoming inactive
+      if (!newValue && this.observer) {
+        this.observer.disconnect();
+        this.observer = null;
+        return;
+      }
+      
+      // Set up if becoming active and in waiting state
+      if (newValue && this.state === 'waiting' && !this.observer) {
+        this.setupObserver();
+      }
     }
   },
   
   methods: {
     setupObserver() {
-      // Only set up the observer if in loading state
-      if (this.state !== 'loading' || !this.active) {
-        this.isVisible = true; // Always show end/error states
-        return;
-      }
-      
-      // Special handling for top loading markers - make them visible immediately
-      if (this.position === 'top') {
-        this.isVisible = true;
-        // If we're in loading state and active, emit load-more after a delay
-        if (this.state === 'loading' && this.active) {
-          console.log(`AdaptiveMarker: Auto-loading more (${this.position}) - waiting 1.5s`);
-          setTimeout(() => {
-            console.log(`AdaptiveMarker: Executing delayed auto-load (${this.position})`);
-            this.$emit('load-more');
-          }, 1500); // 1.5 second delay
-        }
+      // Only set up for waiting state
+      if (this.state !== 'waiting' || !this.active) {
         return;
       }
       
       this.observer = new IntersectionObserver(entries => {
         const isIntersecting = entries[0].isIntersecting;
         
-        if (isIntersecting && this.active) {
+        if (isIntersecting) {
           this.isVisible = true;
-          // Only emit load-more event if in loading state
-          if (this.state === 'loading') {
-            console.log(`AdaptiveMarker: Loading more (${this.position}) - waiting 1.5s`);
-            // Add delay before making the API call
+          
+          // Only emit load-more if we haven't already for this cycle
+          // and we're in waiting state
+          if (!this.hasEmittedLoad && this.state === 'waiting') {
+            // Add a small delay to avoid too many rapid events
             setTimeout(() => {
-              console.log(`AdaptiveMarker: Executing delayed load (${this.position})`);
+              this.hasEmittedLoad = true;
               this.$emit('load-more');
-            }, 1500); // 1.5 second delay
+            }, 300);
           }
         } else {
           this.isVisible = false;
         }
       }, {
-        rootMargin: '100px',
+        rootMargin: '100px', // Start loading a bit before scrolling into view
         threshold: 0.1
       });
       
-      this.observer.observe(this.$refs.markerElement);
-    }
-  },
-  
-  watch: {
-    // Update observer when state changes
-    state(newState, oldState) {
-      console.log(`AdaptiveMarker state changed: ${oldState} -> ${newState}`);
-      
-      if (this.observer) {
-        this.observer.disconnect();
+      if (this.$refs.markerElement) {
+        this.observer.observe(this.$refs.markerElement);
       }
-      
-      this.$nextTick(() => {
-        this.setupObserver();
-        
-        // If state changes to 'end', ensure marker is visible
-        if (newState === 'end') {
-          this.isVisible = true;
-        }
-      });
-    },
-    
-    // Update observer when active state changes
-    active() {
-      if (this.observer) {
-        this.observer.disconnect();
-      }
-      
-      this.$nextTick(() => {
-        this.setupObserver();
-      });
     }
   }
 }
@@ -232,20 +241,30 @@ export default {
   position: relative;
 }
 
-.end-marker::before {
+.end-marker:before,
+.end-marker:after {
   content: '';
   position: absolute;
-  top: 50%;
-  left: 0;
   width: 100%;
-  height: 2px;
-  background-color: var(--border-color, #ddd);
-  transform: translateY(-50%);
+  left: 0;
+  border-top: 1px solid var(--text-color-light, #666);
 }
 
-/* Error state styling */
+.end-marker:before {
+  top: 45%;
+}
+
+.end-marker:after {
+  top: 55%;
+}
+
+.marker-text {
+  font-size: 0.9em;
+  color: var(--text-color-light, #666);
+}
+
 .error-icon {
-  font-size: 20px;
+  font-size: 1.2em;
 }
 
 .retry-button {
@@ -254,34 +273,33 @@ export default {
   border: none;
   border-radius: 4px;
   padding: 4px 8px;
-  font-size: 0.85em;
   cursor: pointer;
-  margin-left: 8px;
+  font-size: 0.8em;
 }
 
 .retry-button:hover {
-  background-color: var(--primary-color-dark, #0056b3);
-}
-
-.marker-text {
-  color: var(--text-color-light, #777);
-  font-style: italic;
-}
-
-/* Position-specific styling */
-.adaptive-marker.top .marker-content {
-  border-bottom: 1px solid var(--border-color, #ddd);
-  padding-bottom: 10px;
-}
-
-.adaptive-marker.bottom .marker-content {
-  border-top: 1px solid var(--border-color, #ddd);
-  padding-top: 10px;
+  background-color: var(--primary-color-dark, #0069d9);
 }
 
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+  .loading-spinner {
+    border-color: rgba(255, 255, 255, 0.1);
+    border-top-color: var(--primary-color, #007bff);
+  }
+  
+  .end-marker:before,
+  .end-marker:after {
+    border-top-color: var(--text-color-light-dark, #aaa);
+  }
+  
+  .marker-text {
+    color: var(--text-color-light-dark, #aaa);
   }
 }
 </style> 

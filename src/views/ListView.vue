@@ -1,9 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import { signOut, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { getFirebaseAuth } from '../firebase.js';
 import { useRouter, useRoute } from 'vue-router';
 import { useStore } from 'vuex';
+import { useAuthentication } from '../composables/useAuthentication';
 import TabNavigation from '../components/TabNavigation.vue';
 import MessageList from '../components/MessageList.vue';
 import ProfileEditModal from '../components/ProfileEditModal.vue';
@@ -18,6 +17,8 @@ import ProfileEditModal from '../components/ProfileEditModal.vue';
 const router = useRouter();
 const route = useRoute();
 const store = useStore();
+const { login, logout } = useAuthentication();
+
 const user = computed(() => store.getters['auth/user']);
 const activeTab = computed(() => store.getters['ui/activeTab']);
 const isWhitelisted = computed(() => store.getters['auth/isWhitelisted']);
@@ -26,27 +27,21 @@ const canInteract = computed(() => store.getters['auth/canInteract']);
 const isLoggingIn = ref(false);
 const isProfileModalOpen = ref(false);
 
-const logout = async () => {
-  try {
-    await signOut(getFirebaseAuth());
-    store.dispatch('auth/setUser', null);
-  } catch (error) {
-    console.error("Error signing out:", error);
-  }
-};
+// New computed properties for user display
+const userDisplayName = computed(() => {
+  if (!user.value) return 'Guest';
+  return user.value.displayName || user.value.email || 'Unknown User';
+});
 
-const login = async () => {
+const userTag = computed(() => {
+  if (!user.value) return null;
+  return user.value.user_tag || null;
+});
+
+const handleLogin = async () => {
   isLoggingIn.value = true;
   try {
-    const provider = new GoogleAuthProvider();
-    const result = await signInWithPopup(getFirebaseAuth(), provider);
-    store.dispatch('auth/setUser', result.user);
-    
-    // Check if user email is whitelisted and admin status
-    if (result.user.email) {
-      store.dispatch('auth/checkWhitelistStatus', result.user.email);
-      store.dispatch('auth/checkAdminStatus', result.user.email);
-    }
+    await login();
     
     // Handle redirect if there was one
     if (route.query.redirect) {
@@ -73,18 +68,7 @@ const closeProfileModal = () => {
   isProfileModalOpen.value = false;
 };
 
-onMounted(() => {
-  // Add null check before trying to access currentUser
-  const auth = getFirebaseAuth();
-  if (auth && auth.currentUser) {
-    store.dispatch('auth/setUser', auth.currentUser);
-    
-    if (auth.currentUser.email) {
-      store.dispatch('auth/checkWhitelistStatus', auth.currentUser.email);
-      store.dispatch('auth/checkAdminStatus', auth.currentUser.email);
-    }
-  }
-});
+// No need for onMounted with direct Firebase calls - the auth store handles initialization
 </script>
 
 <template>
@@ -99,25 +83,19 @@ onMounted(() => {
         
         <div class="user-controls">
           <div class="user-info">
-            <img 
-              v-if="user?.photoURL" 
-              :src="user.photoURL" 
-              alt="Profile" 
-              class="profile-pic" 
-              @click="openProfileModal"
-            />
             <div class="username-container" @click="openProfileModal" v-if="user">
-            <span class="username">{{ user?.displayName || user?.email || 'Guest' }}</span>
+              <span class="username">{{ userDisplayName }}</span>
+              <span v-if="userTag" class="user-tag">@{{ userTag }}</span>
               <span class="edit-icon" title="Edit profile">✎</span>
             </div>
             <span v-else class="username">Guest</span>
-            <span v-if="user && isAdmin" class="admin-badge" title="Admin">⛊</span>
-            <span v-else-if="user && isWhitelisted" class="whitelist-badge" title="Whitelisted">✓</span>
-            <span v-else-if="user && !isWhitelisted" class="non-whitelist-badge" title="Not whitelisted">✗</span>
+            <span v-if="user && user.status === 'admin'" class="admin-badge" title="Admin">⛊</span>
+            <span v-else-if="user && user.status === 'whitelisted'" class="whitelist-badge" title="Whitelisted">✓</span>
+            <span v-else-if="user && user.status !== 'admin' && user.status !== 'whitelisted'" class="non-whitelist-badge" title="Not whitelisted">✗</span>
             <span v-if="!user" class="guest-badge" title="Not logged in">?</span>
           </div>
           <button v-if="user" @click="logout" class="logout-btn">Logout</button>
-          <button v-else @click="login" class="login-btn" :disabled="isLoggingIn">
+          <button v-else @click="handleLogin" class="login-btn" :disabled="isLoggingIn">
             {{ isLoggingIn ? 'Signing in...' : 'Login' }}
           </button>
         </div>
@@ -179,14 +157,6 @@ onMounted(() => {
   margin-right: var(--spacing-sm);
 }
 
-.profile-pic {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  object-fit: cover;
-  cursor: pointer; /* Add cursor pointer to indicate clickable */
-}
-
 .username-container {
   display: flex;
   align-items: center;
@@ -208,6 +178,12 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.user-tag {
+  font-size: 0.85em;
+  color: var(--text-color-light);
+  opacity: 0.8;
 }
 
 .edit-icon {

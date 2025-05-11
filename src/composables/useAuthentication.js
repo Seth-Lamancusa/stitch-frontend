@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import { auth } from '../firebase.js';
+import { getFirebaseAuth } from '../firebase.js';
 import { signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { useRouter } from 'vue-router';
 import { useStore } from 'vuex';
@@ -28,8 +28,12 @@ export function useAuthentication() {
     const provider = new GoogleAuthProvider();
     try {
       error.value = null;
+      const auth = getFirebaseAuth();
       const result = await signInWithPopup(auth, provider);
-      store.dispatch('updateUser', result.user);
+      
+      // Let the store handle all auth state management
+      store.dispatch('auth/setUser', result.user);
+      
       router.push('/chat');
     } catch (e) {
       error.value = e.message;
@@ -42,8 +46,12 @@ export function useAuthentication() {
    */
   const logout = async () => {
     try {
+      const auth = getFirebaseAuth();
       await signOut(auth);
-      store.dispatch('updateUser', null);
+      
+      // Let the store handle clearing user state
+      store.dispatch('auth/setUser', null);
+      
       router.push('/');
     } catch (e) {
       error.value = e.message;

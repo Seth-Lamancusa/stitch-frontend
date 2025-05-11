@@ -3,11 +3,19 @@
     class="message-node" 
     :class="{ 'selected': isSelected, 'pinned': isPinned }"
   >
+    <!-- Add sibling navigator if message has a parent -->
+    <sibling-navigator
+      v-if="message.parent_id"
+      :message-id="message.id"
+      :parent-id="message.parent_id"
+      @navigate="handleSiblingNavigation"
+    />
+    
     <div class="message-content">
       <div class="message-header">
         <div class="author-section">
           <div class="author-info">
-            <span class="message-author">{{ authorDisplayName }}</span>
+            <span class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ authorDisplayName }}</span>
             <span v-if="authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
           </div>
           
@@ -16,11 +24,12 @@
             Public
           </span>
           
-          <!-- To You badge with recipients dropdown (for recipients) -->
+          <!-- To You badge (for recipients) -->
           <div v-if="isUserRecipient" class="recipients-dropdown-container">
             <button 
-              @click.stop="toggleRecipientsDropdown" 
+              @click.stop="toggleRecipientsDropdown('to-you')" 
               class="recipients-toggle to-you"
+              ref="toYouButton"
             >
               <!-- If only the user is recipient -->
               <span v-if="recipientsExcludingUser.length === 0">
@@ -31,50 +40,34 @@
                 To You and {{ recipientsExcludingUser.length }} other{{ recipientsExcludingUser.length > 1 ? 's' : '' }}
               </span>
             </button>
-            
-            <!-- Recipients dropdown -->
-            <div v-if="showRecipientsDropdown" class="recipients-dropdown">
-              <div class="dropdown-header">
-                Recipients
-                <button @click.stop="toggleRecipientsDropdown" class="close-dropdown">×</button>
-              </div>
-              <ul class="recipients-list">
-                <li v-if="currentUser" class="recipient-item current-user">
-                  {{ currentUser.email }} <span class="user-tag">(you)</span>
-                </li>
-                <li v-for="(recipient, index) in recipientsExcludingUser" 
-                    :key="index" 
-                    class="recipient-item"
-                >
-                  {{ recipient }}
-                  <span v-if="isUserAuthorOfContent(recipient)" class="author-tag">(author)</span>
-                </li>
-              </ul>
-            </div>
           </div>
           
-          <!-- Recipients dropdown for authors who are not recipients -->
-          <div v-else-if="isUserAuthor && hasRecipients" class="recipients-dropdown-container author-container">
+          <!-- Recipients badge (for authors) -->
+          <div v-if="isUserAuthor && hasRecipients" class="recipients-dropdown-container author-container">
             <button 
-              @click.stop="toggleRecipientsDropdown" 
+              @click.stop="toggleRecipientsDropdown('author')" 
               class="recipients-toggle author-toggle"
+              ref="authorButton"
             >
               Recipients ({{ message.recipients.length }})
             </button>
-            
-            <!-- Recipients dropdown -->
-            <div v-if="showRecipientsDropdown" class="recipients-dropdown author-dropdown">
+          </div>
+          
+          <!-- Unified Recipients dropdown -->
+          <div v-if="showRecipientsDropdown" class="recipients-dropdown-overlay" @click="showRecipientsDropdown = false">
+            <div class="recipients-dropdown" :style="dropdownPositionStyle" @click.stop>
               <div class="dropdown-header">
                 Recipients
-                <button @click.stop="toggleRecipientsDropdown" class="close-dropdown">×</button>
+                <button @click.stop="showRecipientsDropdown = false" class="close-dropdown">×</button>
               </div>
               <ul class="recipients-list">
-                <li v-for="(recipient, index) in message.recipients" 
-                    :key="index" 
-                    class="recipient-item"
+                <li 
+                  v-for="(recipient, index) in message.recipients" 
+                  :key="recipient.uid || index" 
+                  class="recipient-item"
                 >
-                  {{ recipient }}
-                  <span v-if="recipient === currentUser.email" class="user-tag">(you)</span>
+                  <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
+                  <span class="recipient-tag">@{{ recipient.user_tag }}</span>
                 </li>
                 <li v-if="message.recipients.length === 0" class="no-recipients">
                   No specific recipients
@@ -94,9 +87,12 @@
             <button 
               @click.stop="togglePinStatus" 
               class="pin-button"
+              :class="{ 'loading': isPinning }"
               :title="isPinned ? 'Unpin this message' : 'Pin this message'"
+              :disabled="isPinning"
             >
-              <span class="pin-icon">📌</span>
+              <span v-if="isPinning" class="pin-loading-indicator"></span>
+              <span v-else class="pin-icon">📌</span>
               {{ isPinned ? 'Unpin' : 'Pin' }}
             </button>
             
@@ -137,29 +133,6 @@
             <span class="pin-icon">📌</span> Pinned
           </div>
         </div>
-        
-        <div class="sibling-navigation" v-if="showSiblingNav">
-          <button 
-            @click.stop="$emit('navigate', 'prev')" 
-            class="nav-button"
-            :disabled="!hasPrevSibling"
-          >
-            &larr;
-          </button>
-          
-          <div class="sibling-position">
-            <span v-if="isLoadingSiblings" class="sibling-loading-indicator"></span>
-            <span v-else>{{ siblingPosition }} / {{ parentTotalReplies }}</span>
-          </div>
-          
-          <button 
-            @click.stop="$emit('navigate', 'next')" 
-            class="nav-button"
-            :disabled="!hasNextSibling"
-          >
-            &rarr;
-          </button>
-        </div>
       </div>
     </div>
     
@@ -179,6 +152,7 @@
               v-model="editableTitle" 
               type="text" 
               placeholder="Message title"
+              ref="titleInput"
             />
           </div>
           
@@ -190,6 +164,10 @@
               rows="3" 
               placeholder="Brief description of this message"
             ></textarea>
+          </div>
+          
+          <div v-if="saveMessage" class="save-status" :class="{ 'error': saveError }">
+            {{ saveMessage }}
           </div>
         </div>
         
@@ -210,14 +188,16 @@
 
 <script>
 import AdaptiveMarker from './AdaptiveMarker.vue';
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
+import SiblingNavigator from './SiblingNavigator.vue';
+import { computed, ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
 
 export default {
   name: 'MessageNode',
   
   components: {
-    AdaptiveMarker
+    AdaptiveMarker,
+    SiblingNavigator
   },
   
   props: {
@@ -241,37 +221,9 @@ export default {
       type: Number,
       default: 0
     },
-    parentTotalReplies: {
-      type: Number,
-      default: 0
-    },
     canReply: {
       type: Boolean,
       default: true
-    },
-    hasPrevSibling: {
-      type: Boolean,
-      default: false
-    },
-    hasNextSibling: {
-      type: Boolean,
-      default: false
-    },
-    showSiblingNav: {
-      type: Boolean,
-      default: false
-    },
-    isFirstSibling: {
-      type: Boolean,
-      default: false
-    },
-    isLastSibling: {
-      type: Boolean,
-      default: false
-    },
-    siblingPosition: {
-      type: Number,
-      default: 0
     }
   },
   
@@ -280,36 +232,76 @@ export default {
     const currentUser = computed(() => store.getters['auth/user']);
     const isAdmin = computed(() => store.getters['auth/isAdmin']);
     const showRecipientsDropdown = ref(false);
+    const lastClickedBadge = ref(null);
+    const toYouButton = ref(null);
+    const authorButton = ref(null);
+    const dropdownPositionStyle = ref({});
     
     // Title/Description Modal
     const showTitleDescModal = ref(false);
     const editableTitle = ref('');
     const editableDescription = ref('');
     const isSaving = ref(false);
+    const saveMessage = ref('');
+    const saveError = ref(false);
+    const titleInput = ref(null);
     
     const openTitleDescriptionModal = () => {
       editableTitle.value = props.message.title || '';
       editableDescription.value = props.message.description || '';
       showTitleDescModal.value = true;
+      
+      // Clear any previous status message
+      saveMessage.value = '';
+      saveError.value = false;
+      
+      // Focus the title input after the modal is shown
+      nextTick(() => {
+        if (titleInput.value) {
+          titleInput.value.focus();
+        }
+      });
     };
     
     const closeTitleDescModal = () => {
       showTitleDescModal.value = false;
+      // Clear any status message
+      saveMessage.value = '';
+      saveError.value = false;
     };
     
     const saveTitleAndDescription = async () => {
+      // For now just close the modal, since updateMessage action was removed
+      isSaving.value = true;
+      
       try {
-        isSaving.value = true;
-        await store.dispatch('messages/updateMessage', {
-          id: props.message.id,
-          title: editableTitle.value.trim() || null,
-          description: editableDescription.value.trim() || null
+        // Create update data object with only the fields that should be sent
+        const updateData = {};
+        
+        // Always send both fields, with null for empty strings
+        // This explicitly indicates we want to clear the field if it's empty
+        updateData.title = editableTitle.value.trim() || null;
+        updateData.description = editableDescription.value.trim() || null;
+        
+        // Call the store action to update title and description
+        const success = await store.dispatch('messages/updateTitleDescription', {
+          messageId: props.message.id,
+          ...updateData
         });
         
-        closeTitleDescModal();
+        if (success) {
+          closeTitleDescModal();
+          saveMessage.value = 'Title and description saved successfully!';
+        } else {
+          // Handle error - could add error state here if needed
+          console.error('Failed to save title and description');
+          saveError.value = true;
+          saveMessage.value = 'Failed to save title and description. Please try again later.';
+        }
       } catch (error) {
-        console.error('Error saving title/description:', error);
-        // You could add error handling/display here
+        console.error('Error saving title and description:', error);
+        saveError.value = true;
+        saveMessage.value = 'An error occurred while saving title and description. Please try again later.';
       } finally {
         isSaving.value = false;
       }
@@ -322,21 +314,43 @@ export default {
     });
     
     const isUserRecipient = computed(() => {
-      if (!currentUser.value || !currentUser.value.email || !props.message.recipients) {
+      if (!currentUser.value) return false;
+      
+      // Check if the current user is in the recipients list
+      return props.message.recipients.some(recipient => {
+        // Check by UID first (most reliable)
+        if (recipient.uid === currentUser.value.uid) {
+          return true;
+        }
+        
+        // Fallback check by user_tag
+        if (recipient.user_tag && currentUser.value.user_tag && 
+            recipient.user_tag === currentUser.value.user_tag) {
+          return true;
+        }
+        
+        // Last resort: check by email for backward compatibility
+        if (recipient.user_tag && currentUser.value.email && 
+            recipient.user_tag === currentUser.value.email) {
+          return true;
+        }
+        
         return false;
-      }
-      const result = props.message.recipients.includes(currentUser.value.email);
-      return result;
+      });
     });
     
     // Check if message is pinned
     const isPinned = computed(() => {
-      return props.message.is_pinned === 1;
+      return props.message.is_pinned === 1 || props.message.is_pinned === true;
     });
+    
+    const isPinning = ref(false);
     
     // Toggle pin status
     const togglePinStatus = async () => {
       try {
+        isPinning.value = true;
+        
         if (isPinned.value) {
           await store.dispatch('messages/unpinMessage', props.message.id);
         } else {
@@ -344,90 +358,48 @@ export default {
         }
       } catch (error) {
         console.error('Error toggling pin status:', error);
+      } finally {
+        isPinning.value = false;
       }
     };
     
     // Get recipients excluding the current user
     const recipientsExcludingUser = computed(() => {
-      if (!props.message.recipients || !currentUser.value) {
-        return props.message.recipients || [];
+      if (!currentUser.value || !props.message.recipients) {
+        return [];
       }
       
-      return props.message.recipients.filter(
-        recipient => recipient !== currentUser.value.email
-      );
-    });
-    
-    // Get author email for display
-    const authorEmail = computed(() => {
-      // Check for new author fields first
-      if (props.message.author_email) {
-        return props.message.author_email;
-      }
-      // Fall back to content_author (for compatibility with existing data)
-      return props.message.content_author;
+      return props.message.recipients.filter(recipient => {
+        // First check by UID
+        if (recipient.uid && currentUser.value.uid && 
+            recipient.uid === currentUser.value.uid) {
+          return false;
+        }
+        
+        // Then check by user_tag
+        if (recipient.user_tag && currentUser.value.user_tag && 
+            recipient.user_tag === currentUser.value.user_tag) {
+          return false;
+        }
+        
+        // Finally check by email for backward compatibility
+        if (recipient.user_tag && currentUser.value.email && 
+            recipient.user_tag === currentUser.value.email) {
+          return false;
+        }
+        
+        return true;
+      });
     });
     
     // Get author display name
     const authorDisplayName = computed(() => {
-      // For all authors (including ChatGPT), use display name from database when available
-      if (props.message.author_display_name) {
-        return props.message.author_display_name;
-      }
-      
-      // Special case for ChatGPT (fallback)
-      if (props.message.content_author === 'chatgpt' || props.message.content_author === 'chatgpt-system' || props.message.author_email === 'chatgpt') {
-        return 'ChatGPT';
-      }
-      
-      // If the current user is the author, prefer the up-to-date display name from auth state
-      if (currentUser.value && (
-          props.message.content_author === currentUser.value.uid || 
-          props.message.author_email === currentUser.value.email
-        )) {
-        // Use the current user's display name from the auth store (most up-to-date)
-        if (currentUser.value.displayName) {
-          return currentUser.value.displayName;
-        }
-      }
-      
-      // For email-only authors (legacy data)
-      if (props.message.author_email_display) {
-        return props.message.author_email_display;
-      }
-      
-      // Use user tag if no display name is available
-      if (props.message.author_user_tag) {
-        return props.message.author_user_tag;
-      }
-      
-      // Last resort: use content_author (may be a UUID now)
-      return props.message.content_author;
+      return props.message.author_display_name || '';
     });
     
     // Get author user tag
     const authorUserTag = computed(() => {
-      // Skip for ChatGPT
-      if (props.message.content_author === 'chatgpt' || props.message.content_author === 'chatgpt-system' || props.message.author_email === 'chatgpt') {
-        return null;
-      }
-      
-      // If the current user is the author, use their tag from auth state
-      if (currentUser.value && (
-          props.message.content_author === currentUser.value.uid || 
-          props.message.author_email === currentUser.value.email
-        )) {
-        if (currentUser.value.user_tag) {
-          return currentUser.value.user_tag;
-        }
-      }
-      
-      // Otherwise use the tag from the message
-      if (props.message.author_user_tag) {
-        return props.message.author_user_tag;
-      }
-      
-      return null;
+      return props.message.author_user_tag || null;
     });
     
     // Check if the current user is the author of the message
@@ -456,13 +428,21 @@ export default {
     
     // Utility function to check if a recipient is the author
     const isUserAuthorOfContent = (recipient) => {
-      // Special case for ChatGPT
-      if (props.message.content_author === 'chatgpt' || props.message.content_author === 'chatgpt-system' || props.message.author_email === 'chatgpt') {
-        return recipient === 'chatgpt';
+      if (!props.message || !recipient) return false;
+      
+      // The message author UID should match the recipient UID
+      if (props.message.content_author && recipient.uid && 
+          props.message.content_author === recipient.uid) {
+        return true;
       }
       
-      // Check if the recipient matches the author email
-      return recipient === authorEmail.value;
+      // Or the message author user_tag should match the recipient user_tag
+      if (props.message.author_user_tag && recipient.user_tag && 
+          props.message.author_user_tag === recipient.user_tag) {
+        return true;
+      }
+      
+      return false;
     };
     
     const isEndOfBranch = computed(() => {
@@ -470,40 +450,114 @@ export default {
     });
     
     const isLoadingSiblings = computed(() => {
-      // Check if parent is loading its children (siblings of this message)
-      return props.message.parent_id ? 
-        store.getters['messages/isLoading'](props.message.parent_id, 'children') : false;
+      // Check if parent exists
+      if (!props.message.parent_id) return false;
+      
+      const parentMessage = store.getters['messages/getMessage'](props.message.parent_id);
+      
+      // If parent doesn't exist in the store, show loading
+      if (!parentMessage) return true;
+      
+      // Check if parent is loading its children
+      return store.getters['messages/isLoading'](props.message.parent_id, 'children');
     });
     
     const hasRecipients = computed(() => {
       return props.message.recipients && props.message.recipients.length > 0;
     });
     
-    const toggleRecipientsDropdown = (event) => {
-      event.stopPropagation();
+    // Toggle recipients dropdown with positioning
+    const toggleRecipientsDropdown = (badgeType) => {
+      lastClickedBadge.value = badgeType;
+      
+      // Toggle the dropdown visibility
       showRecipientsDropdown.value = !showRecipientsDropdown.value;
+      
+      // If opening the dropdown, position it correctly
+      if (showRecipientsDropdown.value) {
+        nextTick(() => {
+          const targetButton = badgeType === 'to-you' ? toYouButton.value : authorButton.value;
+          if (targetButton) {
+            const rect = targetButton.getBoundingClientRect();
+            dropdownPositionStyle.value = {
+              position: 'fixed',
+              top: `${rect.bottom + 2}px`,
+              left: `${rect.left}px`,
+            };
+          }
+        });
+      }
     };
     
-    // Close dropdown when clicking outside
+    // Update the click handler to be more global
     const handleClickOutside = (event) => {
-      const dropdown = document.querySelector('.recipients-dropdown');
-      const dropdownToggle = document.querySelector('.recipients-toggle');
-      
-      if (showRecipientsDropdown.value && 
-          dropdown && 
-          !dropdown.contains(event.target) &&
-          dropdownToggle &&
-          !dropdownToggle.contains(event.target)) {
+      // Simply close the dropdown no matter where clicked
+      if (showRecipientsDropdown.value) {
         showRecipientsDropdown.value = false;
       }
     };
     
+    const handleSiblingNavigation = ({ direction, targetSiblingId, parentId }) => {
+      // No longer automatically select the new target sibling
+      // Selection will be handled by the navigateToSibling action
+      // based on whether the previous sibling was selected
+      console.log(`[MessageNode] Sibling navigation: ${direction}, target: ${targetSiblingId}`);
+    };
+    
+    const isCurrentUser = computed(() => {
+      if (!currentUser.value) return false;
+      
+      // Check if the author is the current user
+      // First try to match by user tag
+      if (authorUserTag.value && currentUser.value.user_tag === authorUserTag.value) {
+        return true;
+      }
+      
+      // Then check by email
+      if (props.message.author_email && currentUser.value.email === props.message.author_email) {
+        return true;
+      }
+      
+      // Finally check content_author for older messages
+      if (props.message.content_author === currentUser.value.uid) {
+        return true;
+      }
+      
+      return false;
+    });
+    
+    // Add new helper method to check if current user is a recipient
+    const isCurrentUserRecipient = (recipient) => {
+      if (!currentUser.value || !recipient) return false;
+      
+      // Check by UID
+      if (recipient.uid && currentUser.value.uid && 
+          recipient.uid === currentUser.value.uid) {
+        return true;
+      }
+      
+      // Check by user_tag
+      if (recipient.user_tag && currentUser.value.user_tag && 
+          recipient.user_tag === currentUser.value.user_tag) {
+        return true;
+      }
+      
+      // Check by email for backward compatibility
+      if (recipient.user_tag && currentUser.value.email && 
+          recipient.user_tag === currentUser.value.email) {
+        return true;
+      }
+      
+      return false;
+    };
+    
+    // Listen in the capture phase to get clicks before other handlers
     onMounted(() => {
-      document.addEventListener('click', handleClickOutside);
+      document.addEventListener('click', handleClickOutside, true);
     });
     
     onBeforeUnmount(() => {
-      document.removeEventListener('click', handleClickOutside);
+      document.removeEventListener('click', handleClickOutside, true);
     });
     
     return {
@@ -523,14 +577,23 @@ export default {
       saveTitleAndDescription,
       hasReplies: computed(() => props.totalReplies > 0),
       isEndOfBranch,
-      isLoadingSiblings,
       hasRecipients,
       showRecipientsDropdown,
       toggleRecipientsDropdown,
       recipientsExcludingUser,
       authorDisplayName,
       authorUserTag,
-      isUserAuthorOfContent
+      isUserAuthorOfContent,
+      isPinning,
+      handleSiblingNavigation,
+      isCurrentUser,
+      isCurrentUserRecipient,
+      toYouButton,
+      authorButton,
+      dropdownPositionStyle,
+      saveMessage,
+      saveError,
+      titleInput
     };
   },
   
@@ -546,6 +609,17 @@ export default {
 .message-node {
   margin-bottom: 15px;
   transition: all 0.2s ease;
+  position: relative;
+}
+
+/* Add extra horizontal margin for messages with siblings */
+/* First selector uses :has() which isn't supported in all browsers */
+.message-node:has(> .sibling-navigator) .message-content,
+/* Fallback for browsers that don't support :has() */
+.message-node > .sibling-navigator ~ .message-content {
+  margin-left: 40px;
+  margin-right: 40px;
+  max-width: calc(100% - 80px);
 }
 
 .message-content {
@@ -587,6 +661,11 @@ export default {
   font-weight: bold;
 }
 
+.message-author.current-user-name {
+  font-weight: 800;
+  color: var(--primary-color, #4a90e2);
+}
+
 .author-user-tag {
   color: var(--text-color-light, #777);
   font-size: 0.85em;
@@ -603,7 +682,7 @@ export default {
 }
 
 .visibility-indicator {
-  background-color: #8bc34a;
+  background-color: #91c754;
   color: black;
 }
 
@@ -639,8 +718,8 @@ export default {
 }
 
 .recipients-toggle.author-toggle {
-  background-color: #9c27b0; /* Purple for author badge */
-  color: white;
+  background-color: #da843a; /* Dark orange for author badge */
+  color: black;
   border: none;
 }
 
@@ -648,17 +727,23 @@ export default {
   position: relative;
 }
 
-.recipients-dropdown {
-  position: absolute;
-  top: 24px;
+.recipients-dropdown-overlay {
+  position: fixed;
+  top: 0;
   left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+}
+
+.recipients-dropdown {
   background-color: var(--card-background, white);
   border: 1px solid var(--border-color, #ddd);
   border-radius: 6px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   z-index: 100;
-  min-width: 200px;
-  max-width: 300px;
+  min-width: 180px;
+  max-width: 250px;
 }
 
 .author-container {
@@ -670,58 +755,55 @@ export default {
 }
 
 .dropdown-header {
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--border-color, #ddd);
   font-weight: bold;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-size: 0.9rem;
 }
 
 .close-dropdown {
   background: none;
   border: none;
-  font-size: 18px;
+  font-size: 16px;
   cursor: pointer;
   color: var(--text-color-light, #777);
 }
 
 .recipients-list {
   list-style: none;
-  padding: 8px 0;
+  padding: 4px 0;
   margin: 0;
-  max-height: 200px;
+  max-height: 180px;
   overflow-y: auto;
 }
 
 .recipient-item {
-  padding: 4px 12px;
-  line-height: 1.4;
-  word-break: break-all;
+  padding: 4px 10px;
+  line-height: 1.3;
+  display: flex;
+  flex-direction: column;
 }
 
-.recipient-item.current-user {
-  background-color: var(--primary-color-light, #e6f2ff);
+.recipient-name {
+  font-weight: 500;
+  margin-bottom: 0;
+  font-size: 0.9rem;
 }
 
-.user-tag, .author-tag {
-  font-size: 0.85em;
+.recipient-tag {
+  font-size: 0.8em;
+  color: var(--text-color-light, #777);
   opacity: 0.8;
-  margin-left: 4px;
-}
-
-.user-tag {
-  color: var(--primary-color, #007bff);
-}
-
-.author-tag {
-  color: #9c27b0; /* Purple to match author toggle */
 }
 
 .no-recipients {
-  padding: 4px 12px;
+  padding: 4px 10px;
   color: var(--text-color-light, #777);
   font-style: italic;
+  font-size: 0.85rem;
 }
 
 .admin-controls {
@@ -812,45 +894,6 @@ export default {
   gap: 4px;
   color: var(--primary-color);
   font-weight: 500;
-}
-
-.sibling-navigation {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.nav-button {
-  background: none;
-  border: 1px solid var(--border-color, #ddd);
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text-color, #333);
-}
-
-.nav-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.sibling-position {
-  min-width: 40px;
-  text-align: center;
-}
-
-.sibling-loading-indicator {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 2px solid rgba(0, 0, 0, 0.1);
-  border-top-color: var(--primary-color, #007bff);
-  animation: spin 1s linear infinite;
 }
 
 /* Modal styles */
@@ -966,9 +1009,32 @@ export default {
   cursor: not-allowed;
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.pin-loading-indicator {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top-color: var(--primary-color, #007bff);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-right: 4px;
+}
+
+.pin-button.loading {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.save-status {
+  margin-top: 12px;
+  padding: 8px;
+  border-radius: 4px;
+  background-color: var(--card-background-active, #f0f0f0);
+  color: var(--text-color);
+  font-size: 0.85em;
+}
+
+.save-status.error {
+  background-color: var(--card-background-error, #ffcccc);
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, watch, ref, onMounted as onMountedVue, onUnmounted } from 'vue';
+import { computed, onMounted, watch, ref, onUnmounted } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter } from 'vue-router';
 import { initializeFirebase } from '../firebase';
@@ -14,42 +14,49 @@ import MessageService from '../services/MessageService';
 const store = useStore();
 const router = useRouter();
 
+// Track loading states
+const isLoadingMessages = ref(true); // Used for both initial load and refreshes
+const hasLoadedOnce = ref(false);
+
 const activeTab = computed(() => store.getters['ui/activeTab']);
+const messageListTitle = computed(() => {
+  return activeTab.value === 'public' ? 'Public Messages' : 'Private Messages';
+});
+
 const threads = computed(() => {
   const allMessages = store.getters['messages/getLoadedMessages'] || [];
   const currentUser = store.getters['auth/user'];
   const userEmail = currentUser?.email;
   
-  // Get recommended message IDs from store for filtering
-  const recommendedMessageIds = store.getters['messages/getRecommendedMessageIds'] || [];
-  
+  // Filter to only include pinned messages
   const filteredMessages = allMessages.filter(msg => {
     const isPublic = msg.public === 1 || msg.public === true;
     const isUserRecipient = userEmail && msg.recipients && 
       Array.isArray(msg.recipients) && msg.recipients.includes(userEmail);
-    const isRecommended = recommendedMessageIds.includes(msg.id);
+    const isPinned = msg.is_pinned === 1 || msg.is_pinned === true;
     
     if (activeTab.value === 'public') {
-      // Public tab: show only public messages that are recommended
-      return isPublic && isRecommended;
+      // Public tab: show pinned public messages
+      return isPublic && isPinned;
     } else {
-      // Private tab: show any private messages OR public messages where user is explicitly a recipient
-      return !isPublic || isUserRecipient;
+      // Private tab: show pinned private messages OR public pinned messages where user is explicitly a recipient
+      return isPinned && (!isPublic || isUserRecipient);
     }
   });
   
-  // Sort messages with pinned at top, then by timestamp
-  return filteredMessages.sort((a, b) => {
-    // First sort by pinned status (pinned messages come first)
-    if ((a.is_pinned === 1) && (b.is_pinned !== 1)) return -1;
-    if ((a.is_pinned !== 1) && (b.is_pinned === 1)) return 1;
-    
-    // Then sort by timestamp (newest first)
+  // Sort by timestamp (newest first)
+  const result = filteredMessages.sort((a, b) => {
     return new Date(b.timestamp) - new Date(a.timestamp);
   });
+  
+  return result;
 });
 
-const isLoading = computed(() => store.getters['ui/isLoading']('threads'));
+// For completeness, still include the global loading state
+const globalLoadingState = computed(() => {
+  return store.getters['ui/isLoading']('threads');
+});
+
 const error = computed(() => store.getters['ui/error']);
 const user = computed(() => store.getters['auth/user']);
 const isWhitelisted = computed(() => store.getters['auth/isWhitelisted']);
@@ -60,74 +67,22 @@ const replyCounts = ref({}); // Track reply counts by thread ID
 
 // Get display version of author for a message
 function getAuthorDisplay(message) {
-  const currentUser = store.getters['auth/user'];
-  
-  // Special case for ChatGPT
-  if (message.content_author === 'chatgpt' || message.content_author === 'chatgpt-system' || message.author_email === 'chatgpt') {
-    return 'ChatGPT';
-  }
-  
-  // If the current user is the author, prefer the up-to-date display name from auth state
-  if (currentUser && (
-      message.content_author === currentUser.uid || 
-      message.author_email === currentUser.email
-    )) {
-    // Use the current user's display name from the auth store (most up-to-date)
-    if (currentUser.displayName) {
-      return currentUser.displayName;
-    }
-  }
-  
-  // For other authors, use the hierarchy from the message
-  // Use display name if available
-  if (message.author_display_name) {
-    return message.author_display_name;
-  }
-  
-  // For email-only authors (legacy data)
-  if (message.author_email_display) {
-    return message.author_email_display;
-  }
-  
-  // Use user tag if no display name is available
-  if (message.author_user_tag) {
-    return message.author_user_tag;
-  }
-  
-  // If it's a special character author like email, show that
-  if (typeof message.content_author === 'string' && message.content_author.includes('@')) {
-    return message.content_author;
-  }
-  
-  // Last resort: just show content_author (could be UUID)
-  return message.content_author;
+  return message.author_display_name || '';
 }
 
 // Get author user tag
 function getAuthorUserTag(message) {
-  const currentUser = store.getters['auth/user'];
-  
-  // Skip for ChatGPT
-  if (message.content_author === 'chatgpt' || message.content_author === 'chatgpt-system' || message.author_email === 'chatgpt') {
-    return null;
+  return message.author_user_tag || null;
+}
+
+// Get reply count from child_ids
+function getReplyCount(message) {
+  // Use child_ids array if available
+  if (message.child_ids && Array.isArray(message.child_ids)) {
+    return message.child_ids.length;
   }
-  
-  // If the current user is the author, use their tag from auth state
-  if (currentUser && (
-      message.content_author === currentUser.uid || 
-      message.author_email === currentUser.email
-    )) {
-    if (currentUser.user_tag) {
-      return currentUser.user_tag;
-    }
-  }
-  
-  // Otherwise use the tag from the message
-  if (message.author_user_tag) {
-    return message.author_user_tag;
-  }
-  
-  return null;
+  // Fall back to existing counts if available
+  return replyCounts.value[message.id] || 0;
 }
 
 // Navigate to thread view when a thread is clicked
@@ -137,35 +92,24 @@ const viewThread = (threadId) => {
 
 // Create a new message thread
 const createNewThread = () => {
-  // Create a minimal temp thread object - just the ID and metadata
-  // Removing any content or message-like properties
-  const tempThread = {
-    id: 'temp-' + Date.now(),
-    // Explicitly set public based on active tab
-    public: activeTab.value === 'public',
-    timestamp: new Date().toISOString(),
-    isNewThreadDraft: true, // Flag to indicate this is just a draft marker, not a message
-    // Always initialize with empty recipients array
-    recipients: []
-  };
-  
-  console.log(`Creating new thread in ${activeTab.value} tab (public: ${tempThread.public})`);
-  
-  // Store it and redirect
-  store.dispatch('ui/createTempThread', tempThread);
-  router.push({ name: 'thread', params: { id: tempThread.id } });
+  // Simply navigate to the new thread route
+  router.push('/new-thread');
+  console.log('Navigating to new thread route');
 };
 
 // Handle the new message button click
 const handleNewThreadClick = (event) => {
-  // Only navigate if user can interact
-  if (canInteract.value) {
+  // First check if user is logged in
+  if (!user.value) {
+    alert("Please log in to create new messages");
+    return;
+  }
+
+  // Check user status directly
+  if (user.value.status === 'admin' || user.value.status === 'whitelisted') {
     createNewThread();
   } else {
-    // Optionally show a message explaining why they can't create a thread
-    alert(user.value 
-      ? "You need to be whitelisted to create new messages" 
-      : "Please log in to create new messages");
+    alert("You need to be whitelisted to create new messages");
   }
 };
 
@@ -174,25 +118,41 @@ const isTemporaryThread = (id) => {
   return typeof id === 'string' && id.toString().startsWith('temp-');
 };
 
-// Update fetchReplyCounts to skip temporary threads
-const fetchReplyCounts = async () => {
-  // Only fetch if we have threads and the user is authenticated
-  if (threads.value.length && user.value) {
-    try {
-      // Fetch reply counts for each thread
-      for (const thread of threads.value) {
-        // Skip temporary threads
-        if (isTemporaryThread(thread.id)) {
-          continue;
-        }
-        
-        const response = await MessageService.getReplyCount(thread.id);
-        // Store the count in our replyCounts ref
-        replyCounts.value[thread.id] = response.data.count;
-      }
-    } catch (error) {
-      console.error('Error fetching reply counts:', error);
-    }
+// Function to check if the author is the current user
+function isCurrentUserAuthor(message) {
+  if (!user.value) return false;
+  
+  // First check by author_user_tag if available
+  if (message.author_user_tag && user.value.user_tag === message.author_user_tag) {
+    return true;
+  }
+  
+  // Then check by email
+  if (message.author_email && user.value.email === message.author_email) {
+    return true;
+  }
+  
+  // Finally check content_author for older messages
+  if (message.content_author === user.value.uid) {
+    return true;
+  }
+  
+  return false;
+}
+
+// Load messages with unified loading state
+const loadMessages = async () => {
+  isLoadingMessages.value = true;
+  try {
+    console.log('[Debug] Loading messages for tab:', activeTab.value);
+    await store.dispatch('messages/fetchThreads');
+  } catch (error) {
+    console.error('Error loading messages:', error);
+  } finally {
+    // Always set loading to false when done
+    isLoadingMessages.value = false;
+    hasLoadedOnce.value = true;
+    console.log('[Debug] Finished loading messages');
   }
 };
 
@@ -205,60 +165,48 @@ onMounted(async () => {
     console.error("Firebase initialization failed in MessageList:", error);
   }
   
-  // Always fetch threads regardless of Firebase status
-  await store.dispatch('messages/fetchThreads');
-  
-  // After messages are loaded, fetch reply counts
-  await fetchReplyCounts();
+  // Always load messages with the unified loading state
+  await loadMessages();
 });
 
+// Watch for tab changes and reload messages
 watch(activeTab, async () => {
-  await store.dispatch('messages/fetchThreads');
-  // Refresh reply counts when active tab changes
-  await fetchReplyCounts();
+  // Always reload messages when tab changes
+  await loadMessages();
 });
-
-// Also watch threads for changes to handle dynamic updates
-watch(threads, async () => {
-  // If threads change, update reply counts
-  await fetchReplyCounts();
-}, { deep: true });
 </script>
 
 <template>
   <div class="message-list">
-    <div v-if="isLoading" class="loading-indicator">
-      Loading messages...
+    <!-- Empty state - only shown when no messages and not loading -->
+    <div v-if="!isLoadingMessages && hasLoadedOnce && threads.length === 0" class="empty-state">
+      <p>No {{ activeTab }} messages found.</p>
     </div>
     
+    <!-- Error state -->
     <div v-else-if="error" class="error-message">
       {{ error }}
     </div>
     
-    <div v-else-if="threads.length === 0" class="empty-state">
-      <p>No {{ activeTab }} messages found.</p>
-    </div>
-    
-    <!-- All messages in a single list with pinned ones at the top -->
-    <div v-else class="messages-container">
+    <!-- Messages container -->
+    <div class="messages-container">
+      <!-- Messages list -->
       <div 
         v-for="thread in threads" 
         :key="thread.id" 
-        class="message-item"
-        :class="{'pinned-message': thread.is_pinned === 1}"
+        class="message-item pinned-message"
         :data-thread-id="thread.id"
         @click="viewThread(thread.id)"
       >
         <div class="message-header">
           <h3 class="message-title">
-            {{ thread.title || 'Untitled Message' }}
+            📌 {{ thread.title || 'Untitled Message' }}
           </h3>
           <div class="author-info">
             <div class="author-pin-section">
-            <span class="message-author">By {{ getAuthorDisplay(thread) }}</span>
-            <span v-if="getAuthorUserTag(thread)" class="author-user-tag">@{{ getAuthorUserTag(thread) }}</span>
-          </div>
-            <span v-if="thread.is_pinned === 1" class="pin-indicator">📌</span>
+              <span class="message-author" :class="{ 'current-user-name': isCurrentUserAuthor(thread) }">{{ getAuthorDisplay(thread) }}</span>
+              <span v-if="getAuthorUserTag(thread)" class="author-user-tag">@{{ getAuthorUserTag(thread) }}</span>
+            </div>
           </div>
         </div>
         
@@ -267,9 +215,15 @@ watch(threads, async () => {
         </p>
         
         <div class="message-footer">
-          <span class="reply-count">{{ replyCounts[thread.id] || 0 }} replies</span>
+          <span class="reply-count">{{ getReplyCount(thread) }} replies</span>
           <span class="message-date">{{ new Date(thread.timestamp).toLocaleString() }}</span>
         </div>
+      </div>
+      
+      <!-- Unified loading indicator - always visible when loading -->
+      <div v-if="isLoadingMessages" class="loading-indicator" :class="{ 'full-height': threads.length === 0 }">
+        <div class="loading-spinner"></div>
+        <p>{{ threads.length === 0 ? 'Loading messages...' : 'Loading more messages...' }}</p>
       </div>
     </div>
     
@@ -360,15 +314,15 @@ watch(threads, async () => {
   color: var(--text-color-light);
 }
 
+.message-author.current-user-name {
+  font-weight: 800;
+  color: var(--primary-color, #4a90e2);
+}
+
 .author-user-tag {
   font-size: 0.8rem;
   color: var(--text-color-light);
   opacity: 0.8;
-}
-
-.pin-indicator {
-  color: var(--primary-color);
-  font-size: 1rem;
 }
 
 .message-desc {
@@ -383,8 +337,34 @@ watch(threads, async () => {
   color: var(--text-color-light);
 }
 
-.loading-indicator,
-.error-message,
+.loading-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--text-color-light);
+  text-align: center;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: var(--spacing-sm);
+  height: auto;
+  padding: var(--spacing-sm);
+}
+
+.loading-indicator.full-height {
+  height: 160px;
+}
+
+.error-message {
+  color: #e74c3c;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  text-align: center;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .empty-state {
   display: flex;
   justify-content: center;
@@ -392,10 +372,22 @@ watch(threads, async () => {
   height: 200px;
   color: var(--text-color-light);
   text-align: center;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.error-message {
-  color: #e74c3c;
+.loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-top: 3px solid var(--primary-color, #007bff);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .new-message-btn {
@@ -426,5 +418,13 @@ watch(threads, async () => {
   opacity: 0.5;
   cursor: not-allowed;
   pointer-events: all;
+}
+
+.page-title {
+  font-size: 1.6rem;
+  margin-bottom: var(--spacing-md);
+  color: var(--text-color);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-color);
 }
 </style> 

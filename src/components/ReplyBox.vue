@@ -7,16 +7,17 @@
             type="checkbox" 
             :checked="isPublic" 
             @click="toggleVisibility"
+            :disabled="!canInteract"
           >
           <span>Public reply</span>
         </label>
         
-        <button class="recipients-toggle" @click="toggleRecipientSelector">
+        <button 
+          class="recipients-toggle" 
+          @click="toggleRecipientSelector"
+          :disabled="!canInteract"
+        >
           Recipients ({{ recipients.length }})
-        </button>
-        
-        <button class="chatgpt-shortcut" @click.prevent="addChatGPT">
-          + ChatGPT
         </button>
       </div>
     </div>
@@ -30,15 +31,18 @@
         @keydown="handleTextareaKeyDown"
         @focus="ensureReplyingActive"
         @input="autoResizeTextarea"
+        :disabled="!canInteract"
+        :class="{ 'disabled': !canInteract }"
       ></textarea>
       
       <div class="reply-actions">
         <button 
           @click="sendReply" 
           class="send-button"
-          :disabled="!canInteract || !content.trim()"
+          :disabled="!canInteract || !content.trim() || isSending"
         >
-          Send
+          <span v-if="!isSending">Send</span>
+          <div v-else class="button-spinner"></div>
         </button>
       </div>
     </div>
@@ -109,17 +113,16 @@
           <div class="recipients-list">
             <div 
               v-for="(recipient, index) in recipients" 
-              :key="index" 
+              :key="recipient.uid || index" 
               class="recipient-tag"
-              :class="{
-                'author-tag': isAuthorRecipient(recipient),
-                'system-tag': recipient === 'system',
-                'chatgpt-tag': recipient.toLowerCase() === 'chatgpt'
-              }"
             >
-              {{ recipient }}
-              <span v-if="isAuthorRecipient(recipient)" class="author-indicator">(author)</span>
-              <button @click="() => removeRecipient(index)" class="remove-recipient-btn">×</button>
+              <div class="recipient-info">
+                <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
+                <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
+              </div>
+              <div class="recipient-actions">
+                <button v-if="!isAuthorRecipient(recipient)" @click="() => removeRecipient(index)" class="remove-recipient-btn">×</button>
+              </div>
             </div>
             
             <div v-if="recipients.length === 0" class="no-recipients">
@@ -156,10 +159,18 @@ const props = defineProps({
   isTemporaryThread: {
     type: Boolean,
     default: false
+  },
+  isMessageSelected: {
+    type: Boolean,
+    default: false
+  },
+  isAuthenticated: {
+    type: Boolean,
+    default: false
   }
 });
 
-const emit = defineEmits(['send', 'cancel']);
+const emit = defineEmits(['send', 'cancel', 'send-success', 'send-error']);
 
 // Setup store
 const store = useStore();
@@ -167,6 +178,7 @@ const store = useStore();
 // Refs
 const replyTextarea = ref(null);
 const content = ref('');
+const isSending = ref(false);
 
 // UI state
 const showRecipientSelector = ref(false);
@@ -176,6 +188,7 @@ const searchResults = ref([]);
 const isSearching = ref(false);
 const hasSearched = ref(false);
 const showSearchResults = ref(false);
+const recipientInput = ref(null);
 
 // Computed properties from store
 const user = computed(() => store.getters['auth/user']);
@@ -192,6 +205,19 @@ const canAddRecipient = computed(() => {
 
 // Generate placeholder text
 const placeholderText = computed(() => {
+  // First check if no message is selected
+  if (!props.isMessageSelected) {
+    return "Select a message to reply";
+  }
+  
+  // If user can't interact, show a message explaining why
+  if (!props.canInteract) {
+    if (!props.isAuthenticated) {
+      return "You need to log in to send messages";
+    }
+    return "You need to be whitelisted to send messages";
+  }
+
   if (props.isTemporaryThread) {
     return "Type your message to create this thread...";
   }
@@ -221,8 +247,12 @@ const toggleVisibility = () => {
   const currentState = store.getters['navigation/replyIsPublic'];
   // Toggle to opposite
   store.dispatch('navigation/updateReplyVisibility', !currentState);
-  // Force sync settings after toggle
-  store.dispatch('navigation/syncReplySettingsWithSelectedMessage');
+  
+  // Only sync with selected message if we're not in a temporary thread
+  if (!props.isTemporaryThread) {
+    // Force sync settings after toggle
+    store.dispatch('navigation/syncReplySettingsWithSelectedMessage');
+  }
 };
 
 const toggleRecipientSelector = () => {
@@ -231,6 +261,13 @@ const toggleRecipientSelector = () => {
   // Reset input field when opening the modal
   if (showRecipientSelector.value) {
     newRecipient.value = '';
+    
+    // Focus the input field after DOM update
+    nextTick(() => {
+      if (recipientInput.value) {
+        recipientInput.value.focus();
+      }
+    });
   }
 };
 
@@ -277,24 +314,47 @@ const autoResizeTextarea = () => {
   }
 };
 
-const sendReply = () => {
+const sendReply = async () => {
   if (!content.value.trim()) return;
   
-  emit('send', {
-    content: content.value,
-    isPublic: isPublic.value,
-    recipients: recipients.value
-  });
+  // Make sure we have a user and email
+  const currentUser = store.getters['auth/user'];
+  if (!currentUser || !currentUser.email) {
+    store.commit('ui/SET_ERROR', 'You need to be logged in to send messages.');
+    return;
+  }
   
-  // Clear reply content
-  content.value = '';
-  
-  // Reset textarea height
-  nextTick(() => {
-    if (replyTextarea.value) {
-      replyTextarea.value.style.height = '40px';
-    }
-  });
+  try {
+    isSending.value = true;
+    
+    // Create a new message using the store action
+    const newMessage = await store.dispatch('messages/sendReply', {
+      parentId: props.targetId, // Will be null for new threads
+      content: content.value,
+      isPrivate: !isPublic.value,
+      recipients: recipients.value,
+      // Ensure the author is explicitly set to the user's email
+      content_author: currentUser.email
+    });
+    
+    // Clear the input
+    content.value = '';
+    
+    // Resize the textarea
+    autoResizeTextarea();
+    
+    // No longer emit send-success - rely solely on WebSocket
+    // emit('send-success', newMessage);
+    
+    return newMessage;
+  } catch (error) {
+    console.error('Error sending message:', error);
+    store.commit('ui/SET_ERROR', 'Failed to send message. Please try again.');
+    emit('send-error', error);
+    throw error;
+  } finally {
+    isSending.value = false;
+  }
 };
 
 // Debounce function for search
@@ -366,15 +426,15 @@ const clearSearch = () => {
 
 const selectSearchResult = (user) => {
   if (user && user.user_tag) {
-    // Use the user tag for the recipient
-    const userTag = user.user_tag;
-    
-    // Set as valid explicitly
+    // Use the full user object
     isTagValid.value = true;
-    newRecipient.value = userTag;
     
     // Add the recipient right away
-    store.dispatch('navigation/addRecipient', userTag);
+    store.dispatch('navigation/addRecipient', {
+      uid: user.uid,
+      display_name: user.display_name,
+      user_tag: user.user_tag
+    });
     
     // Clear the input
     newRecipient.value = '';
@@ -404,7 +464,26 @@ const addRecipient = async () => {
   isSearching.value = false;
   
   if (isValid) {
-    store.dispatch('navigation/addRecipient', tag);
+    // Try to get full user details
+    const results = await store.dispatch('auth/searchUsers', tag);
+    const matchingUser = results?.find(u => u.user_tag === tag);
+    
+    if (matchingUser) {
+      // Use the full user object
+      store.dispatch('navigation/addRecipient', {
+        uid: matchingUser.uid,
+        display_name: matchingUser.display_name,
+        user_tag: matchingUser.user_tag
+      });
+    } else {
+      // Fallback: Use basic object with tag
+      store.dispatch('navigation/addRecipient', {
+        uid: tag, // Temporary - will be resolved on server
+        display_name: tag,
+        user_tag: tag
+      });
+    }
+    
     newRecipient.value = '';
     isTagValid.value = null;
     searchResults.value = [];
@@ -418,28 +497,6 @@ const removeRecipient = (index) => {
   store.dispatch('navigation/removeRecipient', index);
 };
 
-const addChatGPT = () => {
-  console.log('[CHATGPT] Add ChatGPT button clicked in ReplyBox component');
-  
-  // Use the action and get success indicator
-  const added = store.dispatch('navigation/addChatGPT');
-  console.log(`[CHATGPT] ChatGPT ${added ? 'added to' : 'already in'} recipients list`);
-  
-  // Show brief confirmation
-  const chatgptBtn = document.querySelector('.chatgpt-shortcut');
-  if (chatgptBtn) {
-    const originalText = chatgptBtn.textContent;
-    chatgptBtn.textContent = '✓ Added';
-    chatgptBtn.classList.add('added');
-    console.log('[CHATGPT] Updated button UI to show confirmation');
-    setTimeout(() => {
-      chatgptBtn.textContent = originalText;
-      chatgptBtn.classList.remove('added');
-      console.log('[CHATGPT] Reset button UI after timeout');
-    }, 1000);
-  }
-};
-
 const isAuthorRecipient = (recipient) => {
   // If we're replying to a message
   if (props.targetId) {
@@ -450,17 +507,24 @@ const isAuthorRecipient = (recipient) => {
       if ((targetMessage.content_author === 'chatgpt' || 
            targetMessage.content_author === 'chatgpt-system' ||
            targetMessage.author_email === 'chatgpt') && 
-          recipient.toLowerCase() === 'chatgpt') {
+          (recipient.uid === 'chatgpt-system')) {
         return true;
       }
       
-      // Check if recipient matches the target message's author's tag
-      if (targetMessage.author_user_tag && recipient === targetMessage.author_user_tag) {
+      // Check if recipient UID matches the target message's author UID
+      if (recipient.uid && recipient.uid === targetMessage.content_author) {
         return true;
       }
       
-      // For backwards compatibility, check email as well
-      if (targetMessage.author_email && recipient === targetMessage.author_email) {
+      // Check if recipient tag matches the target message's author tag
+      if (recipient.user_tag && targetMessage.author_user_tag && 
+          recipient.user_tag === targetMessage.author_user_tag) {
+        return true;
+      }
+      
+      // For backward compatibility, check email as well
+      if (recipient.user_tag && targetMessage.author_email && 
+          recipient.user_tag === targetMessage.author_email) {
         return true;
       }
     }
@@ -473,14 +537,20 @@ const isAuthorRecipient = (recipient) => {
 const getAuthorDisplayName = (message) => {
   const currentUser = store.getters['auth/user'];
   
-  // Special case for ChatGPT
+  // First priority: use database-provided display name
+  if (message.author_display_name) {
+    return message.author_display_name;
+  }
+  
+  // Second priority (ChatGPT special case fallback)
+  // Only use hardcoded name if nothing is available from database
   if (message.content_author === 'chatgpt' || 
       message.content_author === 'chatgpt-system' || 
       message.author_email === 'chatgpt') {
     return 'ChatGPT';
   }
   
-  // If the author is the current user, use their display name from auth store
+  // Third priority: if current user is the author, use display name from auth state
   if (currentUser && (
       message.content_author === currentUser.uid || 
       message.author_email === currentUser.email
@@ -490,16 +560,12 @@ const getAuthorDisplayName = (message) => {
     }
   }
   
-  // For other authors, use the hierarchy from the message
-  if (message.author_display_name) {
-    return message.author_display_name;
-  }
-  
+  // Fourth priority: legacy email display
   if (message.author_email_display) {
     return message.author_email_display;
   }
   
-  // Use user tag if no display name is available
+  // Fifth priority: use user tag if no display name is available
   if (message.author_user_tag) {
     return message.author_user_tag;
   }
@@ -509,22 +575,29 @@ const getAuthorDisplayName = (message) => {
     return message.content_author;
   }
   
-  // Fallback to the raw author value (could be UUID)
-  return message.content_author;
+  // Last resort: use content_author (may be a UUID now)
+  return message.content_author || "Unknown User";
 };
 
 // Helper function to get author user tag
 const getAuthorUserTag = (message) => {
   const currentUser = store.getters['auth/user'];
   
-  // Skip for ChatGPT
+  // First priority: message's author_user_tag from database
+  if (message.author_user_tag) {
+    // This will handle ChatGPT and all users with proper database records
+    return message.author_user_tag;
+  }
+  
+  // Second priority: ChatGPT special case fallback
+  // Skip returning any tag for ChatGPT if no tag in database
   if (message.content_author === 'chatgpt' || 
       message.content_author === 'chatgpt-system' || 
       message.author_email === 'chatgpt') {
     return null;
   }
   
-  // If the author is the current user, use their tag from auth state
+  // Third priority: current user's tag from auth state (if they're the author)
   if (currentUser && (
       message.content_author === currentUser.uid || 
       message.author_email === currentUser.email
@@ -534,18 +607,20 @@ const getAuthorUserTag = (message) => {
     }
   }
   
-  // Otherwise use the tag from the message
-  if (message.author_user_tag) {
-    return message.author_user_tag;
-  }
-  
+  // Default: no valid tag found
   return null;
 };
 
 // Close search results when clicking outside
 onMounted(() => {
   document.addEventListener('click', handleClickOutsideSearch);
+  console.log("ReplyBox mounted, canInteract:", props.canInteract);
 });
+
+// Watch for changes to canInteract
+watch(() => props.canInteract, (newValue, oldValue) => {
+  console.log("ReplyBox canInteract changed:", oldValue, "->", newValue);
+}, { immediate: true });
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutsideSearch);
@@ -567,6 +642,7 @@ const handleClickOutsideSearch = (event) => {
 // Expose methods and properties that parent components might need
 defineExpose({
   content,
+  isSending,
   focus: () => {
     if (replyTextarea.value) {
       replyTextarea.value.focus();
@@ -635,27 +711,13 @@ defineExpose({
   transition: background-color 0.2s;
 }
 
-.recipients-toggle:hover {
+.recipients-toggle:hover:not(:disabled) {
   background-color: var(--primary-color-hover, #d1e6ff);
 }
 
-.chatgpt-shortcut {
-  padding: 4px 8px;
-  background-color: #10a37f; /* ChatGPT green color */
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.75em;
-  transition: all 0.2s;
-}
-
-.chatgpt-shortcut:hover {
-  background-color: #0d8c6d;
-}
-
-.chatgpt-shortcut.added {
-  background-color: #4caf50; /* Success green */
+.recipients-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Reply input styles */
@@ -677,10 +739,16 @@ defineExpose({
   overflow-y: auto; /* Show scrollbar if content exceeds max-height */
 }
 
-.reply-input:focus {
+.reply-input:focus:not(:disabled) {
   outline: none;
   border-color: var(--primary-color, #4a90e2);
   box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb, 74, 144, 226), 0.2);
+}
+
+.reply-input.disabled {
+  background-color: var(--surface-color, #f0f0f0);
+  color: var(--text-color-light, #999);
+  cursor: not-allowed;
 }
 
 .reply-actions {
@@ -697,11 +765,25 @@ defineExpose({
   border-radius: 18px;
   cursor: pointer;
   font-weight: bold;
+  min-width: 80px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .send-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.button-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #ffffff;
+  border-top: 2px solid transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 /* Modal styles */
@@ -869,30 +951,31 @@ defineExpose({
   border-radius: var(--border-radius-md);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
   font-size: 0.9rem;
   color: var(--text-color);
 }
 
-.author-tag {
-  background-color: var(--primary-color-light, #e6f2ff);
-  color: var(--text-color);
+.recipient-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.system-tag {
-  background-color: var(--primary-color);
-  color: white;
+.recipient-name {
+  font-weight: 500;
 }
 
-.chatgpt-tag {
-  background-color: var(--primary-color-light);
-  color: white;
+.recipient-tag-name {
+  font-size: 0.85rem;
+  color: var(--text-color-light, #777);
 }
 
-.author-indicator {
-  font-size: 0.75rem;
-  font-style: italic;
-  margin-left: 4px;
+.recipient-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .remove-recipient-btn {
@@ -1041,6 +1124,12 @@ defineExpose({
     color: var(--text-color-dark, #eee);
     border-color: var(--border-color-dark, #444);
     margin-bottom: 10px;
+  }
+  
+  .reply-input.disabled {
+    background-color: #1a1a1a;
+    border-color: #333;
+    color: #555;
   }
   
   .send-button:disabled {

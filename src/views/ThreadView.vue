@@ -5,7 +5,7 @@
       <p>Loading...</p>
     </div>
     
-    <div v-else-if="isLoading || isInitialLoading" class="loading-indicator">
+    <div v-else-if="isLoading || isInitialLoading || isLoadingFromUrl" class="loading-indicator">
       <div class="loading-spinner"></div>
       <p>Loading thread...</p>
     </div>
@@ -14,9 +14,7 @@
       {{ error }}
     </div>
     
-    <!-- For temporary threads, show the TempThreadView component -->
-    <temp-thread-view v-else-if="isTemporaryThread" />
-    
+    <!-- Normal thread view (remove conditional for temporary threads) -->
     <template v-else-if="displayedMessages.length > 0">
       <!-- Thread header with navigation back and title -->
       <div class="thread-header">
@@ -27,25 +25,18 @@
       </div>
       
       <!-- Messages container with fixed spacing -->
-      <div class="messages-container" ref="messageList">
-      <!-- Top of thread marker -->
-      <adaptive-marker
-        v-if="displayedMessages.length > 0 && isTopOfThread"
-        state="end"
-        position="top"
-        class-name="thread-begin-marker"
-      />
-      
-        <!-- Loading node for earlier messages at top of thread -->
-        <div v-if="canLoadMoreParents" class="parent-loading-container">
-        <adaptive-marker 
+      <div class="messages-container" ref="messageList" @click="handleContainerClick">
+        <!-- Top of thread marker - always show -->
+        <adaptive-marker
           position="top"
-          :state="getParentLoadingState()"
-            @load-more="() => { loadMoreParents(); }"
-            @retry="() => { loadMoreParents(); }"
-          />
-        </div>
-        
+          :state="topMarkerState"
+          class-name="thread-begin-marker"
+          @load-more="loadMoreParents"
+          @retry="loadMoreParents"
+          ref="topMarker"
+          :key="`top-marker-${displayedMessages.length > 0 ? displayedMessages[0].id : 'empty'}`"
+        />
+      
         <!-- Thread messages - showing single branch -->
         <template v-for="(message, index) in displayedMessages" :key="message.id">
           <!-- Skip system messages in temporary threads -->
@@ -57,16 +48,7 @@
             :indent-level="0"
             :loaded-replies="getLoadedRepliesCount(message.id)"
             :total-replies="getTotalRepliesCount(message.id)"
-            :parent-total-replies="message.parent_id ? getTotalRepliesCount(message.parent_id) : 0"
             :can-reply="canInteract"
-            :has-prev-sibling="hasPrevSibling(message.id)"
-            :has-next-sibling="hasNextSibling(message.id)"
-            :is-first-sibling="isFirstSibling(message.id)"
-            :is-last-loaded-sibling="isLastLoadedSibling(message.id)" 
-            :is-last-sibling="isLastSibling(message.id)"
-            :sibling-position="getSiblingPosition(message.id)"
-            :show-sibling-nav="message.parent_id && (getTotalRepliesCount(message.parent_id) > 0)"
-            @navigate="navigateSiblings(message.parent_id, $event)"
             @click="selectMessage(message.id)"
             @delete="confirmDeleteMessage"
           />
@@ -76,23 +58,27 @@
             <div class="loading-spinner"></div>
             <div class="loading-text">Loading message...</div>
           </div>
-          
-          <!-- If this is the last message, show appropriate marker (loading/end of branch) -->
-          <adaptive-marker 
-            v-if="index === displayedMessages.length - 1" 
-            position="bottom"
-            :state="getEndMarkerState(message.id)"
-            @load-more="loadMoreChildren"
-            @retry="loadMoreChildren"
-          />
         </template>
+        
+        <!-- Bottom of thread marker - always show -->
+        <adaptive-marker
+          position="bottom"
+          :state="bottomMarkerState"
+          class-name="thread-end-marker"
+          @load-more="loadMoreChildren"
+          @retry="loadMoreChildren"
+          ref="bottomMarker"
+          :key="`bottom-marker-${displayedMessages.length > 0 ? displayedMessages[displayedMessages.length - 1].id : 'empty'}`"
+        />
       </div>
       
       <!-- Reply box component -->
       <reply-box 
         :target-id="replyTargetId"
-        :can-interact="canInteract"
-        @send="sendReply"
+        :can-interact="canInteract && !!replyTargetId"
+        :is-message-selected="!!replyTargetId"
+        :is-authenticated="!!user"
+        ref="replyBox"
       />
     </template>
     
@@ -107,11 +93,12 @@
         <p>Are you sure you want to delete this message and all its replies?</p>
         <p class="warning">This action cannot be undone.</p>
         <div class="delete-confirm-actions">
-          <button @click="store.dispatch('ui/hideDeleteConfirm')" class="cancel-button">
+          <button @click="store.dispatch('ui/hideDeleteConfirm')" class="cancel-button" :disabled="isDeleting">
             Cancel
           </button>
-          <button @click="deleteMessage" class="delete-button">
-            Delete
+          <button @click="deleteMessage" class="delete-button" :disabled="isDeleting">
+            <span v-if="!isDeleting">Delete</span>
+            <div v-else class="button-spinner"></div>
           </button>
         </div>
       </div>
@@ -123,12 +110,9 @@
 import { ref, computed, onMounted, watch, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute, useRouter } from 'vue-router';
-import { getFirebaseAuth, initializeFirebase } from '../firebase.js';
-import { onAuthStateChanged } from 'firebase/auth';
 import MessageNode from '../components/MessageNode.vue';
 import AdaptiveMarker from '../components/AdaptiveMarker.vue';
 import ReplyBox from '../components/ReplyBox.vue';
-import TempThreadView from '../views/TempThreadView.vue';
 import MessageService from '../services/MessageService';
 import WebSocketService from '../services/WebSocketService';
 
@@ -139,27 +123,27 @@ const router = useRouter();
 
 // Refs
 const messageList = ref(null);
-let unsubscribeAuth = null;
 let unsubscribeMessages = null;
+const isLoadingFromUrl = ref(false); // Track if we're loading a thread from URL
+const isDeleting = ref(false);
+
+// Add component-level loading states
+const isLoadingParents = ref(false);
+const isLoadingChildren = ref(false);
 
 // Message ID from route
 const messageId = computed(() => {
   const id = route.params.id;
-  // Check if this is a temporary thread ID (starts with 'temp-')
-  if (typeof id === 'string' && id.startsWith('temp-')) {
-    return id;
-  }
+  // Convert to number (all real threads are numeric)
   return Number(id);
 });
 
 // Computed properties from namespaced store modules
 const user = computed(() => store.getters['auth/user']);
-const isWhitelisted = computed(() => store.getters['auth/isWhitelisted']);
-const canInteract = computed(() => store.getters['auth/canInteract']);
 const isAuthReady = computed(() => store.getters['auth/authReady']);
+const canInteract = computed(() => store.getters['auth/canInteract']);
 const isLoading = computed(() => store.getters['ui/isLoading']('messages'));
 const error = computed(() => store.getters['ui/error']);
-const isTemporaryThread = computed(() => store.getters['ui/isTemporaryThread']);
 const showDeleteConfirm = computed(() => store.getters['ui/showDeleteConfirm']);
 const messageToDelete = computed(() => store.getters['ui/messageToDelete']);
 
@@ -170,8 +154,7 @@ const replyTargetId = computed(() => store.getters['navigation/replyTargetId']);
 
 // Message display
 const displayedMessages = computed(() => {
-  const msgs = store.getters['messages/getVisibleBranchMessages'];
-  console.log(`[DEBUG UI] displayedMessages computed property updated, found ${msgs.length} messages: ${msgs.map(m => m.id).join(', ')}`);
+  const msgs = store.getters['messages/getVisibleBranchMessages'](messageId.value);
   return msgs;
 });
 const rootMessage = computed(() => {
@@ -190,140 +173,111 @@ const isTopOfThread = computed(() => {
 });
 
 // Loading state
-const canLoadMoreParents = computed(() => {
-  if (displayedMessages.value.length === 0) return false;
-  
-  const firstMessage = displayedMessages.value[0];
-  // Simple check: has parent_id and not currently loading
-  return firstMessage.parent_id && !store.getters['messages/isLoading'](firstMessage.id, 'parents');
-});
-
-const canLoadMoreChildren = computed(() => {
-  if (displayedMessages.value.length === 0) return false;
-  
-  const lastMessage = displayedMessages.value[displayedMessages.value.length - 1];
-  // Has children according to backend and not currently loading
-  return lastMessage.has_children && !store.getters['messages/isLoading'](lastMessage.id, 'children');
-});
-
-// Simplified marker state functions
-const getParentLoadingState = () => {
-  if (displayedMessages.value.length === 0) return 'loading';
-  
-  const firstMessage = displayedMessages.value[0];
-  
-  if (!firstMessage.parent_id) return 'end'; // No parent = beginning of thread
-  if (store.getters['messages/isLoading'](firstMessage.id, 'parents')) return 'loading';
-  
-  return canLoadMoreParents.value ? 'loading' : 'end';
-};
-
-const getEndMarkerState = (messageId) => {
-  // Get the message
-  const message = store.getters['messages/getMessage'](messageId);
-  if (!message) {
-    return 'end'; // If message doesn't exist, we're at the end
-  }
-  
-  // Check if this is the last message in our displayed chain
-  const isLastDisplayed = displayedMessages.value.length > 0 && 
-                         displayedMessages.value[displayedMessages.value.length - 1].id === messageId;
-  if (!isLastDisplayed) {
-    return 'end'; // Only show markers for the last displayed message
-  }
-  
-  // Case 1: We're currently loading children
-  const isLoading = store.getters['messages/isLoading'](messageId, 'children');
-  if (isLoading) {
-    return 'loading';
-  }
-  
-  // Case 2: Check has_children flag directly from the message
-  // This is the definitive source of truth from the backend
-  if (message.has_children) {
-    return 'loading'; // Show loading marker if has_children is true
-  }
-  
-  // Otherwise, we're at the end of the branch
-  return 'end';
-};
-
-// Add a new computed property for initial loading state
 const isInitialLoading = computed(() => {
-  // Check if target message is still loading
+  // Check if message ID is valid but message isn't in the store yet
   if (!messageId.value) return false;
-  return store.getters['messages/isLoading'](messageId.value, 'message');
+  
+  // If the message ID exists but the message isn't in the store, consider it loading
+  return !store.getters['messages/getMessage'](messageId.value);
 });
 
-// Helper function to find the end of branch message
-const findEndOfBranchMessage = () => {
-  if (!displayedMessages.value || displayedMessages.value.length === 0) {
-    return null;
-  }
-  
-  // Get the last message in the displayed chain
-  const lastMessage = displayedMessages.value[displayedMessages.value.length - 1];
-  return lastMessage;
-};
+// In the script setup section, add refs for the adaptive markers
+const topMarker = ref(null);
+const bottomMarker = ref(null);
 
-// Wrapper functions for convenient calling
-const loadMoreParents = async () => {
-  // Get reference to the messages container
-  const messagesContainer = document.querySelector('.messages-container');
-  if (!messagesContainer) {
-    await loadMessages('parents');
-    return;
+// Add this near the top of the script, with the other refs
+const lastWebSocketSetupTime = ref(0);
+const webSocketDebounceTime = 1000; // 1 second debounce
+
+// In the script setup section, add computed properties for marker states
+const topMarkerState = computed(() => {
+  // If no messages, use end state
+  if (displayedMessages.value.length === 0) return 'end';
+  
+  // If currently loading parents, show loading state
+  if (isLoadingParents.value) return 'loading';
+  
+  // Get first message in the branch
+  const firstMessage = displayedMessages.value[0];
+  
+  // If first message doesn't have a parent_id at all, we're at the top
+  if (!firstMessage.parent_id) {
+    console.log('[ThreadView] topMarkerState: No parent_id, showing end state');
+    return 'end';
   }
   
-  // Capture and cache HTML content of the first visible message to use as an anchor
-  // This is more reliable than relying on element references which might change
-  if (displayedMessages.value.length === 0) {
-    await loadMessages('parents');
-    return;
-  }
+  // Check if parent is already loaded in the store
+  const parentMessage = store.getters['messages/getMessage'](firstMessage.parent_id);
   
-  // Measure the current scroll position and container heights
-  const scrollTop = messagesContainer.scrollTop;
-  const oldScrollHeight = messagesContainer.scrollHeight;
+  // Log the state for debugging
+  const state = parentMessage ? 'end' : 'waiting';
+  console.log(`[ThreadView] topMarkerState: Message ${firstMessage.id} has parent_id ${firstMessage.parent_id}, parent ${parentMessage ? 'found' : 'not found'} in store, showing ${state} state`);
   
-  // Find a specific message element (second one if available, or first if not)
-  // Using the second one gives us a better anchor point that won't be affected by the loading UI
-  const messageElements = messagesContainer.querySelectorAll('.message-node');
-  const anchorElement = messageElements.length > 1 ? messageElements[1] : messageElements[0];
-  
-  if (!anchorElement) {
-    await loadMessages('parents');
-    return;
-  }
-  
-  // Save its position relative to the viewport
-  const anchorTop = anchorElement.getBoundingClientRect().top;
-  const anchorId = anchorElement.getAttribute('data-message-id') || 'unknown';
-  
-  // Load new content
-  await loadMessages('parents');
-  
-  // Immediately adjust scroll to maintain relative position
-  // This needs to happen synchronously before any browser repaints
-  requestAnimationFrame(() => {
-    // Get the new scroll height after content was added
-    const newScrollHeight = messagesContainer.scrollHeight;
+  // If parent_id exists but parent message isn't in store, we need to load more (waiting state)
+  return state;
+});
+
+// Add the consolidated thread rendering and subscription function
+const renderThreadAndSubscribe = async () => {
+  try {
+    console.log(`[ThreadView] Rendering thread for messageId: ${messageId.value}`);
     
-    // Calculate how much content was added
-    const heightDifference = newScrollHeight - oldScrollHeight;
-    
-    // Adjust scroll position to maintain the same view
-    if (heightDifference > 0) {
-      messagesContainer.scrollTop = scrollTop + heightDifference;
+    // Guard against missing messageId
+    if (!messageId.value) {
+      console.log(`[ThreadView] No messageId to render`);
+      return;
     }
-  });
+    
+    // 1. Load message data if needed
+    await loadMessageIfNeeded(messageId.value);
+    
+    // 2. Prepare branch paths
+    await store.dispatch('messages/prepareBranchPath', messageId.value);
+    
+    // 3. Force re-evaluation of displayedMessages (happens automatically due to computed property)
+    const messages = displayedMessages.value;
+    
+    console.log(`[ThreadView] Thread rendered with ${messages.length} messages`);
+    
+    // 4. Set up WebSocket subscription only after messages are loaded
+    if (messages.length > 0) {
+      setupWebSocketSubscription();
+    }
+  } catch (error) {
+    console.error(`[ThreadView] Error in renderThreadAndSubscribe:`, error);
+  }
 };
 
-const loadMoreChildren = () => {
-  loadMessages('children');
-};
+const bottomMarkerState = computed(() => {
+  // If no messages, use end state
+  if (displayedMessages.value.length === 0) return 'end';
+  
+  // If currently loading children, show loading state
+  if (isLoadingChildren.value) return 'loading';
+  
+  // Get last message in the branch
+  const lastMessage = displayedMessages.value[displayedMessages.value.length - 1];
+  
+  // If it has no children at all, we're at the bottom
+  if (!lastMessage.child_ids || lastMessage.child_ids.length === 0) {
+    console.log('[ThreadView] bottomMarkerState: No child_ids, showing end state');
+    return 'end';
+  }
+  
+  // Check if any child isn't loaded yet
+  const unloadedChildExists = lastMessage.child_ids.some(childId => 
+    !store.getters['messages/getMessage'](childId)
+  );
+  
+  // Log the state for debugging
+  const state = unloadedChildExists ? 'waiting' : 'end';
+  console.log(`[ThreadView] bottomMarkerState: Message ${lastMessage.id} has ${lastMessage.child_ids.length} children, ${unloadedChildExists ? 'some not loaded' : 'all loaded'}, showing ${state} state`);
+  
+  // If any child_id exists but isn't in store, we need to load more (waiting state)
+  return state;
+});
 
-// Unified loading function
+// Update loadMessages function to use loading states
 const loadMessages = async (direction) => {
   if (displayedMessages.value.length === 0) {
     return;
@@ -339,26 +293,20 @@ const loadMessages = async (direction) => {
     return;
   }
   
-  // Set loading state
-  store.commit('messages/SET_LOADING_STATE', {
-    id: targetId,
-    type: direction,
-    status: 'loading'
-  }, { root: true });
+  // Set component-level loading state
+  if (direction === 'parents') {
+    isLoadingParents.value = true;
+  } else {
+    isLoadingChildren.value = true;
+  }
   
   try {
-    // For parents, we load parent branch with depth 2
+    // For parents, we load parent branch up to specified depth
     if (direction === 'parents') {
       await store.dispatch('messages/loadMessageBranchUp', {
         messageId: targetId,
         depth: 2
       });
-      
-      // Initialize sibling navigation for newly loaded parents
-      const newParentId = store.getters['messages/getParentId'](targetId);
-      if (newParentId) {
-        store.dispatch('navigation/setInitialChild', newParentId);
-      }
     }
     // For children, we load child branch with depth 2
     else if (direction === 'children') {
@@ -366,189 +314,68 @@ const loadMessages = async (direction) => {
         messageId: targetId,
         depth: 2
       });
-      
-      // Initialize sibling navigation for any newly loaded messages with children
-      const childIds = store.getters['messages/getChildIds'](targetId);
-      if (childIds && childIds.length > 0) {
-        // For this message's children
-        store.dispatch('navigation/setInitialChild', targetId);
-        
-        // Also for any of those children that have their own children
-        for (const childId of childIds) {
-          if (store.getters['messages/getChildIds'](childId).length > 0) {
-            store.dispatch('navigation/setInitialChild', childId);
-          }
-        }
-      }
     }
     
-    // Mark as loaded 
-    store.commit('messages/SET_LOADING_STATE', {
-      id: targetId,
-      type: direction,
-      status: 'loaded'
-    }, { root: true });
+    // REMOVED: Don't prepare branch path after loading new messages
+    // This allows sibling navigation to persist
   } catch (error) {
     console.error(`Error loading ${direction}:`, error);
-    store.commit('messages/SET_LOADING_STATE', {
-      id: targetId,
-      type: direction,
-      status: 'error'
-    }, { root: true });
-  }
-};
-
-// Replace initial loadMessageChain with the new approach
-const loadInitialMessage = async (id) => {
-  try {
-    // Use the loadInitialMessage action that loads the initial branch
-    await store.dispatch('messages/loadInitialMessage', id);
-    
-    // Check if the first message has a parent that's not loaded
-    const firstMsg = displayedMessages.value[0];
-    
-    // Initialize sibling navigation for all messages with parents
-    // This fixes the "0 / N" issue when directly navigating to a reply
-    for (const msg of displayedMessages.value) {
-      if (msg.parent_id) {
-        store.dispatch('navigation/setInitialChild', msg.parent_id);
-      }
+  } finally {
+    // Always reset loading state
+    if (direction === 'parents') {
+      isLoadingParents.value = false;
+    } else {
+      isLoadingChildren.value = false;
     }
-    
-    // Find end-of-branch message to ensure WebSocket subscriptions
-    const endOfBranch = findEndOfBranchMessage();
-    if (endOfBranch) {
-      unsubscribeMessages = await store.dispatch('messages/subscribeToEndOfBranchMessages');
-    }
-  } catch (error) {
-    console.error("Error loading initial message:", error);
-    error.value = "Failed to load message. Please try again.";
   }
 };
 
 // Lifecycle hooks
 onMounted(async () => {
-  try {
-    // Initialize Firebase for authentication
-    await initializeFirebase();
-    
-    // Set up auth state listener and ensure authReady is set
-    const auth = getFirebaseAuth();
-    if (auth) {
-      // Set a timeout to prevent infinite loading if auth state never resolves
-      const authTimeout = setTimeout(() => {
-        console.warn("Auth state didn't resolve in time, forcing auth ready state");
-        store.commit('auth/SET_AUTH_READY', true);
-      }, 5000);
-      
-      unsubscribeAuth = onAuthStateChanged(auth, (userData) => {
-        if (userData) {
-          store.commit('auth/SET_USER', {
-            uid: userData.uid,
-            email: userData.email,
-            displayName: userData.displayName
-          });
-          
-          if (userData.email) {
-            // Register the user in our database
-            store.dispatch('auth/registerUser', userData);
-            
-            store.dispatch('auth/checkWhitelistStatus', userData.email);
-            store.dispatch('auth/checkAdminStatus', userData.email);
+  // Wait for auth to be ready before proceeding - auth store handles initialization
+  if (!isAuthReady.value) {
+    await new Promise((resolve) => {
+      const unwatch = store.watch(
+        () => store.getters['auth/authReady'],
+        (newValue) => {
+          if (newValue) {
+            unwatch();
+            resolve();
           }
-        } else {
-          store.commit('auth/SET_USER', null);
         }
-        
-        // Ensure auth is marked as ready
-        store.commit('auth/SET_AUTH_READY', true);
-        clearTimeout(authTimeout);
-      });
-    } else {
-      // If no auth object, still mark auth as ready
-      store.commit('auth/SET_AUTH_READY', true);
-    }
-    
-    // Wait for auth to be ready before proceeding
-    if (!store.getters['auth/authReady']) {
-      await new Promise((resolve) => {
-        const unwatch = store.watch(
-          () => store.getters['auth/authReady'],
-          (newValue) => {
-            if (newValue) {
-              unwatch();
-              resolve();
-            }
-          }
-        );
-      });
-    }
-    
-    // Initialize message from route
-    if (messageId.value) {
-      
-      if (isTemporaryThread.value) {
-        // Special case for temporary threads
-        // Just set the message as selected, TempThreadView will handle the rest
-        store.dispatch('navigation/selectMessage', messageId.value);
-      } else {
-        // For real threads, load from API with the new approach
-        await loadInitialMessage(messageId.value);
-        
-        // Select the message to display it in the UI
-        store.dispatch('navigation/selectMessage', messageId.value);
-      }
-    }
-    
-    // Set up WebSocket subscription for real-time updates once messages are loaded
-    if (displayedMessages.value.length > 0) {
-      const visibleMessageIds = displayedMessages.value.map(msg => msg.id);
-      const lastMessageId = displayedMessages.value[displayedMessages.value.length - 1].id;
-      
-      // Set up WebSocket subscription
-      unsubscribeMessages = await store.dispatch('messages/subscribeToEndOfBranchMessages');
-    }
-    
-    // Add keyboard navigation
-    document.addEventListener('keydown', handleKeyDown);
-    
-    // Code to center selected message after loading
-    nextTick(() => {
-      if (selectedMessageId.value) {
-        const selectedElement = document.querySelector(`.message-node.selected`);
-        if (selectedElement) {
-          selectedElement.scrollIntoView({
-            behavior: "auto",
-            block: "center"
-          });
-        }
-      }
+      );
     });
-  } catch (error) {
-    console.error('Error in ThreadView onMounted:', error);
-    // Ensure auth is ready even if there's an error
-    store.commit('auth/SET_AUTH_READY', true);
   }
+  
+  // Use consolidated function for initial render
+  await renderThreadAndSubscribe();
+  
+  // Add keyboard navigation event listener
+  document.addEventListener('keydown', handleKeyDown);
 });
 
 onBeforeUnmount(() => {
   // Clean up listeners
-  if (unsubscribeAuth) {
-    unsubscribeAuth();
-  }
-  
   if (unsubscribeMessages) {
     unsubscribeMessages();
+    unsubscribeMessages = null;
   }
   
+  // Explicitly disconnect WebSocket when leaving the thread view
+  WebSocketService.disconnectFromThread();
+  
   document.removeEventListener('keydown', handleKeyDown);
+  
+  // Clear message selection when leaving the thread view
+  store.dispatch('navigation/selectMessage', null);
+  
+  // Keep message cache when leaving thread view
 });
 
-// Watch for route changes
+// Watch for route changes - simplify to just load message if needed
 watch(messageId, async (newId) => {
-  if (newId && newId !== selectedMessageId.value) {
-    // Use the same selectMessage function to ensure loading states are handled correctly
-    await selectMessage(newId);
+  if (newId) {
+    await renderThreadAndSubscribe();
   }
 });
 
@@ -558,133 +385,15 @@ watch(selectedMessageId, () => {
   // Settings are synced automatically when selecting a message
 }, { immediate: true });
 
-// Add a watcher to log changes in the key conditions
-watch([displayedMessages, isTopOfThread, canLoadMoreParents], ([newMessages]) => {
-  console.log(`[DEBUG Thread] displayedMessages updated: ${newMessages.map(m => m.id).join(', ')}`);
-}, { immediate: true });
-
 // Add new watch to center the selected message when it changes
 watch(selectedMessageId, (newId) => {
-  console.log(`[DEBUG Thread] selectedMessageId changed to: ${newId}`);
-  if (newId) {
-    nextTick(() => {
-      // Find the selected message element
-      const selectedElement = document.querySelector(`.message-node.selected`);
-      if (selectedElement) {
-        selectedElement.scrollIntoView({
-          behavior: "auto",
-          block: "center"
-        });
-      }
-    });
-  }
+  // Remove automatic scrolling on selection change
+  // This allows users to select messages without disrupting their scroll position
 }, { immediate: true });
 
-// Methods
-const initAuth = async () => {
-  try {
-    await initializeFirebase();
-    const auth = getFirebaseAuth();
-    
-    if (auth) {
-      unsubscribeAuth = onAuthStateChanged(auth, (userData) => {
-        store.commit('auth/SET_USER', {
-          uid: userData.uid,
-          email: userData.email,
-          displayName: userData.displayName
-        });
-        
-        if (userData.email) {
-          store.dispatch('auth/checkWhitelistStatus', userData.email);
-          store.dispatch('auth/checkAdminStatus', userData.email);
-        }
-      });
-    } else {
-      store.commit('auth/SET_AUTH_READY', true);
-    }
-  } catch (error) {
-    console.error('Error initializing auth:', error);
-    store.commit('auth/SET_AUTH_READY', true);
-  }
-};
-
-// Message loading
-const loadMoreReplies = async (parentId) => {
-  const loadedCount = getLoadedRepliesCount(parentId);
-  
-  try {
-    // Set loading state
-    store.commit('messages/SET_LOADING_STATE', { 
-      id: parentId, 
-      type: 'children', 
-      status: 'loading' 
-    }, { root: true });
-    
-    // Get reply IDs
-    const response = await MessageService.getReplyIds(parentId);
-    const replyIds = response.data.reply_ids || [];
-    
-    // Load the messages
-    if (replyIds.length > 0) {
-      await store.dispatch('messages/loadMessagesIfNeeded', replyIds);
-      
-      // Set up relationships
-      replyIds.forEach(replyId => {
-        store.commit('messages/SET_RELATIONSHIP', {
-          parentId: parentId,
-          childId: replyId
-        }, { root: true });
-      });
-      
-      // Update reply count
-      store.commit('messages/SET_REPLY_COUNT', {
-      messageId: parentId,
-        count: replyIds.length
-      }, { root: true });
-    }
-    
-    // Set loading state to loaded
-    store.commit('messages/SET_LOADING_STATE', { 
-      id: parentId, 
-      type: 'children', 
-      status: 'loaded' 
-    }, { root: true });
-  } catch (error) {
-    console.error('Error loading more replies:', error);
-    store.commit('messages/SET_LOADING_STATE', { 
-      id: parentId, 
-      type: 'children', 
-      status: 'error' 
-    }, { root: true });
-  }
-};
-
-// Display helpers
-const getMessageIndent = (id) => {
-  let indent = 0;
-  let currentId = id;
-  
-  while (true) {
-    const parentId = store.getters['messages/getParentId'](currentId);
-    if (!parentId) break;
-    
-    indent += 1;
-    currentId = parentId;
-  }
-  
-  return indent;
-};
-
-const getLoadedRepliesCount = (parentId) => {
-  return store.getters['messages/getChildIds'](parentId).length;
-};
-
-const getTotalRepliesCount = (parentId) => {
-  return store.getters['messages/getReplyCount'](parentId);
-};
-
 // Navigation
-const backToList = () => {
+const backToList = async () => {
+  // Navigate back to list view - keep cache for faster return
   router.push('/chat');
 };
 
@@ -697,41 +406,32 @@ const selectMessage = async (id) => {
   store.dispatch('navigation/selectMessage', id);
 };
 
-const sendReply = async ({ content, isPublic, recipients }) => {
-  if (!content.trim()) return;
-  
-  // Make sure we have a user and email
-  if (!user.value || !user.value.email) {
-    store.commit('ui/SET_ERROR', 'You need to be logged in to send messages.');
-    return;
-  }
-  
-  try {
-    // For existing threads, add a reply
-    const newMessage = await store.dispatch('messages/sendReply', {
-      parentId: replyTargetId.value,
-      content: content,
-      isPrivate: !isPublic,
-      recipients,
-      // Ensure the author is explicitly set to the user's email
-      content_author: user.value.email
-    });
-    
-    // IMPORTANT: Immediately subscribe to the new message ID
-    WebSocketService.subscribeToMessage(newMessage.id);
-    
-    // Select the new reply
-    selectNewReply(replyTargetId.value, newMessage.id);
-  } catch (error) {
-    console.error('Error sending reply:', error);
-    store.commit('ui/SET_ERROR', 'Failed to send message. Please try again.');
-  }
-};
-
 // Thread actions
 const refreshThread = async () => {
   if (messageId.value) {
-    await store.dispatch('messages/loadInitialMessage', messageId.value);
+    await loadMessageIfNeeded(messageId.value);
+  }
+};
+
+// Handle clicks on the messages container
+const handleContainerClick = (event) => {
+  // Check if the click is directly on the container (not on a message)
+  // We need to check if the clicked element or any of its parents have the message-node class
+  let target = event.target;
+  let isMessageNode = false;
+  
+  // Walk up the DOM tree to check for message-node class
+  while (target && target !== event.currentTarget) {
+    if (target.classList && target.classList.contains('message-node')) {
+      isMessageNode = true;
+      break;
+    }
+    target = target.parentElement;
+  }
+  
+  // If click is not on a message node, deselect current message
+  if (!isMessageNode && selectedMessageId.value) {
+    store.dispatch('navigation/selectMessage', null);
   }
 };
 
@@ -740,13 +440,14 @@ const confirmDeleteMessage = (message) => {
 };
 
 const deleteMessage = async () => {
-  if (!messageToDelete.value) return;
+  if (!messageToDelete.value || isDeleting.value) return;
   
   const deletedId = messageToDelete.value.id;
   const deletedParentId = messageToDelete.value.parent_id;
   
   try {
-    store.commit('ui/SET_DELETE_CONFIRM', { show: false, message: null });
+    // Set deleting state to true
+    isDeleting.value = true;
     
     await store.dispatch('messages/deleteMessage', deletedId);
     
@@ -766,264 +467,192 @@ const deleteMessage = async () => {
     if (displayedMessages.value.length === 0) {
       // If there are no more displayed messages, go back to thread list
       router.push('/chat');
-      return;
-    }
-    
-    // Refresh the thread or go back to thread list if root was deleted
-    if (deletedParentId) {
-      refreshThread();
     } else {
-      router.push('/chat');
-    }
-    
-    // Important: Re-evaluate the end marker state for any parents
-    if (displayedMessages.value.length > 0) {
-      const lastMessageId = displayedMessages.value[displayedMessages.value.length - 1].id;
-      const lastMessage = store.getters['messages/getMessage'](lastMessageId);
-      
-      // Update the has_children property if needed
-      if (lastMessage && lastMessage.has_children) {
-        const childIds = store.getters['messages/getChildIds'](lastMessageId);
-        if (childIds.length === 0) {
-          // No more children, update the flag
-          store.dispatch('messages/updateMessage', {
-            id: lastMessageId,
-            has_children: false
-          });
-        }
+      // Refresh the thread or go back to thread list if root was deleted
+      if (deletedParentId) {
+        refreshThread();
+      } else {
+        router.push('/chat');
       }
     }
+    
+    // Hide confirmation modal after successful deletion
+    store.commit('ui/SET_DELETE_CONFIRM', { show: false, message: null });
   } catch (error) {
     console.error('Error deleting message:', error);
     store.commit('ui/SET_ERROR', 'Failed to delete message: ' + error.message);
     refreshThread();
+  } finally {
+    // Reset deleting state
+    isDeleting.value = false;
   }
-};
-
-// Sibling navigation helpers
-const hasPrevSibling = (id) => {
-  // Get message parent
-  const parentId = store.getters['messages/getParentId'](id);
-  if (!parentId) return false;
-  
-  // Get sibling info from parent's children
-  const siblingInfo = store.getters['navigation/getSiblingInfo'](parentId);
-  
-  // If total count is 1, there's no previous sibling regardless of position
-  if (siblingInfo.totalCount <= 1) return false;
-  
-  // Otherwise check if position is greater than 1 (since position is 1-indexed)
-  return siblingInfo.position > 1;
-};
-
-const hasNextSibling = (id) => {
-  // Get message parent
-  const parentId = store.getters['messages/getParentId'](id);
-  if (!parentId) return false;
-  
-  // Get sibling info
-  const siblingInfo = store.getters['navigation/getSiblingInfo'](parentId);
-  
-  // If total count is 1, there's no next sibling regardless of position
-  if (siblingInfo.totalCount <= 1) return false;
-  
-  // Otherwise check if position is less than total count
-  return siblingInfo.position < siblingInfo.totalCount;
-};
-
-const isFirstSibling = (id) => {
-  const parentId = store.getters['messages/getParentId'](id);
-  if (!parentId) return true; // Root message is first by default
-  
-  const siblingInfo = store.getters['navigation/getSiblingInfo'](parentId);
-  return siblingInfo.isFirst;
-};
-
-const isLastSibling = (id) => {
-  const parentId = store.getters['messages/getParentId'](id);
-  if (!parentId) return true; // Root message is last by default
-  
-  // Compare with total count from server
-  const siblingInfo = store.getters['navigation/getSiblingInfo'](parentId);
-  return siblingInfo.isLast; // Now uses the corrected getter
-};
-
-const isLastLoadedSibling = (id) => {
-  const parentId = store.getters['messages/getParentId'](id);
-  if (!parentId) return true;
-  
-  // Compare with loaded count
-  const siblingInfo = store.getters['navigation/getSiblingInfo'](parentId);
-  return siblingInfo.isLastLoaded;
-};
-
-const getSiblingPosition = (id) => {
-  const parentId = store.getters['messages/getParentId'](id);
-  if (!parentId) return 0; // Root message
-  
-  const siblingInfo = store.getters['navigation/getSiblingInfo'](parentId);
-  return siblingInfo.position;
-};
-
-const hasMultipleChildren = (parentId) => {
-  if (!parentId) return false;
-  return store.getters['messages/getChildIds'](parentId).length > 1;
-};
-
-const childCount = (parentId) => {
-  return store.getters['messages/getChildIds'](parentId).length;
-};
-
-// Check if a message has any more children to load
-const hasMoreChildren = (messageId) => {
-  const message = store.getters['messages/getMessage'](messageId);
-  if (!message) return false;
-  
-  // Simply check if the message has children according to backend
-  return message.has_children;
-};
-
-// Navigation methods
-const navigateSiblings = async (parentId, direction) => {
-  // Set loading state for this operation
-  store.commit('messages/SET_LOADING_STATE', { 
-    id: parentId, 
-    type: 'children', 
-    status: 'loading' 
-  }, { root: true });
-  
-  try {
-    // First, get the reply IDs
-    const response = await MessageService.getReplyIds(parentId);
-    const replyIds = response.data.reply_ids || [];
-    
-    // Then load all those messages
-    if (replyIds.length > 0) {
-      await store.dispatch('messages/loadMessagesIfNeeded', replyIds);
-      
-      // Set up relationships with parent
-      replyIds.forEach(replyId => {
-        store.commit('messages/SET_RELATIONSHIP', {
-          parentId: parentId,
-          childId: replyId
-        }, { root: true });
-      });
-      
-      // Set reply count
-      store.commit('messages/SET_REPLY_COUNT', {
-        messageId: parentId,
-        count: replyIds.length
-      }, { root: true });
-      
-      // Make sure navigation state is properly initialized 
-      // This ensures we have proper sibling positions
-      store.dispatch('navigation/setInitialChild', parentId);
-    }
-    
-    // Then navigate to the appropriate sibling
-    store.dispatch('navigation/navigateToSibling', { parentId, direction });
-    
-    // Set loading state back to loaded
-    store.commit('messages/SET_LOADING_STATE', { 
-      id: parentId, 
-      type: 'children', 
-      status: 'loaded' 
-    }, { root: true });
-  } catch (error) {
-    console.error('Error navigating siblings:', error);
-    store.commit('messages/SET_LOADING_STATE', { 
-      id: parentId, 
-      type: 'children', 
-      status: 'error' 
-    }, { root: true });
-  }
-};
-
-// After sending a reply, set it as the current child
-const selectNewReply = (parentId, newReplyId) => {
-  store.commit('navigation/SET_CURRENT_CHILD', { 
-    parentId, 
-    childId: newReplyId 
-  });
-  store.dispatch('navigation/selectMessage', newReplyId);
 };
 
 // Keyboard navigation
 const handleKeyDown = (event) => {
-  if (!displayedMessages.value.length) return;
+  // Remove keyboard navigation for now as we're migrating navigation system
+  // Will be reimplemented after the new navigation system is in place
+};
+
+// Simplify the WebSocket subscription function
+const setupWebSocketSubscription = () => {
+  // Clean up any existing subscription
+  if (unsubscribeMessages) {
+    unsubscribeMessages();
+    unsubscribeMessages = null;
+  }
   
-  // Only handle if not in a text input
-  if (event.target.tagName === 'TEXTAREA' || 
-      event.target.tagName === 'INPUT') {
+  // Only subscribe if we have messages
+  if (displayedMessages.value.length === 0) {
+    console.log(`[ThreadView] No messages to subscribe to`);
+    WebSocketService.disconnectFromThread();
     return;
   }
   
-  if (event.key === 'ArrowLeft') {
-    navigateSiblings('prev');
-    event.preventDefault();
-  } else if (event.key === 'ArrowRight') {
-    navigateSiblings('next');
-    event.preventDefault();
+  // Get last message in the branch
+  const lastMessage = displayedMessages.value[displayedMessages.value.length - 1];
+  
+  console.log(`[ThreadView] Setting up WebSocket subscription for message ${lastMessage.id}`);
+  
+  // Create a unique view ID that includes thread ID and timestamp
+  const threadViewId = `thread_${messageId.value}_${Date.now()}`;
+  
+  // Register for message updates
+  unsubscribeMessages = WebSocketService.handleNewMessage(handleWebSocketMessage);
+  
+  // Connect to thread with last message as the end message
+  WebSocketService.connectToThread(threadViewId, lastMessage.id)
+    .catch(error => console.error('[ThreadView] WebSocket connection error:', error));
+};
+
+// Update WebSocket message handler to select messages and ensure selection before rendering
+const handleWebSocketMessage = async (messageData) => {
+  console.log(`[ThreadView] Received WebSocket message for new reply: ${messageData.id} to parent ${messageData.parent_id}`);
+  
+  // Add the new message to store
+  store.commit('messages/SET_MESSAGE', messageData);
+  
+  // Update the parent's child_ids list to include this message
+  const parentId = messageData.parent_id;
+  if (parentId) {
+    const parent = store.getters['messages/getMessage'](parentId);
+    if (parent && !parent.child_ids.includes(messageData.id)) {
+      store.commit('messages/SET_MESSAGE', {
+        ...parent,
+        child_ids: [...parent.child_ids, messageData.id]
+      });
+      
+      // Set this as the branch child of its parent (moved from handleReplySent)
+      store.dispatch('messages/setBranchChild', {
+        messageId: parentId,
+        childId: messageData.id
+      });
+    }
+  }
+  
+  // Select the new message from WebSocket and wait for it to complete
+  await store.dispatch('navigation/selectMessage', messageData.id);
+  
+  // Now that selection is complete, render the thread
+  await renderThreadAndSubscribe();
+};
+
+// Update loadMessageIfNeeded function to remove temporary thread check
+const loadMessageIfNeeded = async (id) => {
+  // If message isn't in the store, load it from API
+  if (!store.getters['messages/getMessage'](id)) {
+    console.log(`[ThreadView] Message ${id} not in cache, loading from API`);
+    
+    try {
+      // Set loading state
+      isLoadingFromUrl.value = true;
+      
+      const response = await MessageService.getMessage(id);
+      if (response.data) {
+        // Add to store
+        store.commit('messages/SET_MESSAGE', response.data);
+        console.log(`[ThreadView] Message ${id} loaded from API and added to store`);
+        
+        // Prepare branch path after loading
+        store.dispatch('messages/prepareBranchPath', id);
+      } else {
+        console.error(`[ThreadView] API returned no data for message ${id}`);
+        store.commit('ui/SET_ERROR', 'Thread not found or not accessible.');
+      }
+    } catch (error) {
+      console.error(`[ThreadView] Error loading message ${id}:`, error);
+      store.commit('ui/SET_ERROR', 'Failed to load thread.');
+    } finally {
+      // Clear loading state
+      isLoadingFromUrl.value = false;
+    }
+  } else {
+    console.log(`[ThreadView] Message ${id} already in cache, no API call needed`);
+    
+    // Prepare branch path even for cached messages
+    store.dispatch('messages/prepareBranchPath', id);
   }
 };
 
-// In the script setup section, add this watch for visible messages
-watch(displayedMessages, async (newMessages) => {
-  // If we have messages loaded, ensure we're subscribed to them for real-time updates
-  if (newMessages.length > 0) {
-    // Get the visible message IDs
-    const visibleMessageIds = newMessages.map(msg => msg.id);
-    
-    // Get the last message ID (for special handling in WebSocket service)
-    const lastMessageId = newMessages[newMessages.length - 1].id;
-    
-    // Update WebSocket service with new visible messages
-    WebSocketService.updateVisibleMessages(visibleMessageIds, lastMessageId);
+// Display helpers
+const getLoadedRepliesCount = (parentId) => {
+  // Get the message first
+  const message = store.getters['messages/getMessage'](parentId);
+  
+  // If the message has child_ids, use that
+  if (message && message.child_ids && Array.isArray(message.child_ids)) {
+    return message.child_ids.length;
   }
-}, { deep: true });
+  
+  // Fall back to old implementation
+  return store.getters['messages/getChildIds'](parentId).length;
+};
 
-// Add a watch for any changes to store relationships
-watch(() => store.state.messages.relationships, (newVal, oldVal) => {
-  console.log(`[DEBUG UI] Relationships changed in store`);
+const getTotalRepliesCount = (parentId) => {
+  // Get the message first
+  const message = store.getters['messages/getMessage'](parentId);
   
-  // Force a re-evaluation of displayed messages
-  const currentMessages = displayedMessages.value;
-  const visibleIds = currentMessages.map(m => m.id);
-  
-  console.log(`[DEBUG UI] Current visible message IDs: ${visibleIds.join(', ')}`);
-  
-  // Check relationship data to detect new messages
-  const allRelationships = { ...newVal.parents };
-  
-  // Look for any children of our visible messages that aren't in the display list
-  for (const parentId of visibleIds) {
-    const childIds = store.getters['messages/getChildIds'](parentId) || [];
-    if (childIds.length > 0) {
-      console.log(`[DEBUG UI] Message ${parentId} has children: ${childIds.join(', ')}`);
-      
-      // Check if any children are not in visible IDs
-      const newChildren = childIds.filter(id => !visibleIds.includes(id));
-      if (newChildren.length > 0) {
-        console.log(`[DEBUG UI] New children detected: ${newChildren.join(', ')}`);
-      }
-    }
+  // If the message has child_ids, use that as the definitive count
+  if (message && message.child_ids && Array.isArray(message.child_ids)) {
+    return message.child_ids.length;
   }
-}, { deep: true });
+  
+  // Fall back to the store getter which handles both old and new cases
+  return store.getters['messages/getReplyCount'](parentId);
+};
 
-// Add a watch for any direct message changes  
-watch(() => store.state.messages.messages, (newVal, oldVal) => {
-  console.log(`[DEBUG UI] Messages object changed in store`);
-  
-  // Check for new messages
-  const currentKeys = Object.keys(newVal).map(Number);
-  const oldKeys = Object.keys(oldVal).map(Number);
-  
-  // Find keys that exist in new but not in old
-  const addedKeys = currentKeys.filter(key => !oldKeys.includes(key));
-  if (addedKeys.length > 0) {
-    console.log(`[DEBUG UI] New messages added to store: ${addedKeys.join(', ')}`);
+// Update loadMoreParents function
+const loadMoreParents = async () => {
+  isLoadingParents.value = true;
+  try {
+    await loadMessages('parents');
+    await renderThreadAndSubscribe();
+  } finally {
+    isLoadingParents.value = false;
   }
-}, { deep: true });
+};
+
+// Update loadMoreChildren function
+const loadMoreChildren = async () => {
+  isLoadingChildren.value = true;
+  try {
+    await loadMessages('children');
+    await renderThreadAndSubscribe();
+  } finally {
+    isLoadingChildren.value = false;
+  }
+};
+
+// Helper function to find the end of branch message
+const findEndOfBranchMessage = () => {
+  if (!displayedMessages.value || displayedMessages.value.length === 0) {
+    return null;
+  }
+  
+  // Get the last message in the displayed chain
+  const lastMessage = displayedMessages.value[displayedMessages.value.length - 1];
+  return lastMessage;
+};
 </script>
 
 <style scoped>
@@ -1156,10 +785,30 @@ watch(() => store.state.messages.messages, (newVal, oldVal) => {
   cursor: pointer;
   font-weight: 500;
   transition: background-color 0.2s;
+  min-width: 80px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.delete-confirm-actions .delete-button:hover {
+.delete-confirm-actions .delete-button:hover:not(:disabled) {
   background-color: var(--error-color-dark, #c82333);
+}
+
+.delete-confirm-actions .delete-button:disabled,
+.delete-confirm-actions .cancel-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.button-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
 /* Thread markers and loading indicators */
@@ -1238,3 +887,5 @@ watch(() => store.state.messages.messages, (newVal, oldVal) => {
   }
 }
 </style> 
+
+

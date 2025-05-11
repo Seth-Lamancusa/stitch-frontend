@@ -1,298 +1,202 @@
 export default {
-  // View-based state
-  viewConnection: null, // The current view's WebSocket connection
-  viewCallbacks: [], // Callbacks for view events
-  visibleMessageIds: [], // IDs of all visible messages in the current view
-  lastVisibleMessageId: null, // ID of the last visible message in the current view
-  pingInterval: null, // Interval for ping-pong
-  debugMode: true, // Enable detailed debug logging
+  // Core state
+  connection: null,
+  connectionPromise: null,
+  threadId: null,
+  endMessageId: null,
+  messageCallback: null,
+  pingInterval: null,
+  debugMode: true,
 
-  // Connect to WebSocket server for the current view
-  connectToView(viewId) {
-    // Close existing connection if there is one
-    if (this.viewConnection) {
-      this.closeViewConnection();
+  // Simple connection method - returns a promise that resolves when connected
+  async connectToThread(threadId, endMessageId) {
+    // If already connected to this thread with the same end message, do nothing
+    if (this.connection && 
+        this.threadId === threadId && 
+        this.endMessageId === endMessageId && 
+        this.connection.readyState === WebSocket.OPEN) {
+      this.log(`Already connected to thread ${threadId} with end message ${endMessageId}`);
+      return Promise.resolve();
     }
     
-    const baseWsUrl = import.meta.env.VITE_WS_URL || `ws://${window.location.host}`;
-    const wsUrl = `${baseWsUrl}/ws/view/${viewId}`;
-    
-    if (this.debugMode) {
-      console.log(`[WebSocket] Connecting to ${wsUrl}`);
+    // If connected to a different thread or different end message, disconnect first
+    if (this.connection) {
+      this.disconnectFromThread();
     }
     
-    // Create a new WebSocket connection
-    const socket = new WebSocket(wsUrl);
+    // Store thread info
+    this.threadId = threadId;
+    this.endMessageId = endMessageId;
     
-    socket.onopen = () => {
-      console.log(`[WebSocket] Connected for view ${viewId}`);
+    // Create a new connection promise
+    this.connectionPromise = new Promise((resolve, reject) => {
+      // Create WebSocket connection
+      const baseWsUrl = import.meta.env.VITE_WS_URL || `ws://${window.location.host}`;
+      const wsUrl = `${baseWsUrl}/ws/view/${threadId}`;
       
-      // Re-subscribe to visible messages if any
-      if (this.visibleMessageIds.length > 0) {
-        if (this.debugMode) {
-          console.log(`[WebSocket] Re-subscribing to ${this.visibleMessageIds.length} messages after connection`);
-        }
-        this.sendSubscription(this.visibleMessageIds);
-      } else {
-        console.log(`[WebSocket] No messages to subscribe to after connection`);
-      }
-    };
-    
-    socket.onmessage = (event) => {
-      try {
-        // Handle ping/pong
-        if (event.data === 'pong') {
-          return;
+      this.log(`Connecting to ${wsUrl}`);
+      const socket = new WebSocket(wsUrl);
+      
+      // Set up event handlers
+      socket.onopen = () => {
+        this.log(`Connected to thread ${threadId}`);
+        
+        // Once connected, subscribe to the end message
+        if (this.endMessageId) {
+          this.log(`Subscribing to end message ${this.endMessageId}`);
+          this.sendSubscription(socket, [this.endMessageId]);
         }
         
-        const data = JSON.parse(event.data);
-        
-        if (this.debugMode) {
-          if (data.type === 'subscription_ack') {
-            console.log(`[WebSocket] Subscription acknowledged: ${data.message_ids?.length || 0} messages`);
-          } else if (data.type === 'new_reply') {
-            console.log(`[WebSocket] Received new reply: ${data.data?.id} to parent ${data.data?.parent_id}`);
-          } else {
-            console.log(`[WebSocket] Received message of type: ${data.type}`);
+        resolve(); // Resolve the connection promise
+      };
+      
+      socket.onmessage = (event) => {
+        try {
+          // Handle ping/pong
+          if (event.data === 'pong') {
+            return;
           }
+          
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'subscription_ack') {
+            this.log(`Subscription acknowledged: ${data.message_ids?.length || 0} messages`);
+          } else if (data.type === 'new_reply') {
+            this.log(`Received new reply: ${data.data?.id} to parent ${data.data?.parent_id}`);
+            
+            // Only process messages for our end message
+            if (data.data?.parent_id === this.endMessageId && this.messageCallback) {
+              this.messageCallback(data.data);
+            }
+          }
+        } catch (error) {
+          console.error('[WebSocket] Error handling message:', error);
         }
-        
-        this.handleViewMessage(data);
-      } catch (error) {
-        console.error('[WebSocket] Error handling message:', error);
-      }
-    };
-    
-    socket.onclose = () => {
-      console.log(`[WebSocket] Connection closed for view ${viewId}`);
-      this.viewConnection = null;
+      };
       
-      // Reconnect after delay if needed
-      if (this.viewCallbacks.length > 0) {
-        setTimeout(() => this.connectToView(viewId), 3000);
-      }
-    };
+      socket.onclose = (event) => {
+        this.log(`Connection closed for thread ${threadId}`, event.code, event.reason);
+        this.connection = null;
+        
+        // Only clear the promise if it's our current one
+        if (this.connectionPromise && !event.wasClean) {
+          this.connectionPromise = null;
+          reject(new Error('Connection closed unexpectedly'));
+        }
+      };
+      
+      socket.onerror = (error) => {
+        console.error(`[WebSocket] Error for thread ${threadId}:`, error);
+        reject(error);
+      };
+      
+      // Store the connection
+      this.connection = socket;
+      
+      // Set up ping interval
+      this.pingInterval = setInterval(() => {
+        if (this.connection?.readyState === WebSocket.OPEN) {
+          this.connection.send('ping');
+        }
+      }, 30000);
+    });
     
-    socket.onerror = (error) => {
-      console.error(`[WebSocket] Error for view ${viewId}:`, error);
-    };
-    
-    // Store the socket connection
-    this.viewConnection = socket;
-    
-    // Set up ping interval to keep connection alive
-    this.pingInterval = setInterval(() => {
-      if (this.viewConnection && this.viewConnection.readyState === WebSocket.OPEN) {
-        this.viewConnection.send('ping');
-      }
-    }, 30000); // Every 30 seconds
-    
-    return socket;
+    return this.connectionPromise;
   },
   
-  // Close view connection
-  closeViewConnection() {
-    if (this.viewConnection) {
-      this.viewConnection.close();
-      this.viewConnection = null;
+  // Disconnect from current thread
+  disconnectFromThread() {
+    if (this.connection) {
+      this.log(`Disconnecting from thread ${this.threadId}`);
+      
+      try {
+        this.connection.close();
+      } catch (e) {
+        console.error('[WebSocket] Error closing connection:', e);
+      }
+      
+      this.connection = null;
     }
     
+    // Clear ping interval
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
       this.pingInterval = null;
     }
     
-    this.visibleMessageIds = [];
-    this.lastVisibleMessageId = null;
-    this.viewCallbacks = [];
-    
-    if (this.debugMode) {
-      console.log(`[WebSocket] Connection and subscriptions cleared`);
-    }
+    // Clear thread state
+    this.threadId = null;
+    this.endMessageId = null;
+    this.connectionPromise = null;
   },
   
-  // Handle messages from view WebSocket
-  handleViewMessage(data) {
-    // Handle subscription acknowledgment
-    if (data.type === 'subscription_ack') {
-      return;
-    }
+  // Register callback for new messages
+  handleNewMessage(callback) {
+    this.messageCallback = callback;
     
-    // Check if this is a new reply to a visible message
-    if (data.type === 'new_reply' && data.data && data.data.parent_id) {
-      // Check if the parent message is in our visible messages
-      const parentId = data.data.parent_id;
-      const isParentVisible = this.visibleMessageIds.includes(parentId);
+    // Return unsubscribe function
+    return () => {
+      this.messageCallback = null;
       
-      // Special handling for replies to the last visible message
-      const isReplyToLastMessage = parentId === this.lastVisibleMessageId;
-      
-      // Add special flags to the data before passing to callbacks
-      data.isParentVisible = isParentVisible;
-      data.isReplyToLastMessage = isReplyToLastMessage;
-    
-      if (this.debugMode) {
-        console.log(`[WebSocket] Processing new reply ${data.data.id} to ${parentId}. Parent visible: ${isParentVisible}`);
+      // If no callback, we can disconnect
+      if (!this.messageCallback) {
+        this.disconnectFromThread();
       }
-    }
-    
-    // Notify all callbacks of the event
-    this.viewCallbacks.forEach(callback => {
-      callback(data);
-    });
+    };
   },
   
-  // Send subscription to server
-  sendSubscription(messageIds) {
-    if (!messageIds || messageIds.length === 0) {
-      console.warn('[WebSocket] Attempted to subscribe with empty message IDs list');
+  // Update the end message we're subscribed to
+  async updateEndMessage(endMessageId) {
+    // If same end message, do nothing
+    if (endMessageId === this.endMessageId) {
       return;
     }
     
-    if (this.viewConnection && this.viewConnection.readyState === WebSocket.OPEN) {
+    this.log(`Updating end message from ${this.endMessageId} to ${endMessageId}`);
+    this.endMessageId = endMessageId;
+    
+    // If connected, send new subscription
+    if (this.connection?.readyState === WebSocket.OPEN) {
+      this.sendSubscription(this.connection, [endMessageId]);
+    }
+  },
+  
+  // Send subscription to server (private helper)
+  sendSubscription(socket, messageIds) {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+    
+    if (socket.readyState === WebSocket.OPEN) {
       const subscription = {
         type: 'subscribe',
         messageIds: messageIds
       };
       
-      if (this.debugMode) {
-        console.log(`[WebSocket] Sending subscription for ${messageIds.length} messages: ${messageIds.join(', ')}`);
-      }
-      
-      this.viewConnection.send(JSON.stringify(subscription));
-    } else {
-      console.warn('[WebSocket] Cannot subscribe: View WebSocket not connected');
-      
-      // Create a new connection if needed
-      if (!this.viewConnection) {
-        console.log('[WebSocket] Creating new connection for subscription');
-        const viewId = `view_${Date.now()}`;
-        this.connectToView(viewId);
-        // The onopen handler will re-attempt subscription
-      } else {
-        console.log(`[WebSocket] Connection state: ${this.viewConnection.readyState}`);
-      }
+      this.log(`Sending subscription for messages: ${messageIds.join(', ')}`);
+      socket.send(JSON.stringify(subscription));
     }
   },
   
-  // Subscribe to all visible messages in the current view
-  subscribeToVisibleMessages(viewId, messageIds, lastMessageId, callback) {
+  // Helper for logging with debug mode
+  log(...messages) {
     if (this.debugMode) {
-      console.log(`[WebSocket] subscribeToVisibleMessages called for ${messageIds.length} messages`);
-    }
-    
-    // Store the message IDs
-    this.visibleMessageIds = [...messageIds];
-    this.lastVisibleMessageId = lastMessageId;
-    
-    // Add the callback
-    if (callback && !this.viewCallbacks.includes(callback)) {
-      this.viewCallbacks.push(callback);
-      if (this.debugMode) {
-        console.log(`[WebSocket] Added new callback, total callbacks: ${this.viewCallbacks.length}`);
-      }
-    }
-    
-    // Make sure we have a connection
-    if (!this.viewConnection) {
-      if (this.debugMode) {
-        console.log(`[WebSocket] No active connection, creating new one for view ${viewId}`);
-      }
-      this.connectToView(viewId);
-    } else if (this.viewConnection.readyState === WebSocket.OPEN) {
-      // If already connected, send subscription
-      if (this.debugMode) {
-        console.log(`[WebSocket] Using existing connection to subscribe`);
-      }
-      this.sendSubscription(messageIds);
-    } else {
-      if (this.debugMode) {
-        console.log(`[WebSocket] Connection not ready (state: ${this.viewConnection.readyState}), will subscribe when open`);
-      }
-    }
-    
-    // Return unsubscribe function
-    return () => {
-      this.viewCallbacks = this.viewCallbacks.filter(cb => cb !== callback);
-      
-      // If no more callbacks, close connection
-      if (this.viewCallbacks.length === 0) {
-        this.closeViewConnection();
-      }
-    };
-  },
-  
-  // Update the list of visible messages
-  updateVisibleMessages(messageIds, lastMessageId) {
-    if (!messageIds || messageIds.length === 0) {
-      console.warn('[WebSocket] Attempted to update with empty message IDs');
-      return;
-    }
-    
-    const hasChanges = 
-      messageIds.length !== this.visibleMessageIds.length || 
-      lastMessageId !== this.lastVisibleMessageId ||
-      messageIds.some(id => !this.visibleMessageIds.includes(id));
-      
-    if (hasChanges) {
-      if (this.debugMode) {
-        const added = messageIds.filter(id => !this.visibleMessageIds.includes(id));
-        if (added.length > 0) {
-          console.log(`[WebSocket] Adding ${added.length} new message subscriptions: ${added.join(', ')}`);
-        }
-      }
-      
-      this.visibleMessageIds = [...messageIds];
-      this.lastVisibleMessageId = lastMessageId;
-      
-      // Re-subscribe if connection is open
-      if (this.viewConnection && this.viewConnection.readyState === WebSocket.OPEN) {
-        this.sendSubscription(messageIds);
-      } else {
-        if (this.debugMode) {
-          console.log(`[WebSocket] Connection not ready for subscription update, state: ${this.viewConnection?.readyState}`);
-        }
-      }
-    } else {
-      if (this.debugMode) {
-        console.log(`[WebSocket] No changes in visible messages, skipping update`);
-      }
+      console.log('[WebSocket]', ...messages);
     }
   },
   
-  // Subscribe to a specific message
-  subscribeToMessage(messageId) {
-    if (!messageId) {
-      console.warn('[WebSocket] Attempted to subscribe to invalid message ID');
-      return;
+  // Backward compatibility functions
+  subscribeToEndOfBranchMessages(viewId, endMessageId, isAtEnd, callback) {
+    // Only subscribe if at the end of the thread
+    if (!isAtEnd) {
+      this.disconnectFromThread();
+      return () => {};
     }
     
-    // Always create a connection if we don't have one yet
-    if (!this.viewConnection) {
-      const viewId = `view_${Date.now()}`;
-      console.log(`[WebSocket] Creating new connection for subscribing to message ${messageId}`);
-      this.connectToView(viewId);
-      // Ensure we have a non-empty list to start with
-      this.visibleMessageIds = [messageId];
-      // The connection's onopen handler will send the subscription
-      return;
-    }
+    // Connect and register callback
+    this.connectToThread(viewId, endMessageId)
+      .catch(error => console.error('[WebSocket] Connection error:', error));
     
-    // Add to existing subscriptions
-    if (!this.visibleMessageIds.includes(messageId)) {
-      console.log(`[WebSocket] Adding message ${messageId} to subscriptions`);
-      this.visibleMessageIds.push(messageId);
-      
-      // Send updated subscription if connected
-      if (this.viewConnection && this.viewConnection.readyState === WebSocket.OPEN) {
-        this.sendSubscription(this.visibleMessageIds);
-      } else {
-        console.log(`[WebSocket] Connection not ready (state: ${this.viewConnection.readyState}), will subscribe when open`);
-      }
-    } else {
-      if (this.debugMode) {
-        console.log(`[WebSocket] Message ${messageId} already in subscription list`);
-      }
-    }
+    return this.handleNewMessage(callback);
   }
 };

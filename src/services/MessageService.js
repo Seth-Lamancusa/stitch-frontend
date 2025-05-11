@@ -25,7 +25,9 @@ export default {
   // Fetch a single message
   async getMessage(id) {
     const headers = await getAuthHeaders();
-    return axios.get(`${apiBaseUrl}/messages/${id}`, { headers });
+    const response = await axios.get(`${apiBaseUrl}/messages/${id}`, { headers });
+    console.log(`[DEBUG] MessageService - getMessage(${id}) response:`, response.data);
+    return response;
   },
   
   // Get multiple messages by ID in a single request
@@ -33,19 +35,12 @@ export default {
     if (!ids || ids.length === 0) return { data: [] };
     
     const headers = await getAuthHeaders();
-    return axios.post(`${apiBaseUrl}/messages/batch`, ids, { headers });
-  },
-  
-  // Get all reply IDs for a message
-  async getReplyIds(id) {
-    const headers = await getAuthHeaders();
-    return axios.get(`${apiBaseUrl}/messages/${id}/reply_ids`, { headers });
-  },
-  
-  // Get all replies for a message without pagination
-  async getAllReplies(id) {
-    const headers = await getAuthHeaders();
-    return axios.get(`${apiBaseUrl}/messages/replies/${id}`, { headers });
+    const response = await axios.post(`${apiBaseUrl}/messages/batch`, ids, { headers });
+    console.log('[DEBUG] MessageService - getMessagesBatch response:', 
+      response.data.length > 0 ? 
+      {count: response.data.length, firstMessage: response.data[0]} : 
+      {count: 0});
+    return response;
   },
   
   // Get count of replies for a message
@@ -63,7 +58,7 @@ export default {
     const messageData = {
       content,
       public: !isPrivate,
-      recipients
+      recipients // Now expects an array of UIDs
     };
     
     // Only include parent_id if this is a reply
@@ -71,18 +66,11 @@ export default {
       messageData.parent_id = parentId;
     }
     
-    // Include content_author if provided (should now be a UUID)
-    // Note: The backend will use the authenticated user's UID by default
-    if (content_author && content_author !== 'chatgpt') {
-      // For users, we'll let the backend handle it based on the auth token
-      if (content_author === 'chatgpt') {
-        messageData.content_author = content_author;
-      }
-      // Otherwise, we don't include content_author, as the backend will use the authenticated user's UID
-    } else if (content_author === 'chatgpt') {
-      // Handle the special ChatGPT case
+    // Handle special case for ChatGPT
+    if (content_author === 'chatgpt') {
       messageData.content_author = 'chatgpt';
     }
+    // For regular users, backend will use the authenticated user's UID from token
     
     return axios.post(`${apiBaseUrl}/messages`, messageData, { headers });
   },
@@ -93,6 +81,10 @@ export default {
     const safeLimit = Math.min(limit, 5000);
     const headers = await getAuthHeaders();
     const response = await axios.get(`${apiBaseUrl}/messages/recommended?limit=${safeLimit}`, { headers });
+    console.log('[DEBUG] MessageService - getRecommendedMessages response:', 
+      response.data.length > 0 ? 
+      {count: response.data.length, firstMessage: response.data[0]} : 
+      {count: 0});
     return response;
   },
   
@@ -139,9 +131,31 @@ export default {
     return axios.get(`${apiBaseUrl}/messages/pinned?limit=${limit}`, { headers });
   },
   
-  // Update message details (title, description)
-  async updateMessageDetails(messageId, details) {
+  // Load parent branch with specified depth
+  async loadBranchUp(messageId, depth = 2) {
     const headers = await getAuthHeaders();
-    return axios.patch(`${apiBaseUrl}/messages/${messageId}`, details, { headers });
+    const response = await axios.get(`${apiBaseUrl}/messages/branch_up/${messageId}?depth=${depth}`, { headers });
+    console.log(`[DEBUG] MessageService - loadBranchUp(${messageId}, depth=${depth}) response:`, 
+      response.data.length > 0 ? 
+      {count: response.data.length, firstMessage: response.data[0]} : 
+      {count: 0});
+    return response;
+  },
+  
+  // Load child branch with specified depth
+  async loadBranchDown(messageId, depth = 2) {
+    const headers = await getAuthHeaders();
+    const response = await axios.get(`${apiBaseUrl}/messages/branch_down/${messageId}?depth=${depth}`, { headers });
+    console.log(`[DEBUG] MessageService - loadBranchDown(${messageId}, depth=${depth}) response:`, 
+      response.data.length > 0 ? 
+      {count: response.data.length, firstMessage: response.data[0]} : 
+      {count: 0});
+    return response;
+  },
+  
+  // Update message title and description
+  async updateTitleDescription(id, titleData) {
+    const headers = await getAuthHeaders();
+    return axios.patch(`${apiBaseUrl}/messages/${id}/title-description`, titleData, { headers });
   }
 };

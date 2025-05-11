@@ -1,6 +1,29 @@
 import MessageService from '../../services/MessageService'
 import WebSocketService from '../../services/WebSocketService'
 
+// Helper function to check if a message is a descendant of another
+function isDescendantOf(state, messageId, ancestorId) {
+  if (!messageId || !ancestorId || messageId === ancestorId) return false;
+  
+  let currentId = messageId;
+  
+  // Traverse up the parent chain
+  while (currentId) {
+    const message = state.messages[currentId];
+    if (!message) break;
+    
+    // If this message's parent is the ancestor, it's a direct descendant
+    if (message.parent_id === ancestorId) {
+      return true;
+    }
+    
+    // Move up to the parent
+    currentId = message.parent_id;
+  }
+  
+  return false;
+}
+
 export default {
   namespaced: true,
   
@@ -8,185 +31,157 @@ export default {
     // Flat storage of messages by ID
     messages: {},
     
-    // Track parent-child relationships
-    relationships: {
-      // parentId: [childId1, childId2, ...]
-      parents: {},
-      // childId: parentId
-      children: {}
-    },
-    
-    // Track loading states
-    loadingStates: {
-      // messageId: 'loading' | 'loaded' | 'error'
-      messages: {},
-      // messageId: 'loading' | 'loaded' | 'error'
-      children: {},
-      // messageId: 'loading' | 'loaded' | 'error'
-      parents: {},
-      // messageId: 'loading' | 'loaded' | 'error'
-      chain: {}
-    },
-    
-    // Track currently viewed message
-    currentMessageId: null,
-    
-    // Track reply counts
-    replyCounts: {},
-    
-    // Loading state for pinned messages
-    isPinnedMessagesLoading: false,
-    
-    // Store recommended message IDs
-    recommendedMessageIds: []
+    // Track selected message
+    selectedMessageId: null
   },
   
   mutations: {
     SET_MESSAGE(state, message) {
-      state.messages = {
-        ...state.messages,
-        [message.id]: message
-      };
+      console.log('[DEBUG] messages.js - SET_MESSAGE received message:', {
+        id: message.id,
+        author_display_name: message.author_display_name,
+        author_user_tag: message.author_user_tag,
+        content_author: message.content_author
+      });
+      
+      // Ensure child_ids is always an array
+      if (!message.child_ids) {
+        message.child_ids = [];
+      }
+      
+      // Preserve branch_child if it exists
+      let currentBranchChild = null;
+      if (state.messages[message.id]) {
+        currentBranchChild = state.messages[message.id].branch_child;
+      }
+      
+      // Default branch_child to first child if there are children and no previous selection
+      const hasChildren = message.child_ids && message.child_ids.length > 0;
+      if (hasChildren && currentBranchChild === undefined) {
+        message.branch_child = message.child_ids[0];
+      } else if (hasChildren) {
+        // Keep existing selection if it's still valid
+        const isBranchChildValid = message.child_ids.includes(currentBranchChild);
+        message.branch_child = isBranchChildValid ? currentBranchChild : message.child_ids[0];
+      } else {
+        message.branch_child = null;
+      }
+      
+      state.messages[message.id] = { ...message };
     },
     
     SET_MESSAGES(state, messages) {
-      const newMessages = {};
-      messages.forEach(message => {
-        newMessages[message.id] = message;
-      });
+      for (const message of messages) {
+        // Ensure child_ids is always an array
+        if (!message.child_ids) {
+          message.child_ids = [];
+        }
+        
+        // Preserve branch_child if it exists
+        let currentBranchChild = null;
+        if (state.messages[message.id]) {
+          currentBranchChild = state.messages[message.id].branch_child;
+        }
+        
+        // Default branch_child to first child if there are children and no previous selection
+        const hasChildren = message.child_ids && message.child_ids.length > 0;
+        if (hasChildren && currentBranchChild === undefined) {
+          message.branch_child = message.child_ids[0];
+        } else if (hasChildren) {
+          // Keep existing selection if it's still valid
+          const isBranchChildValid = message.child_ids.includes(currentBranchChild);
+          message.branch_child = isBranchChildValid ? currentBranchChild : message.child_ids[0];
+        } else {
+          message.branch_child = null;
+        }
+        
+        state.messages[message.id] = { ...message };
+      }
+    },
+    
+    SET_SELECTED_MESSAGE(state, messageId) {
+      state.selectedMessageId = messageId;
+    },
+    
+    // Consolidated branch path mutation
+    SET_BRANCH_PATH(state, messageId) {
+      // First ensure the message exists
+      if (!state.messages[messageId]) return;
       
-      state.messages = {
-        ...state.messages,
-        ...newMessages
+      // Set this message's branch path flag to true
+      state.messages[messageId] = {
+        ...state.messages[messageId],
+        in_branch_path: true
       };
-    },
-    
-    SET_RELATIONSHIP(state, { parentId, childId }) {
-      // Set parent-child relationship
-      if (!state.relationships.parents[parentId]) {
-        state.relationships.parents[parentId] = [];
-      }
       
-      if (!state.relationships.parents[parentId].includes(childId)) {
-        state.relationships.parents[parentId].push(childId);
+      // If the message has a parent, remove all siblings from branch path
+      const parentId = state.messages[messageId].parent_id;
+      if (parentId && state.messages[parentId] && state.messages[parentId].child_ids) {
+        state.messages[parentId].child_ids.forEach(childId => {
+          if (childId !== messageId && state.messages[childId]) {
+            state.messages[childId] = {
+              ...state.messages[childId],
+              in_branch_path: false
+            };
+          }
+        });
       }
-      
-      // Set child-parent relationship
-      state.relationships.children[childId] = parentId;
     },
     
-    SET_LOADING_STATE(state, { id, type, status }) {
-      if (!state.loadingStates[type]) {
-        state.loadingStates[type] = {};
-      }
-      state.loadingStates[type][id] = status;
-    },
-    
-    SET_CURRENT_MESSAGE(state, messageId) {
-      state.currentMessageId = messageId;
-    },
-    
+    // Restore REMOVE_MESSAGE mutation
     REMOVE_MESSAGE(state, messageId) {
-      // First, recursively collect all descendant message IDs to remove
-      const collectDescendants = (parentId, collected = []) => {
-        if (state.relationships.parents[parentId]) {
-          // Get all child IDs
-          const childIds = [...state.relationships.parents[parentId]];
-          // Add each child and its descendants
-          childIds.forEach(childId => {
-            collected.push(childId);
-            collectDescendants(childId, collected);
-          });
+      // First check if message exists
+      if (!state.messages[messageId]) return;
+      
+      // If this message has a parent, remove it from parent's child_ids
+      const message = state.messages[messageId];
+      if (message.parent_id && state.messages[message.parent_id]) {
+        const parent = state.messages[message.parent_id];
+        if (parent.child_ids) {
+          const index = parent.child_ids.indexOf(messageId);
+          if (index !== -1) {
+            // Create a new array without the deleted message ID
+            const newChildIds = [...parent.child_ids];
+            newChildIds.splice(index, 1);
+            
+            // Update the parent with new child_ids array
+            state.messages[message.parent_id] = {
+              ...parent,
+              child_ids: newChildIds
+            };
+          }
         }
-        return collected;
-      };
-      
-      // Get all descendants to remove
-      const descendantIds = collectDescendants(messageId);
-      console.log(`Removing message ${messageId} and ${descendantIds.length} descendants`);
-      
-      // Create a copy of the messages object
-      const messages = { ...state.messages };
-      
-      // Remove the parent message
-      delete messages[messageId];
-      
-      // Remove all descendants
-      descendantIds.forEach(id => {
-        delete messages[id];
-      });
-      
-      // Update state with the filtered messages
-      state.messages = messages;
-      
-      // Remove from parent-child relationships
-      const parents = { ...state.relationships.parents };
-      const children = { ...state.relationships.children };
-      
-      // Remove parent relationship (parent → this message)
-      if (children[messageId]) {
-        const parentId = children[messageId];
-        if (parents[parentId]) {
-          parents[parentId] = parents[parentId].filter(id => id !== messageId);
-        }
-        delete children[messageId];
       }
       
-      // Remove child relationships (this message → all children)
-      delete parents[messageId];
-      
-      // Remove all descendant relationships
-      descendantIds.forEach(id => {
-        delete parents[id];
-        delete children[id];
-      });
-      
-      // Update the relationship state
-      state.relationships.parents = parents;
-      state.relationships.children = children;
+      // Delete the message
+      delete state.messages[messageId];
     },
     
-    SET_REPLY_COUNT(state, { messageId, count }) {
-      state.replyCounts = {
-        ...state.replyCounts,
-        [messageId]: count
-      };
-    },
-    
+    // Restore REMOVE_TEMP_THREAD mutation
     REMOVE_TEMP_THREAD(state, threadId) {
-      // Create a copy of the messages without the temp thread
-      const messages = { ...state.messages };
-      
-      // Remove the specified temp thread
-      if (messages[threadId]) {
-        delete messages[threadId];
+      if (state.messages[threadId]) {
+        delete state.messages[threadId];
       }
-      
-      // Also check through all messages to find any with matching temp ID
-      Object.keys(messages).forEach(id => {
-        if (typeof id === 'string' && id.startsWith('temp-')) {
-          delete messages[id];
-        }
-      });
-      
-      state.messages = messages;
     },
     
-    SET_PINNED_MESSAGES_LOADING(state, isLoading) {
-      state.isPinnedMessagesLoading = isLoading;
-    },
-    
-    UPDATE_MESSAGE_PIN_STATUS(state, { messageId, isPinned }) {
+    UPDATE_PIN_STATUS(state, { messageId, isPinned }) {
       if (state.messages[messageId]) {
+        state.messages[messageId].is_pinned = isPinned ? 1 : 0;
+      }
+    },
+    
+    // New mutation to change selected child
+    SET_BRANCH_CHILD(state, { messageId, childId }) {
+      const message = state.messages[messageId];
+      if (!message) return;
+      
+      // Verify childId is a valid child
+      if (message.child_ids && message.child_ids.includes(childId)) {
         state.messages[messageId] = {
-          ...state.messages[messageId],
-          is_pinned: isPinned ? 1 : 0
+          ...message,
+          branch_child: childId
         };
       }
-    },
-    
-    SET_RECOMMENDED_MESSAGE_IDS(state, ids) {
-      state.recommendedMessageIds = ids;
     }
   },
   
@@ -195,118 +190,12 @@ export default {
       return typeof id === 'string' && id.toString().startsWith('temp-');
     },
     
-    // Helper function to load a message and all its replies to specified depth
-    async loadMessageBranchDown({ commit, dispatch }, { messageId, depth, currentDepth = 0 }) {
-      
-      if (currentDepth > depth) {
-        return [];
+    // Simplified message loading - single message only
+    async loadMessage({ commit, state }, messageId) {
+      // Return cached message if available
+      if (state.messages[messageId]) {
+        return state.messages[messageId];
       }
-      
-      // Load the message itself if not already loaded
-      const message = await dispatch('loadMessageIfNeeded', messageId);
-      if (!message) {
-        return []; // Skip if message couldn't be loaded
-      }
-      
-      // Load all replies using our getAllReplies endpoint
-      let replyMessages = [];
-      try {
-        // Use the new loadAllReplies action to get all replies at once
-        replyMessages = await dispatch('loadAllReplies', messageId);
-      } catch (error) {
-        return [message]; // Return just the message if replies can't be loaded
-      }
-      
-      // If no replies, return just the message
-      if (replyMessages.length === 0) {
-        return [message];
-      }
-      
-      // If at max depth, return the message but also fetch reply counts for all replies
-      // to ensure navigation UI is accurate even without loading actual content
-      if (currentDepth === depth) {
-        
-        // Ensure we have reply counts for all replies at the edge of our depth
-        for (const reply of replyMessages) {
-          // Fetch the reply count but don't await, let it happen in the background
-          dispatch('fetchReplyCount', reply.id);
-        }
-        
-        return [message];
-      }
-      
-      // For each reply, continue loading its branch if we haven't reached max depth
-      if (currentDepth < depth) {
-        let childBranches = [];
-        // Process replies sequentially to avoid overwhelming the server
-        for (const reply of replyMessages) {
-          const childBranch = await dispatch('loadMessageBranchDown', {
-            messageId: reply.id,
-            depth,
-            currentDepth: currentDepth + 1
-          });
-          childBranches = [...childBranches, ...childBranch];
-        }
-        
-        return [message, ...childBranches];
-      }
-      
-      return [message, ...replyMessages];
-    },
-    
-    // Helper function to load a message and all its parents to specified depth
-    async loadMessageBranchUp({ commit, dispatch }, { messageId, depth, currentDepth = 0 }) {
-      if (currentDepth > depth) return [];
-      
-      // Load the message itself if not already loaded
-      const message = await dispatch('loadMessageIfNeeded', messageId);
-      if (!message) return []; // Skip if message couldn't be loaded
-      
-      // If no parent or at max depth, return just the message
-      if (!message.parent_id || currentDepth === depth) {
-        return [message];
-      }
-      
-      // Recursively load parent branch
-      const parentBranch = await dispatch('loadMessageBranchUp', {
-        messageId: message.parent_id,
-        depth,
-        currentDepth: currentDepth + 1
-      });
-      
-      // Set up relationship
-      if (parentBranch.length > 0) {
-            commit('SET_RELATIONSHIP', {
-          parentId: message.parent_id,
-          childId: message.id
-        });
-      }
-      
-      return [...parentBranch, message];
-    },
-    
-    // Load a message if it's not already in the store
-    async loadMessageIfNeeded({ commit, state, getters, dispatch }, messageId) {
-      // Check if message is already loaded
-      const existingMessage = getters.getMessage(messageId);
-      
-      if (existingMessage && 
-          state.loadingStates.messages && 
-          state.loadingStates.messages[messageId] === 'loaded') {
-        // Always fetch the reply count to ensure navigation state is correct
-        if (state.replyCounts[messageId] === undefined) {
-          dispatch('fetchReplyCount', messageId);
-        }
-        
-        // Even though the message is loaded, ensure all its replies are loaded too
-        if (!state.loadingStates.children || state.loadingStates.children[messageId] !== 'loaded') {
-          dispatch('loadAllReplies', messageId);
-        }
-        
-        return existingMessage;
-      }
-      
-      commit('SET_LOADING_STATE', { id: messageId, type: 'messages', status: 'loading' });
       
       try {
         const response = await MessageService.getMessage(messageId);
@@ -314,185 +203,205 @@ export default {
         
         if (message) {
           commit('SET_MESSAGE', message);
-          commit('SET_LOADING_STATE', { id: messageId, type: 'messages', status: 'loaded' });
-          
-          // Always fetch the reply count first
-          await dispatch('fetchReplyCount', messageId);
-          
-          // Always load all replies when a message is loaded
-          dispatch('loadAllReplies', messageId);
+          return message;
         } else {
-          commit('SET_LOADING_STATE', { id: messageId, type: 'messages', status: 'error' });
+          return null;
         }
-        
-        return message;
       } catch (error) {
-        commit('SET_LOADING_STATE', { id: messageId, type: 'messages', status: 'error' });
+        console.error(`Error loading message ${messageId}:`, error);
         return null;
       }
     },
     
-    // Load multiple messages if they're not already in the store
-    async loadMessagesIfNeeded({ commit, dispatch, state, getters }, messageIds) {
-      if (!messageIds || messageIds.length === 0) return [];
-      
-      // Filter to only messages not already loaded
-      const idsToLoad = messageIds.filter(id => 
-        !getters.getMessage(id) || 
-        !state.loadingStates.messages || 
-        state.loadingStates.messages[id] !== 'loaded'
-      );
-      
-      if (idsToLoad.length === 0) {
-        // All messages already loaded
-        const loadedMessages = messageIds.map(id => getters.getMessage(id)).filter(Boolean);
-        
-        // Make sure we have reply counts for all messages
-        for (const messageId of messageIds) {
-          // Always fetch the reply count to ensure navigation state is correct
-          if (state.replyCounts[messageId] === undefined) {
-            dispatch('fetchReplyCount', messageId);
-          }
-          
-          // Even though the messages are loaded, ensure all their replies are loaded too
-          if (!state.loadingStates.children || state.loadingStates.children[messageId] !== 'loaded') {
-            dispatch('loadAllReplies', messageId);
-          }
-        }
-        
-        return loadedMessages;
+    // NEW ACTION: Prepare branch path by setting branch_child relationships
+    // This should be called before using getVisibleBranchMessages
+    prepareBranchPath({ commit, state }, threadRootId) {
+      if (!threadRootId || !state.messages[threadRootId]) {
+        console.log(`[prepareBranchPath] Cannot prepare path: message ${threadRootId} not found`);
+        return false;
       }
       
-      // Set loading state for all messages
-      idsToLoad.forEach(id => {
-        commit('SET_LOADING_STATE', { id, type: 'messages', status: 'loading' });
-      });
+      console.log(`[prepareBranchPath] Preparing branch path for message ID: ${threadRootId}`);
       
-      try {
-        const response = await MessageService.getMessagesBatch(idsToLoad);
-        const messages = response.data;
+      // STEP 1: First trace UPWARD to find the highest ancestor in the store
+      let startingMessage = state.messages[threadRootId];
+      let highestAncestor = startingMessage;
+      let childMessage = startingMessage;
+      let currentParentId = startingMessage.parent_id;
+      
+      // Trace up through parent_id as far as we can go
+      while (currentParentId && state.messages[currentParentId]) {
+        const parentMessage = state.messages[currentParentId];
+        console.log(`[prepareBranchPath] Tracing upward: found parent ${currentParentId} for child ${childMessage.id}`);
         
-        // Add messages to store
-        commit('SET_MESSAGES', messages);
+        // Set this parent's branch_child to point to the child we came from
+        commit('SET_BRANCH_CHILD', { 
+          messageId: currentParentId, 
+          childId: childMessage.id 
+        });
         
-        // Set loading state for loaded messages, fetch reply counts and load replies
-        for (const message of messages) {
-          commit('SET_LOADING_STATE', { id: message.id, type: 'messages', status: 'loaded' });
+        // Move up one level
+        highestAncestor = parentMessage;
+        childMessage = parentMessage;
+        currentParentId = parentMessage.parent_id;
+      }
+      
+      console.log(`[prepareBranchPath] Highest ancestor found: ${highestAncestor.id}`);
+      
+      // STEP 2: Now follow the branch path down, ensuring each node has branch_child set
+      let currentMessage = highestAncestor;
+      
+      // Trace downward, ensuring each node has a branch_child if it has children
+      while (true) {
+        // If message has no branch child but has child_ids, set first child as branch_child
+        if (!currentMessage.branch_child && currentMessage.child_ids && currentMessage.child_ids.length > 0) {
+          console.log(`[prepareBranchPath] Setting branch_child for ${currentMessage.id} to first child ${currentMessage.child_ids[0]}`);
           
-          // First fetch the reply count
-          await dispatch('fetchReplyCount', message.id);
+          commit('SET_BRANCH_CHILD', { 
+            messageId: currentMessage.id, 
+            childId: currentMessage.child_ids[0] 
+          });
           
-          // Then load all replies for this message
-          dispatch('loadAllReplies', message.id);
+          // Get updated message reference
+          currentMessage = state.messages[currentMessage.id];
         }
         
-        // Handle any messages that weren't returned (not found, no permission, etc.)
-        const loadedIds = messages.map(m => m.id);
-        const failedIds = idsToLoad.filter(id => !loadedIds.includes(id));
+        // If message has no branch child (even after trying to set one), break
+        if (!currentMessage.branch_child) {
+          console.log(`[prepareBranchPath] No branch_child for ${currentMessage.id}, ending traversal`);
+          break;
+        }
         
-        failedIds.forEach(id => {
-          commit('SET_LOADING_STATE', { id, type: 'messages', status: 'error' });
-        });
+        const childId = currentMessage.branch_child;
         
-        // Return all successfully loaded messages (including ones that were already loaded)
-        return messageIds
-          .map(id => getters.getMessage(id))
-          .filter(Boolean);
+        // If child doesn't exist in the store, break
+        if (!state.messages[childId]) {
+          console.log(`[prepareBranchPath] Child ${childId} not found in store, ending traversal`);
+          break;
+        }
+        
+        // Move to the next message
+        currentMessage = state.messages[childId];
+      }
+      
+      console.log(`[prepareBranchPath] Branch path preparation complete`);
+      return true;
+    },
+    
+    // Consolidated branch path management
+    setBranchPath({ commit, state }, messageId) {
+      if (!messageId || !state.messages[messageId]) return;
+      
+      // Ensure this message is in branch path
+      commit('SET_BRANCH_PATH', messageId);
+      
+      // If message has parent in store, add parent to branch path
+      const message = state.messages[messageId];
+      if (message.parent_id && state.messages[message.parent_id]) {
+        commit('SET_BRANCH_PATH', message.parent_id);
+      }
+      
+      console.log(`[DEBUG] Set branch path for message ${messageId}`);
+      return true;
+    },
+    
+    // Load parent branch
+    async loadMessageBranchUp({ commit, dispatch, state }, { messageId, depth = 1 }) {
+      if (!messageId) return [];
+      
+      try {
+        // Call the backend endpoint for efficient branch loading
+        const response = await MessageService.loadBranchUp(messageId, depth);
+        const messages = response.data || [];
+        
+        if (messages.length > 0) {
+          // Add messages to store
+          commit('SET_MESSAGES', messages);
+          
+          // Add all messages to branch path
+          for (const message of messages) {
+            dispatch('setBranchPath', message.id);
+          }
+          
+          console.log(`[DEBUG] Loaded ${messages.length} messages in parent branch for ${messageId}`);
+        }
+        
+        return messages;
       } catch (error) {
-        console.error(`Error loading messages batch:`, error);
-        idsToLoad.forEach(id => {
-          commit('SET_LOADING_STATE', { id, type: 'messages', status: 'error' });
-        });
-        
-        // Return any messages that were already loaded
-        return messageIds
-          .map(id => getters.getMessage(id))
-          .filter(Boolean);
+        console.error(`Error loading parent branch for ${messageId}:`, error);
+        return [];
       }
     },
     
-    // Load initial message with its parent and child branches
-    async loadInitialMessage({ commit, dispatch, getters }, messageId) {
-      commit('SET_LOADING_STATE', { id: messageId, type: 'message', status: 'loading' });
+    // Load child branch
+    async loadMessageBranchDown({ commit, dispatch, state }, { messageId, depth = 1 }) {
+      if (!messageId) return [];
       
       try {
-        // First load the message itself
-        const message = await dispatch('loadMessageIfNeeded', messageId);
+        // Call the backend endpoint for efficient branch loading
+        const response = await MessageService.loadBranchDown(messageId, depth);
+        const messages = response.data || [];
         
-        if (!message) {
-          console.error(`[DEBUG] Could not load message ${messageId}, message not found or error occurred`);
-          throw new Error(`Could not load message ${messageId}`);
+        if (messages.length > 0) {
+          // Add messages to store
+          commit('SET_MESSAGES', messages);
+          
+          // Add first message in each level to branch path
+          // First message is guaranteed to be the start message
+          dispatch('setBranchPath', messages[0].id);
+          
+          // For each subsequent message, if it's a direct child of a previous message
+          // in the branch path, add it to the branch path as well
+          for (let i = 1; i < messages.length; i++) {
+            const message = messages[i];
+            const parent = message.parent_id ? state.messages[message.parent_id] : null;
+            
+            if (parent && parent.in_branch_path) {
+              // Only add first child of each parent to branch path
+              const siblings = messages.filter(m => m.parent_id === parent.id);
+              if (siblings.length > 0 && siblings[0].id === message.id) {
+                dispatch('setBranchPath', message.id);
+              }
+            }
+          }
+          
+          console.log(`[DEBUG] Loaded ${messages.length} messages in child branch for ${messageId}`);
         }
         
-        // Load parent branch (upward)
-        const parentDepth = 2; // Changed from 1 to 2
-        const parentBranch = await dispatch('loadMessageBranchUp', {
-          messageId,
-          depth: parentDepth
-        });
-        
-        // Load child branch (downward)
-        const childDepth = 2; // Changed from 1 to 2
-        const childBranch = await dispatch('loadMessageBranchDown', {
-          messageId,
-          depth: childDepth
-        });
-        
-        // Mark as loaded
-        commit('SET_LOADING_STATE', { id: messageId, type: 'message', status: 'loaded' });
-        
-        return message;
+        return messages;
       } catch (error) {
-        console.error(`Error loading initial message ${messageId}:`, error);
-        commit('SET_LOADING_STATE', { id: messageId, type: 'message', status: 'error' });
-        throw error;
-      }
-    },
-    
-    // Load parent messages
-    async loadParents({ commit, dispatch, state }, { messageId, limit }) {
-      commit('SET_LOADING_STATE', { id: messageId, type: 'parents', status: 'loading' });
-      
-      try {
-        const message = await dispatch('loadMessageIfNeeded', messageId);
-        if (!message || !message.parent_id) {
-          commit('SET_LOADING_STATE', { id: messageId, type: 'parents', status: 'loaded' });
-          return [];
-        }
-        
-        // Load parent branch
-        const parents = await dispatch('loadMessageBranchUp', {
-          messageId: message.parent_id,  // Start from parent
-          depth: limit - 1              // Adjust depth since we're starting from parent
-        });
-        
-        commit('SET_LOADING_STATE', { id: messageId, type: 'parents', status: 'loaded' });
-        return parents;
-      } catch (error) {
-        commit('SET_LOADING_STATE', { id: messageId, type: 'parents', status: 'error' });
-        throw error;
+        console.error(`Error loading children branch for ${messageId}:`, error);
+        return [];
       }
     },
     
     // Send a reply to a message
-    async sendReply({ commit, dispatch, rootState }, { parentId, content, isPrivate, recipients, content_author }) {
+    async sendReply({ commit, dispatch, rootState, state }, { parentId, content, isPrivate, recipients, content_author }) {
       try {
         // Use the current user if content_author is not provided
         const effectiveAuthor = content_author || rootState.user?.email;
         
-        // Use recipients as provided without automatically adding current user
-        let updatedRecipients = [...(recipients || [])];
+        // Process recipients to extract UIDs
+        let recipientUids = [];
+        if (recipients && recipients.length > 0) {
+          recipientUids = recipients.map(recipient => {
+            // If recipient is already an object with a uid
+            if (typeof recipient === 'object' && recipient.uid) {
+              return recipient.uid;
+            }
+            // If recipient is a string (backward compatibility)
+            else if (typeof recipient === 'string') {
+              return recipient; // Will be resolved by server
+            }
+            return null;
+          }).filter(uid => uid !== null); // Remove any nulls
+        }
         
         // Only add the author as recipient in private messages with no recipients
         // to ensure they can see their own message
-        if (isPrivate && updatedRecipients.length === 0 && effectiveAuthor) {
-          updatedRecipients.push(effectiveAuthor);
-        }
-        
-        // Log if ChatGPT is included as a recipient for debugging
-        const isChatGPTMessage = updatedRecipients.includes('chatgpt');
-        if (isChatGPTMessage) {
-          console.log('Sending message with ChatGPT as recipient, ensuring subscriptions');
+        if (isPrivate && recipientUids.length === 0 && effectiveAuthor) {
+          // If effectiveAuthor is an email, it will be resolved to UID by server
+          recipientUids.push(effectiveAuthor);
         }
         
         // Make API call to create the reply
@@ -500,7 +409,7 @@ export default {
           parentId, 
           content, 
           isPrivate, 
-          updatedRecipients, 
+          recipientUids, 
           effectiveAuthor
         );
         
@@ -509,145 +418,29 @@ export default {
         // Add to store
         commit('SET_MESSAGE', newMessage);
         
-        // Set the relationship
-        if (parentId) {
-          commit('SET_RELATIONSHIP', {
-            parentId: parentId,
+        // Update parent's child_ids if parent exists
+        if (parentId && state.messages[parentId]) {
+          const parent = state.messages[parentId];
+          const updatedParent = {
+            ...parent,
+            child_ids: [...(parent.child_ids || []), newMessage.id]
+          };
+          commit('SET_MESSAGE', updatedParent);
+          
+          // Set the new message as the branch child of the parent
+          dispatch('setBranchChild', {
+            messageId: parentId,
             childId: newMessage.id
           });
-          
-          // Update reply count
-          await dispatch('fetchReplyCount', parentId);
         }
         
-        // IMPORTANT: Always subscribe to the new message AND its parent
-        // This ensures we'll receive any ChatGPT responses to our messages
-        WebSocketService.subscribeToMessage(newMessage.id); // Subscribe to the new message
-        
-        if (parentId) {
-          // Also subscribe to parent in case it wasn't already subscribed
-          WebSocketService.subscribeToMessage(parentId);
-        }
-        
-        // For ChatGPT messages, ensure we update subscriptions right away
-        if (isChatGPTMessage) {
-          const viewId = `view_${Date.now()}`;
-          let visibleMessageIds = WebSocketService.visibleMessageIds || [];
-          
-          // Ensure both new message and parent are in the list
-          if (!visibleMessageIds.includes(newMessage.id)) {
-            visibleMessageIds.push(newMessage.id);
-          }
-          
-          if (parentId && !visibleMessageIds.includes(parentId)) {
-            visibleMessageIds.push(parentId);
-          }
-          
-          // Force update subscriptions
-          WebSocketService.updateVisibleMessages(visibleMessageIds, newMessage.id);
-          console.log(`Subscribed to messages for ChatGPT interaction: ${visibleMessageIds.join(', ')}`);
-        }
+        // No need to subscribe here, ThreadView handles WebSocket subscriptions
         
         return newMessage;
       } catch (error) {
         console.error("Error sending reply:", error);
         throw error;
       }
-    },
-    
-    // Subscribe to end-of-branch messages for real-time updates
-    subscribeToEndOfBranchMessages({ commit, state, getters, dispatch, rootGetters }) {
-      
-      // Generate a unique view ID
-      const viewId = `view_${Date.now()}`;
-      
-      // Get all visible messages from the current branch
-      const visibleMessages = getters.getVisibleBranchMessages || [];
-      const visibleMessageIds = visibleMessages.map(message => message.id);
-      
-      // Find the last message in the branch (for special handling)
-      const lastVisibleMessageId = visibleMessages.length > 0 
-        ? visibleMessages[visibleMessages.length - 1].id 
-        : null;
-      
-      console.log(`[DEBUG WSCallback] Setting up WebSocket subscription for messages: ${visibleMessageIds.join(', ')}`);
-      
-      // Subscribe to updates
-      const unsubscribe = WebSocketService.subscribeToVisibleMessages(
-        viewId,
-        visibleMessageIds,
-        lastVisibleMessageId,
-        (data) => {
-          if (data.type === 'new_reply' && data.data) {
-            console.log(`[DEBUG WSCallback] WebSocket received new_reply event. Message ID: ${data.data.id}, Parent ID: ${data.data.parent_id}`);
-            const message = data.data;
-            
-            // Check if this is a reply to a visible message
-            if (data.isParentVisible) {
-              console.log(`[DEBUG WSCallback] Parent is visible, adding message to store`);
-              
-              // Add to store
-              commit('SET_MESSAGE', message);
-              
-              // Set relationship
-              if (message.parent_id) {
-                console.log(`[DEBUG WSCallback] Setting relationship: parent=${message.parent_id}, child=${message.id}`);
-                commit('SET_RELATIONSHIP', {
-                  parentId: message.parent_id,
-                  childId: message.id
-                });
-                
-                // Update parent has_children flag to true since it now has a child
-                const parentMessage = getters.getMessage(message.parent_id);
-                if (parentMessage) {
-                  console.log(`[DEBUG WSCallback] Updating parent message has_children flag`);
-                  parentMessage.has_children = true;
-                  commit('SET_MESSAGE', parentMessage);
-                  
-                  // Update reply count
-                  const currentCount = getters.getReplyCount(message.parent_id) || 0;
-                  console.log(`[DEBUG WSCallback] Updating reply count for parent ${message.parent_id} from ${currentCount} to ${currentCount + 1}`);
-                  commit('SET_REPLY_COUNT', { 
-                    messageId: message.parent_id, 
-                    count: currentCount + 1 
-                  });
-                } else {
-                  console.log(`[DEBUG WSCallback] Parent message ${message.parent_id} not found in store, relationship may be incomplete`);
-                }
-                
-                // Check if we need to update the selected message
-                const selectedId = rootGetters['navigation/selectedMessageId'];
-                
-                // If the parent is the selected message, update navigation to show the new reply
-                if (selectedId === message.parent_id) {
-                  console.log(`[DEBUG WSCallback] Parent is selected message - refreshing navigation`);
-                  
-                  // Update the current child in navigation to show this message
-                  dispatch('navigation/setCurrentChildId', {
-                    parentId: message.parent_id,
-                    childId: message.id
-                  }, { root: true });
-                  
-                  // Force refresh of the displayed messages by re-selecting the parent message
-                  setTimeout(() => {
-                    console.log(`[DEBUG WSCallback] Refreshing message selection to show ${message.id}`);
-                    dispatch('navigation/selectMessage', message.parent_id, { root: true });
-                    
-                    // Then select the new message
-                    setTimeout(() => {
-                      dispatch('navigation/selectMessage', message.id, { root: true });
-                    }, 50);
-                  }, 50);
-                }
-              }
-            } else {
-              console.log(`[DEBUG WSCallback] Parent message ${message.parent_id} not in visible messages list, not processing`);
-            }
-          }
-        }
-      );
-      
-      return unsubscribe;
     },
     
     // Delete a message
@@ -657,11 +450,6 @@ export default {
         
         // API call to delete the message
         await MessageService.deleteMessage(messageId);
-        
-        // Before removing, log what we know about descendants
-        if (state.relationships.parents[messageId]) {
-          const childIds = state.relationships.parents[messageId];
-        }
         
         // Remove from store
         commit('REMOVE_MESSAGE', messageId);
@@ -673,194 +461,43 @@ export default {
       }
     },
     
-    // Import a ChatGPT conversation
-    async importChatGPT({ commit, dispatch }, { content, isPublic, recipients }) {
-      try {
-        // Make API call to import conversation
-        const response = await MessageService.importChatGPT(content, isPublic, recipients);
-        
-        const rootMessage = response.data;
-        
-        // Add to store
-        commit('SET_MESSAGE', rootMessage);
-        
-        // Subscribe to the new message for real-time updates
-        WebSocketService.subscribeToMessage(rootMessage.id);
-        
-        return rootMessage;
-      } catch (error) {
-        console.error('Error importing ChatGPT conversation:', error);
-        throw error;
-      }
-    },
-    
     // Fetch threads based on active tab
     async fetchThreads({ commit, rootState, dispatch }) {
       try {
-        commit('SET_LOADING_STATE', { id: 'threads', type: 'messages', status: 'loading' });
-        
         // Get active tab from UI store
         const activeTab = rootState.ui?.activeTab || 'public';
         
         let threads = [];
         let response;
         
-        // Fetch regular messages based on tab
+        // Set a loading flag in UI store
+        commit('ui/SET_LOADING', { key: 'threads', value: true }, { root: true });
+        
+        // Fetch messages based on tab
         if (activeTab === 'private') {
           response = await MessageService.getPrivateMessages(10);
           threads = response.data || [];
         } else {
-          // For public tab, fetch recommended messages
-          response = await MessageService.getRecommendedMessages(1000);
-          threads = response.data || [];
-          
-          // Additionally fetch any pinned messages that might not be in the recommended list
+          // For public tab, fetch only pinned messages
           try {
-            const pinnedResponse = await MessageService.getPinnedMessages();
-            if (pinnedResponse.data && pinnedResponse.data.length) {
-              // Merge pinned messages with threads
-              const pinnedMessages = pinnedResponse.data;
-              
-              // Check for duplicates before adding
-              const existingIds = new Set(threads.map(msg => msg.id));
-              const newPinnedMessages = pinnedMessages.filter(msg => !existingIds.has(msg.id));
-              
-              // Add any non-duplicate pinned messages
-              if (newPinnedMessages.length > 0) {
-                threads = [...newPinnedMessages, ...threads];
-              }
-            }
+            const pinnedResponse = await MessageService.getPinnedMessages(100); // Increased limit for pinned messages
+            threads = pinnedResponse.data || [];
           } catch (error) {
             console.error('Error fetching pinned messages:', error);
           }
         }
         
-        // Extract and store the message IDs for filtering in the UI
-        const messageIds = threads.map(msg => msg.id);
-        commit('SET_RECOMMENDED_MESSAGE_IDS', messageIds);
-        
-        // Log unique parent_ids to see thread structure
-        const uniqueParentIds = new Set();
-        const rootMessages = [];
-        threads.forEach(msg => {
-          if (msg.parent_id) {
-            uniqueParentIds.add(msg.parent_id);
-          } else {
-            rootMessages.push(msg);
-          }
-        });
-        
         // Store threads in the state
         commit('SET_MESSAGES', threads);
         
-        commit('SET_LOADING_STATE', { id: 'threads', type: 'messages', status: 'loaded' });
+        // Clear loading flag
+        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
+        
         return threads;
       } catch (error) {
-        commit('SET_LOADING_STATE', { id: 'threads', type: 'messages', status: 'error' });
         console.error('Error fetching threads:', error);
-        return [];
-      }
-    },
-    
-    // Update a message's fields
-    async updateMessage({ commit, state }, updateData) {
-      try {
-        // Get ID and remove from update data
-        const { id, ...fields } = updateData;
-        
-        if (!id) {
-          throw new Error('Message ID is required for updates');
-        }
-        
-        // Get existing message
-        const message = state.messages[id];
-        if (!message) {
-          throw new Error(`Message with ID ${id} not found`);
-        }
-        
-        // Create updated message
-        const updatedMessage = {
-          ...message,
-          ...fields
-        };
-        
-        // Update in store immediately for responsive UI
-        commit('SET_MESSAGE', updatedMessage);
-        
-        // Call API to persist changes in the backend
-        await MessageService.updateMessageDetails(id, fields);
-        
-        return updatedMessage;
-      } catch (error) {
-        console.error('Error updating message:', error);
-        throw error;
-      }
-    },
-    
-    // Fetch reply count for a message
-    async fetchReplyCount({ commit, state }, messageId) {
-      // Skip for temporary thread IDs
-      if (typeof messageId === 'string' && messageId.startsWith('temp-')) {
-        return 0;
-      }
-      
-      // Skip if we already have the count
-      if (state.replyCounts[messageId] !== undefined) {
-        return state.replyCounts[messageId];
-      }
-      
-      try {
-        const response = await MessageService.getReplyCount(messageId);
-        const count = response.data.count;
-        
-        commit('SET_REPLY_COUNT', { messageId, count });
-        return count;
-      } catch (error) {
-        console.error('Error fetching reply count:', error);
-        return 0;
-      }
-    },
-    
-    // Load all replies for a message using the getAllReplies endpoint
-    async loadAllReplies({ commit, state, dispatch }, messageId) {
-      // Skip for temporary thread IDs
-      if (typeof messageId === 'string' && messageId.startsWith('temp-')) {
-        return [];
-      }
-      
-      try {
-        commit('SET_LOADING_STATE', { id: messageId, type: 'children', status: 'loading' });
-        
-        // Get all replies from the API
-        const response = await MessageService.getAllReplies(messageId);
-        const replies = response.data || [];
-        
-        if (replies.length > 0) {
-          // Store all replies in the state
-          commit('SET_MESSAGES', replies);
-          
-          // Set up parent-child relationships for all replies
-          replies.forEach(reply => {
-            if (reply.id && reply.parent_id) {
-              commit('SET_RELATIONSHIP', {
-                parentId: reply.parent_id,
-                childId: reply.id
-              });
-            }
-          });
-          
-          // Set reply count
-          commit('SET_REPLY_COUNT', {
-            messageId,
-            count: replies.length
-          });
-        }
-        
-        commit('SET_LOADING_STATE', { id: messageId, type: 'children', status: 'loaded' });
-        return replies;
-      } catch (error) {
-        console.error(`loadAllReplies: Error loading replies for message ${messageId}:`, error);
-        commit('SET_LOADING_STATE', { id: messageId, type: 'children', status: 'error' });
+        // Clear loading flag on error
+        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
         return [];
       }
     },
@@ -870,229 +507,312 @@ export default {
       commit('REMOVE_TEMP_THREAD', threadId);
     },
     
-    // Add this helper method
-    updateSubscriptions({ state, getters }) {
-      const viewId = `view_${Date.now()}`;
-      const visibleMessages = getters.getVisibleBranchMessages || [];
-      const visibleMessageIds = visibleMessages.map(message => message.id);
-      const lastVisibleMessageId = visibleMessages.length > 0 
-        ? visibleMessages[visibleMessages.length - 1].id 
-        : null;
-      
-      // Update visible messages in WebSocketService
-      WebSocketService.updateVisibleMessages(visibleMessageIds, lastVisibleMessageId);
+    // Select a message
+    selectMessage({ commit }, messageId) {
+      commit('SET_SELECTED_MESSAGE', messageId);
     },
     
+    // Clear cache of all loaded messages (except thread preview messages needed for list view)
+    async clearCache({ commit, state, rootState }) {
+      console.log('[DEBUG] Clearing messages cache');
+      
+      // Keep a record of thread preview messages (those shown in list view)
+      // This is more efficient than reloading them when returning to list view
+      const threadsToKeep = {};
+      
+      // Find top-level thread messages (those with no parent or parent not loaded)
+      Object.values(state.messages).forEach(message => {
+        // If message has no parent or parent isn't loaded, it's likely a thread root
+        const isThreadRoot = !message.parent_id || !state.messages[message.parent_id];
+        
+        if (isThreadRoot) {
+          // Keep the minimal info needed for list view
+          threadsToKeep[message.id] = {
+            ...message,
+            // Clear branch path information
+            in_branch_path: false,
+          };
+        }
+      });
+      
+      // Clear the state and re-add only the thread previews
+      state.messages = { ...threadsToKeep };
+      
+      return true;
+    },
+    
+    // Pin a message (admin only)
     async pinMessage({ commit }, messageId) {
       try {
         await MessageService.pinMessage(messageId);
-        commit('UPDATE_MESSAGE_PIN_STATUS', { messageId, isPinned: true });
+        
+        // Update the message in the store
+        commit('UPDATE_PIN_STATUS', { messageId, isPinned: true });
+        
         return true;
       } catch (error) {
         console.error('Error pinning message:', error);
+        throw error;
+      }
+    },
+    
+    // Unpin a message (admin only)
+    async unpinMessage({ commit }, messageId) {
+      try {
+        await MessageService.unpinMessage(messageId);
+        commit('UPDATE_PIN_STATUS', { messageId, isPinned: false });
+        return true;
+      } catch (error) {
+        console.error(`Error unpinning message ${messageId}:`, error);
         return false;
       }
     },
     
-    async unpinMessage({ commit }, messageId) {
+    // New action for updating title and description
+    async updateTitleDescription({ commit, state }, { messageId, title, description }) {
       try {
-        await MessageService.unpinMessage(messageId);
-        commit('UPDATE_MESSAGE_PIN_STATUS', { messageId, isPinned: false });
+        await MessageService.updateTitleDescription(messageId, { title, description });
+        
+        // Update the message in the store
+        const message = state.messages[messageId];
+        if (message) {
+          commit('SET_MESSAGE', {
+            ...message,
+            title,
+            description
+          });
+        }
+        
         return true;
       } catch (error) {
-        console.error('Error unpinning message:', error);
+        console.error(`Error updating title/description for message ${messageId}:`, error);
         return false;
       }
-    }
+    },
+    
+    // New action to set selected child
+    setBranchChild({ commit, state }, { messageId, childId }) {
+      // Return early if message doesn't exist
+      if (!state.messages[messageId]) return false;
+      
+      const message = state.messages[messageId];
+      
+      // Return early if not a valid child
+      if (!message.child_ids || !message.child_ids.includes(childId)) {
+        return false;
+      }
+      
+      commit('SET_BRANCH_CHILD', { messageId, childId });
+      return true;
+    },
+    
+    // New action to handle sibling navigation
+    navigateToSibling({ commit, state, dispatch, rootState }, { messageId, direction }) {
+      const message = state.messages[messageId];
+      if (!message || !message.child_ids || message.child_ids.length <= 1) {
+        return false;
+      }
+      
+      const currentChildId = message.branch_child;
+      const currentIndex = message.child_ids.indexOf(currentChildId);
+      
+      if (currentIndex === -1) {
+        // If no valid current child, default to first
+        commit('SET_BRANCH_CHILD', { 
+          messageId: messageId, 
+          childId: message.child_ids[0] 
+        });
+        return true;
+      }
+      
+      let newIndex;
+      if (direction === 'prev') {
+        newIndex = Math.max(0, currentIndex - 1);
+      } else {
+        newIndex = Math.min(message.child_ids.length - 1, currentIndex + 1);
+      }
+      
+      // Only update if actually changing
+      if (newIndex !== currentIndex) {
+        const newChildId = message.child_ids[newIndex];
+        const oldChildId = currentChildId;
+        
+        // Update the branch child
+        commit('SET_BRANCH_CHILD', { 
+          messageId: messageId, 
+          childId: newChildId 
+        });
+        
+        // Get current selected message ID
+        const selectedMessageId = rootState.navigation?.selectedMessageId;
+        
+        // Check if the previous sibling was selected
+        const wasCurrentChildSelected = selectedMessageId === oldChildId;
+        
+        // Check if the current selection is downstream of the old sibling
+        let isSelectionDownstream = false;
+        if (selectedMessageId && selectedMessageId !== oldChildId) {
+          // Check if the selected message is a descendant of the old child
+          isSelectionDownstream = isDescendantOf(state, selectedMessageId, oldChildId);
+        }
+        
+        // Handle selection state
+        if (wasCurrentChildSelected) {
+          // If previous sibling was selected, select the new sibling
+          console.log(`[navigateToSibling] Auto-selecting new sibling ${newChildId} because previous sibling was selected`);
+          dispatch('navigation/selectMessage', newChildId, { root: true });
+        } else if (isSelectionDownstream) {
+          // If selection is downstream of old sibling, clear selection
+          console.log(`[navigateToSibling] Clearing selection because selected message ${selectedMessageId} is downstream of old sibling ${oldChildId}`);
+          dispatch('navigation/selectMessage', null, { root: true });
+        } else {
+          console.log(`[navigateToSibling] Not changing selection state`);
+        }
+        
+        return true;
+      }
+      
+      return false;
+    },
+    
+    // Import a ChatGPT conversation
+    async importChatGPT({ commit, dispatch }, { content, isPublic, recipients }) {
+      try {
+        console.log(`Importing ChatGPT conversation (public: ${isPublic}, recipients: ${recipients.length})`);
+        
+        // Make API call to import the conversation
+        const response = await MessageService.importChatGPT(content, isPublic, recipients);
+        
+        // Get the root message (first message of the thread)
+        const rootMessage = response.data;
+        
+        // Add to store - the message will be a thread root
+        if (rootMessage) {
+          commit('SET_MESSAGE', rootMessage);
+        }
+        
+        return rootMessage;
+      } catch (error) {
+        console.error('Error importing ChatGPT conversation:', error);
+        throw error;
+      }
+    },
   },
   
   getters: {
     getMessage: (state) => (id) => {
-      const message = state.messages[id];
-      return message;
+      return state.messages[id];
     },
     
-    getCurrentMessage: state => state.messages[state.currentMessageId],
+    getSelectedMessage: state => state.messages[state.selectedMessageId],
     
     getChildIds: state => parentId => {
-      return state.relationships.parents[parentId] || [];
+      const message = state.messages[parentId];
+      if (!message) return [];
+      
+      return message.child_ids || [];
     },
     
     getParentId: state => childId => {
-      return state.relationships.children[childId];
-    },
+      const message = state.messages[childId];
+      if (!message) return null;
     
-    isLoading: state => (id, type) => {
-      return state.loadingStates[type]?.[id] === 'loading';
+      return message.parent_id || null;
     },
     
     getLoadedMessages: state => {
       return Object.values(state.messages);
     },
     
-    getVisibleThreadMessages: state => {
-      // If no current message, return empty array
-      if (!state.currentMessageId) return [];
-      
+    // Get all messages in the branch path
+    getBranchPathMessages: (state) => {
+      return Object.values(state.messages)
+        .filter(message => message.in_branch_path);
+    },
+    
+    // Modified getter - PURE GETTER with no state modifications
+    // Get the visible branch - follows the path from root where each message is in branch_path
+    getVisibleBranchMessages: (state) => (threadRootId = null) => {
       const result = [];
-      const visited = new Set();
       
-      // Add current message
-      if (state.messages[state.currentMessageId]) {
-        result.push(state.messages[state.currentMessageId]);
-        visited.add(state.currentMessageId);
+      // First try to use the explicitly provided threadRootId if available
+      let startingMessage = threadRootId ? state.messages[threadRootId] : null;
+      
+      // If no explicit ID provided or message not found, fall back to finding the first root
+      if (!startingMessage) {
+        startingMessage = Object.values(state.messages)
+          .find(msg => !msg.parent_id || (msg.parent_id && !state.messages[msg.parent_id]));
       }
       
-      // Add parents (ancestors)
-      let currentId = state.currentMessageId;
-      while (state.relationships.children[currentId]) {
-        const parentId = state.relationships.children[currentId];
-        
-        if (visited.has(parentId)) break; // Avoid cycles
-        
-        if (state.messages[parentId]) {
-          result.unshift(state.messages[parentId]); // Add at beginning
-          visited.add(parentId);
-        }
-        
-        currentId = parentId;
+      if (!startingMessage) return [];
+      
+      console.log(`[getVisibleBranchMessages] Starting with message ID: ${startingMessage.id}`);
+      
+      // STEP 1: First trace UPWARD to find the highest ancestor that's in the store
+      let highestAncestor = startingMessage;
+      let currentParentId = startingMessage.parent_id;
+      
+      // Trace up through parent_id as far as we can go
+      while (currentParentId && state.messages[currentParentId]) {
+        console.log(`[getVisibleBranchMessages] Tracing upward: found parent ${currentParentId}`);
+        highestAncestor = state.messages[currentParentId];
+        currentParentId = highestAncestor.parent_id;
       }
       
-      // Add children (descendants), up to what we've loaded
-      const addChildren = (parentId) => {
-        const childIds = state.relationships.parents[parentId] || [];
-        
-        for (const childId of childIds) {
-          if (visited.has(childId)) continue; // Avoid cycles
-          
-          if (state.messages[childId]) {
-            result.push(state.messages[childId]);
-            visited.add(childId);
-            
-            // Recursively add children of this child
-            addChildren(childId);
-          }
-        }
-      };
+      console.log(`[getVisibleBranchMessages] Highest ancestor found: ${highestAncestor.id}`);
       
-      addChildren(state.currentMessageId);
+      // STEP 2: Now build the chain from highest ancestor down - NO STATE MODIFICATIONS
+      // Start with the highest ancestor found
+      result.push(highestAncestor);
+      
+      // Initialize currentMessage to highest ancestor to begin downward traversal
+      let currentMessage = highestAncestor;
+      
+      // STEP 3: Recursively follow branch_child path downward - NO STATE MODIFICATIONS
+      while (true) {
+        // If message has no branch child, break
+        if (!currentMessage.branch_child) {
+          console.log(`[getVisibleBranchMessages] No branch_child found for ${currentMessage.id}, ending traversal`);
+          break;
+        }
+        
+        const childId = currentMessage.branch_child;
+        
+        // If child doesn't exist in the store, break
+        if (!state.messages[childId]) {
+          console.log(`[getVisibleBranchMessages] Child ${childId} not found in store, ending traversal`);
+          break;
+        }
+        
+        console.log(`[getVisibleBranchMessages] Adding branch_child ${childId} to result`);
+        
+        // Add the branch child to the result
+        result.push(state.messages[childId]);
+        
+        // Move to the next message
+        currentMessage = state.messages[childId];
+      }
+      
+      console.log(`[getVisibleBranchMessages] Final chain length: ${result.length}, from ${result[0].id} to ${result[result.length-1].id}`);
       
       return result;
     },
     
-    // New getter for single branch view
-    getVisibleBranchMessages: (state, getters, rootState, rootGetters) => {
-      const result = [];
-      const visited = new Set();
-      
-      // Start from selected message (this is just to identify which branch we're in)
-      let currentId = rootGetters['navigation/selectedMessageId'];
-      if (!currentId) return [];
-      
-      // For debugging
-      console.log(`[DEBUG] getVisibleBranchMessages called with selected ID: ${currentId}`);
-      
-      // For temporary threads that have no messages yet, just return empty array
-      if (typeof currentId === 'string' && currentId.startsWith('temp-') && !state.messages[currentId]) {
-        return [];
-      }
-      
-      // Add current message
-      if (state.messages[currentId]) {
-        result.push(state.messages[currentId]);
-        visited.add(currentId);
-      }
-      
-      // Add parents (traverse upward to find the root of this branch)
-      let rootMessageId = currentId;
-      while (state.relationships.children[currentId]) {
-        const parentId = state.relationships.children[currentId];
-        if (visited.has(parentId)) break;
-        
-        if (state.messages[parentId]) {
-          result.unshift(state.messages[parentId]);
-          visited.add(parentId);
-          rootMessageId = parentId; // Keep track of the root message
-        }
-        
-        currentId = parentId;
-      }
-      
-      // Now follow the branch from root to leaf, adding all messages
-      // This builds the full branch regardless of which message is selected
-      const buildFullBranch = (fromId, branch = []) => {
-        if (visited.has(fromId)) return branch;
-        
-        // Add this message
-        if (state.messages[fromId]) {
-          branch.push(state.messages[fromId]);
-          visited.add(fromId);
-        } else {
-          return branch; // Message not found, stop here
-        }
-        
-        // Get child IDs
-        const childIds = getters.getChildIds(fromId);
-        if (!childIds || childIds.length === 0) {
-          return branch; // End of branch
-        }
-        
-        // Log available children for debugging
-        console.log(`[DEBUG] Message ${fromId} has children: ${childIds.join(', ')}`);
-        
-        // We need to find which child continues the main branch
-        // First check if there's a current child set for this parent
-        let nextChildId = rootGetters['navigation/getCurrentChildId'](fromId);
-        
-        // If no specific child is selected, default to the first one
-        if (!nextChildId || !state.messages[nextChildId]) {
-          nextChildId = childIds[0];
-        }
-        
-        // Follow this child to continue the branch
-        if (nextChildId) {
-          console.log(`[DEBUG] Following child ${nextChildId} from parent ${fromId}`);
-          return buildFullBranch(nextChildId, branch);
-        }
-        
-        return branch;
-      };
-      
-      // Reset result and visited sets before rebuilding the full branch
-      result.length = 0;
-      visited.clear();
-      
-      // Build the full branch from the root message
-      const fullBranch = buildFullBranch(rootMessageId);
-      
-      // Log full branch contents for debugging
-      console.log(`[DEBUG] Visible branch messages: ${fullBranch.map(m => m.id).join(', ')}`);
-      
-      return fullBranch;
-    },
-    
     getReplyCount: state => (messageId) => {
-      // If we have the count in store, return it
-      if (state.replyCounts[messageId] !== undefined) {
-        return state.replyCounts[messageId];
+      const message = state.messages[messageId];
+      if (!message) return 0;
+      
+      // First check child_ids which should be most accurate
+      if (message.child_ids && Array.isArray(message.child_ids)) {
+        return message.child_ids.length;
       }
       
-      // Otherwise return the number of loaded children
-      const childIds = state.relationships.parents[messageId] || [];
-      return childIds.length;
-    },
-    
-    // Get end-of-branch status
-    isEndOfBranch: (state) => (messageId) => {
-      const message = state.messages[messageId];
-      if (!message) return false;
-      
-      // Only show end-of-branch if message has no children
-      return !message.has_children;
+      // Fallback (will be deprecated)
+      return 0;
     },
     
     // Get message branch (all messages in the current path)
-    getMessageBranch: (state, getters) => (messageId) => {
+    getMessageBranch: (state) => (messageId) => {
       const branch = [];
       let currentId = messageId;
       
@@ -1103,9 +823,10 @@ export default {
       
       // Add all ancestors
       while (true) {
-        const parentId = getters.getParentId(currentId);
-        if (!parentId) break;
+        const message = state.messages[currentId];
+        if (!message || !message.parent_id) break;
         
+        const parentId = message.parent_id;
         const parent = state.messages[parentId];
         if (!parent) break;
         
@@ -1116,21 +837,60 @@ export default {
       return branch;
     },
     
-    getPinnedMessages: state => {
+    getPinnedMessages: (state, getters, rootState) => {
+      const activeTab = rootState.ui?.activeTab || 'public';
+      const currentUser = rootState.auth?.user;
+      const userEmail = currentUser?.email;
+      
       // Filter messages by is_pinned property
       return Object.values(state.messages)
-        .filter(message => message.is_pinned === 1)
+        .filter(message => {
+          // First ensure it's a pinned message
+          const isPinned = message.is_pinned === 1 || message.is_pinned === true;
+          if (!isPinned) return false;
+          
+          // Then filter based on the active tab
+          const isPublic = message.public === 1 || message.public === true;
+          const isUserRecipient = userEmail && message.recipients && 
+            Array.isArray(message.recipients) && message.recipients.includes(userEmail);
+            
+          if (activeTab === 'public') {
+            // Public tab: show pinned public messages
+            return isPublic;
+          } else {
+            // Private tab: show pinned private messages OR public pinned messages where user is explicitly a recipient
+            return !isPublic || isUserRecipient;
+          }
+        })
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Sort by timestamp (newest first)
     },
     
-    isPinnedMessagesLoading: state => state.isPinnedMessagesLoading,
-    
-    isMessagePinned: state => id => {
-      return state.messages[id] && state.messages[id].is_pinned === 1;
+    // Check if a message is in the branch path
+    isInBranchPath: state => (messageId) => {
+      return state.messages[messageId]?.in_branch_path === true;
     },
     
-    getRecommendedMessageIds: state => {
-      return state.recommendedMessageIds;
+    // New getter to get the selected child of a message
+    getBranchChild: (state) => (messageId) => {
+      const message = state.messages[messageId];
+      if (!message) return null;
+      return message.branch_child;
+    },
+    
+    isAtEndOfBranch: (state) => (messageId) => {
+      const message = state.messages[messageId];
+      if (!message) return false;
+      
+      // We're at the end if:
+      // 1. There are no child_ids array
+      // 2. The child_ids array is empty
+      // 3. All child_ids are loaded in the store
+      if (!message.child_ids || message.child_ids.length === 0) {
+        return true;
+      }
+      
+      // Check if all children are loaded
+      return message.child_ids.every(childId => state.messages[childId]);
     }
   }
 }

@@ -31,6 +31,11 @@ export default {
       state.messageToDelete = message;
     },
     
+    REQUEST_MESSAGE_DELETE(state, message) {
+      // This mutation is observed by the DeleteConfirmModal component
+      // No state changes needed here as the modal handles its own state
+    },
+    
     SET_TEMP_THREAD(state, thread) {
       state.tempThread = thread;
     },

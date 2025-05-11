@@ -16,8 +16,14 @@ app.use(store)
 const initApp = async () => {
   try {
     console.log('App initialization started');
+    
+    // First initialize Firebase
     await initializeFirebase();
-    console.log("Firebase initialized, mounting Vue app");
+    console.log("Firebase initialized");
+    
+    // Then initialize auth store
+    await store.dispatch('auth/initAuth');
+    console.log("Auth store initialized");
     
     try {
       app.mount('#app');
@@ -28,18 +34,18 @@ const initApp = async () => {
       document.body.innerHTML = '<div style="padding: 20px; color: red;">Failed to initialize app. Check console for details.</div>';
     }
   } catch (error) {
-    console.error("Failed to initialize Firebase:", error);
+    console.error("Failed to initialize:", error);
     
     // Create a simple error handler in global scope for tracking
-    window.firebaseInitError = error;
+    window.appInitError = error;
     
-    // Mount anyway, your components should handle the absence of Firebase
-    console.warn("Mounting app without Firebase initialization");
+    // Mount anyway, your components should handle initialization failures
+    console.warn("Mounting app despite initialization failure");
     try {
       app.mount('#app');
-      console.log('Vue app mounted despite Firebase init failure');
+      console.log('Vue app mounted despite initialization failure');
     } catch (mountError) {
-      console.error('CRITICAL ERROR: Failed to mount Vue app after Firebase init failed:', mountError);
+      console.error('CRITICAL ERROR: Failed to mount Vue app after initialization failed:', mountError);
       document.body.innerHTML = '<div style="padding: 20px; color: red;">Failed to initialize app. Check console for details.</div>';
     }
   }
