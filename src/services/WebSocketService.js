@@ -31,7 +31,7 @@ export default {
     // Create a new connection promise
     this.connectionPromise = new Promise((resolve, reject) => {
       // Create WebSocket connection
-      const baseWsUrl = import.meta.env.VITE_WS_URL || `ws://${window.location.host}`;
+      const baseWsUrl = import.meta.env.VITE_WS_URL || `wss://${window.location.host}`;
       const wsUrl = `${baseWsUrl}/ws/view/${threadId}`;
       
       this.log(`Connecting to ${wsUrl}`);
