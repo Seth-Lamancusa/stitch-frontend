@@ -30,8 +30,10 @@ export default {
     
     // Create a new connection promise
     this.connectionPromise = new Promise((resolve, reject) => {
-      // Create WebSocket connection
-      const baseWsUrl = import.meta.env.VITE_WS_URL || `wss://${window.location.host}`;
+      // Create WebSocket connection - use backend URL, not frontend
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://stitch-backend-659986757275.us-central1.run.app';
+      // Convert HTTPS URL to WSS URL
+      const baseWsUrl = apiUrl.replace('https://', 'wss://');
       const wsUrl = `${baseWsUrl}/ws/view/${threadId}`;
       
       this.log(`Connecting to ${wsUrl}`);
