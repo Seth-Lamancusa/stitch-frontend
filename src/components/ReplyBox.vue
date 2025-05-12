@@ -343,8 +343,11 @@ const sendReply = async () => {
     // Resize the textarea
     autoResizeTextarea();
     
-    // No longer emit send-success - rely solely on WebSocket
-    // emit('send-success', newMessage);
+    // Only emit send-success for new threads
+    // WebSockets will handle updates for replies to existing messages
+    if (props.isTemporaryThread) {
+      emit('send-success', newMessage);
+    }
     
     return newMessage;
   } catch (error) {

@@ -189,6 +189,10 @@ const bottomMarker = ref(null);
 const lastWebSocketSetupTime = ref(0);
 const webSocketDebounceTime = 1000; // 1 second debounce
 
+// In the script setup section, add a debounce timer
+const websocketDebounceTimer = ref(null);
+const currentSubscribedMessageId = ref(null);
+
 // In the script setup section, add computed properties for marker states
 const topMarkerState = computed(() => {
   // If no messages, use end state
@@ -370,6 +374,12 @@ onBeforeUnmount(() => {
   store.dispatch('navigation/selectMessage', null);
   
   // Keep message cache when leaving thread view
+  
+  // Clean up any pending timer
+  if (websocketDebounceTimer.value) {
+    clearTimeout(websocketDebounceTimer.value);
+    websocketDebounceTimer.value = null;
+  }
 });
 
 // Watch for route changes - simplify to just load message if needed
@@ -494,40 +504,64 @@ const handleKeyDown = (event) => {
   // Will be reimplemented after the new navigation system is in place
 };
 
-// Simplify the WebSocket subscription function
+// Simplify the WebSocket subscription function with debouncing
 const setupWebSocketSubscription = () => {
-  // Clean up any existing subscription
-  if (unsubscribeMessages) {
-    unsubscribeMessages();
-    unsubscribeMessages = null;
+  // Clear any pending subscription setup
+  if (websocketDebounceTimer.value) {
+    clearTimeout(websocketDebounceTimer.value);
+    websocketDebounceTimer.value = null;
   }
   
-  // Only subscribe if we have messages
-  if (displayedMessages.value.length === 0) {
-    console.log(`[ThreadView] No messages to subscribe to`);
+  // Debounce the setup
+  websocketDebounceTimer.value = setTimeout(() => {
+    // If we're already subscribed to this message, don't reconnect
+    if (currentSubscribedMessageId.value === selectedMessageId.value) {
+      console.log(`[ThreadView] Already subscribed to message ${selectedMessageId.value}`);
+      return;
+    }
+    
+    // Clean up any existing subscription
+    if (unsubscribeMessages) {
+      unsubscribeMessages();
+      unsubscribeMessages = null;
+    }
+    
+    // Disconnect any existing WebSocket
     WebSocketService.disconnectFromThread();
-    return;
-  }
-  
-  // Get last message in the branch
-  const lastMessage = displayedMessages.value[displayedMessages.value.length - 1];
-  
-  console.log(`[ThreadView] Setting up WebSocket subscription for message ${lastMessage.id}`);
-  
-  // Create a unique view ID that includes thread ID and timestamp
-  const threadViewId = `thread_${messageId.value}_${Date.now()}`;
-  
-  // Register for message updates
-  unsubscribeMessages = WebSocketService.handleNewMessage(handleWebSocketMessage);
-  
-  // Connect to thread with last message as the end message
-  WebSocketService.connectToThread(threadViewId, lastMessage.id)
-    .catch(error => console.error('[ThreadView] WebSocket connection error:', error));
+    
+    // Only subscribe if a message is selected
+    if (!selectedMessageId.value) {
+      console.log(`[ThreadView] No selected message to subscribe to`);
+      currentSubscribedMessageId.value = null;
+      return;
+    }
+    
+    console.log(`[ThreadView] Setting up WebSocket subscription for selected message ${selectedMessageId.value}`);
+    
+    // Create a unique view ID based on the thread and message (without timestamp)
+    const threadViewId = `thread_${messageId.value}_msg_${selectedMessageId.value}`;
+    
+    // Register for message updates
+    unsubscribeMessages = WebSocketService.handleNewMessage(handleWebSocketMessage);
+    
+    // Connect to thread with selected message as the subscription point
+    WebSocketService.connectToThread(threadViewId, selectedMessageId.value)
+      .then(() => {
+        // Update current subscribed message ID on successful connection
+        currentSubscribedMessageId.value = selectedMessageId.value;
+      })
+      .catch(error => {
+        console.error('[ThreadView] WebSocket connection error:', error);
+        currentSubscribedMessageId.value = null;
+      });
+  }, 300); // 300ms debounce
 };
 
 // Update WebSocket message handler to select messages and ensure selection before rendering
 const handleWebSocketMessage = async (messageData) => {
-  console.log(`[ThreadView] Received WebSocket message for new reply: ${messageData.id} to parent ${messageData.parent_id}`);
+  console.log(`[WEBSOCKET] 📨 RECEIVED NEW MESSAGE: ID=${messageData.id}, PARENT=${messageData.parent_id}`);
+  console.log(`[WEBSOCKET] MESSAGE CONTENT: "${messageData.content.substring(0, 50)}${messageData.content.length > 50 ? '...' : ''}"`);
+  console.log(`[WEBSOCKET] FROM: ${messageData.author_display_name || messageData.author_user_tag || messageData.content_author}`);
   
   // Add the new message to store
   store.commit('messages/SET_MESSAGE', messageData);
@@ -651,6 +685,15 @@ const findEndOfBranchMessage = () => {
   const lastMessage = displayedMessages.value[displayedMessages.value.length - 1];
   return lastMessage;
 };
+
+// Add a watcher for selectedMessageId to update WebSocket subscription
+watch(selectedMessageId, (newId, oldId) => {
+  // Only update subscription if the ID actually changed
+  if (newId !== oldId) {
+    console.log(`[ThreadView] Selected message changed from ${oldId} to ${newId}, updating WebSocket subscription`);
+    setupWebSocketSubscription();
+  }
+});
 </script>
 
 <style scoped>

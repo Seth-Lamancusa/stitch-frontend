@@ -447,15 +447,52 @@ export default {
     },
     
     // Delete a message
-    async deleteMessage({ commit, state }, messageId) {
+    async deleteMessage({ commit, state, dispatch }, messageId) {
       try {
         console.log(`Deleting message: ${messageId}`);
+        
+        // Save reference to the message before deletion
+        const messageToDelete = state.messages[messageId];
+        
+        // If message doesn't exist, just return
+        if (!messageToDelete) {
+          return true;
+        }
+        
+        // Get parent ID before deletion
+        const parentId = messageToDelete.parent_id;
         
         // API call to delete the message
         await MessageService.deleteMessage(messageId);
         
+        // Check if this message was the branch_child of its parent
+        let wasParentBranchChild = false;
+        let parentMessage = null;
+        
+        if (parentId && state.messages[parentId]) {
+          parentMessage = state.messages[parentId];
+          wasParentBranchChild = parentMessage.branch_child === messageId;
+        }
+        
         // Remove from store
         commit('REMOVE_MESSAGE', messageId);
+        
+        // If this was the parent's branch_child, set a new one
+        if (wasParentBranchChild && parentMessage && parentMessage.child_ids && parentMessage.child_ids.length > 0) {
+          // Get updated parent after REMOVE_MESSAGE might have modified it
+          const updatedParent = state.messages[parentId];
+          
+          // If parent has remaining children, set the first one as branch_child
+          if (updatedParent && updatedParent.child_ids && updatedParent.child_ids.length > 0) {
+            commit('SET_BRANCH_CHILD', { 
+              messageId: parentId, 
+              childId: updatedParent.child_ids[0] 
+            });
+            
+            // Prepare branch path with the new branch_child
+            dispatch('prepareBranchPath', parentId);
+          }
+        }
         
         return true;
       } catch (error) {

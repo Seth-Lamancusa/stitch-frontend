@@ -3,38 +3,72 @@ export default {
   connection: null,
   connectionPromise: null,
   threadId: null,
-  endMessageId: null,
+  selectedMessageId: null,
   messageCallback: null,
   pingInterval: null,
   debugMode: true,
 
   // Simple connection method - returns a promise that resolves when connected
-  async connectToThread(threadId, endMessageId) {
-    // If already connected to this thread with the same end message, do nothing
+  async connectToThread(threadId, messageId) {
+    // If already connected to this thread with the same message, do nothing
     if (this.connection && 
         this.threadId === threadId && 
-        this.endMessageId === endMessageId && 
+        this.selectedMessageId === messageId && 
         this.connection.readyState === WebSocket.OPEN) {
-      this.log(`Already connected to thread ${threadId} with end message ${endMessageId}`);
+      this.log(`Already connected to thread ${threadId} with selected message ${messageId}`);
       return Promise.resolve();
     }
     
-    // If connected to a different thread or different end message, disconnect first
+    // If connected to a different thread or different message, disconnect first
     if (this.connection) {
       this.disconnectFromThread();
     }
     
     // Store thread info
     this.threadId = threadId;
-    this.endMessageId = endMessageId;
+    this.selectedMessageId = messageId;
     
     // Create a new connection promise
     this.connectionPromise = new Promise((resolve, reject) => {
       // Create WebSocket connection - use backend URL, not frontend
       const apiUrl = import.meta.env.VITE_API_URL || 'https://stitch-backend-659986757275.us-central1.run.app';
-      // Convert HTTPS URL to WSS URL
-      const baseWsUrl = apiUrl.replace('https://', 'wss://');
-      const wsUrl = `${baseWsUrl}/ws/view/${threadId}`;
+      
+      // Parse the URL to handle any path format
+      let wsUrl;
+      try {
+        // Create URL object to easily work with parts
+        const apiUrlObj = new URL(apiUrl);
+        
+        // Switch protocol
+        apiUrlObj.protocol = apiUrlObj.protocol === 'https:' ? 'wss:' : 'ws:';
+        
+        // WebSocket endpoint should not have /api prefix
+        // Replace /api/ or /api in the pathname
+        apiUrlObj.pathname = apiUrlObj.pathname
+          .replace(/\/api\/?$/, '/') // Replace /api/ or /api at the end
+          .replace(/\/api\//, '/');  // Replace /api/ in the middle
+          
+        // Ensure pathname ends with /
+        if (!apiUrlObj.pathname.endsWith('/')) {
+          apiUrlObj.pathname += '/';
+        }
+        
+        // Append WebSocket path
+        wsUrl = `${apiUrlObj.toString()}ws/view/${threadId}`;
+        
+        // Clean up any double slashes (except in protocol)
+        wsUrl = wsUrl.replace(/([^:])\/\//g, '$1/');
+      } catch (e) {
+        // Fallback if URL parsing fails
+        this.log(`Error parsing URL: ${e}. Using simple string manipulation.`);
+        const baseWsUrl = apiUrl
+          .replace('https://', 'wss://')
+          .replace('http://', 'ws://')
+          .replace(/\/api\/?$/, '') // Remove trailing /api or /api/
+          .replace(/\/api\//, '/'); // Replace /api/ in the path
+          
+        wsUrl = `${baseWsUrl}/ws/view/${threadId}`;
+      }
       
       this.log(`Connecting to ${wsUrl}`);
       const socket = new WebSocket(wsUrl);
@@ -43,10 +77,10 @@ export default {
       socket.onopen = () => {
         this.log(`Connected to thread ${threadId}`);
         
-        // Once connected, subscribe to the end message
-        if (this.endMessageId) {
-          this.log(`Subscribing to end message ${this.endMessageId}`);
-          this.sendSubscription(socket, [this.endMessageId]);
+        // Once connected, subscribe to the selected message
+        if (this.selectedMessageId) {
+          this.log(`Subscribing to selected message ${this.selectedMessageId}`);
+          this.sendSubscription(socket, [this.selectedMessageId]);
         }
         
         resolve(); // Resolve the connection promise
@@ -64,10 +98,15 @@ export default {
           if (data.type === 'subscription_ack') {
             this.log(`Subscription acknowledged: ${data.message_ids?.length || 0} messages`);
           } else if (data.type === 'new_reply') {
-            this.log(`Received new reply: ${data.data?.id} to parent ${data.data?.parent_id}`);
+            this.log(`===== NEW REPLY RECEIVED =====`);
+            this.log(`Message ID: ${data.data?.id}`);
+            this.log(`Parent ID: ${data.data?.parent_id}`);
+            this.log(`Author: ${data.data?.author_display_name || data.data?.author_user_tag || data.data?.content_author}`);
+            this.log(`Content: "${data.data?.content?.substring(0, 50)}${data.data?.content?.length > 50 ? '...' : ''}"`);
             
-            // Only process messages for our end message
-            if (data.data?.parent_id === this.endMessageId && this.messageCallback) {
+            // Process all new_reply messages, regardless of parent_id
+            if (this.messageCallback) {
+              this.log(`Passing message to callback`);
               this.messageCallback(data.data);
             }
           }
@@ -128,7 +167,7 @@ export default {
     
     // Clear thread state
     this.threadId = null;
-    this.endMessageId = null;
+    this.selectedMessageId = null;
     this.connectionPromise = null;
   },
   
@@ -147,19 +186,19 @@ export default {
     };
   },
   
-  // Update the end message we're subscribed to
-  async updateEndMessage(endMessageId) {
-    // If same end message, do nothing
-    if (endMessageId === this.endMessageId) {
+  // Update the selected message we're subscribed to
+  async updateSelectedMessage(messageId) {
+    // If same message, do nothing
+    if (messageId === this.selectedMessageId) {
       return;
     }
     
-    this.log(`Updating end message from ${this.endMessageId} to ${endMessageId}`);
-    this.endMessageId = endMessageId;
+    this.log(`Updating selected message from ${this.selectedMessageId} to ${messageId}`);
+    this.selectedMessageId = messageId;
     
     // If connected, send new subscription
     if (this.connection?.readyState === WebSocket.OPEN) {
-      this.sendSubscription(this.connection, [endMessageId]);
+      this.sendSubscription(this.connection, [messageId]);
     }
   },
   
@@ -185,20 +224,5 @@ export default {
     if (this.debugMode) {
       console.log('[WebSocket]', ...messages);
     }
-  },
-  
-  // Backward compatibility functions
-  subscribeToEndOfBranchMessages(viewId, endMessageId, isAtEnd, callback) {
-    // Only subscribe if at the end of the thread
-    if (!isAtEnd) {
-      this.disconnectFromThread();
-      return () => {};
-    }
-    
-    // Connect and register callback
-    this.connectToThread(viewId, endMessageId)
-      .catch(error => console.error('[WebSocket] Connection error:', error));
-    
-    return this.handleNewMessage(callback);
   }
 };
