@@ -532,22 +532,20 @@ const handleWebSocketMessage = async (messageData) => {
   // Add the new message to store
   store.commit('messages/SET_MESSAGE', messageData);
   
-  // Update the parent's child_ids list to include this message
+  // Update the parent's child_ids using the dedicated mutation
   const parentId = messageData.parent_id;
   if (parentId) {
-    const parent = store.getters['messages/getMessage'](parentId);
-    if (parent && !parent.child_ids.includes(messageData.id)) {
-      store.commit('messages/SET_MESSAGE', {
-        ...parent,
-        child_ids: [...parent.child_ids, messageData.id]
-      });
-      
-      // Set this as the branch child of its parent (moved from handleReplySent)
-      store.dispatch('messages/setBranchChild', {
-        messageId: parentId,
-        childId: messageData.id
-      });
-    }
+    // Use the new mutation instead of directly modifying the parent
+    store.commit('messages/ADD_CHILD_TO_PARENT', {
+      parentId,
+      childId: messageData.id
+    });
+    
+    // Set this as the branch child of its parent
+    store.dispatch('messages/setBranchChild', {
+      messageId: parentId,
+      childId: messageData.id
+    });
   }
   
   // Select the new message from WebSocket and wait for it to complete

@@ -182,6 +182,17 @@ export default {
           branch_child: childId
         };
       }
+    },
+    
+    // New mutation for WebSocket updates
+    ADD_CHILD_TO_PARENT(state, { parentId, childId }) {
+      const parent = state.messages[parentId];
+      if (parent && !parent.child_ids.includes(childId)) {
+        state.messages[parentId] = {
+          ...parent,
+          child_ids: [...(parent.child_ids || []), childId]
+        };
+      }
     }
   },
   
@@ -418,16 +429,8 @@ export default {
         // Add to store
         commit('SET_MESSAGE', newMessage);
         
-        // Update parent's child_ids if parent exists
+        // Set the new message as the branch child of the parent if parent exists
         if (parentId && state.messages[parentId]) {
-          const parent = state.messages[parentId];
-          const updatedParent = {
-            ...parent,
-            child_ids: [...(parent.child_ids || []), newMessage.id]
-          };
-          commit('SET_MESSAGE', updatedParent);
-          
-          // Set the new message as the branch child of the parent
           dispatch('setBranchChild', {
             messageId: parentId,
             childId: newMessage.id
