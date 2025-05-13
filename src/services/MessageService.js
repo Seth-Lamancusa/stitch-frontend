@@ -88,10 +88,15 @@ export default {
     return response;
   },
   
-  // Get private messages for current user
-  async getPrivateMessages(limit = 10) {
+  // Get direct messages for current user
+  async getDirectMessages() {
     const headers = await getAuthHeaders();
-    return axios.get(`${apiBaseUrl}/messages/private?limit=${limit}`, { headers });
+    return axios.get(`${apiBaseUrl}/messages/direct`, { headers });
+  },
+  
+  // For backward compatibility - alias to getDirectMessages
+  async getPrivateMessages() {
+    return this.getDirectMessages();
   },
   
   // Delete a message and all its descendants
@@ -157,5 +162,17 @@ export default {
   async updateTitleDescription(id, titleData) {
     const headers = await getAuthHeaders();
     return axios.patch(`${apiBaseUrl}/messages/${id}/title-description`, titleData, { headers });
+  },
+  
+  // Mark a message as read
+  async markMessageAsRead(id) {
+    const headers = await getAuthHeaders();
+    return axios.post(`${apiBaseUrl}/messages/${id}/mark-read`, {}, { headers });
+  },
+  
+  // Mark a message as unread
+  async markMessageAsUnread(id) {
+    const headers = await getAuthHeaders();
+    return axios.post(`${apiBaseUrl}/messages/${id}/mark-unread`, {}, { headers });
   }
 };

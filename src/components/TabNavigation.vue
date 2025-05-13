@@ -60,27 +60,27 @@ const changeTab = (tab) => {
 }
 
 .tab-button {
-  padding: var(--spacing-md) var(--spacing-sm);
+  padding: var(--space-md) var(--space-sm);
   background-color: transparent;
-  color: var(--text-color-light);
+  color: var(--color-text-secondary);
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all var(--transition-fast);
   flex: 1;
   text-align: center;
   max-width: 180px;
 }
 
 .tab-button.active {
-  color: var(--primary-color);
-  border-bottom-color: var(--primary-color);
-  background-color: var(--primary-color-light);
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  background-color: var(--color-primary-light);
 }
 
 .tab-button:hover:not(.active) {
-  background-color: var(--hover-color);
-  color: var(--text-color);
+  background-color: var(--color-hover-overlay);
+  color: var(--color-text);
 }
 
 /* Mobile optimizations */
@@ -91,7 +91,7 @@ const changeTab = (tab) => {
   
   .tab-button {
     max-width: none;
-    padding: var(--spacing-sm);
+    padding: var(--space-sm);
   }
 }
 </style> 

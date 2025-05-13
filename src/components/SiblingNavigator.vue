@@ -134,13 +134,13 @@ const navigate = (direction) => {
   justify-content: center;
   width: 30px;
   height: 30px;
-  background-color: var(--card-background, #f5f5f5);
-  border: 1px solid var(--border-color, #ddd);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 50%;
   font-size: 18px;
   cursor: pointer;
-  color: var(--text-color, #333);
-  transition: all 0.2s ease;
+  color: var(--color-text);
+  transition: all var(--transition-fast);
   padding: 0;
   line-height: 1;
   pointer-events: auto; /* Re-enable pointer events for buttons */
@@ -156,9 +156,9 @@ const navigate = (direction) => {
 }
 
 .nav-button:hover:not(:disabled) {
-  background-color: var(--primary-color-light, #e6f2ff);
-  border-color: var(--primary-color, #4a90e2);
-  color: var(--primary-color, #4a90e2);
+  background-color: var(--color-primary-light);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
   transform: translateY(-50%) scale(1.1);
   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
 }
@@ -172,7 +172,7 @@ const navigate = (direction) => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: var(--primary-color, #4a90e2);
+  background-color: var(--color-primary);
   animation: pulse 1.5s infinite;
 }
 
@@ -186,17 +186,5 @@ const navigate = (direction) => {
   100% { opacity: 0.3; transform: scale(0.8); }
 }
 
-@media (prefers-color-scheme: dark) {
-  .nav-button {
-    background-color: var(--card-background-dark, #333);
-    border-color: var(--border-color-dark, #444);
-    color: var(--text-color-dark, #eee);
-  }
-  
-  .nav-button:hover:not(:disabled) {
-    background-color: var(--primary-color-dark, #1a3b66);
-    border-color: var(--primary-color-dark, #2c5894);
-    color: var(--text-color-dark, #eee);
-  }
-}
+/* Dark theme styles are no longer needed as we're using CSS variables */
 </style> 

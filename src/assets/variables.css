@@ -1,0 +1,126 @@
+/**
+ * Stitch - Global Variables
+ * 
+ * This file contains all global CSS variables used throughout the application.
+ * We're using a dark theme as the primary and only theme.
+ */
+
+:root {
+  /* ===== Core Colors ===== */
+  --color-primary: #f5f5f5;
+  --color-primary-dark: #e0e0e0;
+  --color-primary-light: rgba(245, 245, 245, 0.2);
+  
+  --color-secondary: #4a90e2;
+  --color-secondary-dark: #3a7bc8;
+  --color-secondary-light: rgba(74, 144, 226, 0.2);
+  
+  --color-accent: #10a37f; /* ChatGPT green */
+  --color-accent-light: #0d8c6d;
+  
+  --color-success: #4caf50;
+  --color-warning: #ff9800;
+  --color-error: #dc3545;
+  --color-info: #2196f3;
+
+  /* ===== Neutral Colors ===== */
+  --color-background: #121212;
+  --color-surface: #1e1e1e;
+  --color-surface-light: #2a2a2a;
+  --color-surface-dark: #181818;
+  
+  --color-border: #333333;
+  --color-border-light: #444444;
+  --color-border-dark: #222222;
+  
+  --color-divider: #333333;
+
+  /* ===== Text Colors ===== */
+  --color-text: #e0e0e0;
+  --color-text-secondary: #aaaaaa;
+  --color-text-disabled: #666666;
+  --color-text-inverse: #121212;
+
+  /* ===== Component Colors ===== */  
+  --color-card-background: var(--color-surface);
+  --color-card-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  
+  --color-input-background: var(--color-surface-light);
+  --color-input-border: var(--color-border);
+  --color-input-focus-border: var(--color-secondary);
+  
+  --color-button-background: var(--color-primary);
+  --color-button-text: var(--color-text-inverse);
+  --color-button-disabled: #555555;
+  
+  --color-hover-overlay: rgba(255, 255, 255, 0.05);
+  --color-active-overlay: rgba(255, 255, 255, 0.1);
+  
+  --color-scrollbar-track: transparent;
+  --color-scrollbar-thumb: rgba(200, 200, 200, 0.3);
+  --color-scrollbar-thumb-hover: rgba(200, 200, 200, 0.5);
+
+  /* ===== Message Colors ===== */
+  --color-user-message-background: var(--color-primary);
+  --color-user-message-text: #333333;
+  --color-system-message-background: var(--color-surface-light);
+  --color-system-message-text: var(--color-text);
+
+  /* ===== Formatted Content Colors ===== */
+  --color-code-background: #2d2d2d;
+  --color-inline-code-background: #3a3a3a;
+  --color-code-text: #f8f8f2;
+  
+  --color-table-border: #444444;
+  --color-table-header-background: #2a2a2a;
+  --color-table-row-hover: #333333;
+  
+  --color-blockquote-border: #444444;
+  --color-blockquote-text: #aaaaaa;
+  
+  --color-link: #4a90e2;
+  --color-link-hover: #3a7bc8;
+  
+  --color-heading: var(--color-text);
+
+  /* ===== Spacing ===== */
+  --space-xxs: 0.25rem;  /* 4px */
+  --space-xs: 0.5rem;    /* 8px */
+  --space-sm: 0.75rem;   /* 12px */
+  --space-md: 1rem;      /* 16px */
+  --space-lg: 1.5rem;    /* 24px */
+  --space-xl: 2rem;      /* 32px */
+  --space-xxl: 3rem;     /* 48px */
+
+  /* ===== Border Radius ===== */
+  --radius-sm: 0.25rem;  /* 4px */
+  --radius-md: 0.5rem;   /* 8px */
+  --radius-lg: 1rem;     /* 16px */
+  --radius-pill: 9999px;
+
+  /* ===== Typography ===== */
+  --font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 
+    Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  --font-family-code: 'Courier New', monospace;
+  
+  --font-size-xs: 0.75rem;   /* 12px */
+  --font-size-sm: 0.875rem;  /* 14px */
+  --font-size-md: 1rem;      /* 16px */
+  --font-size-lg: 1.125rem;  /* 18px */
+  --font-size-xl: 1.25rem;   /* 20px */
+  --font-size-xxl: 1.5rem;   /* 24px */
+  
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.8;
+
+  /* ===== Transitions ===== */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 400ms ease;
+
+  /* ===== Z-indices ===== */
+  --z-index-dropdown: 100;
+  --z-index-modal: 200;
+  --z-index-tooltip: 300;
+} 

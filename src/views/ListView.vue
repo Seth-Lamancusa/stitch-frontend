@@ -17,7 +17,7 @@ import ProfileEditModal from '../components/ProfileEditModal.vue';
 const router = useRouter();
 const route = useRoute();
 const store = useStore();
-const { login, logout } = useAuthentication();
+const { signInWithGoogle, logout } = useAuthentication();
 
 const user = computed(() => store.getters['auth/user']);
 const activeTab = computed(() => store.getters['ui/activeTab']);
@@ -41,7 +41,7 @@ const userTag = computed(() => {
 const handleLogin = async () => {
   isLoggingIn.value = true;
   try {
-    await login();
+    await signInWithGoogle();
     
     // Handle redirect if there was one
     if (route.query.redirect) {
@@ -67,6 +67,12 @@ const openProfileModal = () => {
 const closeProfileModal = () => {
   isProfileModalOpen.value = false;
 };
+
+// Add onMounted to load messages based on the active tab when component mounts
+onMounted(async () => {
+  // Fetch threads based on the persisted tab state
+  await store.dispatch('messages/fetchThreads');
+});
 
 // No need for onMounted with direct Firebase calls - the auth store handles initialization
 </script>
@@ -118,8 +124,8 @@ const closeProfileModal = () => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background-color: var(--background-color);
-  color: var(--text-color);
+  background-color: var(--color-background);
+  color: var(--color-text);
   overflow: hidden;
 }
 
@@ -128,8 +134,8 @@ const closeProfileModal = () => {
   display: flex;
   flex-direction: column;
   width: 100%;
-  background-color: var(--card-background);
-  box-shadow: var(--card-shadow);
+  background-color: var(--color-surface);
+  box-shadow: var(--color-card-shadow);
   overflow: hidden;
 }
 
@@ -137,8 +143,8 @@ const closeProfileModal = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--spacing-md);
-  border-bottom: 1px solid var(--border-color);
+  padding: 0 var(--space-md);
+  border-bottom: 1px solid var(--color-border);
   background-color: #000000;
   min-height: 48px; /* Minimum height to ensure consistency */
   max-height: 48px; /* Maximum height to prevent overflow */
@@ -147,14 +153,14 @@ const closeProfileModal = () => {
 .user-controls {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: var(--space-sm);
 }
 
 .user-info {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  margin-right: var(--spacing-sm);
+  gap: var(--space-xs);
+  margin-right: var(--space-sm);
 }
 
 .username-container {
@@ -164,12 +170,12 @@ const closeProfileModal = () => {
   cursor: pointer;
   position: relative;
   padding: 2px 6px;
-  border-radius: 4px;
-  transition: background-color 0.2s ease;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-fast);
 }
 
 .username-container:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--color-hover-overlay);
 }
 
 .username {
@@ -181,15 +187,15 @@ const closeProfileModal = () => {
 }
 
 .user-tag {
-  font-size: 0.85em;
-  color: var(--text-color-light);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
   opacity: 0.8;
 }
 
 .edit-icon {
   font-size: 12px;
   opacity: 0.7;
-  color: var(--text-color);
+  color: var(--color-text);
 }
 
 .username-container:hover .edit-icon {
@@ -198,31 +204,31 @@ const closeProfileModal = () => {
 
 .logout-btn {
   background-color: transparent;
-  color: var(--text-color);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-sm);
+  color: var(--color-text);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--font-size-xs);
 }
 
 .logout-btn:hover {
-  background-color: var(--hover-color);
+  background-color: var(--color-hover-overlay);
 }
 
 .login-btn {
-  background-color: var(--primary-color);
-  color: black;
-  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  padding: var(--space-xs) var(--space-sm);
   border: none;
-  border-radius: var(--border-radius-sm);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--font-size-xs);
   text-decoration: none;
 }
 
 .login-btn:hover {
-  background-color: var(--primary-color-dark);
+  background-color: var(--color-primary-dark);
 }
 
 /* Mobile optimizations */
@@ -234,9 +240,9 @@ const closeProfileModal = () => {
   
   .user-controls {
     width: 100%;
-    padding: var(--spacing-xs) var(--spacing-sm);
+    padding: var(--space-xs) var(--space-sm);
     justify-content: flex-end;
-    background-color: var(--surface-color);
+    background-color: var(--color-surface);
   }
   
   .username {
@@ -253,15 +259,15 @@ const closeProfileModal = () => {
 
 .whitelist-badge {
   display: inline-block;
-  background-color: var(--primary-color);
-  color: black;
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
   width: 18px;
   height: 18px;
   border-radius: 50%;
   text-align: center;
   line-height: 18px;
   font-size: 12px;
-  margin-left: var(--spacing-xs);
+  margin-left: var(--space-xs);
 }
 
 .admin-badge {
@@ -274,32 +280,32 @@ const closeProfileModal = () => {
   text-align: center;
   line-height: 18px;
   font-size: 12px;
-  margin-left: var(--spacing-xs);
+  margin-left: var(--space-xs);
 }
 
 .non-whitelist-badge {
   display: inline-block;
-  background-color: #e74c3c;
-  color: black;
+  background-color: var(--color-error);
+  color: var(--color-text-inverse);
   width: 18px;
   height: 18px;
   border-radius: 50%;
   text-align: center;
   line-height: 18px;
   font-size: 12px;
-  margin-left: var(--spacing-xs);
+  margin-left: var(--space-xs);
 }
 
 .guest-badge {
   display: inline-block;
-  background-color: #95a5a6;
-  color: black;
+  background-color: var(--color-text-disabled);
+  color: var(--color-text-inverse);
   width: 18px;
   height: 18px;
   border-radius: 50%;
   text-align: center;
   line-height: 18px;
   font-size: 12px;
-  margin-left: var(--spacing-xs);
+  margin-left: var(--space-xs);
 }
 </style> 

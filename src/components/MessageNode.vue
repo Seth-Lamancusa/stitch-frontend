@@ -2,6 +2,7 @@
   <div 
     class="message-node" 
     :class="{ 'selected': isSelected, 'pinned': isPinned }"
+    :data-message-id="message.id"
   >
     <!-- Add sibling navigator if message has a parent -->
     <sibling-navigator
@@ -15,6 +16,7 @@
       <div class="message-header">
         <div class="author-section">
           <div class="author-info">
+            <span v-if="message.is_read === false" class="unread-dot" title="Unread message"></span>
             <span class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ authorDisplayName }}</span>
             <span v-if="authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
           </div>
@@ -119,13 +121,27 @@
       </div>
       
       <div class="message-body">
-        {{ message.content }}
+        <formatted-content :content="message.content" />
       </div>
       
       <div class="message-footer">
         <div class="message-actions">
           <div class="reply-count">
             {{ totalReplies }} {{ totalReplies === 1 ? 'reply' : 'replies' }}
+          </div>
+          
+          <!-- Read status toggle for recipients -->
+          <div v-if="isUserRecipient && message.is_read !== null" class="read-status-toggle">
+            <button 
+              @click.stop="toggleReadStatus" 
+              :class="['read-toggle-button', { 'loading': isTogglingReadStatus }]"
+              :disabled="isTogglingReadStatus"
+              :title="message.is_read ? 'Mark as unread' : 'Mark as read'"
+            >
+              <span v-if="isTogglingReadStatus" class="loading-indicator"></span>
+              <span v-else class="envelope-icon">{{ message.is_read ? '📩' : '✉️' }}</span>
+              {{ message.is_read ? 'Mark as unread' : 'Mark as read' }}
+            </button>
           </div>
           
           <!-- Pin status indicator -->
@@ -189,6 +205,8 @@
 <script>
 import AdaptiveMarker from './AdaptiveMarker.vue';
 import SiblingNavigator from './SiblingNavigator.vue';
+import FormattedContent from './FormattedContent/index.vue';
+import { initFormatters } from './FormattedContent/init';
 import { computed, ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
 
@@ -197,7 +215,8 @@ export default {
   
   components: {
     AdaptiveMarker,
-    SiblingNavigator
+    SiblingNavigator,
+    FormattedContent
   },
   
   props: {
@@ -245,6 +264,9 @@ export default {
     const saveMessage = ref('');
     const saveError = ref(false);
     const titleInput = ref(null);
+    
+    // For regular users, just use token info
+    const isTogglingReadStatus = ref(false);
     
     const openTitleDescriptionModal = () => {
       editableTitle.value = props.message.title || '';
@@ -551,8 +573,29 @@ export default {
       return false;
     };
     
-    // Listen in the capture phase to get clicks before other handlers
+    const toggleReadStatus = async () => {
+      if (isTogglingReadStatus.value) return;
+      
+      isTogglingReadStatus.value = true;
+      try {
+        if (props.message.is_read) {
+          await store.dispatch('messages/markMessageAsUnread', props.message.id);
+        } else {
+          await store.dispatch('messages/markMessageAsRead', props.message.id);
+        }
+      } catch (error) {
+        console.error('Error toggling read status:', error);
+      } finally {
+        isTogglingReadStatus.value = false;
+      }
+    };
+    
+    // Initialize formatters when the component is first created
     onMounted(() => {
+      // Initialize formatters if not already done
+      initFormatters();
+      
+      // Listen in the capture phase to get clicks before other handlers
       document.addEventListener('click', handleClickOutside, true);
     });
     
@@ -593,7 +636,9 @@ export default {
       dropdownPositionStyle,
       saveMessage,
       saveError,
-      titleInput
+      titleInput,
+      isTogglingReadStatus,
+      toggleReadStatus
     };
   },
   
@@ -607,8 +652,8 @@ export default {
 
 <style scoped>
 .message-node {
-  margin-bottom: 15px;
-  transition: all 0.2s ease;
+  margin-bottom: var(--space-md);
+  transition: all var(--transition-fast);
   position: relative;
 }
 
@@ -623,31 +668,31 @@ export default {
 }
 
 .message-content {
-  background-color: var(--card-background, #f5f5f5);
-  border-radius: 8px;
-  padding: 12px;
-  border: 1px solid var(--border-color, #ddd);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
 }
 
 .message-node.selected .message-content {
-  border: 2px solid var(--primary-color, #007bff);
-  background-color: var(--primary-color-light, #e6f2ff);
+  border: 2px solid var(--color-primary);
+  background-color: var(--color-primary-light);
 }
 
 .message-node.pinned .message-content {
-  border-color: var(--primary-color-light, #c8e6ff);
+  border-color: var(--color-primary-light);
 }
 
 .message-header {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-xs);
 }
 
 .author-section {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-xs);
   flex-wrap: wrap;
 }
 
@@ -663,40 +708,50 @@ export default {
 
 .message-author.current-user-name {
   font-weight: 800;
-  color: var(--primary-color, #4a90e2);
+  color: var(--color-primary);
 }
 
 .author-user-tag {
-  color: var(--text-color-light, #777);
-  font-size: 0.85em;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.unread-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--color-error, #ff3860);
+  margin-right: 6px;
+  vertical-align: middle;
 }
 
 .visibility-indicator, .recipients-toggle {
   /* Apply consistent base styling to both types of indicators */
-  font-size: 0.75em;
+  font-size: var(--font-size-xs);
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: var(--radius-pill);
   height: 22px;
   display: inline-flex;
   align-items: center;
 }
 
 .visibility-indicator {
-  background-color: #91c754;
-  color: black;
+  background-color: var(--color-success);
+  color: var(--color-text-inverse);
 }
 
 .visibility-indicator.private {
-  background-color: #ff9800;
+  background-color: var(--color-warning);
 }
 
 .recipients-toggle {
   /* Base styling for all recipient toggles */
-  font-size: 0.75em;
+  font-size: var(--font-size-xs);
   padding: 2px 6px;
   cursor: pointer;
-  border-radius: 10px;
-  transition: all 0.2s;
+  border-radius: var(--radius-pill);
+  transition: all var(--transition-fast);
   margin-left: 0;
   height: 22px;
   display: inline-flex;
@@ -707,19 +762,19 @@ export default {
 .recipients-toggle:not(.to-you):not(.author-toggle) {
   /* Only apply these styles to the default toggle (not author or to-you) */
   background-color: transparent;
-  border: 1px solid var(--border-color, #ddd);
-  color: var(--text-color-light, #777);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
 }
 
 .recipients-toggle.to-you {
-  background-color: #2196f3; /* Blue for To You badge */
-  color: white;
+  background-color: var(--color-info);
+  color: var(--color-text-inverse);
   border: none;
 }
 
 .recipients-toggle.author-toggle {
-  background-color: #da843a; /* Dark orange for author badge */
-  color: black;
+  background-color: var(--color-warning);
+  color: var(--color-text-inverse);
   border: none;
 }
 
@@ -733,15 +788,15 @@ export default {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 90;
+  z-index: var(--z-index-dropdown);
 }
 
 .recipients-dropdown {
-  background-color: var(--card-background, white);
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: 6px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  z-index: 100;
+  z-index: var(--z-index-dropdown);
   min-width: 180px;
   max-width: 250px;
 }
@@ -756,12 +811,12 @@ export default {
 
 .dropdown-header {
   padding: 6px 10px;
-  border-bottom: 1px solid var(--border-color, #ddd);
+  border-bottom: 1px solid var(--color-border);
   font-weight: bold;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
 }
 
 .close-dropdown {
@@ -769,7 +824,7 @@ export default {
   border: none;
   font-size: 16px;
   cursor: pointer;
-  color: var(--text-color-light, #777);
+  color: var(--color-text-secondary);
 }
 
 .recipients-list {
@@ -790,20 +845,20 @@ export default {
 .recipient-name {
   font-weight: 500;
   margin-bottom: 0;
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
 }
 
 .recipient-tag {
-  font-size: 0.8em;
-  color: var(--text-color-light, #777);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
   opacity: 0.8;
 }
 
 .no-recipients {
   padding: 4px 10px;
-  color: var(--text-color-light, #777);
+  color: var(--color-text-secondary);
   font-style: italic;
-  font-size: 0.85rem;
+  font-size: var(--font-size-xs);
 }
 
 .admin-controls {
@@ -813,21 +868,21 @@ export default {
 }
 
 .pin-button, .delete-button, .title-button {
-  font-size: 0.75em;
+  font-size: var(--font-size-xs);
   padding: 2px 8px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   background-color: transparent;
-  border: 1px solid var(--border-color, #ddd);
-  color: var(--text-color-light, #777);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
   display: flex;
   align-items: center;
   gap: 4px;
-  transition: all 0.2s;
+  transition: all var(--transition-fast);
 }
 
 .pin-button:hover, .delete-button:hover, .title-button:hover {
-  background-color: var(--card-background-active, #f0f0f0);
+  background-color: var(--color-hover-overlay);
 }
 
 .title-icon {
@@ -837,7 +892,7 @@ export default {
   font-size: 1.3em;
   color: #b01b2e; /* Closer to the dark red in the image */
   cursor: pointer;
-  transition: color 0.2s ease;
+  transition: color var(--transition-fast);
   margin: 0 8px 0 0;
   display: inline-block;
   transform: skewX(-5deg); /* Slight slant */
@@ -850,7 +905,7 @@ export default {
 }
 
 .delete-button {
-  color: #e74c3c; /* Red for delete */
+  color: var(--color-error);
   border-color: #ffcccc;
 }
 
@@ -863,14 +918,14 @@ export default {
 }
 
 .message-timestamp {
-  font-size: 0.8em;
-  color: var(--text-color-light, #777);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
   white-space: nowrap;
 }
 
 .message-body {
-  margin-bottom: 12px;
-  white-space: pre-wrap;
+  margin-bottom: var(--space-md);
+  white-space: normal;
   word-wrap: break-word;
 }
 
@@ -878,8 +933,8 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.8em;
-  color: var(--text-color-light, #777);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 
 .message-actions {
@@ -892,8 +947,51 @@ export default {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: var(--primary-color);
+  color: var(--color-primary);
   font-weight: 500;
+}
+
+.read-status-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.read-toggle-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background-color: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.read-toggle-button:hover {
+  background-color: var(--color-hover-overlay);
+}
+
+.read-toggle-button .loading-indicator {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top-color: var(--primary-color, #007bff);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-right: 4px;
+}
+
+.read-toggle-button.loading {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.envelope-icon {
+  font-size: 0.9em;
 }
 
 /* Modal styles */

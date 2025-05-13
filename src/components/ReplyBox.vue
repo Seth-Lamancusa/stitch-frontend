@@ -668,10 +668,10 @@ defineExpose({
   bottom: 20px; /* Reduced bottom spacing */
   left: 40px;
   right: 40px;
-  padding: 8px 16px;
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: var(--border-radius-md, 8px);
-  background-color: var(--surface-color, #f8f8f8);
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
   z-index: 10;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
@@ -683,7 +683,7 @@ defineExpose({
 .reply-settings {
   display: flex;
   gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-xs);
   align-items: center;
   position: relative;
 }
@@ -692,7 +692,7 @@ defineExpose({
   display: flex;
   flex-direction: row;
   align-items: flex-end;
-  gap: 8px;
+  gap: var(--space-xs);
 }
 
 .visibility-toggle {
@@ -704,18 +704,19 @@ defineExpose({
 
 .recipients-toggle {
   padding: 6px 12px;
-  background-color: var(--primary-color-light, #e6f2ff);
-  border: 1px solid var(--primary-color, #007bff);
-  color: var(--primary-color, #007bff);
-  border-radius: 4px;
+  background-color: var(--color-primary-light);
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: var(--font-size-xs);
   font-weight: 500;
-  transition: background-color 0.2s;
+  transition: background-color var(--transition-fast);
 }
 
 .recipients-toggle:hover:not(:disabled) {
-  background-color: var(--primary-color-hover, #d1e6ff);
+  background-color: var(--color-primary-light);
+  filter: brightness(95%);
 }
 
 .recipients-toggle:disabled {
@@ -730,42 +731,42 @@ defineExpose({
   height: 40px; /* Start with single line */
   max-height: 150px; /* Maximum height before scrolling */
   padding: 10px 14px;
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: 18px; /* More rounded corners */
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill); /* More rounded corners */
   resize: none; /* Disable manual resizing since we're doing it programmatically */
   margin-bottom: 0;
   font-family: inherit;
-  font-size: 16px; /* Better for mobile */
-  background-color: var(--card-background, #f5f5f5);
-  color: var(--text-color, #333);
-  transition: all 0.2s ease;
+  font-size: var(--font-size-md); /* Better for mobile */
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  transition: all var(--transition-fast);
   overflow-y: auto; /* Show scrollbar if content exceeds max-height */
 }
 
 .reply-input:focus:not(:disabled) {
   outline: none;
-  border-color: var(--primary-color, #4a90e2);
-  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb, 74, 144, 226), 0.2);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-light);
 }
 
 .reply-input.disabled {
-  background-color: var(--surface-color, #f0f0f0);
-  color: var(--text-color-light, #999);
+  background-color: var(--color-surface);
+  color: var(--color-text-disabled);
   cursor: not-allowed;
 }
 
 .reply-actions {
   display: flex;
   align-items: center;
-  margin-left: 8px;
+  margin-left: var(--space-xs);
 }
 
 .send-button {
-  padding: 8px 16px;
-  background-color: var(--primary-color, #4a90e2);
-  color: rgb(65, 65, 65);
+  padding: var(--space-xs) var(--space-md);
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
   border: none;
-  border-radius: 18px;
+  border-radius: var(--radius-pill);
   cursor: pointer;
   font-weight: bold;
   min-width: 80px;
@@ -783,8 +784,8 @@ defineExpose({
 .button-spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid #ffffff;
-  border-top: 2px solid transparent;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-top: 2px solid var(--color-text-inverse);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -800,17 +801,17 @@ defineExpose({
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 100;
+  z-index: var(--z-index-modal);
 }
 
 .recipient-modal {
-  background-color: var(--surface-color, #f8f8f8);
-  padding: 24px;
-  border-radius: var(--border-radius-md, 8px);
+  background-color: var(--color-surface);
+  padding: var(--space-lg);
+  border-radius: var(--radius-md);
   max-width: 400px;
   width: 90%;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--border-color, #ddd);
+  border: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
 }
@@ -819,7 +820,7 @@ defineExpose({
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  margin-bottom: var(--space-lg);
 }
 
 .modal-content {
@@ -829,15 +830,15 @@ defineExpose({
 .modal-footer {
   display: flex;
   justify-content: flex-end;
-  margin-top: 24px;
+  margin-top: var(--space-lg);
 }
 
 .done-button {
-  padding: 8px 16px;
-  background-color: var(--primary-color, #4a90e2);
-  color: black;
+  padding: var(--space-xs) var(--space-md);
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
   border: none;
-  border-radius: var(--border-radius-sm, 4px);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 500;
 }
@@ -847,18 +848,18 @@ defineExpose({
   border: none;
   cursor: pointer;
   font-size: 1.5rem;
-  color: var(--text-color, #333);
+  color: var(--color-text);
 }
 
 .modal-description {
-  margin-bottom: 16px;
-  color: var(--text-color, #333);
+  margin-bottom: var(--space-md);
+  color: var(--color-text);
 }
 
 .recipients-hint {
   margin-top: 10px;
-  color: var(--text-color-light, #777);
-  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
   font-style: italic;
 }
 
@@ -871,7 +872,7 @@ defineExpose({
   right: 10px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 0.8rem;
+  font-size: var(--font-size-xs);
   z-index: 5;
   opacity: 0.7;
   background-color: transparent;
@@ -884,7 +885,7 @@ defineExpose({
   width: 12px;
   height: 12px;
   border: 2px solid rgba(0, 0, 0, 0.05);
-  border-top-color: var(--primary-color, #007bff);
+  border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -893,16 +894,16 @@ defineExpose({
   position: absolute;
   top: 100%;
   right: 40px;
-  color: var(--text-color, #333);
-  font-size: 0.8rem;
+  color: var(--color-text);
+  font-size: var(--font-size-xs);
 }
 
 .valid-indicator {
-  color: var(--success-color, #4caf50);
+  color: var(--color-success);
 }
 
 .invalid-indicator {
-  color: var(--error-color, #dc3545);
+  color: var(--color-error);
 }
 
 .recipient-selector {
@@ -911,10 +912,10 @@ defineExpose({
   bottom: 40px; /* Position above the button */
   left: 50%; /* Center it on its parent */
   transform: translateX(-50%); /* Center it on its parent */
-  background-color: var(--card-background, #f5f5f5);
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: var(--border-radius-md, 8px);
-  padding: 16px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
   min-width: 280px;
   z-index: 20;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -922,23 +923,23 @@ defineExpose({
 
 .recipient-input-row {
   display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-xs);
 }
 
 .recipient-input {
   flex: 1;
   padding: 6px;
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
 }
 
 .add-recipient-btn {
   padding: 6px 10px;
-  background-color: var(--primary-color, #4a90e2);
-  color: black;
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
@@ -949,15 +950,15 @@ defineExpose({
 }
 
 .recipient-tag {
-  background-color: var(--primary-color-light, #e6f2ff);
+  background-color: var(--color-primary-light);
   padding: 6px 10px;
-  border-radius: var(--border-radius-md);
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  font-size: 0.9rem;
-  color: var(--text-color);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
 }
 
 .recipient-info {
@@ -971,8 +972,8 @@ defineExpose({
 }
 
 .recipient-tag-name {
-  font-size: 0.85rem;
-  color: var(--text-color-light, #777);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 
 .recipient-actions {
@@ -993,17 +994,17 @@ defineExpose({
 }
 
 .no-recipients {
-  color: var(--text-color-light, #777);
+  color: var(--color-text-secondary);
   font-style: italic;
-  font-size: 0.85rem;
+  font-size: var(--font-size-xs);
   padding: 4px 0;
 }
 
 .recipient-input-container {
   position: relative;
   display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
 }
 
 .input-wrapper {
@@ -1012,22 +1013,22 @@ defineExpose({
 }
 
 .input-wrapper.valid .recipient-input {
-  border-color: var(--success-color, #4caf50);
+  border-color: var(--color-success);
 }
 
 .input-wrapper.invalid .recipient-input {
-  border-color: var(--error-color, #dc3545);
+  border-color: var(--color-error);
 }
 
 .recipient-input {
   width: 100%;
-  padding: 8px 12px;
+  padding: var(--space-xs) var(--space-md);
   padding-right: 30px; /* Space for indicators */
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-sm);
-  background-color: var(--input-background);
-  color: var(--text-color);
-  transition: border-color 0.2s;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  transition: border-color var(--transition-fast);
 }
 
 .search-indicator,
@@ -1037,14 +1038,14 @@ defineExpose({
   right: 10px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 0.8rem;
+  font-size: var(--font-size-xs);
 }
 
 .search-indicator .spinner {
   width: 16px;
   height: 16px;
   border: 2px solid rgba(0, 0, 0, 0.1);
-  border-top-color: var(--primary-color, #007bff);
+  border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -1056,19 +1057,19 @@ defineExpose({
 
 .search-results-list {
   width: 100%;
-  background-color: var(--surface-color, #f8f8f8);
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: 4px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   max-height: 200px;
   overflow-y: auto;
   margin-bottom: 10px;
 }
 
 .search-result-item {
-  padding: 8px 12px;
+  padding: var(--space-xs) var(--space-md);
   cursor: pointer;
-  transition: background-color 0.2s;
-  border-bottom: 1px solid var(--border-color-light, #eee);
+  transition: background-color var(--transition-fast);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .search-result-item:last-child {
@@ -1076,7 +1077,7 @@ defineExpose({
 }
 
 .search-result-item:hover {
-  background-color: var(--primary-color-light, #e6f2ff);
+  background-color: var(--color-primary-light);
 }
 
 .search-result-content {
@@ -1087,20 +1088,20 @@ defineExpose({
 }
 
 .search-result-name {
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   font-weight: 500;
-  color: var(--text-color, #333);
+  color: var(--color-text);
 }
 
 .search-result-tag {
-  font-size: 0.8rem;
-  color: var(--text-color-light, #777);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 
 .no-search-results {
-  padding: 12px;
-  color: var(--text-color-light, #777);
-  font-size: 0.85rem;
+  padding: var(--space-md);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
   text-align: center;
   font-style: italic;
 }
@@ -1112,37 +1113,5 @@ defineExpose({
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
-}
-
-/* Dark theme overrides */
-@media (prefers-color-scheme: dark) {
-  .reply-container {
-    background-color: #000000;
-    border-color: var(--border-color-dark, #444);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  }
-  
-  .reply-input {
-    background-color: var(--card-background-dark, #333);
-    color: var(--text-color-dark, #eee);
-    border-color: var(--border-color-dark, #444);
-    margin-bottom: 10px;
-  }
-  
-  .reply-input.disabled {
-    background-color: #1a1a1a;
-    border-color: #333;
-    color: #555;
-  }
-  
-  .send-button:disabled {
-    background-color: var(--primary-color-dark, #2b5a94);
-    opacity: 0.5;
-  }
-  
-  .send-button {
-    background-color: var(--primary-color, #4a90e2);
-    color: rgb(58, 58, 58);
-  }
 }
 </style> 

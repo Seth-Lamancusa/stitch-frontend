@@ -204,11 +204,11 @@ export default {
 
 <style scoped>
 .adaptive-marker {
-  padding: 15px;
+  padding: var(--space-md);
   text-align: center;
   opacity: 0.5;
-  transition: opacity 0.3s ease;
-  border-radius: 8px;
+  transition: opacity var(--transition-normal);
+  border-radius: var(--radius-md);
   position: relative;
 }
 
@@ -220,7 +220,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: var(--space-sm);
 }
 
 /* Loading state styling */
@@ -228,8 +228,8 @@ export default {
   display: inline-block;
   width: 20px;
   height: 20px;
-  border: 2px solid rgba(0, 0, 0, 0.1);
-  border-top-color: var(--primary-color, #007bff);
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 1s infinite linear;
 }
@@ -247,7 +247,7 @@ export default {
   position: absolute;
   width: 100%;
   left: 0;
-  border-top: 1px solid var(--text-color-light, #666);
+  border-top: 1px solid var(--color-text-secondary);
 }
 
 .end-marker:before {
@@ -260,7 +260,7 @@ export default {
 
 .marker-text {
   font-size: 0.9em;
-  color: var(--text-color-light, #666);
+  color: var(--color-text-secondary);
 }
 
 .error-icon {
@@ -268,17 +268,17 @@ export default {
 }
 
 .retry-button {
-  background-color: var(--primary-color, #007bff);
-  color: white;
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
   border: none;
-  border-radius: 4px;
-  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-xxs) var(--space-xs);
   cursor: pointer;
   font-size: 0.8em;
 }
 
 .retry-button:hover {
-  background-color: var(--primary-color-dark, #0069d9);
+  background-color: var(--color-primary-dark);
 }
 
 @keyframes spin {
@@ -286,20 +286,5 @@ export default {
   100% { transform: rotate(360deg); }
 }
 
-/* Dark theme support */
-@media (prefers-color-scheme: dark) {
-  .loading-spinner {
-    border-color: rgba(255, 255, 255, 0.1);
-    border-top-color: var(--primary-color, #007bff);
-  }
-  
-  .end-marker:before,
-  .end-marker:after {
-    border-top-color: var(--text-color-light-dark, #aaa);
-  }
-  
-  .marker-text {
-    color: var(--text-color-light-dark, #aaa);
-  }
-}
+/* Dark theme styles are no longer needed as we're using CSS variables */
 </style> 

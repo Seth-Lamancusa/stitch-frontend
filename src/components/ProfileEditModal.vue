@@ -226,7 +226,7 @@ const closeModal = () => {
 <style scoped>
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .fade-enter-from,
@@ -244,18 +244,18 @@ const closeModal = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-index-modal);
   backdrop-filter: blur(2px);
 }
 
 .modal-container {
-  background-color: var(--card-background);
-  border-radius: 12px;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
   width: 90%;
   max-width: 450px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--color-card-shadow);
   overflow: hidden;
-  animation: modal-appear 0.3s ease-out;
+  animation: modal-appear var(--transition-normal);
 }
 
 @keyframes modal-appear {
@@ -273,25 +273,25 @@ const closeModal = () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color);
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .modal-header h3 {
   margin: 0;
-  color: var(--text-color);
-  font-size: 18px;
+  color: var(--color-text);
+  font-size: var(--font-size-lg);
   font-weight: 600;
 }
 
 .close-button {
   background: none;
   border: none;
-  font-size: 24px;
+  font-size: var(--font-size-xl);
   cursor: pointer;
-  color: var(--text-color);
+  color: var(--color-text);
   opacity: 0.7;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-fast);
   height: 24px;
   width: 24px;
   display: flex;
@@ -305,61 +305,61 @@ const closeModal = () => {
 }
 
 .modal-content {
-  padding: 20px;
+  padding: var(--space-lg);
 }
 
 .form-group {
-  margin-bottom: 20px;
+  margin-bottom: var(--space-lg);
 }
 
 .form-group label {
   display: block;
-  margin-bottom: 6px;
-  color: var(--text-color);
+  margin-bottom: var(--space-xs);
+  color: var(--color-text);
   font-weight: 500;
-  font-size: 14px;
+  font-size: var(--font-size-sm);
 }
 
 .form-group input {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background-color: var(--input-background);
-  color: var(--text-color);
-  font-size: 14px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-input-background);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .form-group input:focus {
   outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb, 0, 120, 212), 0.2);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-light);
 }
 
 .field-hint {
-  font-size: 12px;
-  color: #888;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
   margin-top: 4px;
 }
 
 .field-error {
-  font-size: 12px;
-  color: #e74c3c;
+  font-size: var(--font-size-xs);
+  color: var(--color-error);
   margin-top: 4px;
 }
 
 .error-message {
-  color: #e74c3c;
+  color: var(--color-error);
   margin: 2px 0;
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   display: block;
 }
 
 .modal-footer {
   display: flex;
-  padding: 16px 20px;
-  border-top: 1px solid var(--border-color);
+  padding: var(--space-md) var(--space-lg);
+  border-top: 1px solid var(--color-border);
 }
 
 .footer-message {
@@ -372,38 +372,38 @@ const closeModal = () => {
 
 .footer-message span {
   background-color: rgba(231, 76, 60, 0.1);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 1px 6px;
   display: inline-block;
 }
 
 .button-group {
   display: flex;
-  gap: 12px;
+  gap: var(--space-md);
   margin-left: auto;
 }
 
 .cancel-btn {
   background-color: transparent;
-  color: var(--text-color);
-  padding: 8px 16px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
+  color: var(--color-text);
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--font-size-sm);
   font-weight: 500;
-  transition: background-color 0.2s ease;
+  transition: background-color var(--transition-fast);
 }
 
 .cancel-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--color-hover-overlay);
 }
 
 .update-btn {
-  background-color: var(--primary-color);
-  color: black;
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-weight: 500;
   min-width: 140px;
@@ -421,7 +421,7 @@ const closeModal = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: var(--font-size-sm);
 }
 
 .spinner {
@@ -429,13 +429,13 @@ const closeModal = () => {
   height: 14px;
   border: 2px solid rgba(0, 0, 0, 0.3);
   border-radius: 50%;
-  border-top-color: #000;
+  border-top-color: var(--color-text-inverse);
   animation: spin 1s linear infinite;
-  margin-right: 8px;
+  margin-right: var(--space-xs);
 }
 
 .update-btn:hover:not(:disabled) {
-  background-color: var(--primary-color-dark, #0069d9);
+  background-color: var(--color-primary-dark);
 }
 
 .update-btn:disabled {

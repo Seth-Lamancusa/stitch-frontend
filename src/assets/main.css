@@ -1,12 +1,29 @@
-@import './base.css';
-@import './theme.css';
+@import './variables.css';
 
-body {
+/**
+ * Stitch - Main Styles
+ * 
+ * Global styles and base component styles.
+ */
+
+/* Reset and base styles */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: 'Avenir', Helvetica, Arial, sans-serif;
-  color: var(--text-color);
-  background-color: var(--background-color);
+}
+
+body {
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-normal);
+  color: var(--color-text);
+  background-color: var(--color-background);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
 }
 
 /* Custom scrollbar styling */
@@ -16,39 +33,25 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--color-scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(128, 128, 128, 0.4);
-  border-radius: 4px;
+  background: var(--color-scrollbar-thumb);
+  border-radius: var(--radius-sm);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(128, 128, 128, 0.6);
+  background: var(--color-scrollbar-thumb-hover);
 }
 
 /* Firefox scrollbar styling */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(128, 128, 128, 0.4) transparent;
+  scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
 }
 
-/* Dark mode adjustments */
-@media (prefers-color-scheme: dark) {
-  ::-webkit-scrollbar-thumb {
-    background: rgba(200, 200, 200, 0.3);
-  }
-  
-  ::-webkit-scrollbar-thumb:hover {
-    background: rgba(200, 200, 200, 0.5);
-  }
-  
-  * {
-    scrollbar-color: rgba(200, 200, 200, 0.3) transparent;
-  }
-}
-
+/* App container */
 #app {
   max-width: 1280px;
   margin: 0 auto;
@@ -56,43 +59,81 @@ body {
   font-weight: normal;
 }
 
+/* Base component styles */
 button {
-  padding: var(--spacing-sm) var(--spacing-md);
-  background-color: var(--primary-color);
-  color: white;
+  padding: var(--space-xs) var(--space-md);
+  background-color: var(--color-button-background);
+  color: var(--color-button-text);
   border: none;
-  border-radius: var(--border-radius-sm);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: background-color var(--transition-fast);
 }
 
 button:hover {
-  background-color: var(--primary-color-dark);
+  background-color: var(--color-primary-dark);
 }
 
-input {
-  padding: var(--spacing-sm);
-  border: 1px solid var(--input-border);
-  border-radius: var(--border-radius-sm);
-  background-color: var(--input-background);
-  color: var(--text-color);
+button:disabled {
+  background-color: var(--color-button-disabled);
+  cursor: not-allowed;
+}
+
+input, textarea, select {
+  padding: var(--space-xs);
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-input-background);
+  color: var(--color-text);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-md);
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--color-input-focus-border);
 }
 
 a {
   text-decoration: none;
-  color: var(--primary-color);
-  transition: 0.4s;
-  padding: var(--spacing-xs);
+  color: var(--color-link);
+  transition: color var(--transition-fast);
 }
 
 a:hover {
-  background-color: var(--primary-color-light);
+  color: var(--color-link-hover);
 }
 
-/* Remove the grid layout for now */
-@media (min-width: 1024px) {
-  #app {
-    display: block;
-    padding: 0 0;
-  }
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--color-heading);
+  line-height: var(--line-height-tight);
+  margin-bottom: var(--space-sm);
 }
+
+h1 { font-size: var(--font-size-xxl); }
+h2 { font-size: var(--font-size-xl); }
+h3 { font-size: var(--font-size-lg); }
+h4 { font-size: var(--font-size-md); }
+h5 { font-size: var(--font-size-sm); }
+h6 { font-size: var(--font-size-xs); }
+
+p {
+  margin-bottom: var(--space-md);
+}
+
+/* Utility classes */
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+.text-right { text-align: right; }
+
+.text-error { color: var(--color-error); }
+.text-success { color: var(--color-success); }
+.text-warning { color: var(--color-warning); }
+.text-info { color: var(--color-info); }
+
+.d-flex { display: flex; }
+.flex-column { flex-direction: column; }
+.justify-center { justify-content: center; }
+.align-center { align-items: center; }
+.space-between { justify-content: space-between; }

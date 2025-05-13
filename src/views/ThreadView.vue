@@ -246,6 +246,9 @@ const renderThreadAndSubscribe = async () => {
     // 4. Set up WebSocket subscription only after messages are loaded
     if (messages.length > 0) {
       setupWebSocketSubscription();
+      
+      // 5. Scroll to center the message ID from the URL
+      scrollToMessageId();
     }
   } catch (error) {
     console.error(`[ThreadView] Error in renderThreadAndSubscribe:`, error);
@@ -309,14 +312,14 @@ const loadMessages = async (direction) => {
     if (direction === 'parents') {
       await store.dispatch('messages/loadMessageBranchUp', {
         messageId: targetId,
-        depth: 2
+        depth: 5
       });
     }
     // For children, we load child branch with depth 2
     else if (direction === 'children') {
       await store.dispatch('messages/loadMessageBranchDown', {
         messageId: targetId,
-        depth: 2
+        depth: 5
       });
     }
     
@@ -386,6 +389,8 @@ onBeforeUnmount(() => {
 watch(messageId, async (newId) => {
   if (newId) {
     await renderThreadAndSubscribe();
+    // Ensure we scroll to the message even if it was already loaded
+    scrollToMessageId();
   }
 });
 
@@ -694,6 +699,40 @@ watch(selectedMessageId, (newId, oldId) => {
     setupWebSocketSubscription();
   }
 });
+
+// Add this function after renderThreadAndSubscribe
+const scrollToMessageId = () => {
+  // Ensure we have a message ID and the message container exists
+  if (!messageId.value || !messageList.value) return;
+  
+  // Wait for DOM updates to complete
+  nextTick(() => {
+    // Find the element for the target message
+    const messageElement = document.querySelector(`[data-message-id="${messageId.value}"]`);
+    if (!messageElement) return;
+    
+    // Calculate position needed to center the element in the viewport
+    const containerRect = messageList.value.getBoundingClientRect();
+    const messageRect = messageElement.getBoundingClientRect();
+    
+    // Get the scroll container's current scroll position
+    const containerScrollTop = messageList.value.scrollTop;
+    
+    // Calculate position needed to center the element in the viewport
+    const messageRelativeTop = messageRect.top - containerRect.top;
+    const containerHeight = containerRect.height;
+    
+    // Calculate new scroll position to center the message
+    // Container's current scroll + message's position relative to container + half message height - half container height
+    const newScrollTop = containerScrollTop + messageRelativeTop + (messageRect.height / 2) - (containerHeight / 2);
+    
+    // Set the scroll position immediately (no animation)
+    messageList.value.scrollTo({
+      top: newScrollTop,
+      behavior: 'auto' // 'auto' for no animation
+    });
+  });
+};
 </script>
 
 <style scoped>
@@ -708,25 +747,26 @@ watch(selectedMessageId, (newId, oldId) => {
 .thread-header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md, 12px);
-  padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
-  border-bottom: 1px solid var(--border-color, #ddd);
-  background-color: var(--surface-color, #f8f8f8);
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-surface);
   z-index: 5;
 }
 
 .back-button {
-  padding: var(--spacing-xs, 4px) var(--spacing-sm, 8px);
+  padding: var(--space-xs) var(--space-sm);
   background-color: transparent;
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: var(--border-radius-sm, 4px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   cursor: pointer;
+  color: var(--color-text);
 }
 
 .thread-title {
   margin: 0;
-  color: var(--primary-color, #333);
-  font-size: 1.1rem;
+  color: var(--color-primary);
+  font-size: var(--font-size-lg);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -752,7 +792,7 @@ watch(selectedMessageId, (newId, oldId) => {
   justify-content: center;
   align-items: center;
   height: 200px;
-  color: var(--text-color-light, #777);
+  color: var(--color-text-secondary);
   text-align: center;
 }
 
@@ -766,31 +806,31 @@ watch(selectedMessageId, (newId, oldId) => {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 100;
+  z-index: var(--z-index-modal);
   backdrop-filter: blur(2px);
 }
 
 .delete-confirm-content {
-  background-color: var(--surface-color, #f8f8f8);
+  background-color: var(--color-surface);
   padding: 24px;
-  border-radius: var(--border-radius-md, 8px);
+  border-radius: var(--radius-md);
   max-width: 400px;
   width: 90%;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--border-color, #ddd);
+  border: 1px solid var(--color-border);
 }
 
 .delete-confirm-content h3 {
   margin-top: 0;
-  color: var(--error-color, #dc3545);
-  font-size: 1.3rem;
+  color: var(--color-error);
+  font-size: var(--font-size-xl);
   margin-bottom: 16px;
 }
 
 .warning {
-  color: var(--error-color, #dc3545);
+  color: var(--color-error);
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: var(--font-size-sm);
   margin-top: 12px;
 }
 
@@ -802,30 +842,30 @@ watch(selectedMessageId, (newId, oldId) => {
 }
 
 .delete-confirm-actions .cancel-button {
-  padding: 8px 16px;
+  padding: var(--space-xs) var(--space-md);
   background-color: transparent;
-  color: var(--text-color, #333);
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: var(--border-radius-sm, 4px);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 500;
-  transition: background-color 0.2s, border-color 0.2s;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .delete-confirm-actions .cancel-button:hover {
-  background-color: rgba(0, 0, 0, 0.05);
-  border-color: var(--border-color-dark, #ccc);
+  background-color: var(--color-hover-overlay);
+  border-color: var(--color-border-dark);
 }
 
 .delete-confirm-actions .delete-button {
-  padding: 8px 16px;
-  background-color: var(--error-color, #dc3545);
-  color: white;
+  padding: var(--space-xs) var(--space-md);
+  background-color: var(--color-error);
+  color: var(--color-text-inverse);
   border: none;
-  border-radius: var(--border-radius-sm, 4px);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 500;
-  transition: background-color 0.2s;
+  transition: background-color var(--transition-fast);
   min-width: 80px;
   height: 36px;
   display: flex;
@@ -834,7 +874,8 @@ watch(selectedMessageId, (newId, oldId) => {
 }
 
 .delete-confirm-actions .delete-button:hover:not(:disabled) {
-  background-color: var(--error-color-dark, #c82333);
+  background-color: var(--color-error);
+  filter: brightness(90%);
 }
 
 .delete-confirm-actions .delete-button:disabled,
@@ -847,7 +888,7 @@ watch(selectedMessageId, (newId, oldId) => {
   width: 16px;
   height: 16px;
   border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top: 2px solid white;
+  border-top: 2px solid var(--color-text-inverse);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -865,8 +906,8 @@ watch(selectedMessageId, (newId, oldId) => {
 .loading-spinner {
   width: 24px;
   height: 24px;
-  border: 4px solid rgba(0, 0, 0, 0.1);
-  border-top: 4px solid var(--primary-color, #007bff);
+  border: 4px solid var(--color-border);
+  border-top: 4px solid var(--color-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -878,8 +919,8 @@ watch(selectedMessageId, (newId, oldId) => {
 
 .loading-text {
   margin-top: 10px;
-  color: var(--text-color-light, #666);
-  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .parent-loading-container {
@@ -897,35 +938,9 @@ watch(selectedMessageId, (newId, oldId) => {
   justify-content: center;
   margin: 15px 0;
   padding: 20px;
-  background-color: var(--card-background, #f5f5f5);
-  border-radius: 8px;
-  border: 1px solid var(--border-color, #ddd);
-}
-
-/* Dark theme overrides */
-@media (prefers-color-scheme: dark) {
-  .thread-header {
-    background-color: #000000;
-  }
-
-  /* Dark theme for delete modal */
-  .delete-confirm-content {
-    background-color: var(--surface-color-dark, #222);
-    border-color: var(--border-color-dark, #444);
-  }
-  
-  .delete-confirm-content p {
-    color: var(--text-color-dark, #eee);
-  }
-  
-  .delete-confirm-actions .cancel-button {
-    color: var(--text-color-dark, #eee);
-    border-color: var(--border-color-dark, #444);
-  }
-  
-  .delete-confirm-actions .cancel-button:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-  }
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
 }
 </style> 
 

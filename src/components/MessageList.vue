@@ -26,21 +26,24 @@ const messageListTitle = computed(() => {
 const threads = computed(() => {
   const allMessages = store.getters['messages/getLoadedMessages'] || [];
   const currentUser = store.getters['auth/user'];
-  const userEmail = currentUser?.email;
+  const currentUid = currentUser?.uid;
   
-  // Filter to only include pinned messages
   const filteredMessages = allMessages.filter(msg => {
     const isPublic = msg.public === 1 || msg.public === true;
-    const isUserRecipient = userEmail && msg.recipients && 
-      Array.isArray(msg.recipients) && msg.recipients.includes(userEmail);
+    
+    // Check if user is recipient (using uid)
+    const isUserRecipient = currentUser && msg.recipients && 
+      Array.isArray(msg.recipients) && 
+      msg.recipients.some(r => r.uid === currentUid);
+    
     const isPinned = msg.is_pinned === 1 || msg.is_pinned === true;
     
     if (activeTab.value === 'public') {
-      // Public tab: show pinned public messages
+      // Public tab: show only pinned public messages
       return isPublic && isPinned;
     } else {
-      // Private tab: show pinned private messages OR public pinned messages where user is explicitly a recipient
-      return isPinned && (!isPublic || isUserRecipient);
+      // Private tab: show private messages OR messages where user is explicitly a recipient
+      return !isPublic || isUserRecipient;
     }
   });
   
@@ -73,6 +76,28 @@ function getAuthorDisplay(message) {
 // Get author user tag
 function getAuthorUserTag(message) {
   return message.author_user_tag || null;
+}
+
+// Get message title with fallback if both title and description are null/empty
+function getMessageTitle(message) {
+  if ((!message.title || message.title.trim() === '') && 
+      (!message.description || message.description.trim() === '')) {
+    return `Message from ${getAuthorDisplay(message)}`;
+  }
+  return message.title || 'Untitled Message';
+}
+
+// Get message description with fallback to content preview if both title and description are null/empty
+function getMessageDescription(message) {
+  if ((!message.title || message.title.trim() === '') && 
+      (!message.description || message.description.trim() === '')) {
+    // Get first 200 characters of content
+    const contentPreview = message.content || '';
+    return contentPreview.length > 200 ? 
+      contentPreview.substring(0, 200) + '...' : 
+      contentPreview;
+  }
+  return message.description || 'No description';
 }
 
 // Get reply count from child_ids
@@ -194,13 +219,16 @@ watch(activeTab, async () => {
       <div 
         v-for="thread in threads" 
         :key="thread.id" 
-        class="message-item pinned-message"
+        class="message-item"
+        :class="{ 'pinned-message': thread.is_pinned }"
         :data-thread-id="thread.id"
         @click="viewThread(thread.id)"
       >
         <div class="message-header">
           <h3 class="message-title">
-            📌 {{ thread.title || 'Untitled Message' }}
+            <span v-if="thread.is_pinned">📌</span> 
+            <span v-if="thread.is_read === false" class="unread-indicator"></span>
+            {{ getMessageTitle(thread) }}
           </h3>
           <div class="author-info">
             <div class="author-pin-section">
@@ -211,7 +239,7 @@ watch(activeTab, async () => {
         </div>
         
         <p class="message-desc">
-          {{ thread.description || 'No description' }}
+          {{ getMessageDescription(thread) }}
         </p>
         
         <div class="message-footer">
@@ -245,15 +273,15 @@ watch(activeTab, async () => {
   flex-direction: column;
   height: 100%;
   overflow-y: auto;
-  padding: var(--spacing-md);
-  gap: var(--spacing-md);
+  padding: var(--space-md);
+  gap: var(--space-md);
   scroll-behavior: smooth;
 }
 
 .section-title {
-  font-size: 1.2rem;
-  margin-bottom: var(--spacing-sm);
-  color: var(--text-color);
+  font-size: var(--font-size-lg);
+  margin-bottom: var(--space-sm);
+  color: var(--color-text);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -262,33 +290,33 @@ watch(activeTab, async () => {
 .messages-container {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md);
+  gap: var(--space-md);
 }
 
 .message-item {
-  background-color: var(--card-background);
-  border-radius: var(--border-radius-md);
-  border: 1px solid var(--border-color);
-  padding: var(--spacing-md);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  padding: var(--space-md);
   cursor: pointer;
-  transition: box-shadow 0.3s, transform 0.2s;
+  transition: box-shadow var(--transition-normal), transform var(--transition-fast);
   position: relative;
 }
 
 .message-item:hover {
-  box-shadow: var(--card-shadow);
+  box-shadow: var(--color-card-shadow);
   transform: translateY(-2px);
 }
 
 .pinned-message {
-  border-color: var(--primary-color-light, #c8e6ff);
+  border-color: var(--color-primary-light);
 }
 
 .message-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: var(--spacing-sm);
+  margin-bottom: var(--space-sm);
 }
 
 .author-pin-section {
@@ -299,8 +327,8 @@ watch(activeTab, async () => {
 
 .message-title {
   margin: 0;
-  color: var(--primary-color);
-  font-size: 1.2rem;
+  color: var(--color-primary);
+  font-size: var(--font-size-lg);
 }
 
 .author-info {
@@ -310,44 +338,44 @@ watch(activeTab, async () => {
 }
 
 .message-author {
-  font-size: 0.9rem;
-  color: var(--text-color-light);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 
 .message-author.current-user-name {
   font-weight: 800;
-  color: var(--primary-color, #4a90e2);
+  color: var(--color-primary);
 }
 
 .author-user-tag {
-  font-size: 0.8rem;
-  color: var(--text-color-light);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
   opacity: 0.8;
 }
 
 .message-desc {
-  margin-bottom: var(--spacing-md);
-  color: var(--text-color);
+  margin-bottom: var(--space-md);
+  color: var(--color-text);
 }
 
 .message-footer {
   display: flex;
   justify-content: space-between;
-  font-size: 0.8rem;
-  color: var(--text-color-light);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 
 .loading-indicator {
   display: flex;
   justify-content: center;
   align-items: center;
-  color: var(--text-color-light);
+  color: var(--color-text-secondary);
   text-align: center;
   flex-direction: column;
   gap: 12px;
-  margin-top: var(--spacing-sm);
+  margin-top: var(--space-sm);
   height: auto;
-  padding: var(--spacing-sm);
+  padding: var(--space-sm);
 }
 
 .loading-indicator.full-height {
@@ -355,7 +383,7 @@ watch(activeTab, async () => {
 }
 
 .error-message {
-  color: #e74c3c;
+  color: var(--color-error);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -370,7 +398,7 @@ watch(activeTab, async () => {
   justify-content: center;
   align-items: center;
   height: 200px;
-  color: var(--text-color-light);
+  color: var(--color-text-secondary);
   text-align: center;
   flex-direction: column;
   gap: 16px;
@@ -379,8 +407,8 @@ watch(activeTab, async () => {
 .loading-spinner {
   width: 28px;
   height: 28px;
-  border: 3px solid rgba(0, 0, 0, 0.1);
-  border-top: 3px solid var(--primary-color, #007bff);
+  border: 3px solid var(--color-border);
+  border-top: 3px solid var(--color-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -392,10 +420,10 @@ watch(activeTab, async () => {
 
 .new-message-btn {
   position: fixed;
-  bottom: var(--spacing-xl);
-  right: var(--spacing-xl);
-  background-color: var(--primary-color);
-  color: black;
+  bottom: var(--space-xl);
+  right: var(--space-xl);
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
   border: none;
   border-radius: 50%;
   width: 60px;
@@ -405,13 +433,13 @@ watch(activeTab, async () => {
   align-items: center;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: background-color var(--transition-normal);
   z-index: 10;
   font-size: 52px;
 }
 
 .new-message-btn:hover {
-  background-color: var(--primary-color-dark);
+  background-color: var(--color-primary-dark);
 }
 
 .new-message-btn.disabled {
@@ -421,10 +449,20 @@ watch(activeTab, async () => {
 }
 
 .page-title {
-  font-size: 1.6rem;
-  margin-bottom: var(--spacing-md);
-  color: var(--text-color);
-  padding-bottom: var(--spacing-sm);
-  border-bottom: 1px solid var(--border-color);
+  font-size: var(--font-size-xl);
+  margin-bottom: var(--space-md);
+  color: var(--color-text);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.unread-indicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--color-error, #ff3860);
+  margin-right: 5px;
+  vertical-align: middle;
 }
 </style> 

@@ -1,9 +1,11 @@
 import './assets/main.css'
+import './components/FormattedContent/styles.css'
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router.js'
 import store from './store'
 import { initializeFirebase } from './firebase.js'
+import { initFormatters } from './components/FormattedContent/init'
 
 console.log('Main.js starting execution');
 
@@ -24,6 +26,10 @@ const initApp = async () => {
     // Then initialize auth store
     await store.dispatch('auth/initAuth');
     console.log("Auth store initialized");
+    
+    // Initialize the formatters
+    initFormatters();
+    console.log("Content formatters initialized");
     
     try {
       app.mount('#app');

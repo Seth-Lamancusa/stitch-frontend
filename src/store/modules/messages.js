@@ -193,6 +193,16 @@ export default {
           child_ids: [...(parent.child_ids || []), childId]
         };
       }
+    },
+    
+    // Add a new mutation to update the read status of a message
+    UPDATE_MESSAGE_READ_STATUS(state, { messageId, isRead }) {
+      if (state.messages[messageId]) {
+        state.messages[messageId] = {
+          ...state.messages[messageId],
+          is_read: isRead
+        };
+      }
     }
   },
   
@@ -515,7 +525,7 @@ export default {
         
         // Fetch messages based on tab
         if (activeTab === 'private') {
-          response = await MessageService.getPrivateMessages(10);
+          response = await MessageService.getDirectMessages();
           threads = response.data || [];
         } else {
           // For public tab, fetch only pinned messages
@@ -626,6 +636,30 @@ export default {
         return true;
       } catch (error) {
         console.error(`Error updating title/description for message ${messageId}:`, error);
+        return false;
+      }
+    },
+    
+    // New action to mark a message as read
+    async markMessageAsRead({ commit, state }, messageId) {
+      try {
+        await MessageService.markMessageAsRead(messageId);
+        commit('UPDATE_MESSAGE_READ_STATUS', { messageId, isRead: true });
+        return true;
+      } catch (error) {
+        console.error(`Error marking message ${messageId} as read:`, error);
+        return false;
+      }
+    },
+    
+    // New action to mark a message as unread
+    async markMessageAsUnread({ commit, state }, messageId) {
+      try {
+        await MessageService.markMessageAsUnread(messageId);
+        commit('UPDATE_MESSAGE_READ_STATUS', { messageId, isRead: false });
+        return true;
+      } catch (error) {
+        console.error(`Error marking message ${messageId} as unread:`, error);
         return false;
       }
     },

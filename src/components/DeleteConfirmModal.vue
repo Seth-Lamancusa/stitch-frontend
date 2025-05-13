@@ -118,20 +118,20 @@ export default {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 100;
+  z-index: var(--z-index-modal);
 }
 
 .modal-container {
-  background-color: white;
-  border-radius: 8px;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
   width: 90%;
   max-width: 500px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--color-card-shadow);
 }
 
 .modal-header {
-  padding: 16px;
-  border-bottom: 1px solid #eee;
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -139,60 +139,61 @@ export default {
 
 .modal-header h3 {
   margin: 0;
-  font-size: 18px;
-  color: #333;
+  font-size: var(--font-size-lg);
+  color: var(--color-text);
 }
 
 .close-button {
   background: none;
   border: none;
-  font-size: 24px;
+  font-size: var(--font-size-xl);
   cursor: pointer;
-  color: #999;
+  color: var(--color-text-secondary);
 }
 
 .modal-content {
-  padding: 16px;
+  padding: var(--space-md);
 }
 
 .warning-text {
-  font-size: 16px;
-  margin-bottom: 12px;
+  font-size: var(--font-size-md);
+  margin-bottom: var(--space-md);
 }
 
 .delete-details {
-  color: #e74c3c;
-  font-size: 14px;
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
   margin-bottom: 0;
 }
 
 .modal-footer {
-  padding: 16px;
-  border-top: 1px solid #eee;
+  padding: var(--space-md);
+  border-top: 1px solid var(--color-border);
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--space-md);
 }
 
 .cancel-btn {
-  padding: 8px 16px;
-  background-color: #f1f1f1;
+  padding: var(--space-xs) var(--space-md);
+  background-color: var(--color-surface-light);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
+  color: var(--color-text);
 }
 
 .delete-btn {
-  padding: 8px 16px;
-  background-color: #e74c3c;
-  color: white;
+  padding: var(--space-xs) var(--space-md);
+  background-color: var(--color-error);
+  color: var(--color-text-inverse);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
 .delete-btn:disabled {
-  background-color: #e57373;
+  opacity: 0.7;
   cursor: not-allowed;
 }
 </style> 

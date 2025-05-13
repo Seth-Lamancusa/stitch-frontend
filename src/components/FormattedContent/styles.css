@@ -1,0 +1,127 @@
+/* Import KaTeX CSS */
+@import 'katex/dist/katex.min.css';
+
+/* Import highlight.js CSS (GitHub theme) */
+@import 'highlight.js/styles/github.css';
+
+/**
+ * Stitch - Formatted Content Styles
+ * 
+ * Styles for rendered content including Markdown, LaTeX, and code blocks.
+ * These styles use the global variables defined in variables.css.
+ */
+
+/* ===== Code Blocks ===== */
+pre {
+  background-color: var(--color-code-background);
+  color: var(--color-code-text);
+  font-family: var(--font-family-code);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+  overflow-x: auto;
+  margin: var(--space-md) 0;
+  border: 1px solid var(--color-border);
+}
+
+code {
+  font-family: var(--font-family-code);
+  background-color: var(--color-inline-code-background);
+  color: var(--color-code-text);
+  padding: 0.2em 0.4em;
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
+}
+
+pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+
+/* Overrides for highlight.js */
+.hljs {
+  background-color: var(--color-code-background) !important;
+  color: var(--color-code-text) !important;
+  padding: 0 !important;
+}
+
+/* ===== Tables ===== */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: var(--space-md) 0;
+  border: 1px solid var(--color-table-border);
+}
+
+th, td {
+  padding: var(--space-xs);
+  border: 1px solid var(--color-table-border);
+  text-align: left;
+}
+
+th {
+  background-color: var(--color-table-header-background);
+  font-weight: bold;
+}
+
+tbody tr:hover {
+  background-color: var(--color-table-row-hover);
+}
+
+/* ===== Blockquotes ===== */
+blockquote {
+  border-left: 3px solid var(--color-blockquote-border);
+  margin: var(--space-md) 0;
+  padding-left: var(--space-md);
+  color: var(--color-blockquote-text);
+  font-style: italic;
+}
+
+/* ===== LaTeX ===== */
+.katex-display {
+  margin: var(--space-md) 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: var(--space-xs) 0;
+}
+
+.katex-error {
+  color: var(--color-error);
+  border: 1px solid var(--color-error);
+  padding: var(--space-xxs);
+  margin: var(--space-xxs);
+  display: inline-block;
+  border-radius: var(--radius-sm);
+}
+
+/* ===== Lists ===== */
+ul, ol {
+  padding-left: var(--space-xl);
+  margin: var(--space-xs) 0;
+}
+
+li {
+  margin-bottom: var(--space-xxs);
+}
+
+/* ===== Links ===== */
+a {
+  color: var(--color-link);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--color-link-hover);
+  text-decoration: underline;
+}
+
+/* ===== Images ===== */
+img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
+
+/* Dark mode overrides are now unnecessary since we're using CSS variables */ 

@@ -350,25 +350,25 @@ const importFromChatGPT = async () => {
 .thread-header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md, 12px);
-  padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
-  border-bottom: 1px solid var(--border-color, #ddd);
-  background-color: var(--surface-color, #f8f8f8);
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-surface);
   z-index: 5;
 }
 
 .back-button {
-  padding: var(--spacing-xs, 4px) var(--spacing-sm, 8px);
+  padding: var(--space-xs) var(--space-sm);
   background-color: transparent;
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: var(--border-radius-sm, 4px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
 .thread-title {
   margin: 0;
-  color: var(--primary-color, #333);
-  font-size: 1.1rem;
+  color: var(--color-primary);
+  font-size: var(--font-size-lg);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -390,9 +390,9 @@ const importFromChatGPT = async () => {
   text-align: center;
   padding: 10px 0;
   margin-top: 10px;
-  color: var(--text-color-light, #777);
+  color: var(--color-text-secondary);
   font-style: italic;
-  font-size: 0.9rem;
+  font-size: var(--font-size-sm);
   opacity: 0.8;
 }
 
@@ -400,14 +400,14 @@ const importFromChatGPT = async () => {
 .import-chatgpt-btn {
   display: block;
   margin: 12px auto;
-  padding: 8px 16px;
-  background-color: #10a37f; /* ChatGPT green color */
-  color: white;
+  padding: var(--space-xs) var(--space-md);
+  background-color: var(--color-accent);
+  color: var(--color-text-inverse);
   border: none;
-  border-radius: var(--border-radius-sm, 4px);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 0.9rem;
-  transition: background-color 0.2s ease;
+  font-size: var(--font-size-sm);
+  transition: background-color var(--transition-fast);
 }
 
 .chatgpt-icon {
@@ -415,15 +415,15 @@ const importFromChatGPT = async () => {
 }
 
 .import-hint {
-  font-size: 0.8rem;
-  color: var(--text-color-light, #888);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
   margin-top: 6px;
   margin-bottom: 0;
   font-style: italic;
 }
 
 .import-chatgpt-btn:hover {
-  background-color: #0d8c6d;
+  background-color: var(--color-accent-light);
 }
 
 /* Import modal styles */
@@ -437,59 +437,59 @@ const importFromChatGPT = async () => {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 100;
+  z-index: var(--z-index-modal);
   backdrop-filter: blur(2px);
 }
 
 .import-modal-content {
-  background-color: var(--surface-color, #f8f8f8);
-  padding: 24px;
-  border-radius: var(--border-radius-md, 8px);
+  background-color: var(--color-surface);
+  padding: var(--space-lg);
+  border-radius: var(--radius-md);
   max-width: 600px;
   width: 90%;
   max-height: 90vh;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--border-color, #ddd);
+  border: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
 }
 
 .import-modal-content h3 {
   margin-top: 0;
-  color: var(--primary-color, #4a90e2);
-  font-size: 1.3rem;
-  margin-bottom: 16px;
+  color: var(--color-primary);
+  font-size: var(--font-size-xl);
+  margin-bottom: var(--space-md);
 }
 
 .import-instructions {
-  margin-bottom: 12px;
-  color: var(--text-color, #333);
+  margin-bottom: var(--space-md);
+  color: var(--color-text);
 }
 
 .import-textarea {
   flex: 1;
   min-height: 200px;
-  padding: 12px;
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: var(--border-radius-sm, 4px);
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   resize: vertical;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-md);
   font-family: inherit;
-  font-size: 0.9rem;
-  background-color: var(--card-background, #f5f5f5);
+  font-size: var(--font-size-sm);
+  background-color: var(--color-surface);
 }
 
 /* Import settings styles */
 .import-settings {
   display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
   align-items: center;
   position: relative;
-  padding: 8px;
-  background-color: var(--card-background, #f5f5f5);
-  border-radius: var(--border-radius-sm, 4px);
-  border: 1px solid var(--border-color, #ddd);
+  padding: var(--space-xs);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
 }
 
 .import-settings .visibility-toggle {
@@ -503,8 +503,8 @@ const importFromChatGPT = async () => {
 .import-settings .recipients-toggle {
   padding: 4px 8px;
   background-color: transparent;
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -524,21 +524,21 @@ const importFromChatGPT = async () => {
 .import-modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--space-md);
 }
 
 .import-button {
-  padding: 8px 16px;
-  background-color: #10a37f; /* ChatGPT green color */
-  color: white;
+  padding: var(--space-xs) var(--space-md);
+  background-color: var(--color-accent);
+  color: var(--color-text-inverse);
   border: none;
-  border-radius: var(--border-radius-sm, 4px);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 500;
 }
 
 .import-button:hover {
-  background-color: #0d8c6d;
+  background-color: var(--color-accent-light);
 }
 
 .import-button:disabled {
@@ -547,19 +547,19 @@ const importFromChatGPT = async () => {
 }
 
 .cancel-button {
-  padding: 8px 16px;
+  padding: var(--space-xs) var(--space-md);
   background-color: transparent;
-  color: var(--text-color, #333);
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: var(--border-radius-sm, 4px);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-weight: 500;
-  transition: background-color 0.2s, border-color 0.2s;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .cancel-button:hover {
-  background-color: rgba(0, 0, 0, 0.05);
-  border-color: var(--border-color-dark, #ccc);
+  background-color: var(--color-hover-overlay);
+  border-color: var(--color-border-dark);
 }
 
 /* Loading overlay styles */
@@ -573,14 +573,14 @@ const importFromChatGPT = async () => {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 200;
+  z-index: var(--z-index-modal);
   backdrop-filter: blur(3px);
 }
 
 .loading-content {
-  background-color: var(--surface-color, #f8f8f8);
-  padding: 32px;
-  border-radius: var(--border-radius-md, 8px);
+  background-color: var(--color-surface);
+  padding: var(--space-xl);
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -593,57 +593,57 @@ const importFromChatGPT = async () => {
 .import-spinner {
   width: 48px;
   height: 48px;
-  border: 5px solid rgba(0, 0, 0, 0.1);
-  border-top: 5px solid #10a37f; /* ChatGPT green color */
+  border: 5px solid var(--color-border);
+  border-top: 5px solid var(--color-accent);
   border-radius: 50%;
   animation: import-spin 1.2s linear infinite;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-md);
 }
 
 .loading-message {
-  font-size: 1.2rem;
+  font-size: var(--font-size-lg);
   font-weight: bold;
-  margin: 0 0 8px 0;
-  color: var(--text-color, #333);
+  margin: 0 0 var(--space-xs) 0;
+  color: var(--color-text);
 }
 
 .loading-submessage {
-  font-size: 0.9rem;
-  color: var(--text-color-light, #777);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
   margin: 0;
 }
 
 .recipient-selector-title {
-  margin: 0 0 8px 0;
-  font-size: 1.1rem;
-  color: var(--primary-color);
+  margin: 0 0 var(--space-xs) 0;
+  font-size: var(--font-size-lg);
+  color: var(--color-primary);
 }
 
 .recipient-selector-desc {
-  margin: 0 0 12px 0;
-  font-size: 0.85rem;
-  color: var(--text-color-light);
+  margin: 0 0 var(--space-md) 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 
 .recipient-input-row {
   display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-xs);
 }
 
 .recipient-input {
   flex: 1;
   padding: 6px;
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
 }
 
 .add-recipient-btn {
   padding: 6px 10px;
-  background-color: var(--primary-color, #4a90e2);
-  color: white;
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
@@ -654,14 +654,14 @@ const importFromChatGPT = async () => {
 }
 
 .recipient-tag {
-  background-color: var(--primary-color-light, #e6f2ff);
+  background-color: var(--color-primary-light);
   padding: 6px 10px;
-  border-radius: var(--border-radius-md);
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.9rem;
-  color: var(--text-color);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
 }
 
 .remove-recipient-btn {
@@ -676,9 +676,9 @@ const importFromChatGPT = async () => {
 }
 
 .no-recipients {
-  color: var(--text-color-light, #777);
+  color: var(--color-text-secondary);
   font-style: italic;
-  font-size: 0.85rem;
+  font-size: var(--font-size-xs);
   padding: 4px 0;
 }
 
@@ -688,30 +688,30 @@ const importFromChatGPT = async () => {
   bottom: 40px; /* Position above the button */
   left: 50%; /* Center it on its parent */
   transform: translateX(-50%); /* Center it on its parent */
-  background-color: var(--card-background, #f5f5f5);
-  border: 1px solid var(--border-color, #ddd);
-  border-radius: var(--border-radius-md, 8px);
-  padding: 16px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
   min-width: 280px;
   z-index: 20;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .import-validation-error {
-  color: var(--error-color, #dc3545);
-  font-size: 0.85rem;
-  margin: 8px 0 0 0;
+  color: var(--color-error);
+  font-size: var(--font-size-xs);
+  margin: var(--space-xs) 0 0 0;
   text-align: center;
   font-weight: 500;
 }
 
 .recipients-required {
-  border-color: var(--error-color, #dc3545);
-  color: var(--error-color, #dc3545);
+  border-color: var(--color-error);
+  color: var(--color-error);
 }
 
 .required-indicator {
-  font-size: 0.8rem;
+  font-size: var(--font-size-xs);
   font-weight: bold;
   margin-left: 4px;
 }

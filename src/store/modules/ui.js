@@ -2,7 +2,7 @@ export default {
   namespaced: true,
   
   state: {
-    activeTab: 'public',
+    activeTab: localStorage.getItem('stitch_active_tab') || 'public',
     loading: {
       messages: false,
       threads: false
@@ -16,6 +16,7 @@ export default {
   mutations: {
     SET_ACTIVE_TAB(state, tab) {
       state.activeTab = tab;
+      localStorage.setItem('stitch_active_tab', tab);
     },
     
     SET_LOADING(state, { type, value }) {
