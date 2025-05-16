@@ -31,6 +31,21 @@ const initApp = async () => {
     initFormatters();
     console.log("Content formatters initialized");
     
+    // Add global click handler for beta.html links
+    document.addEventListener('click', (event) => {
+      // Check if the click was on an anchor tag
+      const anchor = event.target.closest('a');
+      if (anchor) {
+        const href = anchor.getAttribute('href');
+        // Check if the href contains beta.html
+        if (href && href.includes('beta.html')) {
+          event.preventDefault();
+          console.log('Intercepted click on beta.html link, redirecting to /beta');
+          router.push('/beta');
+        }
+      }
+    });
+    
     try {
       app.mount('#app');
       console.log('Vue app mounted successfully');
