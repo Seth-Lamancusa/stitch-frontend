@@ -133,7 +133,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
-import ReplyBox from '../components/ReplyBox.vue';
+import ReplyBox from '../../components/ReplyBox.vue';
 
 // Setup store and routing
 const store = useStore();
@@ -182,6 +182,9 @@ const canInteract = computed(() => {
 // Add computed property for current reply visibility
 const isPublic = computed(() => store.getters['navigation/replyIsPublic']);
 
+// Add computed property for previous route
+const previousRoute = computed(() => store.getters['navigation/previousRoute']);
+
 // Computed property to check if import is valid
 const isImportValid = computed(() => {
   // Public threads are always valid
@@ -229,8 +232,8 @@ const cancelThread = () => {
     }
   }
   
-  // Navigate back to chat list
-  router.push('/messages');
+  // Navigate back to the previous route
+  router.push(previousRoute.value);
 };
 
 const handleSendSuccess = async (newMessage) => {

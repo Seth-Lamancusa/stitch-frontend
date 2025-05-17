@@ -1,49 +1,14 @@
 <template>
-  <div class="website-container">
-    <!-- Navigation -->
-    <header>
-      <nav class="main-nav">
-        <div class="logo">
-          <h1>Stitch</h1>
-        </div>
-        <ul class="nav-links" :class="{ active: isMenuOpen }">
-          <li><router-link to="/">Home</router-link></li>
-          <li><router-link to="/about">About Us</router-link></li>
-          <li><router-link to="/roadmap">Roadmap</router-link></li>
-          <li><router-link to="/community" class="active">Community</router-link></li>
-          <li><router-link to="/terms">Terms & Conditions</router-link></li>
-          <li><router-link to="/beta" class="join-beta-btn">Join Beta</router-link></li>
-          <li><router-link to="/messages" class="login-btn">Login</router-link></li>
-        </ul>
-        <div class="hamburger" @click="toggleMenu" :class="{ active: isMenuOpen }">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-      </nav>
-    </header>
-
-    <!-- Community Hero Section -->
-    <section class="page-hero community-hero">
-      <div class="hero-content">
-        <h1>Join Our Community</h1>
-        <p>Connect, collaborate, and contribute to the growing ecosystem of Stitch</p>
-      </div>
-    </section>
-
-    <!-- Beta Phase Banner -->
-    <section class="beta-banner">
-      <div class="container">
-        <div class="banner-content">
-          <div class="banner-icon">🚀</div>
-          <div class="banner-text">
-            <h3>Beta Phase: Google Cloud Platform Deployment</h3>
-            <p>During our beta phase, we're running on GCP for reliability and rapid iteration. Our architecture is designed for a seamless transition to fully decentralized infrastructure post-beta.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
+  <InfoViewLayout
+    pageTitle="Join Our Community"
+    pageSubtitle="Connect, collaborate, and contribute to the growing ecosystem of Stitch"
+    heroClass="community-hero"
+    :showBetaBanner="true"
+    betaBannerIcon="🚀"
+    betaBannerTitle="Beta Phase: Google Cloud Platform Deployment"
+    betaBannerText="During our beta phase, we're running on GCP for reliability and rapid iteration. Our architecture is designed for a seamless transition to fully decentralized infrastructure post-beta."
+    footerTagline="Building the multiplayer AI chat platform for seamless human-AI collaboration"
+  >
     <!-- Community Details Layout -->
     <div class="community-details-layout">
       <!-- Navigation Sidebar -->
@@ -199,141 +164,99 @@
         <!-- Events Section -->
         <section id="events" class="community-section" ref="eventsSection">
           <h2>Upcoming Events</h2>
-          <p class="section-intro">Join us at these upcoming events to learn more about Stitch.</p>
+          <p class="section-intro">Join us for upcoming events, webinars, and meetups related to Stitch and AI collaboration.</p>
           
-          <div class="community-card">
-            <h3>Community Webinar: Introduction to Stitch</h3>
-            <p><strong>Date:</strong> April 15, 2024</p>
-            <p><strong>Time:</strong> 11:00 AM - 12:00 PM UTC</p>
-            <p><strong>Description:</strong> An introduction to the Stitch platform, its features, and our vision for multiplayer AI chat.</p>
-            <a href="#" class="btn secondary-btn">Register</a>
-          </div>
-          
-          <div class="community-card">
-            <h3>Developer Workshop: Building with the Stitch API</h3>
-            <p><strong>Date:</strong> May 2, 2024</p>
-            <p><strong>Time:</strong> 3:00 PM - 5:00 PM UTC</p>
-            <p><strong>Description:</strong> A hands-on workshop for developers interested in building applications and integrations using the Stitch API.</p>
-            <a href="#" class="btn secondary-btn">Register</a>
-          </div>
-          
-          <div class="community-card">
-            <h3>AI Roundtable: The Future of Collaborative AI</h3>
-            <p><strong>Date:</strong> May 20, 2024</p>
-            <p><strong>Time:</strong> 2:00 PM - 3:00 PM UTC</p>
-            <p><strong>Description:</strong> Join a discussion with AI researchers and industry experts on the future of collaborative AI systems.</p>
-            <a href="#" class="btn secondary-btn">Register</a>
+          <div class="events-grid">
+            <div class="event-card">
+              <div class="event-date">June 15, 2024</div>
+              <h3>Stitch Platform Demo</h3>
+              <p>Online webinar showcasing the latest features and capabilities of the Stitch platform.</p>
+              <p><strong>Time:</strong> 10:00 AM - 11:30 AM PDT</p>
+              <a href="#" class="btn secondary-btn">Register</a>
+            </div>
+            
+            <div class="event-card">
+              <div class="event-date">July 8, 2024</div>
+              <h3>Developer Workshop</h3>
+              <p>Hands-on workshop for developers interested in building on the Stitch platform.</p>
+              <p><strong>Time:</strong> 2:00 PM - 4:00 PM PDT</p>
+              <a href="#" class="btn secondary-btn">Register</a>
+            </div>
+            
+            <div class="event-card">
+              <div class="event-date">August 12, 2024</div>
+              <h3>Community Meetup</h3>
+              <p>Virtual meetup for the Stitch community to connect, share experiences, and provide feedback.</p>
+              <p><strong>Time:</strong> 5:00 PM - 6:30 PM PDT</p>
+              <a href="#" class="btn secondary-btn">Register</a>
+            </div>
           </div>
         </section>
 
-        <!-- How to Contribute Section -->
+        <!-- Contribute Section -->
         <section id="contribute" class="community-section" ref="contributeSection">
           <h2>How to Contribute</h2>
-          <p class="section-intro">There are many ways to contribute to the Stitch ecosystem.</p>
+          <p class="section-intro">There are many ways to contribute to the Stitch ecosystem, regardless of your technical background.</p>
           
-          <div class="community-grid">
-            <div class="community-card">
-              <h3>Testing & Feedback</h3>
-              <p>Join our beta program and provide feedback on features, usability, and AI performance.</p>
+          <div class="contribute-grid">
+            <div class="contribute-card">
+              <div class="contribute-icon">🧪</div>
+              <h3>Beta Testing</h3>
+              <p>Join our beta program to test new features, report bugs, and provide feedback on the user experience.</p>
               <router-link to="/beta" class="btn secondary-btn">Join Beta</router-link>
             </div>
             
-            <div class="community-card">
-              <h3>Development</h3>
-              <p>Contribute code, report bugs, or suggest improvements to our open-source components.</p>
-              <a href="#" class="btn secondary-btn">GitHub</a>
+            <div class="contribute-card">
+              <div class="contribute-icon">📣</div>
+              <h3>Spread the Word</h3>
+              <p>Share your experiences with Stitch on social media, blogs, or with your network to help grow the community.</p>
             </div>
             
-            <div class="community-card">
-              <h3>Documentation</h3>
-              <p>Help improve our documentation, write tutorials, or create educational content.</p>
-              <router-link to="/roadmap" class="btn secondary-btn">Technical Details</router-link>
+            <div class="contribute-card">
+              <div class="contribute-icon">🤝</div>
+              <h3>Community Support</h3>
+              <p>Help answer questions from other users and share your knowledge in our community forums and social channels.</p>
             </div>
             
-            <div class="community-card">
-              <h3>Community Building</h3>
-              <p>Spread the word, moderate community channels, or organize local meetups.</p>
-              <a href="#social" @click.prevent="scrollToSection('social')" class="btn secondary-btn">Join Social Channels</a>
+            <div class="contribute-card">
+              <div class="contribute-icon">💡</div>
+              <h3>Feature Suggestions</h3>
+              <p>Submit your ideas for new features, improvements, or AI capabilities through our feedback channels.</p>
+            </div>
+            
+            <div class="contribute-card">
+              <div class="contribute-icon">🔨</div>
+              <h3>Developer Contributions</h3>
+              <p>Build apps, extensions, or integrations that enhance the Stitch platform and ecosystem.</p>
+            </div>
+            
+            <div class="contribute-card">
+              <div class="contribute-icon">🤖</div>
+              <h3>AI Agent Creation</h3>
+              <p>Design and share custom AI agents that provide unique capabilities or personality traits.</p>
+            </div>
+          </div>
+          
+          <div class="cta-card">
+            <h3>Join Our Community Today</h3>
+            <p>Become part of the Stitch community and help shape the future of multiplayer AI collaboration.</p>
+            <div class="cta-buttons">
+              <router-link to="/beta" class="btn primary-btn">Join Beta</router-link>
+              <a href="#social" @click.prevent="scrollToSection('social')" class="btn secondary-btn">Connect on Social</a>
             </div>
           </div>
         </section>
       </main>
     </div>
-
-    <!-- Footer -->
-    <footer>
-      <div class="footer-content">
-        <div class="footer-logo">
-          <h2>Stitch</h2>
-          <p>The collaborative platform for humans and AI agents to chat, create, and solve problems together</p>
-        </div>
-        <div class="footer-links">
-          <div class="footer-column">
-            <h3>Platform</h3>
-            <ul>
-              <li><router-link to="/">Home</router-link></li>
-              <li><router-link to="/about">About Us</router-link></li>
-              <li><router-link to="/roadmap">Roadmap</router-link></li>
-            </ul>
-          </div>
-
-          <div class="footer-column">
-            <h3>Community</h3>
-            <ul>
-              <li><router-link to="/beta">Join Beta</router-link></li>
-              <li><router-link to="/community">Community</router-link></li>
-              <li><a href="/static/html/contact.html">Contact Us</a></li>
-            </ul>
-          </div>
-          <div class="footer-column">
-            <h3>Legal</h3>
-            <ul>
-              <li><router-link to="/terms">Terms & Conditions</router-link></li>
-              <li><a href="/static/html/privacy.html">Privacy Policy</a></li>
-              <li><a href="/static/html/cookies.html">Cookie Policy</a></li>
-            </ul>
-          </div>
-        </div>
-      </div>
-      <div class="footer-bottom">
-        <p>&copy; 2023 Stitch. All rights reserved.</p>
-      </div>
-    </footer>
-  </div>
+  </InfoViewLayout>
 </template>
 
 <script setup>
+import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
 import { ref, onMounted, onBeforeUnmount } from 'vue';
-
-// State for mobile menu toggle
-const isMenuOpen = ref(false);
 
 // Track active section for navigation highlighting
 const activeSection = ref('overview');
-
-// Function to toggle mobile menu
-const toggleMenu = () => {
-  isMenuOpen.value = !isMenuOpen.value;
-};
-
-// Reset body and html styles
-const resetStyles = () => {
-  document.documentElement.style.height = 'auto';
-  document.documentElement.style.overflow = 'auto';
-  document.documentElement.style.position = 'static';
-  document.body.style.height = 'auto';
-  document.body.style.overflow = 'auto';
-  document.body.style.position = 'static';
-  document.body.style.overscrollBehavior = 'auto';
-  
-  // Get app container and reset its styles
-  const appElement = document.getElementById('app');
-  if (appElement) {
-    appElement.style.height = 'auto';
-    appElement.style.overflow = 'visible';
-    appElement.style.display = 'block';
-  }
-};
 
 // Define section refs
 const overviewSection = ref(null);
@@ -375,11 +298,7 @@ const handleScroll = () => {
 };
 
 onMounted(() => {
-  // Reset styles
-  resetStyles();
-  
-  // Add event listeners
-  window.addEventListener('resize', resetStyles);
+  // Add scroll event listener
   window.addEventListener('scroll', handleScroll);
   
   // Initial scroll check
@@ -387,49 +306,22 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  // Remove event listeners
-  window.removeEventListener('resize', resetStyles);
+  // Remove scroll event listener
   window.removeEventListener('scroll', handleScroll);
 });
 </script>
 
 <style>
-@import '../assets/website.css';
-
-/* Override the default body styles for this component */
-.website-container {
-  min-height: 100%;
-  width: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+/* Community layout styles */
+.community-details-layout {
+  display: grid;
+  grid-template-columns: 1fr 3fr;
+  gap: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem;
 }
 
-/* Remove all underlines from links */
-.website-container a {
-  text-decoration: none !important;
-}
-
-.website-container a:hover {
-  text-decoration: none !important;
-}
-
-/* Additional styles for hamburger menu in active state */
-.hamburger.active span:nth-child(1) {
-  transform: rotate(45deg) translate(5px, 5px);
-}
-
-.hamburger.active span:nth-child(2) {
-  opacity: 0;
-}
-
-.hamburger.active span:nth-child(3) {
-  transform: rotate(-45deg) translate(7px, -6px);
-}
-
-/* Community-specific styles */
 .section-nav {
   position: sticky;
   top: 100px;
@@ -474,15 +366,6 @@ onBeforeUnmount(() => {
   font-weight: 500;
 }
 
-.community-details-layout {
-  display: grid;
-  grid-template-columns: 1fr 3fr;
-  gap: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 2rem;
-}
-
 .community-content {
   min-height: 100vh;
 }
@@ -502,29 +385,20 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--card-border);
 }
 
+/* Community grid styles */
+.community-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin: 2rem 0;
+}
+
 .community-card {
   background-color: var(--card-background);
   border-radius: var(--border-radius);
+  padding: 2rem;
   box-shadow: var(--box-shadow);
   border: 1px solid var(--card-border);
-  padding: 2rem;
-  margin-bottom: 2rem;
-  transition: transform 0.3s ease;
-}
-
-.community-card:hover {
-  transform: translateY(-5px);
-}
-
-.community-card h3 {
-  color: var(--primary-color);
-  margin-bottom: 1rem;
-}
-
-.community-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 2rem;
 }
 
 .community-icon {
@@ -532,50 +406,50 @@ onBeforeUnmount(() => {
   margin-bottom: 1rem;
 }
 
-.social-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
+.community-card h3 {
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+}
+
+.community-card p {
+  margin-bottom: 1rem;
+}
+
+.community-card a {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.community-card .btn {
   margin-top: 1rem;
 }
 
-.social-link {
-  display: inline-block;
-  padding: 0.5rem 1rem;
-  background-color: var(--input-background);
-  color: var(--text-light);
-  text-decoration: none;
-  border-radius: 20px;
-  transition: all 0.3s ease;
-  border: 1px solid var(--card-border);
-}
-
-.social-link:hover {
-  background-color: var(--primary-color);
-  color: white;
-}
-
+/* Timeline styles */
 .timeline {
-  position: relative;
-  margin: 2rem 0;
+  margin: 3rem 0;
   padding-left: 2rem;
+  position: relative;
 }
 
 .timeline:before {
   content: '';
   position: absolute;
-  top: 0;
   left: 0;
-  width: 4px;
+  top: 0;
   height: 100%;
-  background: var(--gradient-primary);
-  border-radius: 2px;
+  width: 2px;
+  background: var(--primary-color);
+}
+
+.timeline h3 {
+  margin-bottom: 2rem;
 }
 
 .timeline-item {
   position: relative;
   margin-bottom: 2rem;
-  padding-bottom: 1rem;
+  padding-left: 2rem;
 }
 
 .timeline-item:last-child {
@@ -585,19 +459,160 @@ onBeforeUnmount(() => {
 .timeline-item:before {
   content: '';
   position: absolute;
-  top: 0;
-  left: -2.3rem;
+  left: -10px;
+  top: 6px;
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background-color: var(--primary-color);
-  border: 3px solid var(--background-dark);
+  background: var(--background-dark);
+  border: 2px solid var(--primary-color);
+  z-index: 1;
 }
 
 .timeline-date {
-  font-weight: bold;
+  font-weight: 500;
   color: var(--primary-color);
   margin-bottom: 0.5rem;
+}
+
+.timeline-content {
+  background-color: var(--card-background);
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+  border: 1px solid var(--card-border);
+}
+
+.timeline-content h4 {
+  margin-bottom: 0.5rem;
+  color: var(--text-light);
+}
+
+/* Social links styles */
+.social-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.social-link {
+  display: inline-block;
+  padding: 0.6rem 1.2rem;
+  background-color: var(--input-background);
+  border-radius: var(--border-radius);
+  text-decoration: none;
+  color: var(--text-light);
+  transition: background-color 0.3s, transform 0.3s;
+}
+
+.social-link:hover {
+  background-color: var(--primary-color);
+  color: white;
+  transform: translateY(-3px);
+}
+
+/* Events grid styles */
+.events-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin: 2rem 0;
+}
+
+.event-card {
+  background-color: var(--card-background);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--card-border);
+}
+
+.event-date {
+  display: inline-block;
+  padding: 0.4rem 0.8rem;
+  background-color: var(--primary-color);
+  color: white;
+  border-radius: var(--border-radius);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.event-card h3 {
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+}
+
+.event-card p {
+  margin-bottom: 1rem;
+}
+
+.event-card .btn {
+  margin-top: 1rem;
+}
+
+/* Contribute grid styles */
+.contribute-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 2rem;
+  margin: 2rem 0;
+}
+
+.contribute-card {
+  background-color: var(--card-background);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--card-border);
+}
+
+.contribute-icon {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+.contribute-card h3 {
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+}
+
+.contribute-card p {
+  margin-bottom: 1rem;
+}
+
+.contribute-card .btn {
+  margin-top: 1rem;
+}
+
+/* CTA card styles */
+.cta-card {
+  background-color: var(--card-background);
+  border-radius: var(--border-radius);
+  padding: 2.5rem;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--primary-color);
+  text-align: center;
+  margin-top: 3rem;
+}
+
+.cta-card h3 {
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+  font-size: 1.5rem;
+}
+
+.cta-card p {
+  margin-bottom: 1.5rem;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.cta-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 992px) {
@@ -612,8 +627,14 @@ onBeforeUnmount(() => {
     margin-right: 0;
   }
   
-  .community-grid {
-    grid-template-columns: 1fr;
+  .cta-buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .cta-buttons .btn {
+    width: 100%;
+    max-width: 300px;
   }
 }
 </style> 

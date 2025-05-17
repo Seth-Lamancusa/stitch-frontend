@@ -1,17 +1,20 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { getFirebaseAuth, initializeFirebase } from './firebase.js';
 import { onAuthStateChanged } from 'firebase/auth';
+import store from './store';
 
 // Import components
-import ListView from './views/ListView.vue';
-import ThreadView from './views/ThreadView.vue';
-import TempThreadView from './views/TempThreadView.vue';
-import HomeView from './views/HomeView.vue';
-import AboutView from './views/AboutView.vue';
-import RoadmapView from './views/RoadmapView.vue';
-import CommunityView from './views/CommunityView.vue';
-import TermsView from './views/TermsView.vue';
-import BetaView from './views/BetaView.vue';
+import ThreadView from './views/app_views/ThreadView.vue';
+import TempThreadView from './views/app_views/TempThreadView.vue';
+import HomeView from './views/info_views/HomeView.vue';
+import AboutView from './views/info_views/AboutView.vue';
+import RoadmapView from './views/info_views/RoadmapView.vue';
+import CommunityView from './views/info_views/CommunityView.vue';
+import TermsView from './views/info_views/TermsView.vue';
+import BetaView from './views/info_views/BetaView.vue';
+
+// Import tab view
+import TabView from './views/app_views/TabView.vue';
 
 const routes = [
   {
@@ -50,36 +53,48 @@ const routes = [
     component: BetaView,
     meta: { requiresAuth: false }
   },
+  // Tab-specific routes - all use TabView
   {
-    path: '/messages',
-    name: 'messages',
-    component: ListView,
+    path: '/feed',
+    name: 'feed',
+    component: TabView,
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/curated',
+    name: 'curated',
+    component: TabView,
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/direct',
+    name: 'direct',
+    component: TabView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/profile',
+    name: 'profile',
+    component: TabView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/local',
+    name: 'local',
+    component: TabView,
     meta: { requiresAuth: false }
   },
   {
     path: '/messages/:id',
-    name: 'message',
+    name: 'thread',
     component: ThreadView,
     meta: { requiresAuth: false }
-  },
-  {
-    path: '/thread/:id',
-    name: 'thread',
-    redirect: to => {
-      // Redirect old /thread/:id routes to /messages/:id
-      return `/messages/${to.params.id}`;
-    }
   },
   {
     path: '/new-thread',
     name: 'new-thread',
     component: TempThreadView,
     meta: { requiresAuth: true }
-  },
-  // Redirect from /chat to /messages to maintain backward compatibility
-  {
-    path: '/chat',
-    redirect: '/messages'
   },
   // Redirect from /legal to /terms to handle existing links
   {

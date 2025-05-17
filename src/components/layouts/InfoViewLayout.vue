@@ -1,0 +1,214 @@
+<template>
+  <div class="website-container">
+    <!-- Navigation -->
+    <header>
+      <nav class="main-nav">
+        <div class="logo">
+          <h1>Stitch</h1>
+        </div>
+        <ul class="nav-links" :class="{ active: isMenuOpen }">
+          <li><router-link to="/" :class="{ active: currentRoute === '/' }">Home</router-link></li>
+          <li><router-link to="/about" :class="{ active: currentRoute === '/about' }">About Us</router-link></li>
+          <li><router-link to="/roadmap" :class="{ active: currentRoute === '/roadmap' }">Roadmap</router-link></li>
+          <li><router-link to="/community" :class="{ active: currentRoute === '/community' }">Community</router-link></li>
+          <li><router-link to="/terms" :class="{ active: currentRoute === '/terms' }">Terms & Conditions</router-link></li>
+          <li><router-link to="/beta" class="join-beta-btn" :class="{ active: currentRoute === '/beta' }">Join Beta</router-link></li>
+          <li><router-link to="/feed" class="login-btn">Go to Stitch</router-link></li>
+        </ul>
+        <div class="hamburger" @click="toggleMenu" :class="{ active: isMenuOpen }">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </nav>
+    </header>
+
+    <!-- Page Hero Section with dynamic title and subtitle -->
+    <section class="page-hero" :class="heroClass">
+      <div class="hero-content">
+        <h1>{{ pageTitle }}</h1>
+        <p>{{ pageSubtitle }}</p>
+      </div>
+    </section>
+
+    <!-- Beta Phase Banner - Only shown if showBetaBanner is true -->
+    <section v-if="showBetaBanner" class="beta-banner">
+      <div class="container">
+        <div class="banner-content">
+          <div class="banner-icon">{{ betaBannerIcon || '🚀' }}</div>
+          <div class="banner-text">
+            <h3>{{ betaBannerTitle || 'Beta Phase: Now Live' }}</h3>
+            <p>{{ betaBannerText || 'We\'re currently in beta, focusing on perfecting the platform experience.' }}</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main content slot -->
+    <slot></slot>
+
+    <!-- Footer -->
+    <footer>
+      <div class="footer-content">
+        <div class="footer-logo">
+          <h2>Stitch</h2>
+          <p>{{ footerTagline || 'The collaborative platform for humans and AI agents' }}</p>
+        </div>
+        <div class="footer-links">
+          <div class="footer-column">
+            <h3>Platform</h3>
+            <ul>
+              <li><router-link to="/">Home</router-link></li>
+              <li><router-link to="/about">About Us</router-link></li>
+              <li><router-link to="/roadmap">Roadmap</router-link></li>
+            </ul>
+          </div>
+          <div class="footer-column">
+            <h3>Community</h3>
+            <ul>
+              <li><router-link to="/beta">Join Beta</router-link></li>
+              <li><router-link to="/community">Community</router-link></li>
+              <li><a href="/static/html/contact.html">Contact Us</a></li>
+            </ul>
+          </div>
+          <div class="footer-column">
+            <h3>Legal</h3>
+            <ul>
+              <li><router-link to="/terms">Terms & Conditions</router-link></li>
+              <li><a href="/static/html/privacy.html">Privacy Policy</a></li>
+              <li><a href="/static/html/cookies.html">Cookie Policy</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; {{ currentYear }} Stitch. All rights reserved.</p>
+      </div>
+    </footer>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { useRoute } from 'vue-router';
+
+// Props for customization
+const props = defineProps({
+  pageTitle: {
+    type: String,
+    required: true
+  },
+  pageSubtitle: {
+    type: String,
+    default: ''
+  },
+  heroClass: {
+    type: String,
+    default: ''
+  },
+  showBetaBanner: {
+    type: Boolean,
+    default: true
+  },
+  betaBannerIcon: {
+    type: String,
+    default: '🚀'
+  },
+  betaBannerTitle: {
+    type: String,
+    default: 'Beta Phase: Now Live'
+  },
+  betaBannerText: {
+    type: String,
+    default: 'We\'re currently in beta, focusing on perfecting the platform experience.'
+  },
+  footerTagline: {
+    type: String,
+    default: 'The collaborative platform for humans and AI agents'
+  }
+});
+
+// Current route for active links
+const route = useRoute();
+const currentRoute = computed(() => route.path);
+
+// Current year for copyright
+const currentYear = computed(() => new Date().getFullYear());
+
+// State for mobile menu toggle
+const isMenuOpen = ref(false);
+
+// Function to toggle mobile menu
+const toggleMenu = () => {
+  isMenuOpen.value = !isMenuOpen.value;
+};
+
+// Reset body and html styles to prevent issues with fixed app layouts
+const resetStyles = () => {
+  document.documentElement.style.height = 'auto';
+  document.documentElement.style.overflow = 'auto';
+  document.documentElement.style.position = 'static';
+  document.body.style.height = 'auto';
+  document.body.style.overflow = 'auto';
+  document.body.style.position = 'static';
+  document.body.style.overscrollBehavior = 'auto';
+  
+  // Get app container and reset its styles
+  const appElement = document.getElementById('app');
+  if (appElement) {
+    appElement.style.height = 'auto';
+    appElement.style.overflow = 'visible';
+    appElement.style.display = 'block';
+  }
+};
+
+onMounted(() => {
+  // Reset styles to ensure proper display
+  resetStyles();
+  
+  // Add event listener to ensure styles remain reset on window resize
+  window.addEventListener('resize', resetStyles);
+});
+
+onBeforeUnmount(() => {
+  // Remove event listeners when component is unmounted
+  window.removeEventListener('resize', resetStyles);
+});
+</script>
+
+<style>
+@import '../../assets/website.css';
+
+/* Override the default body styles for this component */
+.website-container {
+  min-height: 100%;
+  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* Remove all underlines from links */
+.website-container a {
+  text-decoration: none !important;
+}
+
+.website-container a:hover {
+  text-decoration: none !important;
+}
+
+/* Additional styles for hamburger menu in active state */
+.hamburger.active span:nth-child(1) {
+  transform: rotate(45deg) translate(5px, 5px);
+}
+
+.hamburger.active span:nth-child(2) {
+  opacity: 0;
+}
+
+.hamburger.active span:nth-child(3) {
+  transform: rotate(-45deg) translate(7px, -6px);
+}
+</style> 

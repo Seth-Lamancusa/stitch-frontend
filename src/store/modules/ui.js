@@ -2,7 +2,6 @@ export default {
   namespaced: true,
   
   state: {
-    activeTab: localStorage.getItem('stitch_active_tab') || 'public',
     loading: {
       messages: false,
       threads: false
@@ -14,13 +13,8 @@ export default {
   },
   
   mutations: {
-    SET_ACTIVE_TAB(state, tab) {
-      state.activeTab = tab;
-      localStorage.setItem('stitch_active_tab', tab);
-    },
-    
-    SET_LOADING(state, { type, value }) {
-      state.loading[type] = value;
+    SET_LOADING(state, { key, value }) {
+      state.loading[key] = value;
     },
     
     SET_ERROR(state, error) {
@@ -53,10 +47,6 @@ export default {
   },
   
   actions: {
-    setActiveTab({ commit }, tab) {
-      commit('SET_ACTIVE_TAB', tab);
-    },
-    
     setLoading({ commit }, { type, value }) {
       commit('SET_LOADING', { type, value });
     },
@@ -119,7 +109,6 @@ export default {
   },
   
   getters: {
-    activeTab: state => state.activeTab,
     isLoading: state => type => state.loading[type],
     error: state => state.error,
     showDeleteConfirm: state => state.showDeleteConfirm,

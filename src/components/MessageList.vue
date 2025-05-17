@@ -1,26 +1,94 @@
 <script setup>
-import { computed, onMounted, watch, ref, onUnmounted } from 'vue';
+import { computed, onMounted, ref, onUnmounted, nextTick } from 'vue';
 import { useStore } from 'vuex';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { initializeFirebase } from '../firebase';
 import MessageService from '../services/MessageService';
 
 /**
- * MessageList component displays a list of message threads based on the active tab.
- * Public messages are shown when activeTab is 'public',
- * Private messages are shown when activeTab is 'private'.
+ * MessageList component displays a list of message threads based on the current route.
+ * Public messages (/messages/public) - Shows pinned public messages
+ * Direct messages (/messages/direct) - Shows private messages for the current user
+ * Profile messages (/messages/profile) - Shows messages authored by the current user
+ * Local messages (/messages/local) - Shows locally stored messages
  */
 
 const store = useStore();
 const router = useRouter();
+const route = useRoute();
 
-// Track loading states
-const isLoadingMessages = ref(true); // Used for both initial load and refreshes
-const hasLoadedOnce = ref(false);
+// Track loading states per tab
+const loadingStates = ref({
+  feed: {
+    isLoading: true,
+    isLoadingMore: false,
+    hasLoadedOnce: false,
+    isAllLoaded: false
+  },
+  curated: {
+    isLoading: true,
+    isLoadingMore: false,
+    hasLoadedOnce: false,
+    isAllLoaded: false
+  },
+  private: {
+    isLoading: true,
+    isLoadingMore: false,
+    hasLoadedOnce: false,
+    isAllLoaded: false
+  },
+  profile: {
+    isLoading: true,
+    isLoadingMore: false,
+    hasLoadedOnce: false,
+    isAllLoaded: false
+  },
+  local: {
+    isLoading: true,
+    isLoadingMore: false,
+    hasLoadedOnce: false,
+    isAllLoaded: false
+  }
+});
 
-const activeTab = computed(() => store.getters['ui/activeTab']);
+// Convenience computed properties for the current tab's loading states
+const isLoadingMessages = computed(() => loadingStates.value[activeTab.value].isLoading);
+const isLoadingMore = computed(() => loadingStates.value[activeTab.value].isLoadingMore);
+const hasLoadedOnce = computed(() => loadingStates.value[activeTab.value].hasLoadedOnce);
+const isAllMessagesLoaded = computed(() => loadingStates.value[activeTab.value].isAllLoaded);
+
+// Track cursors for each tab
+const cursors = ref({
+  feed: null,
+  curated: null,
+  private: null,
+  profile: null,
+  local: null
+});
+
+// Reference to the message list container for scroll detection
+const messageListRef = ref(null);
+
+// Determine active tab from route path
+const activeTab = computed(() => {
+  const path = route.path;
+  if (path.includes('/direct')) return 'private';
+  if (path.includes('/profile')) return 'profile';
+  if (path.includes('/local')) return 'local';
+  if (path.includes('/curated')) return 'curated';
+  if (path.includes('/feed')) return 'feed';
+  return 'feed'; // Default tab
+});
+
 const messageListTitle = computed(() => {
-  return activeTab.value === 'public' ? 'Public Messages' : 'Private Messages';
+  switch (activeTab.value) {
+    case 'feed': return 'Feed Messages';
+    case 'curated': return 'Curated Messages';
+    case 'private': return 'Direct Messages';
+    case 'profile': return 'My Messages';
+    case 'local': return 'Local Messages';
+    default: return 'Messages';
+  }
 });
 
 const threads = computed(() => {
@@ -28,31 +96,48 @@ const threads = computed(() => {
   const currentUser = store.getters['auth/user'];
   const currentUid = currentUser?.uid;
   
+  // Filter messages based on the for_tab attribute
   const filteredMessages = allMessages.filter(msg => {
-    const isPublic = msg.public === 1 || msg.public === true;
-    
-    // Check if user is recipient (using uid)
-    const isUserRecipient = currentUser && msg.recipients && 
-      Array.isArray(msg.recipients) && 
-      msg.recipients.some(r => r.uid === currentUid);
-    
-    const isPinned = msg.is_pinned === 1 || msg.is_pinned === true;
-    
-    if (activeTab.value === 'public') {
-      // Public tab: show only pinned public messages
-      return isPublic && isPinned;
-    } else {
-      // Private tab: show private messages OR messages where user is explicitly a recipient
-      return !isPublic || isUserRecipient;
-    }
+    // Only show messages tagged for the current tab
+    return msg.for_tab === activeTab.value;
   });
   
-  // Sort by timestamp (newest first)
-  const result = filteredMessages.sort((a, b) => {
+  // For curated tab, sort by curation score/ranking
+  if (activeTab.value === 'curated') {
+    // Sort by curation score (higher scores first), then by timestamp
+    return filteredMessages.sort((a, b) => {
+      const scoreA = a.curation_score || 0;
+      const scoreB = b.curation_score || 0;
+      
+      if (scoreA !== scoreB) {
+        return scoreB - scoreA; // Higher scores first
+      }
+      
+      // If scores are equal, sort by timestamp (newest first)
+      return new Date(b.timestamp) - new Date(a.timestamp);
+    });
+  }
+  
+  // For feed tab, sort by pinned status first, then timestamp
+  if (activeTab.value === 'feed') {
+    return filteredMessages.sort((a, b) => {
+      const aIsPinned = a.is_pinned === 1 || a.is_pinned === true;
+      const bIsPinned = b.is_pinned === 1 || b.is_pinned === true;
+      
+      // If pinned status differs, prioritize pinned messages
+      if (aIsPinned !== bIsPinned) {
+        return aIsPinned ? -1 : 1;
+      }
+      
+      // Otherwise sort by timestamp
+      return new Date(b.timestamp) - new Date(a.timestamp);
+    });
+  }
+  
+  // For all other tabs, just sort by timestamp (newest first)
+  return filteredMessages.sort((a, b) => {
     return new Date(b.timestamp) - new Date(a.timestamp);
   });
-  
-  return result;
 });
 
 // For completeness, still include the global loading state
@@ -112,11 +197,17 @@ function getReplyCount(message) {
 
 // Navigate to thread view when a thread is clicked
 const viewMessage = (messageId) => {
+  // Store current route before navigation
+  store.dispatch('navigation/setPreviousRoute', route.path);
+  
   router.push({ path: `/messages/${messageId}` });
 };
 
 // Create a new message thread
 const createNewThread = () => {
+  // Store current route before navigation
+  store.dispatch('navigation/setPreviousRoute', route.path);
+  
   // Simply navigate to the new thread route
   router.push('/new-thread');
   console.log('Navigating to new thread route');
@@ -166,22 +257,92 @@ function isCurrentUserAuthor(message) {
 }
 
 // Load messages with unified loading state
-const loadMessages = async () => {
-  isLoadingMessages.value = true;
+const loadMessages = async (isInitial = true) => {
+  if (isInitial) {
+    // Update the specific tab's loading state
+    loadingStates.value[activeTab.value].isLoading = true;
+    loadingStates.value[activeTab.value].isAllLoaded = false;
+    // Reset cursor when doing an initial load
+    cursors.value[activeTab.value] = null;
+  } else {
+    // Update the specific tab's loading more state
+    loadingStates.value[activeTab.value].isLoadingMore = true;
+  }
+  
   try {
-    console.log('[Debug] Loading messages for tab:', activeTab.value);
-    await store.dispatch('messages/fetchThreads');
+    console.log(`[Debug] ${isInitial ? 'Loading' : 'Loading more'} messages for tab:`, activeTab.value);
+    
+    // Get current cursor for this tab
+    const cursor = cursors.value[activeTab.value];
+    console.log(`[Debug] Using cursor:`, cursor);
+    
+    // Use different endpoint based on active tab
+    let response;
+    switch (activeTab.value) {
+      case 'feed':
+        response = await store.dispatch('messages/fetchFeedMessages', { cursor });
+        break;
+      case 'curated':
+        response = await store.dispatch('messages/fetchCuratedMessages', { cursor });
+        break;
+      case 'private':
+        response = await store.dispatch('messages/fetchDirectMessages', { cursor });
+        break;
+      case 'profile':
+        response = await store.dispatch('messages/fetchUserMessages', { cursor });
+        break;
+      case 'local':
+        // Local messages are stored client-side, no API call needed
+        break;
+      default:
+        response = await store.dispatch('messages/fetchFeedMessages', { cursor });
+    }
+    
+    // Check if there are no more messages to load
+    if (response) {
+      if (response.exhausted) {
+        loadingStates.value[activeTab.value].isAllLoaded = true;
+        console.log('[Debug] All messages loaded for this tab');
+      }
+      
+      // Update cursor for next request
+      if (response.nextCursor !== undefined && response.nextCursor !== null) {
+        cursors.value[activeTab.value] = response.nextCursor;
+        console.log(`[Debug] Updated cursor to: ${response.nextCursor}`);
+      }
+    }
   } catch (error) {
-    console.error('Error loading messages:', error);
+    console.error(`Error ${isInitial ? 'loading' : 'loading more'} messages:`, error);
   } finally {
-    // Always set loading to false when done
-    isLoadingMessages.value = false;
-    hasLoadedOnce.value = true;
-    console.log('[Debug] Finished loading messages');
+    // Update loading states for the specific tab
+    if (isInitial) {
+      loadingStates.value[activeTab.value].isLoading = false;
+      loadingStates.value[activeTab.value].hasLoadedOnce = true;
+    } else {
+      loadingStates.value[activeTab.value].isLoadingMore = false;
+    }
+    
+    console.log(`[Debug] Finished ${isInitial ? 'loading' : 'loading more'} messages`);
   }
 };
 
-// Fetch messages on mount and when activeTab changes
+// Handle infinite scroll
+const handleScroll = () => {
+  if (!messageListRef.value || 
+      loadingStates.value[activeTab.value].isLoadingMore || 
+      loadingStates.value[activeTab.value].isAllLoaded) return;
+  
+  const container = messageListRef.value;
+  const scrollPosition = container.scrollTop + container.clientHeight;
+  const scrollThreshold = container.scrollHeight * 0.8; // Load more when 80% scrolled
+  
+  if (scrollPosition >= scrollThreshold) {
+    console.log('[Debug] Scroll threshold reached, loading more messages');
+    loadMessages(false);
+  }
+};
+
+// Fetch messages on mount
 onMounted(async () => {
   try {
     await initializeFirebase();
@@ -190,27 +351,52 @@ onMounted(async () => {
     console.error("Firebase initialization failed in MessageList:", error);
   }
   
-  // Always load messages with the unified loading state
-  await loadMessages();
+  // Load initial messages
+  await loadMessages(true);
+  
+  // Set up scroll listener after initial load
+  if (messageListRef.value) {
+    messageListRef.value.addEventListener('scroll', handleScroll);
+  }
 });
 
-// Watch for tab changes and reload messages
-watch(activeTab, async () => {
-  // Always reload messages when tab changes
-  await loadMessages();
+// Clean up scroll listener
+onUnmounted(() => {
+  if (messageListRef.value) {
+    messageListRef.value.removeEventListener('scroll', handleScroll);
+  }
+});
+
+// Watch for tab changes to reset and reload
+onMounted(() => {
+  router.afterEach((to, from) => {
+    if (to.path !== from.path) {
+      
+      // Check if we already have messages for this tab
+      const tabMessages = store.getters['messages/getLoadedMessages'].filter(
+        msg => msg.for_tab === activeTab.value
+      );
+      
+      if (tabMessages.length === 0) {
+        // No messages for this tab yet, load them
+        console.log(`[Debug] No messages found for tab: ${activeTab.value}, loading from API`);
+        loadMessages(true);
+      } else {
+        console.log(`[Debug] Found ${tabMessages.length} cached messages for tab: ${activeTab.value}, skipping API call`);
+        // Update loading state manually since we're not calling loadMessages()
+        loadingStates.value[activeTab.value].isLoading = false;
+        loadingStates.value[activeTab.value].hasLoadedOnce = true;
+      }
+    }
+  });
 });
 </script>
 
 <template>
-  <div class="message-list">
+  <div class="message-list" ref="messageListRef">
     <!-- Empty state - only shown when no messages and not loading -->
     <div v-if="!isLoadingMessages && hasLoadedOnce && threads.length === 0" class="empty-state">
       <p>No {{ activeTab }} messages found.</p>
-    </div>
-    
-    <!-- Error state -->
-    <div v-else-if="error" class="error-message">
-      {{ error }}
     </div>
     
     <!-- Messages container -->
@@ -248,10 +434,19 @@ watch(activeTab, async () => {
         </div>
       </div>
       
-      <!-- Unified loading indicator - always visible when loading -->
-      <div v-if="isLoadingMessages" class="loading-indicator" :class="{ 'full-height': threads.length === 0 }">
+      <!-- Unified loading indicator - show when initially loading or loading more -->
+      <div 
+        v-if="isLoadingMessages || isLoadingMore" 
+        class="loading-indicator" 
+        :class="{ 'full-height': threads.length === 0 }"
+      >
         <div class="loading-spinner"></div>
         <p>{{ threads.length === 0 ? 'Loading messages...' : 'Loading more messages...' }}</p>
+      </div>
+      
+      <!-- End of results message when all messages are loaded -->
+      <div v-if="!isLoadingMessages && !isLoadingMore && isAllMessagesLoaded && threads.length > 0" class="end-of-results">
+        <p>No more messages to load</p>
       </div>
     </div>
     
@@ -402,6 +597,17 @@ watch(activeTab, async () => {
   text-align: center;
   flex-direction: column;
   gap: 16px;
+}
+
+.end-of-results {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--space-md);
+  color: var(--color-text-secondary);
+  text-align: center;
+  font-size: var(--font-size-sm);
+  opacity: 0.7;
 }
 
 .loading-spinner {

@@ -1,49 +1,14 @@
 <template>
-  <div class="website-container">
-    <!-- Navigation -->
-    <header>
-      <nav class="main-nav">
-        <div class="logo">
-          <h1>Stitch</h1>
-        </div>
-        <ul class="nav-links" :class="{ active: isMenuOpen }">
-          <li><router-link to="/">Home</router-link></li>
-          <li><router-link to="/about">About Us</router-link></li>
-          <li><router-link to="/roadmap">Roadmap</router-link></li>
-          <li><router-link to="/community">Community</router-link></li>
-          <li><router-link to="/terms" class="active">Terms & Conditions</router-link></li>
-          <li><router-link to="/beta" class="join-beta-btn">Join Beta</router-link></li>
-          <li><router-link to="/messages" class="login-btn">Login</router-link></li>
-        </ul>
-        <div class="hamburger" @click="toggleMenu" :class="{ active: isMenuOpen }">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-      </nav>
-    </header>
-
-    <!-- Legal Hero Section -->
-    <section class="page-hero legal-hero">
-      <div class="hero-content">
-        <h1>Terms & Conditions</h1>
-        <p>Guidelines for using the Stitch AI chat platform</p>
-      </div>
-    </section>
-
-    <!-- Beta Phase Banner -->
-    <section class="beta-banner">
-      <div class="container">
-        <div class="banner-content">
-          <div class="banner-icon">📝</div>
-          <div class="banner-text">
-            <h3>Beta Terms Notice</h3>
-            <p>As we're currently in beta, these terms may be updated frequently as our service evolves. Please check back regularly for updates.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
+  <InfoViewLayout
+    pageTitle="Terms & Conditions"
+    pageSubtitle="Guidelines for using the Stitch AI chat platform"
+    heroClass="legal-hero"
+    :showBetaBanner="true"
+    betaBannerIcon="📝"
+    betaBannerTitle="Beta Terms Notice"
+    betaBannerText="As we're currently in beta, these terms may be updated frequently as our service evolves. Please check back regularly for updates."
+    footerTagline="Building the multiplayer AI chat platform for seamless human-AI collaboration"
+  >
     <!-- Legal Details Layout -->
     <div class="legal-details-layout">
       <!-- Navigation Sidebar -->
@@ -270,81 +235,15 @@
         </section>
       </main>
     </div>
-
-    <!-- Footer -->
-    <footer>
-      <div class="footer-content">
-        <div class="footer-logo">
-          <h2>Stitch</h2>
-          <p>Building the multiplayer AI chat platform for seamless human-AI collaboration</p>
-        </div>
-        <div class="footer-links">
-          <div class="footer-column">
-            <h3>Platform</h3>
-            <ul>
-              <li><router-link to="/">Home</router-link></li>
-              <li><router-link to="/about">About Us</router-link></li>
-              <li><router-link to="/roadmap">Roadmap</router-link></li>
-            </ul>
-          </div>
-
-          <div class="footer-column">
-            <h3>Community</h3>
-            <ul>
-              <li><router-link to="/beta">Join Beta</router-link></li>
-              <li><router-link to="/community">Community</router-link></li>
-              <li><a href="/static/html/contact.html">Contact Us</a></li>
-            </ul>
-          </div>
-          <div class="footer-column">
-            <h3>Legal</h3>
-            <ul>
-              <li><router-link to="/terms">Terms & Conditions</router-link></li>
-              <li><a href="/static/html/privacy.html">Privacy Policy</a></li>
-              <li><a href="/static/html/cookies.html">Cookie Policy</a></li>
-            </ul>
-          </div>
-        </div>
-      </div>
-      <div class="footer-bottom">
-        <p>&copy; 2024 Stitch. All rights reserved.</p>
-      </div>
-    </footer>
-  </div>
+  </InfoViewLayout>
 </template>
 
 <script setup>
+import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
 import { ref, onMounted, onBeforeUnmount } from 'vue';
-
-// State for mobile menu toggle
-const isMenuOpen = ref(false);
 
 // Track active section for navigation highlighting
 const activeSection = ref('overview');
-
-// Function to toggle mobile menu
-const toggleMenu = () => {
-  isMenuOpen.value = !isMenuOpen.value;
-};
-
-// Reset body and html styles
-const resetStyles = () => {
-  document.documentElement.style.height = 'auto';
-  document.documentElement.style.overflow = 'auto';
-  document.documentElement.style.position = 'static';
-  document.body.style.height = 'auto';
-  document.body.style.overflow = 'auto';
-  document.body.style.position = 'static';
-  document.body.style.overscrollBehavior = 'auto';
-  
-  // Get app container and reset its styles
-  const appElement = document.getElementById('app');
-  if (appElement) {
-    appElement.style.height = 'auto';
-    appElement.style.overflow = 'visible';
-    appElement.style.display = 'block';
-  }
-};
 
 // Define section refs
 const overviewSection = ref(null);
@@ -394,11 +293,7 @@ const handleScroll = () => {
 };
 
 onMounted(() => {
-  // Reset styles
-  resetStyles();
-  
-  // Add event listeners
-  window.addEventListener('resize', resetStyles);
+  // Add scroll event listener
   window.addEventListener('scroll', handleScroll);
   
   // Initial scroll check
@@ -406,48 +301,12 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  // Remove event listeners
-  window.removeEventListener('resize', resetStyles);
+  // Remove scroll event listener
   window.removeEventListener('scroll', handleScroll);
 });
 </script>
 
 <style>
-@import '../assets/website.css';
-
-/* Override the default body styles for this component */
-.website-container {
-  min-height: 100%;
-  width: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-}
-
-/* Remove all underlines from links */
-.website-container a {
-  text-decoration: none !important;
-}
-
-.website-container a:hover {
-  text-decoration: none !important;
-}
-
-/* Additional styles for hamburger menu in active state */
-.hamburger.active span:nth-child(1) {
-  transform: rotate(45deg) translate(5px, 5px);
-}
-
-.hamburger.active span:nth-child(2) {
-  opacity: 0;
-}
-
-.hamburger.active span:nth-child(3) {
-  transform: rotate(-45deg) translate(7px, -6px);
-}
-
 /* Legal-specific styles */
 .section-nav {
   position: sticky;

@@ -41,7 +41,8 @@ export default {
         id: message.id,
         author_display_name: message.author_display_name,
         author_user_tag: message.author_user_tag,
-        content_author: message.content_author
+        content_author: message.content_author,
+        for_tab: message.for_tab
       });
       
       // Ensure child_ids is always an array
@@ -49,53 +50,62 @@ export default {
         message.child_ids = [];
       }
       
-      // Preserve branch_child if it exists
-      let currentBranchChild = null;
-      if (state.messages[message.id]) {
-        currentBranchChild = state.messages[message.id].branch_child;
-      }
-      
-      // Default branch_child to first child if there are children and no previous selection
-      const hasChildren = message.child_ids && message.child_ids.length > 0;
-      if (hasChildren && currentBranchChild === undefined) {
-        message.branch_child = message.child_ids[0];
-      } else if (hasChildren) {
-        // Keep existing selection if it's still valid
-        const isBranchChildValid = message.child_ids.includes(currentBranchChild);
-        message.branch_child = isBranchChildValid ? currentBranchChild : message.child_ids[0];
-      } else {
-        message.branch_child = null;
-      }
-      
-      state.messages[message.id] = { ...message };
-    },
-    
-    SET_MESSAGES(state, messages) {
-      for (const message of messages) {
-        // Ensure child_ids is always an array
-        if (!message.child_ids) {
-          message.child_ids = [];
+      // Check if message already exists in store - if so, merge it
+      const existingMessage = state.messages[message.id];
+      if (existingMessage) {
+        // Preserve branch_child if it exists
+        const currentBranchChild = existingMessage.branch_child;
+        
+        // Handle merging child_ids from existing and new message
+        let mergedChildIds = [...message.child_ids];
+        if (existingMessage.child_ids && existingMessage.child_ids.length > 0) {
+          // Combine child IDs without duplicates
+          mergedChildIds = [...new Set([...existingMessage.child_ids, ...message.child_ids])];
         }
         
-        // Preserve branch_child if it exists
-        let currentBranchChild = null;
-        if (state.messages[message.id]) {
-          currentBranchChild = state.messages[message.id].branch_child;
-        }
+        // Create the merged message
+        const mergedMessage = {
+          ...existingMessage, // Start with existing message properties
+          ...message,         // Override with new message properties
+          child_ids: mergedChildIds // Use combined child_ids
+        };
         
         // Default branch_child to first child if there are children and no previous selection
-        const hasChildren = message.child_ids && message.child_ids.length > 0;
+        const hasChildren = mergedChildIds.length > 0;
         if (hasChildren && currentBranchChild === undefined) {
-          message.branch_child = message.child_ids[0];
+          mergedMessage.branch_child = mergedChildIds[0];
         } else if (hasChildren) {
           // Keep existing selection if it's still valid
-          const isBranchChildValid = message.child_ids.includes(currentBranchChild);
-          message.branch_child = isBranchChildValid ? currentBranchChild : message.child_ids[0];
+          const isBranchChildValid = mergedChildIds.includes(currentBranchChild);
+          mergedMessage.branch_child = isBranchChildValid ? currentBranchChild : mergedChildIds[0];
+        } else {
+          mergedMessage.branch_child = null;
+        }
+        
+        // Update the store with merged message
+        state.messages[message.id] = mergedMessage;
+      } else {
+        // New message, not in store yet
+        // Default branch_child to first child if there are children
+        const hasChildren = message.child_ids && message.child_ids.length > 0;
+        if (hasChildren) {
+          message.branch_child = message.child_ids[0];
         } else {
           message.branch_child = null;
         }
         
+        // Add to store
         state.messages[message.id] = { ...message };
+      }
+    },
+    
+    SET_MESSAGES(state, messages) {
+      for (const message of messages) {
+        // Use SET_MESSAGE mutation to handle each message individually
+        // This ensures consistent logic for merging messages
+        if (message && message.id) {
+          this.commit('messages/SET_MESSAGE', message);
+        }
       }
     },
     
@@ -514,45 +524,187 @@ export default {
     // Fetch threads based on active tab
     async fetchThreads({ commit, rootState, dispatch }) {
       try {
-        // Get active tab from UI store
-        const activeTab = rootState.ui?.activeTab || 'public';
-        
-        let threads = [];
-        let response;
-        
-        // Set a loading flag in UI store
+        // Set loading state in UI
         commit('ui/SET_LOADING', { key: 'threads', value: true }, { root: true });
         
-        // Fetch messages based on tab
-        if (activeTab === 'private') {
-          response = await MessageService.getDirectMessages();
-          threads = response.data || [];
-        } else {
-          // For public tab, fetch only pinned messages
-          try {
-            const pinnedResponse = await MessageService.getPinnedMessages(100); // Increased limit for pinned messages
-            threads = pinnedResponse.data || [];
-          } catch (error) {
-            console.error('Error fetching pinned messages:', error);
-          }
+        const response = await MessageService.getPinnedMessages(50);
+        const messages = response.data || [];
+        
+        // Process messages to get reply counts
+        const messagesWithChildCounts = [];
+        for (let message of messages) {
+          // Add to list
+          messagesWithChildCounts.push(message);
         }
         
-        // Store threads in the state
-        commit('SET_MESSAGES', threads);
+        // Commit all messages to store
+        commit('SET_MESSAGES', messagesWithChildCounts);
         
-        // Clear loading flag
+        // Clear loading state
         commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
-        
-        return threads;
+        return messagesWithChildCounts;
       } catch (error) {
-        console.error('Error fetching threads:', error);
-        // Clear loading flag on error
         commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
+        commit('ui/SET_ERROR', error.message || 'Failed to load messages', { root: true });
+        console.error('Error fetching threads:', error);
         return [];
       }
     },
     
-    // Remove a temporary thread from the store
+    // Fetch feed messages (Feed tab)
+    async fetchFeedMessages({ commit, rootState, dispatch }, { cursor = null } = {}) {
+      try {
+        // Set loading state in UI
+        commit('ui/SET_LOADING', { key: 'threads', value: true }, { root: true });
+        
+        // For Feed tab, special behavior:
+        // - First call (cursor = null): get ALL pinned messages
+        // - Second call (cursor = 0): get first batch of regular public messages
+        // - Subsequent calls (cursor = last message ID): get next batch of regular messages
+        
+        console.log(`[DEBUG] Fetching feed messages - cursor: ${cursor}`);
+        
+        const response = await MessageService.getPublicMessages(10, cursor);
+        const messages = response.data.messages || [];
+        const exhausted = response.data.exhausted || false;
+        const nextCursor = response.data.next_cursor;
+        
+        // Commit all messages to store
+        commit('SET_MESSAGES', messages);
+        
+        // Clear loading state
+        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
+        
+        // Return the response data with exhausted flag and next cursor
+        return {
+          messages,
+          exhausted,
+          nextCursor
+        };
+      } catch (error) {
+        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
+        commit('ui/SET_ERROR', error.message || 'Failed to load feed messages', { root: true });
+        console.error('Error fetching feed messages:', error);
+        return {
+          messages: [],
+          exhausted: true,
+          nextCursor: null
+        };
+      }
+    },
+    
+    // Fetch curated messages (Curated tab)
+    async fetchCuratedMessages({ commit, rootState, dispatch }, { cursor = null } = {}) {
+      try {
+        // Set loading state in UI
+        commit('ui/SET_LOADING', { key: 'threads', value: true }, { root: true });
+        
+        console.log(`[DEBUG] Fetching curated messages - cursor: ${cursor}`);
+        
+        const response = await MessageService.getCuratedMessages(10, cursor);
+        const messages = response.data.messages || [];
+        const exhausted = response.data.exhausted || false;
+        const nextCursor = response.data.next_cursor;
+        
+        // Commit all messages to store
+        commit('SET_MESSAGES', messages);
+        
+        // Clear loading state
+        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
+        
+        // Return the response data with exhausted flag and next cursor
+        return {
+          messages,
+          exhausted,
+          nextCursor
+        };
+      } catch (error) {
+        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
+        commit('ui/SET_ERROR', error.message || 'Failed to load curated messages', { root: true });
+        console.error('Error fetching curated messages:', error);
+        return {
+          messages: [],
+          exhausted: true,
+          nextCursor: null
+        };
+      }
+    },
+    
+    // Fetch direct messages (Direct tab)
+    async fetchDirectMessages({ commit, rootState, dispatch }, { cursor = null } = {}) {
+      try {
+        // Set loading state in UI
+        commit('ui/SET_LOADING', { key: 'threads', value: true }, { root: true });
+        
+        console.log(`[DEBUG] Fetching direct messages - cursor: ${cursor}`);
+        
+        const response = await MessageService.getDirectMessages(10, cursor);
+        const messages = response.data.messages || [];
+        const exhausted = response.data.exhausted || false;
+        const nextCursor = response.data.next_cursor;
+        
+        // Commit all messages to store
+        commit('SET_MESSAGES', messages);
+        
+        // Clear loading state
+        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
+        
+        // Return the response data with exhausted flag and next cursor
+        return {
+          messages,
+          exhausted,
+          nextCursor
+        };
+      } catch (error) {
+        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
+        commit('ui/SET_ERROR', error.message || 'Failed to load direct messages', { root: true });
+        console.error('Error fetching direct messages:', error);
+        return {
+          messages: [],
+          exhausted: true,
+          nextCursor: null
+        };
+      }
+    },
+    
+    // Fetch user's own messages (Profile tab)
+    async fetchUserMessages({ commit, rootState, dispatch }, { cursor = null } = {}) {
+      try {
+        // Set loading state in UI
+        commit('ui/SET_LOADING', { key: 'threads', value: true }, { root: true });
+        
+        console.log(`[DEBUG] Fetching user messages - cursor: ${cursor}`);
+        
+        // Use the dedicated by-user endpoint
+        const response = await MessageService.getUserMessages(10, cursor);
+        const messages = response.data.messages || [];
+        const exhausted = response.data.exhausted || false;
+        const nextCursor = response.data.next_cursor;
+        
+        // Commit all messages to store
+        commit('SET_MESSAGES', messages);
+        
+        // Clear loading state
+        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
+        
+        // Return the response data with exhausted flag and next cursor
+        return {
+          messages,
+          exhausted,
+          nextCursor
+        };
+      } catch (error) {
+        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
+        commit('ui/SET_ERROR', error.message || 'Failed to load your messages', { root: true });
+        console.error('Error fetching user messages:', error);
+        return {
+          messages: [],
+          exhausted: true,
+          nextCursor: null
+        };
+      }
+    },
+    
     removeTemporaryThread({ commit }, threadId) {
       commit('REMOVE_TEMP_THREAD', threadId);
     },

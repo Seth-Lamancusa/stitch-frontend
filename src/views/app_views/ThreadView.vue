@@ -110,11 +110,11 @@
 import { ref, computed, onMounted, watch, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute, useRouter } from 'vue-router';
-import MessageNode from '../components/MessageNode.vue';
-import AdaptiveMarker from '../components/AdaptiveMarker.vue';
-import ReplyBox from '../components/ReplyBox.vue';
-import MessageService from '../services/MessageService';
-import WebSocketService from '../services/WebSocketService';
+import MessageNode from '../../components/MessageNode.vue';
+import AdaptiveMarker from '../../components/AdaptiveMarker.vue';
+import ReplyBox from '../../components/ReplyBox.vue';
+import MessageService from '../../services/MessageService';
+import WebSocketService from '../../services/WebSocketService';
 
 // Setup store and routing
 const store = useStore();
@@ -408,8 +408,11 @@ watch(selectedMessageId, (newId) => {
 
 // Navigation
 const backToList = async () => {
-  // Navigate back to list view - keep cache for faster return
-  router.push('/messages');
+  // Get the previous route
+  const prevRoute = store.getters['navigation/previousRoute'];
+  
+  // Navigate back to the previous route - keep cache for faster return
+  router.push(prevRoute || '/feed'); // Fallback to feed if no previous route
 };
 
 // Message selection and reply

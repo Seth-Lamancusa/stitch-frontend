@@ -1,49 +1,14 @@
 <template>
-  <div class="website-container">
-    <!-- Navigation -->
-    <header>
-      <nav class="main-nav">
-        <div class="logo">
-          <h1>Stitch</h1>
-        </div>
-        <ul class="nav-links" :class="{ active: isMenuOpen }">
-          <li><router-link to="/">Home</router-link></li>
-          <li><router-link to="/about">About Us</router-link></li>
-          <li><router-link to="/roadmap" class="active">Roadmap</router-link></li>
-          <li><router-link to="/community">Community</router-link></li>
-          <li><router-link to="/terms">Terms & Conditions</router-link></li>
-          <li><router-link to="/beta" class="join-beta-btn">Join Beta</router-link></li>
-          <li><router-link to="/messages" class="login-btn">Login</router-link></li>
-        </ul>
-        <div class="hamburger" @click="toggleMenu" :class="{ active: isMenuOpen }">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-      </nav>
-    </header>
-
-    <!-- Roadmap Hero Section -->
-    <section class="page-hero roadmap-hero">
-      <div class="hero-content">
-        <h1>Roadmap</h1>
-        <p>The technology, architecture, and roadmap behind the Stitch platform</p>
-      </div>
-    </section>
-
-    <!-- Beta Phase Banner -->
-    <section class="beta-banner">
-      <div class="container">
-        <div class="banner-content">
-          <div class="banner-icon">🚀</div>
-          <div class="banner-text">
-            <h3>Beta Phase: Google Cloud Platform Deployment</h3>
-            <p>During our beta phase, we're running on GCP for reliability and rapid iteration. Our architecture is designed for scalability, performance, and seamless AI integration.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
+  <InfoViewLayout
+    pageTitle="Roadmap"
+    pageSubtitle="The technology, architecture, and roadmap behind the Stitch platform"
+    heroClass="roadmap-hero"
+    :showBetaBanner="true"
+    betaBannerIcon="🚀"
+    betaBannerTitle="Beta Phase: Google Cloud Platform Deployment"
+    betaBannerText="During our beta phase, we're running on GCP for reliability and rapid iteration. Our architecture is designed for scalability, performance, and seamless AI integration."
+    footerTagline="Building the multiplayer AI chat platform for seamless human-AI collaboration"
+  >
     <!-- Technical Details Layout -->
     <div class="tech-details-layout">
       <!-- Navigation Sidebar -->
@@ -372,78 +337,15 @@
         </section>
       </main>
     </div>
-
-    <!-- Footer -->
-    <footer>
-      <div class="footer-content">
-        <div class="footer-logo">
-          <h2>Stitch</h2>
-          <p>Building the multiplayer AI chat platform for seamless human-AI collaboration</p>
-        </div>
-        <div class="footer-links">
-          <div class="footer-column">
-            <h3>Platform</h3>
-            <ul>
-              <li><router-link to="/">Home</router-link></li>
-              <li><router-link to="/about">About Us</router-link></li>
-              <li><router-link to="/roadmap">Roadmap</router-link></li>
-            </ul>
-          </div>
-
-          <div class="footer-column">
-            <h3>Community</h3>
-            <ul>
-              <li><router-link to="/beta">Join Beta</router-link></li>
-              <li><router-link to="/community">Community</router-link></li>
-              <li><a href="/static/html/contact.html">Contact Us</a></li>
-            </ul>
-          </div>
-          <div class="footer-column">
-            <h3>Terms & Conditions</h3>
-            <ul>
-              <li><router-link to="/terms">Terms & Conditions</router-link></li>
-              <li><a href="/static/html/privacy.html">Privacy Policy</a></li>
-              <li><a href="/static/html/cookies.html">Cookie Policy</a></li>
-            </ul>
-          </div>
-        </div>
-      </div>
-      <div class="footer-bottom">
-        <p>&copy; 2024 Stitch. All rights reserved.</p>
-      </div>
-    </footer>
-  </div>
+  </InfoViewLayout>
 </template>
 
 <script setup>
+import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 
-// State for mobile menu toggle
-const isMenuOpen = ref(false);
-
-// Function to toggle mobile menu
-const toggleMenu = () => {
-  isMenuOpen.value = !isMenuOpen.value;
-};
-
-// Reset body and html styles
-const resetStyles = () => {
-  document.documentElement.style.height = 'auto';
-  document.documentElement.style.overflow = 'auto';
-  document.documentElement.style.position = 'static';
-  document.body.style.height = 'auto';
-  document.body.style.overflow = 'auto';
-  document.body.style.position = 'static';
-  document.body.style.overscrollBehavior = 'auto';
-  
-  // Get app container and reset its styles
-  const appElement = document.getElementById('app');
-  if (appElement) {
-    appElement.style.height = 'auto';
-    appElement.style.overflow = 'visible';
-    appElement.style.display = 'block';
-  }
-};
+// Track active section for navigation highlighting
+const activeSection = ref('overview');
 
 // Define section refs
 const overviewSection = ref(null);
@@ -455,8 +357,14 @@ const developmentRoadmapSection = ref(null);
 const betaTimelineSection = ref(null);
 const postBetaPhasesSection = ref(null);
 
-// Track active section for navigation highlighting
-const activeSection = ref('overview');
+// Function to scroll to section
+const scrollToSection = (sectionId) => {
+  const section = document.getElementById(sectionId);
+  if (section) {
+    section.scrollIntoView({ behavior: 'smooth' });
+    activeSection.value = sectionId;
+  }
+};
 
 // Track active section based on scroll position
 const handleScroll = () => {
@@ -482,89 +390,31 @@ const handleScroll = () => {
   }
 };
 
-// Handle mobile dropdown toggling
-const handleDropdownToggle = (e) => {
-  if (window.innerWidth <= 768) {
-    e.preventDefault();
-    e.target.parentElement.classList.toggle('active');
-  }
-};
-
-// Function to scroll to section
-const scrollToSection = (sectionId) => {
-  const section = document.getElementById(sectionId);
-  if (section) {
-    section.scrollIntoView({ behavior: 'smooth' });
-    activeSection.value = sectionId;
-  }
-};
-
 onMounted(() => {
-  // Reset styles
-  resetStyles();
-  
-  // Add event listeners
-  window.addEventListener('resize', resetStyles);
+  // Add scroll event listener
   window.addEventListener('scroll', handleScroll);
-  
-  // Set up mobile dropdown toggling
-  document.querySelectorAll('.dropdown-btn').forEach((dropdown) => {
-    dropdown.addEventListener('click', handleDropdownToggle);
-  });
   
   // Initial scroll check
   handleScroll();
 });
 
 onBeforeUnmount(() => {
-  // Remove event listeners
-  window.removeEventListener('resize', resetStyles);
+  // Remove scroll event listener
   window.removeEventListener('scroll', handleScroll);
-  
-  // Clean up dropdown handlers
-  document.querySelectorAll('.dropdown-btn').forEach((dropdown) => {
-    dropdown.removeEventListener('click', handleDropdownToggle);
-  });
 });
 </script>
 
 <style>
-@import '../assets/website.css';
-
-/* Override the default body styles for this component */
-.website-container {
-  min-height: 100%;
-  width: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+/* Technical details layout styles */
+.tech-details-layout {
+  display: grid;
+  grid-template-columns: 1fr 3fr;
+  gap: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem;
 }
 
-/* Remove all underlines from links */
-.website-container a {
-  text-decoration: none !important;
-}
-
-.website-container a:hover {
-  text-decoration: none !important;
-}
-
-/* Additional styles for hamburger menu in active state */
-.hamburger.active span:nth-child(1) {
-  transform: rotate(45deg) translate(5px, 5px);
-}
-
-.hamburger.active span:nth-child(2) {
-  opacity: 0;
-}
-
-.hamburger.active span:nth-child(3) {
-  transform: rotate(-45deg) translate(7px, -6px);
-}
-
-/* Roadmap-specific styles */
 .section-nav {
   position: sticky;
   top: 100px;
@@ -609,15 +459,6 @@ onBeforeUnmount(() => {
   font-weight: 500;
 }
 
-.tech-details-layout {
-  display: grid;
-  grid-template-columns: 1fr 3fr;
-  gap: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 2rem;
-}
-
 .tech-content {
   min-height: 100vh;
 }
@@ -637,157 +478,12 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--card-border);
 }
 
-.section-intro {
-  font-size: 1.1rem;
-  margin-bottom: 2rem;
-  color: var(--text-light);
-  max-width: 800px;
-}
-
-/* Timeline styles */
-.timeline {
-  position: relative;
-  max-width: 800px;
-  margin: 2rem auto 0;
-  padding-left: 2.5rem;
-}
-
-.timeline:before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 11px;
-  height: 100%;
-  width: 3px;
-  background: var(--gradient-primary);
-  opacity: 0.5;
-}
-
-.timeline-item {
-  position: relative;
-  margin-bottom: 3rem;
-}
-
-.timeline-marker {
-  position: absolute;
-  left: -2.5rem;
-  width: 25px;
-  height: 25px;
-  border-radius: 50%;
-  background-color: var(--background-dark);
-  border: 3px solid var(--primary-color);
-  z-index: 1;
-}
-
-.timeline-marker.current {
-  background: var(--gradient-primary);
-}
-
-.timeline-content {
-  background-color: var(--card-background);
-  padding: 2rem;
-  border-radius: var(--border-radius);
-  box-shadow: var(--box-shadow);
-  border: 1px solid var(--card-border);
-}
-
-.timeline-content h3 {
-  color: var(--primary-color);
-  margin-bottom: 1rem;
-}
-
-.timeline-content h4 {
-  margin-top: 1.5rem;
-  color: var(--text-light);
-}
-
-.timeline-date {
-  display: inline-block;
-  margin-top: 1rem;
-  padding: 0.3rem 0.8rem;
-  font-size: 0.9rem;
-  background-color: var(--input-background);
-  color: var(--text-light);
-  border-radius: 20px;
-  font-weight: 500;
-}
-
-/* Vision statement */
-.vision-statement {
-  background-color: var(--card-background);
-  border: 1px solid var(--card-border);
-  border-radius: var(--border-radius);
-  padding: 2rem;
-  margin-top: 2rem;
-  box-shadow: var(--box-shadow);
-}
-
-.vision-points {
-  margin: 1.5rem 0 0 1.5rem;
-}
-
-.vision-points li {
-  margin-bottom: 0.8rem;
-}
-
-/* Key principles */
-.key-principles {
-  background-color: var(--card-background);
-  border: 1px solid var(--card-border);
-  border-radius: var(--border-radius);
-  padding: 2rem;
-  margin-top: 2rem;
-  box-shadow: var(--box-shadow);
-}
-
-.key-principles ul {
-  margin: 1.5rem 0 0 1.5rem;
-}
-
-.key-principles li {
-  margin-bottom: 0.8rem;
-}
-
-/* Stack styles */
-.tech-stack-dark {
-  margin-top: 2rem;
-}
-
-.stack-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 2rem;
-  max-width: 1200px;
-  margin: 1.5rem auto 3rem;
-}
-
-.stack-item {
-  background-color: var(--card-background);
-  padding: 1.5rem;
-  border-radius: var(--border-radius);
-  box-shadow: var(--box-shadow);
-  border: 1px solid var(--card-border);
-}
-
-.stack-item h3 {
-  color: var(--primary-color);
-  margin-bottom: 1rem;
-  font-size: 1.1rem;
-  font-weight: 600;
-}
-
-.stack-item p {
-  color: var(--text-light);
-  font-size: 0.95rem;
-  margin-bottom: 0;
-}
-
-/* Tech grid for Core Technologies section */
+/* For technical cards and grids */
 .tech-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 2rem;
-  margin-top: 2rem;
+  margin: 2rem 0;
 }
 
 .tech-card {
@@ -796,25 +492,11 @@ onBeforeUnmount(() => {
   padding: 2rem;
   box-shadow: var(--box-shadow);
   border: 1px solid var(--card-border);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.tech-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
 }
 
 .tech-icon {
-  font-size: 2rem;
+  font-size: 2.5rem;
   margin-bottom: 1rem;
-  color: var(--primary-color);
-  display: inline-block;
-  width: 50px;
-  height: 50px;
-  line-height: 50px;
-  text-align: center;
-  background: linear-gradient(120deg, rgba(66, 165, 245, 0.1), rgba(66, 245, 209, 0.1));
-  border-radius: 50%;
 }
 
 .tech-card h3 {
@@ -823,85 +505,310 @@ onBeforeUnmount(() => {
 }
 
 .tech-details {
-  list-style: none;
-  padding: 0;
   margin-top: 1rem;
+  padding-left: 1.5rem;
 }
 
 .tech-details li {
   margin-bottom: 0.5rem;
-  position: relative;
-  padding-left: 1.5rem;
 }
 
-.tech-details li:before {
-  content: '•';
-  position: absolute;
-  left: 0;
+/* Tech stack styles */
+.tech-stack-dark {
+  background-color: var(--card-background);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--card-border);
+}
+
+.tech-stack-dark h3 {
+  margin: 1.5rem 0;
   color: var(--primary-color);
-  font-size: 1.2rem;
 }
 
-/* Component details */
-.component-details {
-  list-style: none;
+.stack-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
 }
 
-.component-details li {
-  margin-bottom: 0.8rem;
+.stack-item {
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 1.5rem;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--card-border);
+}
+
+.stack-item h3 {
+  font-size: 1.3rem;
+  margin: 0 0 0.5rem 0;
+  color: var(--text-light);
+}
+
+/* Architecture styles */
+.arch-diagram {
+  background-color: var(--card-background);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  margin: 2rem 0;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--card-border);
+  text-align: center;
+}
+
+.diagram-placeholder {
+  height: 300px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: center;
+  font-style: italic;
+  color: var(--text-secondary);
+  border: 2px dashed var(--card-border);
+  border-radius: var(--border-radius);
 }
 
-.component-label {
-  font-weight: 600;
-  color: var(--primary-color);
-  margin-right: 0.5rem;
-  min-width: 170px;
+.arch-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
 }
 
 .arch-component {
   background-color: var(--card-background);
-  padding: 2rem;
   border-radius: var(--border-radius);
+  padding: 2rem;
   box-shadow: var(--box-shadow);
-  margin-bottom: 2rem;
   border: 1px solid var(--card-border);
 }
 
 .arch-component h3 {
   color: var(--primary-color);
   margin-bottom: 1.5rem;
-  position: relative;
-  padding-bottom: 0.5rem;
 }
 
-.arch-component h3:after {
+.component-details {
+  list-style: none;
+  padding: 0;
+}
+
+.component-details li {
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+
+.component-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  color: var(--text-light);
+}
+
+/* AI capabilities styles */
+.capabilities-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin: 2rem 0;
+}
+
+.capability-card {
+  background-color: var(--card-background);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--card-border);
+}
+
+.capability-card h3 {
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+}
+
+/* Roadmap timeline styles */
+.roadmap-timeline {
+  margin: 3rem 0;
+  position: relative;
+}
+
+.roadmap-timeline::before {
   content: '';
   position: absolute;
+  top: 0;
   bottom: 0;
-  left: 0;
-  width: 50px;
-  height: 3px;
-  background: var(--gradient-primary);
+  left: 20px;
+  width: 2px;
+  background: var(--primary-color);
 }
 
-/* Diagram placeholder */
-.diagram-placeholder {
-  width: 100%;
-  height: 300px;
+.timeline-phase {
+  position: relative;
+  padding-left: 50px;
+  margin-bottom: 3rem;
+}
+
+.timeline-phase:last-child {
+  margin-bottom: 0;
+}
+
+.phase-marker {
+  position: absolute;
+  left: 10px;
+  top: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--background-dark);
+  border: 2px solid var(--primary-color);
+}
+
+.timeline-phase.current .phase-marker {
+  background: var(--primary-color);
+}
+
+.phase-content {
   background-color: var(--card-background);
-  border: 1px dashed var(--card-border);
   border-radius: var(--border-radius);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 2rem;
-  color: var(--text-light);
-  font-style: italic;
+  padding: 2rem;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--card-border);
 }
 
-/* Responsive adjustments */
+.timeline-phase.current .phase-content {
+  border-color: var(--primary-color);
+}
+
+.phase-content h3 {
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+}
+
+.phase-features {
+  padding-left: 1.5rem;
+}
+
+.phase-features li {
+  margin-bottom: 0.5rem;
+}
+
+/* Beta timeline styles */
+.timeline {
+  margin: 3rem 0;
+  position: relative;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100px;
+  width: 2px;
+  background: var(--primary-color);
+}
+
+.timeline-item {
+  position: relative;
+  padding-left: 130px;
+  margin-bottom: 3rem;
+}
+
+.timeline-item:last-child {
+  margin-bottom: 0;
+}
+
+.timeline-date {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 90px;
+  text-align: right;
+  font-weight: 500;
+  color: var(--primary-color);
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: 97px;
+  top: 5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--background-dark);
+  border: 2px solid var(--primary-color);
+}
+
+.timeline-item.current::before {
+  background: var(--primary-color);
+}
+
+.timeline-content {
+  background-color: var(--card-background);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--card-border);
+}
+
+.timeline-item.current .timeline-content {
+  border-color: var(--primary-color);
+}
+
+.timeline-content h3 {
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+}
+
+/* Post-beta styles */
+.post-beta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin: 2rem 0;
+}
+
+.post-beta-card {
+  background-color: var(--card-background);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--card-border);
+}
+
+.post-beta-card h3 {
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+}
+
+.post-beta-card ul {
+  padding-left: 1.5rem;
+}
+
+.post-beta-card li {
+  margin-bottom: 0.5rem;
+}
+
+.tech-cta {
+  background-color: var(--card-background);
+  border-radius: var(--border-radius);
+  padding: 2rem;
+  text-align: center;
+  margin: 3rem 0;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--card-border);
+}
+
+.tech-cta h3 {
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+}
+
+.tech-cta p {
+  margin-bottom: 1.5rem;
+}
+
 @media (max-width: 992px) {
   .tech-details-layout {
     grid-template-columns: 1fr;
@@ -912,6 +819,22 @@ onBeforeUnmount(() => {
     top: 0;
     margin-bottom: 2rem;
     margin-right: 0;
+  }
+  
+  .timeline::before {
+    left: 80px;
+  }
+  
+  .timeline-item {
+    padding-left: 110px;
+  }
+  
+  .timeline-date {
+    width: 70px;
+  }
+  
+  .timeline-item::before {
+    left: 77px;
   }
 }
 </style> 

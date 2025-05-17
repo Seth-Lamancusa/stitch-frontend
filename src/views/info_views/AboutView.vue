@@ -1,49 +1,14 @@
 <template>
-  <div class="website-container">
-    <!-- Navigation -->
-    <header>
-      <nav class="main-nav">
-        <div class="logo">
-          <h1>Stitch</h1>
-        </div>
-        <ul class="nav-links" :class="{ active: isMenuOpen }">
-          <li><router-link to="/">Home</router-link></li>
-          <li><router-link to="/about" class="active">About Us</router-link></li>
-          <li><router-link to="/roadmap">Roadmap</router-link></li>
-          <li><router-link to="/community">Community</router-link></li>
-          <li><router-link to="/terms">Terms & Conditions</router-link></li>
-          <li><router-link to="/beta" class="join-beta-btn">Join Beta</router-link></li>
-          <li><router-link to="/messages" class="login-btn">Login</router-link></li>
-        </ul>
-        <div class="hamburger" @click="toggleMenu" :class="{ active: isMenuOpen }">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-      </nav>
-    </header>
-
-    <!-- About Hero Section -->
-    <section class="page-hero about-hero">
-      <div class="hero-content">
-        <h1>About Stitch</h1>
-        <p>Building the future of human-AI collaboration through multiplayer chat</p>
-      </div>
-    </section>
-
-    <!-- Beta Phase Banner -->
-    <section class="beta-banner">
-      <div class="container">
-        <div class="banner-content">
-          <div class="banner-icon">🚀</div>
-          <div class="banner-text">
-            <h3>Beta Phase: Expanding AI Capabilities</h3>
-            <p>During our beta phase, we're continuously improving our AI agents and multiplayer chat experience while gathering valuable user feedback.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
+  <InfoViewLayout
+    pageTitle="About Stitch"
+    pageSubtitle="Building the future of human-AI collaboration through multiplayer chat"
+    heroClass="about-hero"
+    :showBetaBanner="true"
+    betaBannerIcon="🚀"
+    betaBannerTitle="Beta Phase: Expanding AI Capabilities"
+    betaBannerText="During our beta phase, we're continuously improving our AI agents and multiplayer chat experience while gathering valuable user feedback."
+    footerTagline="The collaborative platform for humans and AI agents to chat, create, and solve problems together"
+  >
     <!-- Our Story Section -->
     <section class="our-story">
       <div class="container">
@@ -248,128 +213,14 @@
         <router-link to="/beta" class="btn primary-btn">Join Our Beta</router-link>
       </div>
     </section>
-
-    <!-- Footer -->
-    <footer>
-      <div class="footer-content">
-        <div class="footer-logo">
-          <h2>Stitch</h2>
-          <p>The collaborative platform for humans and AI agents to chat, create, and solve problems together</p>
-        </div>
-        <div class="footer-links">
-          <div class="footer-column">
-            <h3>Platform</h3>
-            <ul>
-              <li><router-link to="/">Home</router-link></li>
-              <li><router-link to="/about">About Us</router-link></li>
-              <li><router-link to="/roadmap">Roadmap</router-link></li>
-            </ul>
-          </div>
-
-          <div class="footer-column">
-            <h3>Community</h3>
-            <ul>
-              <li><router-link to="/beta">Join Beta</router-link></li>
-              <li><router-link to="/community">Community</router-link></li>
-              <li><a href="/static/html/contact.html">Contact Us</a></li>
-            </ul>
-          </div>
-          <div class="footer-column">
-            <h3>Legal</h3>
-            <ul>
-              <li><router-link to="/terms">Terms & Conditions</router-link></li>
-              <li><a href="/static/html/privacy.html">Privacy Policy</a></li>
-              <li><a href="/static/html/cookies.html">Cookie Policy</a></li>
-            </ul>
-          </div>
-        </div>
-      </div>
-      <div class="footer-bottom">
-        <p>&copy; 2023 Stitch. All rights reserved.</p>
-      </div>
-    </footer>
-  </div>
+  </InfoViewLayout>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue';
-
-// State for mobile menu toggle
-const isMenuOpen = ref(false);
-
-// Function to toggle mobile menu
-const toggleMenu = () => {
-  isMenuOpen.value = !isMenuOpen.value;
-};
-
-// Reset body and html styles
-const resetStyles = () => {
-  document.documentElement.style.height = 'auto';
-  document.documentElement.style.overflow = 'auto';
-  document.documentElement.style.position = 'static';
-  document.body.style.height = 'auto';
-  document.body.style.overflow = 'auto';
-  document.body.style.position = 'static';
-  document.body.style.overscrollBehavior = 'auto';
-  
-  // Get app container and reset its styles
-  const appElement = document.getElementById('app');
-  if (appElement) {
-    appElement.style.height = 'auto';
-    appElement.style.overflow = 'visible';
-    appElement.style.display = 'block';
-  }
-};
-
-onMounted(() => {
-  // Reset styles
-  resetStyles();
-  
-  // Add event listener to ensure styles remain reset
-  window.addEventListener('resize', resetStyles);
-});
-
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', resetStyles);
-});
+import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
 </script>
 
 <style>
-@import '../assets/website.css';
-
-/* Override the default body styles for this component */
-.website-container {
-  min-height: 100%;
-  width: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-}
-
-/* Remove all underlines from links */
-.website-container a {
-  text-decoration: none !important;
-}
-
-.website-container a:hover {
-  text-decoration: none !important;
-}
-
-/* Additional styles for hamburger menu in active state */
-.hamburger.active span:nth-child(1) {
-  transform: rotate(45deg) translate(5px, 5px);
-}
-
-.hamburger.active span:nth-child(2) {
-  opacity: 0;
-}
-
-.hamburger.active span:nth-child(3) {
-  transform: rotate(-45deg) translate(7px, -6px);
-}
-
 /* About Hero Section */
 .about-hero {
   background: linear-gradient(135deg, rgba(109, 72, 170, 0.2) 0%, rgba(157, 80, 187, 0.2) 100%);

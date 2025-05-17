@@ -1,49 +1,14 @@
 <template>
-  <div class="website-container">
-    <!-- Navigation -->
-    <header>
-      <nav class="main-nav">
-        <div class="logo">
-          <h1>The Source</h1>
-        </div>
-        <ul class="nav-links" :class="{ active: isMenuOpen }">
-          <li><router-link to="/">Home</router-link></li>
-          <li><router-link to="/about">About Us</router-link></li>
-          <li><router-link to="/roadmap">Roadmap</router-link></li>
-          <li><router-link to="/community">Community</router-link></li>
-          <li><router-link to="/terms">Terms & Conditions</router-link></li>
-          <li><router-link to="/beta" class="join-beta-btn active">Join Beta</router-link></li>
-          <li><router-link to="/messages" class="login-btn">Login</router-link></li>
-        </ul>
-        <div class="hamburger" @click="toggleMenu" :class="{ active: isMenuOpen }">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-      </nav>
-    </header>
-
-    <!-- Beta Hero Section -->
-    <section class="page-hero beta-hero">
-      <div class="hero-content">
-        <h1>Join Sitch Beta</h1>
-        <p>Help shape the future of decentralized communication for the Web3 ecosystem</p>
-      </div>
-    </section>
-
-    <!-- Beta Phase Banner -->
-    <section class="beta-banner">
-      <div class="container">
-        <div class="banner-content">
-          <div class="banner-icon">ℹ️</div>
-          <div class="banner-text">
-            <h3>Beta Infrastructure: Google Cloud Platform</h3>
-            <p>We're currently deploying on GCP for stability during the beta phase. Post-beta, we'll transition to a fully decentralized infrastructure. Your feedback will help us refine this transition.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
+  <InfoViewLayout
+    pageTitle="Join Stitch Beta"
+    pageSubtitle="Help shape the future of decentralized communication for the Web3 ecosystem"
+    heroClass="beta-hero"
+    :showBetaBanner="true"
+    betaBannerIcon="ℹ️"
+    betaBannerTitle="Beta Infrastructure: Google Cloud Platform"
+    betaBannerText="We're currently deploying on GCP for stability during the beta phase. Post-beta, we'll transition to a fully decentralized infrastructure. Your feedback will help us refine this transition."
+    footerTagline="Building the decentralized communication infrastructure for the blockchain era"
+  >
     <!-- Beta Sign Up Section -->
     <section class="beta-signup">
       <div class="container">
@@ -239,108 +204,14 @@
         <a href="#betaSignupForm" class="btn primary-btn">Apply Now</a>
       </div>
     </section>
-
-    <!-- Footer -->
-    <footer>
-      <div class="footer-content">
-        <div class="footer-logo">
-          <h2>The Source</h2>
-          <p>Building the decentralized communication infrastructure for the blockchain era</p>
-        </div>
-        <div class="footer-links">
-          <div class="footer-column">
-            <h3>Platform</h3>
-            <ul>
-              <li><router-link to="/">Home</router-link></li>
-              <li><router-link to="/about">About Us</router-link></li>
-              <li><router-link to="/roadmap">Technology</router-link></li>
-              <li><router-link to="/roadmap">Architecture</router-link></li>
-              <li><router-link to="/roadmap">Roadmap</router-link></li>
-            </ul>
-          </div>
-          <div class="footer-column">
-            <h3>Resources</h3>
-            <ul>
-              <li><router-link to="/beta">Join Beta</router-link></li>
-              <li><a href="/static/html/contact.html">Contact</a></li>
-            </ul>
-          </div>
-          <div class="footer-column">
-            <h3>Legal</h3>
-            <ul>
-              <li><router-link to="/terms">Terms of Service</router-link></li>
-              <li><a href="/static/html/privacy.html">Privacy Policy</a></li>
-              <li><a href="/static/html/cookies.html">Cookie Policy</a></li>
-            </ul>
-          </div>
-        </div>
-      </div>
-      <div class="footer-bottom">
-        <p>&copy; 2024 The Source. All rights reserved.</p>
-      </div>
-    </footer>
-  </div>
+  </InfoViewLayout>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue';
-
-// State for mobile menu toggle
-const isMenuOpen = ref(false);
-
-// Function to toggle mobile menu
-const toggleMenu = () => {
-  isMenuOpen.value = !isMenuOpen.value;
-};
-
-// Reset body and html styles
-const resetStyles = () => {
-  document.documentElement.style.height = 'auto';
-  document.documentElement.style.overflow = 'auto';
-  document.documentElement.style.position = 'static';
-  document.body.style.height = 'auto';
-  document.body.style.overflow = 'auto';
-  document.body.style.position = 'static';
-  document.body.style.overscrollBehavior = 'auto';
-  
-  // Get app container and reset its styles
-  const appElement = document.getElementById('app');
-  if (appElement) {
-    appElement.style.height = 'auto';
-    appElement.style.overflow = 'visible';
-    appElement.style.display = 'block';
-  }
-};
+import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
+import { onMounted } from 'vue';
 
 onMounted(() => {
-  // Reset styles
-  resetStyles();
-  
-  // Add event listener for window resize
-  window.addEventListener('resize', resetStyles);
-  
-  // Mobile navigation toggle
-  document.querySelector('.hamburger').addEventListener('click', function() {
-    this.classList.toggle('active');
-    document.querySelector('.nav-links').classList.toggle('active');
-  });
-  
-  // Smooth scroll to form when "Apply Now" is clicked
-  const applyNowBtn = document.querySelector('.cta .primary-btn');
-  if (applyNowBtn) {
-    applyNowBtn.addEventListener('click', function(e) {
-      e.preventDefault();
-      const formElement = document.getElementById('betaSignupForm');
-      if (formElement) {
-        formElement.scrollIntoView({ behavior: 'smooth' });
-        // Focus on the first input after scrolling
-        setTimeout(() => {
-          document.getElementById('email').focus();
-        }, 800);
-      }
-    });
-  }
-  
   // Beta signup form handling
   const betaForm = document.getElementById('betaSignupForm');
   const formStatus = document.getElementById('formStatus');
@@ -400,50 +271,26 @@ onMounted(() => {
       });
     });
   });
-});
-
-onBeforeUnmount(() => {
-  // Remove event listeners
-  window.removeEventListener('resize', resetStyles);
+  
+  // Smooth scroll to form when "Apply Now" is clicked
+  const applyNowBtn = document.querySelector('.cta .primary-btn');
+  if (applyNowBtn) {
+    applyNowBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      const formElement = document.getElementById('betaSignupForm');
+      if (formElement) {
+        formElement.scrollIntoView({ behavior: 'smooth' });
+        // Focus on the first input after scrolling
+        setTimeout(() => {
+          document.getElementById('email').focus();
+        }, 800);
+      }
+    });
+  }
 });
 </script>
 
 <style>
-@import '../assets/website.css';
-
-/* Override the default body styles for this component */
-.website-container {
-  min-height: 100%;
-  width: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-}
-
-/* Remove all underlines from links */
-.website-container a {
-  text-decoration: none !important;
-}
-
-.website-container a:hover {
-  text-decoration: none !important;
-}
-
-/* Additional styles for hamburger menu in active state */
-.hamburger.active span:nth-child(1) {
-  transform: rotate(45deg) translate(5px, 5px);
-}
-
-.hamburger.active span:nth-child(2) {
-  opacity: 0;
-}
-
-.hamburger.active span:nth-child(3) {
-  transform: rotate(-45deg) translate(7px, -6px);
-}
-
 /* Beta-specific styles */
 .beta-signup {
   padding: 5rem 2rem;

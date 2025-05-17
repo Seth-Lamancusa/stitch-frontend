@@ -1,13 +1,14 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useStore } from 'vuex';
+import { useRouter } from 'vue-router';
 
 /**
  * TabNavigation component provides a UI for switching between 
- * public and private chat modes.
+ * different message tabs (public, direct, profile, local).
  * 
  * Props:
- * - activeTab: Current active tab, either 'public' or 'private'
+ * - activeTab: Current active tab
  * 
  * Events:
  * - tab-change: Emitted when a tab is selected, with the tab name as payload
@@ -22,14 +23,18 @@ const props = defineProps({
 
 const emit = defineEmits(['tab-change']);
 const store = useStore();
+const router = useRouter();
 
 /**
  * Changes the active tab and updates the store state
- * @param {string} tab - The tab to switch to ('public' or 'private')
+ * @param {string} tab - The tab to switch to
  */
 const changeTab = (tab) => {
   emit('tab-change', tab);
   store.dispatch('ui/setActiveTab', tab);
+  
+  // Navigate to the tab-specific route
+  router.push(`/messages/${tab === 'private' ? 'direct' : tab}`);
 };
 
 </script>
@@ -40,14 +45,28 @@ const changeTab = (tab) => {
       :class="['tab-button', { active: activeTab === 'public' }]"
       @click="changeTab('public')"
     >
-      Public Messages
+      Public
     </button>
     
     <button 
       :class="['tab-button', { active: activeTab === 'private' }]"
       @click="changeTab('private')"
     >
-      Direct Messages
+      Direct
+    </button>
+    
+    <button 
+      :class="['tab-button', { active: activeTab === 'profile' }]"
+      @click="changeTab('profile')"
+    >
+      Profile
+    </button>
+    
+    <button 
+      :class="['tab-button', { active: activeTab === 'local' }]"
+      @click="changeTab('local')"
+    >
+      Local
     </button>
   </div>
 </template>
@@ -69,7 +88,7 @@ const changeTab = (tab) => {
   transition: all var(--transition-fast);
   flex: 1;
   text-align: center;
-  max-width: 180px;
+  max-width: 120px;
 }
 
 .tab-button.active {

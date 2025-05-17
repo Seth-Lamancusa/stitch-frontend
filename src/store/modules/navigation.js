@@ -5,6 +5,7 @@ export default {
     selectedMessageId: null,
     isSelectedMessageLoading: false,
     isReplying: false,
+    previousRoute: '/feed', // Default to feed as fallback
     replySettings: {
       isPublic: true,
       recipients: []  // Will now store objects with {uid, display_name, user_tag} instead of strings
@@ -22,6 +23,10 @@ export default {
     
     SET_REPLYING(state, isReplying) {
       state.isReplying = isReplying;
+    },
+    
+    SET_PREVIOUS_ROUTE(state, route) {
+      state.previousRoute = route;
     },
     
     SET_REPLY_PUBLIC(state, isPublic) {
@@ -121,6 +126,10 @@ export default {
     removeRecipient({ commit }, index) {
       commit('REMOVE_REPLY_RECIPIENT', index);
     },
+    
+    setPreviousRoute({ commit }, route) {
+      commit('SET_PREVIOUS_ROUTE', route);
+    }
   },
   
   getters: {
@@ -139,6 +148,8 @@ export default {
       return message ? message.content_author : '';
     },
     
-    isSelectedMessageLoading: state => state.isSelectedMessageLoading
+    isSelectedMessageLoading: state => state.isSelectedMessageLoading,
+    
+    previousRoute: state => state.previousRoute
   }
 }

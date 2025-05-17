@@ -88,10 +88,76 @@ export default {
     return response;
   },
   
-  // Get direct messages for current user
-  async getDirectMessages() {
+  // Get public messages (for Feed tab)
+  async getPublicMessages(limit = 10, cursor = null) {
     const headers = await getAuthHeaders();
-    return axios.get(`${apiBaseUrl}/messages/direct`, { headers });
+    let url = `${apiBaseUrl}/tabs/feed?limit=${limit}`;
+    
+    // Add cursor parameter if provided
+    if (cursor !== null) {
+      url += `&cursor=${cursor}`;
+    }
+    
+    const response = await axios.get(url, { headers });
+    console.log('[DEBUG] MessageService - getPublicMessages response:', 
+      response.data.messages?.length > 0 ? 
+      {count: response.data.messages.length, firstMessage: response.data.messages[0], nextCursor: response.data.next_cursor} : 
+      {count: 0, nextCursor: response.data.next_cursor});
+    return response;
+  },
+  
+  // Get curated messages (for Curated tab)
+  async getCuratedMessages(limit = 10, cursor = null) {
+    const headers = await getAuthHeaders();
+    let url = `${apiBaseUrl}/tabs/curated?limit=${limit}`;
+    
+    // Add cursor parameter if provided
+    if (cursor !== null) {
+      url += `&cursor=${cursor}`;
+    }
+    
+    const response = await axios.get(url, { headers });
+    console.log('[DEBUG] MessageService - getCuratedMessages response:', 
+      response.data.messages?.length > 0 ? 
+      {count: response.data.messages.length, firstMessage: response.data.messages[0], nextCursor: response.data.next_cursor} : 
+      {count: 0, nextCursor: response.data.next_cursor});
+    return response;
+  },
+  
+  // Get direct messages for current user
+  async getDirectMessages(limit = 10, cursor = null) {
+    const headers = await getAuthHeaders();
+    let url = `${apiBaseUrl}/tabs/direct?limit=${limit}`;
+    
+    // Add cursor parameter if provided
+    if (cursor !== null) {
+      url += `&cursor=${cursor}`;
+    }
+    
+    const response = await axios.get(url, { headers });
+    console.log('[DEBUG] MessageService - getDirectMessages response:', 
+      response.data.messages?.length > 0 ? 
+      {count: response.data.messages.length, firstMessage: response.data.messages[0], nextCursor: response.data.next_cursor} : 
+      {count: 0, nextCursor: response.data.next_cursor});
+    return response;
+  },
+  
+  // Get messages authored by the current user (for Profile tab)
+  async getUserMessages(limit = 10, cursor = null) {
+    const headers = await getAuthHeaders();
+    let url = `${apiBaseUrl}/tabs/by-user?limit=${limit}`;
+    
+    // Add cursor parameter if provided
+    if (cursor !== null) {
+      url += `&cursor=${cursor}`;
+    }
+    
+    const response = await axios.get(url, { headers });
+    console.log('[DEBUG] MessageService - getUserMessages response:', 
+      response.data.messages?.length > 0 ? 
+      {count: response.data.messages.length, firstMessage: response.data.messages[0], nextCursor: response.data.next_cursor} : 
+      {count: 0, nextCursor: response.data.next_cursor});
+    return response;
   },
   
   // For backward compatibility - alias to getDirectMessages
