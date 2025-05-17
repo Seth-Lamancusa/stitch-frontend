@@ -51,7 +51,7 @@
               class="recipients-toggle author-toggle"
               ref="authorButton"
             >
-              Recipients ({{ message.recipients.length }})
+              Recipients {{ typeof message.recipients === 'object' ? `(${message.recipients.length})` : '' }}
             </button>
           </div>
           
@@ -64,6 +64,7 @@
               </div>
               <ul class="recipients-list">
                 <li 
+                  v-if="typeof message.recipients === 'object' && message.recipients !== null"
                   v-for="(recipient, index) in message.recipients" 
                   :key="recipient.uid || index" 
                   class="recipient-item"
@@ -71,7 +72,10 @@
                   <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
                   <span class="recipient-tag">@{{ recipient.user_tag }}</span>
                 </li>
-                <li v-if="message.recipients.length === 0" class="no-recipients">
+                <li v-else-if="typeof message.recipients === 'string'" class="no-recipients">
+                  {{ message.recipients }}
+                </li>
+                <li v-else class="no-recipients">
                   No specific recipients
                 </li>
               </ul>
@@ -129,6 +133,26 @@
           <div class="reply-count">
             {{ totalReplies }} {{ totalReplies === 1 ? 'reply' : 'replies' }}
           </div>
+          
+          <!-- Copy JSON Button -->
+          <button 
+            @click.stop="copyMessageJson" 
+            class="json-button"
+            title="Copy message JSON to clipboard"
+          >
+            <span class="json-icon">{ }</span>
+            Copy JSON
+          </button>
+          
+          <!-- Copy Text Button -->
+          <button 
+            @click.stop="copyMessageText" 
+            class="text-button"
+            title="Copy message text with metadata to clipboard"
+          >
+            <span class="text-icon">📝</span>
+            Copy Text
+          </button>
           
           <!-- Read status toggle for recipients -->
           <div v-if="isUserRecipient && message.is_read !== null" class="read-status-toggle">
@@ -338,6 +362,12 @@ export default {
     const isUserRecipient = computed(() => {
       if (!currentUser.value) return false;
       
+      // Check if recipients array exists
+      if (!props.message.recipients) return false;
+      
+      // If recipients is a string message, this user doesn't have access
+      if (typeof props.message.recipients === 'string') return false;
+      
       // Check if the current user is in the recipients list
       return props.message.recipients.some(recipient => {
         // Check by UID first (most reliable)
@@ -388,6 +418,11 @@ export default {
     // Get recipients excluding the current user
     const recipientsExcludingUser = computed(() => {
       if (!currentUser.value || !props.message.recipients) {
+        return [];
+      }
+      
+      // If recipients is a string message, return empty array
+      if (typeof props.message.recipients === 'string') {
         return [];
       }
       
@@ -485,6 +520,11 @@ export default {
     });
     
     const hasRecipients = computed(() => {
+      // If recipients is a string (access message), display it anyway
+      if (typeof props.message.recipients === 'string') {
+        return true;
+      }
+      // Otherwise check if we have recipients array with items
       return props.message.recipients && props.message.recipients.length > 0;
     });
     
@@ -590,6 +630,72 @@ export default {
       }
     };
     
+    // Add method to copy JSON to clipboard
+    const copyMessageJson = () => {
+      try {
+        // Get the full message object from the store
+        const messageJson = JSON.stringify(props.message, null, 2);
+        navigator.clipboard.writeText(messageJson)
+          .then(() => {
+            // Show a brief feedback message
+            alert('Message JSON copied to clipboard');
+          })
+          .catch(err => {
+            console.error('Failed to copy JSON: ', err);
+            alert('Failed to copy JSON to clipboard');
+          });
+      } catch (error) {
+        console.error('Error copying message JSON:', error);
+        alert('Error preparing message JSON');
+      }
+    };
+    
+    // Add method to copy formatted text to clipboard
+    const copyMessageText = () => {
+      try {
+        const message = props.message;
+        
+        // Handle recipients field based on its type
+        let recipientsText = 'Recipients: None';
+        if (message.recipients) {
+          if (typeof message.recipients === 'string') {
+            recipientsText = `Recipients: ${message.recipients}`;
+          } else if (Array.isArray(message.recipients) && message.recipients.length > 0) {
+            recipientsText = `Recipients: ${message.recipients.map(r => r.display_name || r.user_tag).join(', ')}`;
+          }
+        }
+        
+        // Create a metadata header with important fields
+        const metadata = [
+          '[METADATA HEADER]',
+          `ID: ${message.id || 'N/A'}`,
+          `Author: ${message.author_display_name || 'Unknown'} ${message.author_user_tag ? `(@${message.author_user_tag})` : ''}`,
+          `Timestamp: ${new Date(message.timestamp).toLocaleString()}`,
+          `Visibility: ${message.public ? 'Public' : 'Private'}`,
+          recipientsText,
+          message.title ? `Title: ${message.title}` : '',
+          message.description ? `Description: ${message.description}` : '',
+          '[/METADATA HEADER]\n\n'
+        ].filter(Boolean).join('\n');
+
+        // Combine metadata with the actual message content
+        const fullText = `${metadata}${message.content || ''}`;
+        
+        navigator.clipboard.writeText(fullText)
+          .then(() => {
+            // Show a brief feedback message
+            alert('Message text copied to clipboard');
+          })
+          .catch(err => {
+            console.error('Failed to copy text: ', err);
+            alert('Failed to copy text to clipboard');
+          });
+      } catch (error) {
+        console.error('Error copying message text:', error);
+        alert('Error preparing message text');
+      }
+    };
+    
     // Initialize formatters when the component is first created
     onMounted(() => {
       // Initialize formatters if not already done
@@ -638,7 +744,9 @@ export default {
       saveError,
       titleInput,
       isTogglingReadStatus,
-      toggleReadStatus
+      toggleReadStatus,
+      copyMessageJson,
+      copyMessageText
     };
   },
   
@@ -1134,5 +1242,29 @@ export default {
 
 .save-status.error {
   background-color: var(--card-background-error, #ffcccc);
+}
+
+.json-button, .text-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  padding: 5px 8px;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--color-text-secondary);
+}
+
+.json-button:hover, .text-button:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+}
+
+.json-icon, .text-icon {
+  font-size: var(--font-size-sm);
+  line-height: 1;
 }
 </style>

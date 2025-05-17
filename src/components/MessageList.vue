@@ -111,8 +111,8 @@ function getReplyCount(message) {
 }
 
 // Navigate to thread view when a thread is clicked
-const viewThread = (threadId) => {
-  router.push({ name: 'thread', params: { id: threadId } });
+const viewMessage = (messageId) => {
+  router.push({ path: `/messages/${messageId}` });
 };
 
 // Create a new message thread
@@ -222,7 +222,7 @@ watch(activeTab, async () => {
         class="message-item"
         :class="{ 'pinned-message': thread.is_pinned }"
         :data-thread-id="thread.id"
-        @click="viewThread(thread.id)"
+        @click="viewMessage(thread.id)"
       >
         <div class="message-header">
           <h3 class="message-title">

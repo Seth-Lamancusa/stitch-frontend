@@ -78,6 +78,7 @@
             
             <div class="recipients-list">
               <div 
+                v-if="typeof importRecipients === 'object' && importRecipients !== null"
                 v-for="(recipient, index) in importRecipients" 
                 :key="index" 
                 class="recipient-tag"
@@ -86,7 +87,11 @@
                 <button @click="() => removeImportRecipient(index)" class="remove-recipient-btn">×</button>
               </div>
               
-              <div v-if="importRecipients.length === 0" class="no-recipients">
+              <div v-else-if="typeof importRecipients === 'string'" class="no-recipients">
+                {{ importRecipients }}
+              </div>
+              
+              <div v-else-if="importRecipients.length === 0" class="no-recipients">
                 No recipients {{ importIsPublic ? '(public thread)' : '' }}
               </div>
             </div>
@@ -225,7 +230,7 @@ const cancelThread = () => {
   }
   
   // Navigate back to chat list
-  router.push('/chat');
+  router.push('/messages');
 };
 
 const handleSendSuccess = async (newMessage) => {
@@ -234,7 +239,7 @@ const handleSendSuccess = async (newMessage) => {
     isCreatingThread.value = true;
     
     // Redirect to the new thread
-    router.replace({ name: 'thread', params: { id: newMessage.id }});
+    router.replace({ path: `/messages/${newMessage.id}` });
   } catch (error) {
     console.error('Error handling message success:', error);
     store.commit('ui/SET_ERROR', 'Failed to complete thread creation.');
@@ -327,7 +332,7 @@ const importFromChatGPT = async () => {
     importRecipients.value = [];
     
     // Redirect to the new thread
-    router.replace({ name: 'thread', params: { id: newMessage.id }});
+    router.replace({ path: `/messages/${newMessage.id}` });
   } catch (error) {
     console.error('Error importing from ChatGPT:', error);
     store.commit('ui/SET_ERROR', 'Failed to import from ChatGPT');

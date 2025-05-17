@@ -409,7 +409,7 @@ watch(selectedMessageId, (newId) => {
 // Navigation
 const backToList = async () => {
   // Navigate back to list view - keep cache for faster return
-  router.push('/chat');
+  router.push('/messages');
 };
 
 // Message selection and reply
@@ -473,7 +473,7 @@ const deleteMessage = async () => {
         store.dispatch('navigation/selectMessage', deletedParentId);
       } else {
         // Otherwise go back to thread list
-        router.push('/chat');
+        router.push('/messages');
       }
     }
     
@@ -481,13 +481,13 @@ const deleteMessage = async () => {
     await nextTick();
     if (displayedMessages.value.length === 0) {
       // If there are no more displayed messages, go back to thread list
-      router.push('/chat');
+      router.push('/messages');
     } else {
       // Refresh the thread or go back to thread list if root was deleted
       if (deletedParentId) {
         refreshThread();
       } else {
-        router.push('/chat');
+        router.push('/messages');
       }
     }
     

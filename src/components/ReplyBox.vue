@@ -112,6 +112,7 @@
           
           <div class="recipients-list">
             <div 
+              v-if="typeof recipients === 'object' && recipients !== null"
               v-for="(recipient, index) in recipients" 
               :key="recipient.uid || index" 
               class="recipient-tag"
@@ -125,7 +126,11 @@
               </div>
             </div>
             
-            <div v-if="recipients.length === 0" class="no-recipients">
+            <div v-else-if="typeof recipients === 'string'" class="no-recipients">
+              {{ recipients }}
+            </div>
+            
+            <div v-else-if="recipients && recipients.length === 0" class="no-recipients">
               No recipients {{ isPublic ? '(public reply)' : '' }}
             </div>
           </div>

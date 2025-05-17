@@ -19,10 +19,18 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
-    path: '/thread/:id',
-    name: 'thread',
+    path: '/messages/:id',
+    name: 'message',
     component: ThreadView,
     meta: { requiresAuth: false }
+  },
+  {
+    path: '/thread/:id',
+    name: 'thread',
+    redirect: to => {
+      // Redirect old /thread/:id routes to /messages/:id
+      return `/messages/${to.params.id}`;
+    }
   },
   {
     path: '/new-thread',
