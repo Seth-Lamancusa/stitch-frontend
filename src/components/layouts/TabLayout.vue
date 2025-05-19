@@ -126,6 +126,9 @@ const handleLogin = async () => {
     // Handle redirect if there was one
     if (route.query.redirect) {
       router.push(route.query.redirect);
+    } else {
+      // Default redirect to feed page
+      router.push('/feed');
     }
   } catch (e) {
     console.error("Login error:", e);
@@ -163,12 +166,6 @@ const navigateToTab = (tab) => {
 
 // Load messages for this tab
 onMounted(async () => {
-  // Special handling for profile tab which requires authentication
-  if (props.activeTab === 'profile' && !user.value) {
-    console.log("User not logged in - profile messages unavailable");
-    return;
-  }
-  
   // Dispatch the provided fetch action
   if (props.fetchAction && props.activeTab !== 'local') {
     await store.dispatch(props.fetchAction);

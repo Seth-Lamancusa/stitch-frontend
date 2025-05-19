@@ -49,6 +49,25 @@ export default {
       if (!message.child_ids) {
         message.child_ids = [];
       }
+
+      // Convert single for_tab to array if it's a string
+      if (message.for_tab && typeof message.for_tab === 'string') {
+        message.for_tabs = [message.for_tab];
+        // Keep for_tab for backward compatibility
+        message.for_tab = message.for_tab;
+      } else if (message.for_tab && Array.isArray(message.for_tab)) {
+        message.for_tabs = [...message.for_tab];
+        // Set for_tab to the first element for backward compatibility
+        message.for_tab = message.for_tab[0];
+      } else if (message.for_tabs && Array.isArray(message.for_tabs)) {
+        // Already using for_tabs array, keep it
+        // Set for_tab to the first element for backward compatibility if not empty
+        if (message.for_tabs.length > 0) {
+          message.for_tab = message.for_tabs[0];
+        }
+      } else {
+        message.for_tabs = [];
+      }
       
       // Check if message already exists in store - if so, merge it
       const existingMessage = state.messages[message.id];
@@ -63,12 +82,24 @@ export default {
           mergedChildIds = [...new Set([...existingMessage.child_ids, ...message.child_ids])];
         }
         
+        // Merge for_tabs arrays without duplicates
+        let mergedForTabs = [...(message.for_tabs || [])];
+        if (existingMessage.for_tabs && existingMessage.for_tabs.length > 0) {
+          mergedForTabs = [...new Set([...existingMessage.for_tabs, ...(message.for_tabs || [])])];
+        }
+
         // Create the merged message
         const mergedMessage = {
           ...existingMessage, // Start with existing message properties
           ...message,         // Override with new message properties
+          for_tabs: mergedForTabs, // Use the merged for_tabs array
           child_ids: mergedChildIds // Use combined child_ids
         };
+        
+        // Set for_tab to the first element of for_tabs for backward compatibility
+        if (mergedForTabs.length > 0) {
+          mergedMessage.for_tab = mergedForTabs[0];
+        }
         
         // Default branch_child to first child if there are children and no previous selection
         const hasChildren = mergedChildIds.length > 0;
@@ -95,7 +126,10 @@ export default {
         }
         
         // Add to store
-        state.messages[message.id] = { ...message };
+        state.messages[message.id] = { 
+          ...message,
+          for_tabs: message.for_tabs || [] // Ensure for_tabs is set
+        };
       }
     },
     
@@ -559,8 +593,8 @@ export default {
         
         // For Feed tab, special behavior:
         // - First call (cursor = null): get ALL pinned messages
-        // - Second call (cursor = 0): get first batch of regular public messages
-        // - Subsequent calls (cursor = last message ID): get next batch of regular messages
+        // - Second call (cursor = "PINNED_DONE"): get first batch of regular public messages
+        // - Subsequent calls (cursor = timestamp string): get next batch of regular messages
         
         console.log(`[DEBUG] Fetching feed messages - cursor: ${cursor}`);
         
@@ -568,6 +602,8 @@ export default {
         const messages = response.data.messages || [];
         const exhausted = response.data.exhausted || false;
         const nextCursor = response.data.next_cursor;
+        
+        console.log(`[DEBUG] Feed response - messages: ${messages.length}, exhausted: ${exhausted}, nextCursor: ${nextCursor}`);
         
         // Commit all messages to store
         commit('SET_MESSAGES', messages);

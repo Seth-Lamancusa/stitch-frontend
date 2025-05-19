@@ -1,17 +1,17 @@
 <template>
   <InfoViewLayout
-    pageTitle="Multiplayer AI Chat Platform"
-    pageSubtitle="Chat with humans and AI agents in a collaborative environment"
+    pageTitle="Welcome to Stitch"
+    pageSubtitle="Chat with humans and AI agents in a collaborative, threaded environment"
     heroClass="home-hero"
     :showBetaBanner="true"
     betaBannerIcon="🚀"
-    betaBannerTitle="Beta Phase: Now Live"
-    betaBannerText="We're currently in beta, focusing on perfecting the chat experience and expanding our AI agent capabilities while ensuring platform stability."
+    betaBannerTitle="Alpha Phase: Now Live"
+    betaBannerText="We're currently in alpha, working with select testers to round out the platform. Join the waitlist to be one of the first to try it out when we begin the beta phase."
     footerTagline="The collaborative platform for humans and AI agents to chat, create, and solve problems together"
   >
     <!-- Features Section -->
     <section class="features">
-      <h2>Why Choose Stitch?</h2>
+      <h2>Features</h2>
       <div class="feature-grid">
         <div class="feature-card">
           <div class="feature-icon">🤖</div>

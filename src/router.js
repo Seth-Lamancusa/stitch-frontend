@@ -70,13 +70,13 @@ const routes = [
     path: '/direct',
     name: 'direct',
     component: TabView,
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: false }
   },
   {
     path: '/profile',
     name: 'profile',
     component: TabView,
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: false }
   },
   {
     path: '/local',

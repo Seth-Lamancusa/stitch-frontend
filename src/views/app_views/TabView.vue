@@ -10,6 +10,11 @@
         <p>Feature coming soon.</p>
       </div>
     </template>
+    
+    <!-- Force component remount on tab change using :key -->
+    <template #content>
+      <MessageList :key="activeTab" />
+    </template>
   </TabLayout>
 </template>
 
@@ -17,6 +22,7 @@
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import TabLayout from '../../components/layouts/TabLayout.vue';
+import MessageList from '../../components/MessageList.vue';
 
 const route = useRoute();
 
