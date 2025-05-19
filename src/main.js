@@ -27,6 +27,13 @@ const initApp = async () => {
     await store.dispatch('auth/initAuth');
     console.log("Auth store initialized");
     
+    // Fetch unread message count if user is logged in
+    const currentUser = store.getters['auth/user'];
+    if (currentUser) {
+      console.log("User is logged in, fetching unread message count");
+      await store.dispatch('messages/fetchUnreadMessageCount');
+    }
+    
     // Initialize the formatters
     initFormatters();
     console.log("Content formatters initialized");

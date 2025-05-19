@@ -3,14 +3,6 @@
     :activeTab="activeTab" 
     :fetchAction="fetchAction"
   >
-    <!-- Add any tab-specific slots if needed -->
-    <template v-if="activeTab === 'local'" #tab-intro>
-      <div class="local-message-info">
-        <p>This tab will display messages saved to your local filesystem.</p>
-        <p>Feature coming soon.</p>
-      </div>
-    </template>
-    
     <!-- Force component remount on tab change using :key -->
     <template #content>
       <MessageList :key="activeTab" />
@@ -65,5 +57,25 @@ const fetchAction = computed(() => {
   color: var(--color-text-secondary);
   background-color: var(--color-surface-light);
   border-bottom: 1px solid var(--color-border);
+}
+
+.tab-info {
+  max-width: 600px;
+  margin: 20px auto;
+  padding: 16px 20px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  background-color: var(--color-surface-light);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.tab-info p, .local-message-info p {
+  margin: 0 0 8px 0;
+}
+
+.tab-info p:last-child, .local-message-info p:last-child {
+  margin-bottom: 0;
 }
 </style> 

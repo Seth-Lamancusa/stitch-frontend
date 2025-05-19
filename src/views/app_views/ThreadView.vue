@@ -1,13 +1,13 @@
 <template>
-  <div class="thread-view">
+  <div class="thread-view" :class="{'positioning': isPositioning}">
     <!-- Loading states -->
     <div v-if="!isAuthReady" class="auth-loading">
       <p>Loading...</p>
     </div>
     
-    <div v-else-if="isLoading || isInitialLoading || isLoadingFromUrl" class="loading-indicator">
+    <div v-else-if="isLoading || isInitialLoading || isLoadingFromUrl || isInitialContentLoading" class="loading-indicator">
       <div class="loading-spinner"></div>
-      <p>Loading thread...</p>
+      <p>{{ isInitialContentLoading ? 'Loading thread content...' : 'Loading thread...' }}</p>
     </div>
     
     <div v-else-if="error" class="error-message">
@@ -36,6 +36,9 @@
           ref="topMarker"
           :key="`top-marker-${displayedMessages.length > 0 ? displayedMessages[0].id : 'empty'}`"
         />
+        
+        <!-- Dedicated scroll anchor at top of messages -->
+        <div ref="scrollAnchor" class="scroll-anchor"></div>
       
         <!-- Thread messages - showing single branch -->
         <template v-for="(message, index) in displayedMessages" :key="message.id">
@@ -126,6 +129,14 @@ const messageList = ref(null);
 let unsubscribeMessages = null;
 const isLoadingFromUrl = ref(false); // Track if we're loading a thread from URL
 const isDeleting = ref(false);
+
+// Add new loading state for initial content loading
+const isInitialContentLoading = ref(false);
+
+// Scroll anchor ref
+const scrollAnchor = ref(null);
+const hasInitiallyScrolled = ref(false);
+const isPositioning = ref(false);
 
 // Add component-level loading states
 const isLoadingParents = ref(false);
@@ -221,10 +232,10 @@ const topMarkerState = computed(() => {
   return state;
 });
 
-// Add the consolidated thread rendering and subscription function
-const renderThreadAndSubscribe = async () => {
+// Update the consolidated thread rendering function to mark messages as read
+const renderThread = async (preserveScroll = false) => {
   try {
-    console.log(`[ThreadView] Rendering thread for messageId: ${messageId.value}`);
+    console.log(`[ThreadView] Rendering thread for messageId: ${messageId.value} (preserveScroll: ${preserveScroll})`);
     
     // Guard against missing messageId
     if (!messageId.value) {
@@ -243,15 +254,17 @@ const renderThreadAndSubscribe = async () => {
     
     console.log(`[ThreadView] Thread rendered with ${messages.length} messages`);
     
-    // 4. Set up WebSocket subscription only after messages are loaded
+    // 4. Mark visible messages as read
     if (messages.length > 0) {
-      setupWebSocketSubscription();
-      
-      // 5. Scroll to center the message ID from the URL
-      scrollToMessageId();
+      await markMessagesAsRead(messages);
+    }
+    
+    // 5. Scroll to center the message ID from the URL if messages exist and not preserving scroll
+    if (messages.length > 0 && !preserveScroll) {
+      scrollToMessageId(messageId.value);
     }
   } catch (error) {
-    console.error(`[ThreadView] Error in renderThreadAndSubscribe:`, error);
+    console.error(`[ThreadView] Error in renderThread:`, error);
   }
 };
 
@@ -354,8 +367,13 @@ onMounted(async () => {
     });
   }
   
-  // Use consolidated function for initial render
-  await renderThreadAndSubscribe();
+  // Use loadInitialContent for initial thread loading
+  if (messageId.value) {
+    await loadInitialContent(messageId.value);
+    
+    // After initial content is loaded and rendered, ensure correct scroll position
+    ensureCorrectScroll();
+  }
   
   // Add keyboard navigation event listener
   document.addEventListener('keydown', handleKeyDown);
@@ -385,12 +403,10 @@ onBeforeUnmount(() => {
   }
 });
 
-// Watch for route changes - simplify to just load message if needed
+// Watch for route changes - use loadInitialContent for new thread IDs
 watch(messageId, async (newId) => {
   if (newId) {
-    await renderThreadAndSubscribe();
-    // Ensure we scroll to the message even if it was already loaded
-    scrollToMessageId();
+    await loadInitialContent(newId);
   }
 });
 
@@ -402,8 +418,13 @@ watch(selectedMessageId, () => {
 
 // Add new watch to center the selected message when it changes
 watch(selectedMessageId, (newId) => {
-  // Remove automatic scrolling on selection change
-  // This allows users to select messages without disrupting their scroll position
+  if (newId && hasInitiallyScrolled.value) {
+    // If we've already loaded the initial content, ensure correct scroll position
+    // When user selects a different message
+    nextTick(() => {
+      ensureCorrectScroll();
+    });
+  }
 }, { immediate: true });
 
 // Navigation
@@ -413,6 +434,147 @@ const backToList = async () => {
   
   // Navigate back to the previous route - keep cache for faster return
   router.push(prevRoute || '/feed'); // Fallback to feed if no previous route
+};
+
+// Update the loadInitialContent function to mark messages as read after loading
+
+const loadInitialContent = async (targetMessageId) => {
+  if (!targetMessageId) {
+    console.error('[ThreadView] Cannot load initial content: No target message ID provided');
+    return;
+  }
+  
+  try {
+    // Set loading state
+    isInitialContentLoading.value = true;
+    hasInitiallyScrolled.value = false;
+    isPositioning.value = true; // Hide content during initial rendering
+    
+    console.log(`[ThreadView] Loading initial content for message ID: ${targetMessageId}`);
+    
+    // 1. First load the target message if needed
+    await loadMessageIfNeeded(targetMessageId);
+    
+    // 2. Get the message from the store
+    const targetMessage = store.getters['messages/getMessage'](targetMessageId);
+    if (!targetMessage) {
+      console.error(`[ThreadView] Target message ${targetMessageId} not found after loading`);
+      isInitialContentLoading.value = false;
+      isPositioning.value = false; // Show content in case of error
+      return;
+    }
+    
+    // 3. Check if we need to load parent messages
+    const needParents = !targetMessage.parent_id || await checkNeedMoreParents(targetMessage);
+    
+    // 4. Check if we need to load child messages
+    const needChildren = !targetMessage.child_ids || targetMessage.child_ids.length === 0 || await checkNeedMoreChildren(targetMessage);
+    
+    // 5. Load messages in parallel, but only if needed
+    const loadingPromises = [];
+    const loadedMessages = [];
+    
+    if (needParents) {
+      console.log(`[ThreadView] Loading parent messages for ${targetMessageId}`);
+      const parentMessages = await store.dispatch('messages/loadMessageBranchUp', {
+        messageId: targetMessageId,
+        depth: 5
+      });
+      
+      if (parentMessages && parentMessages.length > 0) {
+        loadedMessages.push(...parentMessages);
+      }
+    } else {
+      console.log(`[ThreadView] Sufficient parent messages already in cache for ${targetMessageId}`);
+    }
+    
+    if (needChildren) {
+      console.log(`[ThreadView] Loading child messages for ${targetMessageId}`);
+      const childMessages = await store.dispatch('messages/loadMessageBranchDown', {
+        messageId: targetMessageId,
+        depth: 5
+      });
+      
+      if (childMessages && childMessages.length > 0) {
+        loadedMessages.push(...childMessages);
+      }
+    } else {
+      console.log(`[ThreadView] Sufficient child messages already in cache for ${targetMessageId}`);
+    }
+    
+    // 6. Mark loaded messages as read
+    if (loadedMessages.length > 0) {
+      await markMessagesAsRead(loadedMessages);
+    }
+    
+    // 7. Prepare branch path for rendering
+    await store.dispatch('messages/prepareBranchPath', targetMessageId);
+    
+    // 8. Select the target message before rendering
+    // This ensures the scroll anchor will be positioned correctly on initial render
+    store.dispatch('navigation/selectMessage', targetMessageId);
+    
+    // 9. Render the thread
+    await renderThread();
+  } catch (error) {
+    console.error('[ThreadView] Error loading initial content:', error);
+  } finally {
+    isInitialContentLoading.value = false;
+  }
+};
+
+// Helper function to check if we need to load more parent messages
+const checkNeedMoreParents = async (message) => {
+  if (!message.parent_id) return false;
+  
+  // Check if parent message is in the store
+  const parentMessage = store.getters['messages/getMessage'](message.parent_id);
+  if (!parentMessage) return true;
+  
+  // Count how many ancestor messages we have in the cache
+  let ancestorCount = 1; // Start with 1 for the direct parent
+  let currentAncestor = parentMessage;
+  
+  while (currentAncestor.parent_id) {
+    const nextAncestor = store.getters['messages/getMessage'](currentAncestor.parent_id);
+    if (!nextAncestor) break;
+    
+    ancestorCount++;
+    if (ancestorCount >= 5) break; // We have enough ancestors
+    
+    currentAncestor = nextAncestor;
+  }
+  
+  // Need to load more if we have fewer than 5 ancestors (unless we're at the root)
+  return ancestorCount < 5 && currentAncestor.parent_id;
+};
+
+// Helper function to check if we need to load more child messages
+const checkNeedMoreChildren = async (message) => {
+  if (!message.child_ids || message.child_ids.length === 0) return true;
+  
+  // Start with the branch child or the first child
+  const branchChildId = message.branch_child || message.child_ids[0];
+  const branchChild = store.getters['messages/getMessage'](branchChildId);
+  if (!branchChild) return true;
+  
+  // Count how many descendant messages we have in the cache
+  let descendantCount = 1; // Start with 1 for the direct child
+  let currentDescendant = branchChild;
+  
+  while (currentDescendant.child_ids && currentDescendant.child_ids.length > 0) {
+    const branchDescendantId = currentDescendant.branch_child || currentDescendant.child_ids[0];
+    const nextDescendant = store.getters['messages/getMessage'](branchDescendantId);
+    if (!nextDescendant) break;
+    
+    descendantCount++;
+    if (descendantCount >= 5) break; // We have enough descendants
+    
+    currentDescendant = nextDescendant;
+  }
+  
+  // Need to load more if we have fewer than 5 descendants (unless we're at a leaf)
+  return descendantCount < 5 && currentDescendant.child_ids && currentDescendant.child_ids.length > 0;
 };
 
 // Message selection and reply
@@ -565,7 +727,7 @@ const setupWebSocketSubscription = () => {
   }, 300); // 300ms debounce
 };
 
-// Update WebSocket message handler to select messages and ensure selection before rendering
+// Update WebSocket message handler to mark new incoming messages as read
 const handleWebSocketMessage = async (messageData) => {
   console.log(`[WEBSOCKET] 📨 RECEIVED NEW MESSAGE: ID=${messageData.id}, PARENT=${messageData.parent_id}`);
   console.log(`[WEBSOCKET] MESSAGE CONTENT: "${messageData.content.substring(0, 50)}${messageData.content.length > 50 ? '...' : ''}"`);
@@ -590,11 +752,25 @@ const handleWebSocketMessage = async (messageData) => {
     });
   }
   
+  // Mark the new message as read if the current user is a recipient
+  await markMessagesAsRead([messageData]);
+  
   // Select the new message from WebSocket and wait for it to complete
   await store.dispatch('navigation/selectMessage', messageData.id);
   
-  // Now that selection is complete, render the thread
-  await renderThreadAndSubscribe();
+  // Now that selection is complete, render the thread but preserve scroll position
+  await renderThread(true);
+  
+  // If this is a response to the currently selected message, scroll to the new message
+  // otherwise keep the current scroll position
+  if (selectedMessageId.value === parentId) {
+    nextTick(() => {
+      const messageElement = document.querySelector(`[data-message-id="${messageData.id}"]`);
+      if (messageElement) {
+        messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }
 };
 
 // Update loadMessageIfNeeded function to remove temporary thread check
@@ -661,23 +837,111 @@ const getTotalRepliesCount = (parentId) => {
   return store.getters['messages/getReplyCount'](parentId);
 };
 
-// Update loadMoreParents function
+// Update loadMoreParents function to maintain scroll position relative to existing content
 const loadMoreParents = async () => {
   isLoadingParents.value = true;
   try {
-    await loadMessages('parents');
-    await renderThreadAndSubscribe();
+    // We need to find a reference message that's currently visible
+    // to maintain its position after new content is loaded
+    const messageNodes = document.querySelectorAll('.message-node');
+    let referenceMessage = null;
+    let referenceMessageRect = null;
+    
+    // Find the first message that's at least partially visible in the viewport
+    if (messageNodes.length > 0) {
+      const containerRect = messageList.value.getBoundingClientRect();
+      
+      for (const node of messageNodes) {
+        const nodeRect = node.getBoundingClientRect();
+        // Check if the node is at least partially visible in the container
+        if (nodeRect.bottom > containerRect.top && nodeRect.top < containerRect.bottom) {
+          referenceMessage = node;
+          referenceMessageRect = nodeRect;
+          // Store distance from top of viewport
+          referenceMessage.dataset.distanceFromTop = nodeRect.top - containerRect.top;
+          break;
+        }
+      }
+      
+      console.log(`[ThreadView] Found reference message: ${referenceMessage?.getAttribute('data-message-id')}`);
+    }
+    
+    // Get first message before loading
+    const firstMessageId = displayedMessages.value.length > 0 ? displayedMessages.value[0].id : null;
+    
+    // Load more messages
+    const loadedMessages = await store.dispatch('messages/loadMessageBranchUp', {
+      messageId: firstMessageId,
+      depth: 5
+    });
+    
+    // Mark loaded messages as read
+    if (loadedMessages && loadedMessages.length > 0) {
+      await markMessagesAsRead(loadedMessages);
+    }
+    
+    // Render thread but preserve scroll position
+    await renderThread(true);
+    
+    // After rendering, if we had a reference message, restore its relative position
+    if (messageList.value && referenceMessage) {
+      // Wait for DOM to settle
+      await nextTick();
+      
+      // Find the same message element after re-rendering
+      const messageId = referenceMessage.getAttribute('data-message-id');
+      const newReferenceMessage = document.querySelector(`.message-node[data-message-id="${messageId}"]`);
+      
+      if (newReferenceMessage) {
+        const containerRect = messageList.value.getBoundingClientRect();
+        const newNodeRect = newReferenceMessage.getBoundingClientRect();
+        const distanceFromTop = parseFloat(referenceMessage.dataset.distanceFromTop);
+        
+        // Calculate the new scroll position to maintain the same relative position
+        const currentDistance = newNodeRect.top - containerRect.top;
+        const adjustment = currentDistance - distanceFromTop;
+        
+        if (Math.abs(adjustment) > 5) { // Only adjust if difference is significant
+          console.log(`[ThreadView] Adjusting scroll by ${adjustment}px to maintain position`);
+          messageList.value.scrollTop += adjustment;
+        }
+      }
+    }
   } finally {
     isLoadingParents.value = false;
   }
 };
 
-// Update loadMoreChildren function
+// Update loadMoreChildren function to mark messages as read
 const loadMoreChildren = async () => {
   isLoadingChildren.value = true;
   try {
-    await loadMessages('children');
-    await renderThreadAndSubscribe();
+    // Capture current scroll position
+    const scrollPosition = messageList.value ? messageList.value.scrollTop : 0;
+    
+    // Get last message before loading
+    const lastMessageId = displayedMessages.value.length > 0 
+      ? displayedMessages.value[displayedMessages.value.length - 1].id 
+      : null;
+    
+    // Load more messages
+    const loadedMessages = await store.dispatch('messages/loadMessageBranchDown', {
+      messageId: lastMessageId,
+      depth: 5
+    });
+    
+    // Mark loaded messages as read
+    if (loadedMessages && loadedMessages.length > 0) {
+      await markMessagesAsRead(loadedMessages);
+    }
+    
+    // Render thread but preserve scroll position
+    await renderThread(true);
+    
+    // After rendering, restore scroll position - no adjustment needed for bottom loading
+    if (messageList.value) {
+      messageList.value.scrollTop = scrollPosition;
+    }
   } finally {
     isLoadingChildren.value = false;
   }
@@ -703,38 +967,186 @@ watch(selectedMessageId, (newId, oldId) => {
   }
 });
 
-// Add this function after renderThreadAndSubscribe
-const scrollToMessageId = () => {
-  // Ensure we have a message ID and the message container exists
-  if (!messageId.value || !messageList.value) return;
+// Simplify the scrollToMessageId function to use the new approach
+const scrollToMessageId = (targetMessageId) => {
+  // Just mark that we've set up scrolling for this message
+  hasInitiallyScrolled.value = true;
   
-  // Wait for DOM updates to complete
-  nextTick(() => {
-    // Find the element for the target message
-    const messageElement = document.querySelector(`[data-message-id="${messageId.value}"]`);
-    if (!messageElement) return;
-    
-    // Calculate position needed to center the element in the viewport
-    const containerRect = messageList.value.getBoundingClientRect();
-    const messageRect = messageElement.getBoundingClientRect();
-    
-    // Get the scroll container's current scroll position
-    const containerScrollTop = messageList.value.scrollTop;
-    
-    // Calculate position needed to center the element in the viewport
-    const messageRelativeTop = messageRect.top - containerRect.top;
-    const containerHeight = containerRect.height;
-    
-    // Calculate new scroll position to center the message
-    // Container's current scroll + message's position relative to container + half message height - half container height
-    const newScrollTop = containerScrollTop + messageRelativeTop + (messageRect.height / 2) - (containerHeight / 2);
-    
-    // Set the scroll position immediately (no animation)
-    messageList.value.scrollTo({
-      top: newScrollTop,
-      behavior: 'auto' // 'auto' for no animation
+  // We'll defer to ensureCorrectScroll to handle the actual positioning
+  ensureCorrectScroll();
+};
+
+// Add a new function to ensure the scroll position is correct after mounting
+const ensureCorrectScroll = () => {
+  // First attempt - check initial container state
+  console.log('[ThreadView] INITIAL check of container dimensions:');
+  if (messageList.value) {
+    console.log({
+      scrollHeight: messageList.value.scrollHeight,
+      clientHeight: messageList.value.clientHeight,
+      maxScroll: messageList.value.scrollHeight - messageList.value.clientHeight,
+      childCount: messageList.value.children.length,
+      childHeights: Array.from(messageList.value.children).map(child => ({
+        tagName: child.tagName,
+        height: child.offsetHeight,
+        className: child.className
+      }))
     });
+  }
+  
+  // Add a small delay to make sure DOM is fully updated
+  setTimeout(() => {
+    nextTick(() => {
+      // Make sure we have a message list and a selected message
+      if (!messageList.value || !selectedMessageId.value) return;
+      
+      console.log('[ThreadView] Setting scroll position for message ID:', selectedMessageId.value);
+      console.log('[ThreadView] Current scrollTop before adjustment:', messageList.value.scrollTop);
+      
+      // Check container dimensions again - they may have changed
+      console.log('[ThreadView] Container dimensions BEFORE adjustment:');
+      console.log({
+        scrollHeight: messageList.value.scrollHeight,
+        clientHeight: messageList.value.clientHeight,
+        maxScroll: messageList.value.scrollHeight - messageList.value.clientHeight,
+        currentScroll: messageList.value.scrollTop,
+        style: window.getComputedStyle(messageList.value),
+        overflowY: window.getComputedStyle(messageList.value).overflowY
+      });
+      
+      // Find the selected message element
+      const messageElement = document.querySelector(`[data-message-id="${selectedMessageId.value}"]`);
+      if (!messageElement) {
+        console.log(`[ThreadView] Could not find element with data-message-id="${selectedMessageId.value}"`);
+        return;
+      }
+      
+      // Log all messages to see if they are properly rendered
+      const allMessages = document.querySelectorAll('.message-node');
+      console.log(`[ThreadView] Found ${allMessages.length} total message nodes`);
+      console.log('[ThreadView] All messages:', Array.from(allMessages).map((msg, i) => {
+        const id = msg.getAttribute('data-message-id');
+        return {
+          index: i,
+          id,
+          isTarget: id == selectedMessageId.value,
+          top: msg.getBoundingClientRect().top,
+          offsetTop: msg.offsetTop
+        };
+      }));
+      
+      // Log detailed information about the elements and their positions
+      const containerRect = messageList.value.getBoundingClientRect();
+      const messageRect = messageElement.getBoundingClientRect();
+      
+      console.log('[ThreadView] Container dimensions:', {
+        top: containerRect.top,
+        height: containerRect.height,
+        bottom: containerRect.bottom,
+        scrollHeight: messageList.value.scrollHeight,
+        clientHeight: messageList.value.clientHeight
+      });
+      
+      console.log('[ThreadView] Message dimensions:', {
+        top: messageRect.top,
+        height: messageRect.height,
+        bottom: messageRect.bottom,
+        offsetTop: messageElement.offsetTop,
+        offsetParent: messageElement.offsetParent ? messageElement.offsetParent.tagName : 'none'
+      });
+      
+      // Calculate the relative top position of the message within the container
+      const relativeTop = messageRect.top - containerRect.top + messageList.value.scrollTop;
+      
+      // Try an alternative calculation that might scroll further down
+      const alternateTop = messageElement.offsetTop;
+      
+      console.log('[ThreadView] Calculated positions:', {
+        relativeTop,
+        alternateTop,
+        difference: alternateTop - relativeTop
+      });
+      
+      // Try scrolling to max first to force container to update its scrollHeight
+      const maxScroll = messageList.value.scrollHeight - messageList.value.clientHeight;
+      console.log(`[ThreadView] Max possible scroll: ${maxScroll}px`);
+      messageList.value.scrollTop = maxScroll;
+      
+      // Check if scrollHeight updated after scrolling to max
+      console.log('[ThreadView] Container dimensions AFTER scrolling to max:');
+      console.log({
+        scrollHeight: messageList.value.scrollHeight,
+        clientHeight: messageList.value.clientHeight,
+        maxScroll: messageList.value.scrollHeight - messageList.value.clientHeight,
+        currentScroll: messageList.value.scrollTop
+      });
+      
+      // Force browser to recalculate layout
+      void messageList.value.offsetHeight;
+      
+      // Now try scrolling to our target
+      const adjustedPosition = alternateTop - 70; // Adjust 20px up to show a bit more context
+      console.log(`[ThreadView] Attempting to scroll to ${adjustedPosition}px (adjusted 20px up from ${alternateTop}px)`);
+      messageList.value.scrollTop = adjustedPosition;
+      
+      // After setting, check what the actual scrollTop became
+      // Sometimes browsers limit scroll positions
+      console.log('[ThreadView] Final scrollTop after adjustment:', messageList.value.scrollTop);
+      
+      // Now that positioning is complete, show the content
+      isPositioning.value = false;
+    });
+  }, 200); // Small delay to ensure DOM is fully rendered
+};
+
+// New helper function to mark messages as read
+const markMessagesAsRead = async (messages) => {
+  if (!messages || messages.length === 0 || !store.getters['auth/user']) {
+    return; // No messages to mark or user not logged in
+  }
+  
+  // Filter messages that are unread and the user is a recipient
+  const messagesToMark = messages.filter(message => {
+    // Check if message is unread
+    const isUnread = message.is_read === false;
+    
+    // Check if current user is a recipient
+    let isRecipient = false;
+    const currentUser = store.getters['auth/user'];
+    
+    if (message.recipients && Array.isArray(message.recipients)) {
+      isRecipient = message.recipients.some(recipient => {
+        // Check by UID
+        if (recipient.uid && currentUser.uid && recipient.uid === currentUser.uid) {
+          return true;
+        }
+        
+        // Check by user_tag
+        if (recipient.user_tag && currentUser.user_tag && recipient.user_tag === currentUser.user_tag) {
+          return true;
+        }
+        
+        // Check by email for backward compatibility
+        if (recipient.user_tag && currentUser.email && recipient.user_tag === currentUser.email) {
+          return true;
+        }
+        
+        return false;
+      });
+    }
+    
+    return isUnread && isRecipient;
   });
+  
+  // Mark each message as read
+  for (const message of messagesToMark) {
+    console.log(`[ThreadView] Marking message ${message.id} as read`);
+    await store.dispatch('messages/markMessageAsRead', message.id);
+  }
+  
+  if (messagesToMark.length > 0) {
+    console.log(`[ThreadView] Marked ${messagesToMark.length} message(s) as read`);
+  }
 };
 </script>
 
@@ -745,6 +1157,11 @@ const scrollToMessageId = () => {
   height: 100vh;
   position: relative;
   overflow: hidden;
+}
+
+/* Add positioning class to hide content until scroll position is set */
+.thread-view.positioning .messages-container {
+  visibility: hidden;
 }
 
 .thread-header {
@@ -775,6 +1192,11 @@ const scrollToMessageId = () => {
   text-overflow: ellipsis;
 }
 
+/* Styles for the scroll anchor - make it invisible */
+.scroll-anchor {
+  display: none;
+}
+
 .messages-container {
   flex: 1;
   display: flex;
@@ -785,6 +1207,7 @@ const scrollToMessageId = () => {
   overflow-y: auto;
   justify-content: flex-start;
   margin-bottom: 130px;
+  scroll-behavior: auto;
 }
 
 .auth-loading,

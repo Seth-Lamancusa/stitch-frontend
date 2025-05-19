@@ -1,12 +1,16 @@
 <template>
   <div 
     class="message-node" 
-    :class="{ 'selected': isSelected, 'pinned': isPinned }"
+    :class="{ 
+      'selected': isSelected, 
+      'pinned': isPinned,
+      'list-view': inListView 
+    }"
     :data-message-id="message.id"
   >
     <!-- Add sibling navigator if message has a parent -->
     <sibling-navigator
-      v-if="message.parent_id"
+      v-if="message.parent_id && !inListView"
       :message-id="message.id"
       :parent-id="message.parent_id"
       @navigate="handleSiblingNavigation"
@@ -16,7 +20,6 @@
       <div class="message-header">
         <div class="author-section">
           <div class="author-info">
-            <span v-if="message.is_read === false" class="unread-dot" title="Unread message"></span>
             <span class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ authorDisplayName }}</span>
             <span v-if="authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
           </div>
@@ -26,19 +29,25 @@
             Public
           </span>
           
-          <!-- To You badge (for recipients) -->
+          <!-- To You badge (for recipients) with unread indicator -->
           <div v-if="isUserRecipient" class="recipients-dropdown-container">
             <button 
-              @click.stop="toggleRecipientsDropdown('to-you')" 
+              @click.stop="toggleReadStatusOrDropdown($event)" 
               class="recipients-toggle to-you"
+              :class="{ 'loading': isTogglingReadStatus }"
+              :title="unreadCount > 0 ? `${unreadCount} unread message${unreadCount !== 1 ? 's' : ''} in this thread` : (message.is_read === false ? 'Click to mark as read (Shift+click to see all recipients)' : 'Click to mark as unread (Shift+click to see all recipients)')"
+              :disabled="isTogglingReadStatus"
               ref="toYouButton"
             >
+              <span v-if="isTogglingReadStatus" class="loading-indicator"></span>
               <!-- If only the user is recipient -->
-              <span v-if="recipientsExcludingUser.length === 0">
+              <span v-else-if="recipientsExcludingUser.length === 0">
+                <span v-if="unreadCount > 0" class="unread-count">{{ unreadCount }}</span>
                 To You
               </span>
               <!-- If there are other recipients -->
               <span v-else>
+                <span v-if="unreadCount > 0" class="unread-count">{{ unreadCount }}</span>
                 To You and {{ recipientsExcludingUser.length }} other{{ recipientsExcludingUser.length > 1 ? 's' : '' }}
               </span>
             </button>
@@ -124,8 +133,10 @@
         <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
       </div>
       
+      <!-- Message body -->
       <div class="message-body">
-        <formatted-content :content="message.content" />
+        <formatted-content v-if="!inListView" :content="message.content" />
+        <div v-else class="plaintext-content">{{ truncatedContent }}</div>
       </div>
       
       <div class="message-footer">
@@ -134,8 +145,9 @@
             {{ totalReplies }} {{ totalReplies === 1 ? 'reply' : 'replies' }}
           </div>
           
-          <!-- Copy JSON Button -->
+          <!-- Copy JSON Button - Admin only -->
           <button 
+            v-if="isAdmin"
             @click.stop="copyMessageJson" 
             class="json-button"
             title="Copy message JSON to clipboard"
@@ -153,20 +165,6 @@
             <span class="text-icon">📝</span>
             Copy Text
           </button>
-          
-          <!-- Read status toggle for recipients -->
-          <div v-if="isUserRecipient && message.is_read !== null" class="read-status-toggle">
-            <button 
-              @click.stop="toggleReadStatus" 
-              :class="['read-toggle-button', { 'loading': isTogglingReadStatus }]"
-              :disabled="isTogglingReadStatus"
-              :title="message.is_read ? 'Mark as unread' : 'Mark as read'"
-            >
-              <span v-if="isTogglingReadStatus" class="loading-indicator"></span>
-              <span v-else class="envelope-icon">{{ message.is_read ? '📩' : '✉️' }}</span>
-              {{ message.is_read ? 'Mark as unread' : 'Mark as read' }}
-            </button>
-          </div>
           
           <!-- Pin status indicator -->
           <div v-if="isPinned" class="pin-status-indicator">
@@ -267,6 +265,15 @@ export default {
     canReply: {
       type: Boolean,
       default: true
+    },
+    inListView: {
+      type: Boolean,
+      default: false
+    },
+    // Add prop for thread messages to calculate unread count
+    threadMessages: {
+      type: Array,
+      default: () => []
     }
   },
   
@@ -696,6 +703,31 @@ export default {
       }
     };
     
+    const toggleReadStatusOrDropdown = (event) => {
+      // Check if clicked on the badge element vs the dropdown arrow
+      if (event.shiftKey || event.ctrlKey) {
+        // If shift or ctrl was held, always open the dropdown
+        toggleRecipientsDropdown('to-you');
+      } else {
+        // Otherwise toggle read status
+        toggleReadStatus();
+      }
+    };
+    
+    const truncatedContent = computed(() => {
+      if (!props.message.content) return '';
+      
+      // Remove newlines and extra spaces
+      const contentWithoutNewlines = props.message.content.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+      
+      // Truncate to 300 characters with ellipsis if needed
+      if (contentWithoutNewlines.length > 300) {
+        return contentWithoutNewlines.substring(0, 300) + '...';
+      }
+      
+      return contentWithoutNewlines;
+    });
+    
     // Initialize formatters when the component is first created
     onMounted(() => {
       // Initialize formatters if not already done
@@ -707,6 +739,48 @@ export default {
     
     onBeforeUnmount(() => {
       document.removeEventListener('click', handleClickOutside, true);
+    });
+    
+    // Add unreadCount computed property
+    const unreadCount = computed(() => {
+      // If not in list view, we don't need to calculate thread unread count
+      if (!props.inListView) return 0;
+      
+      // If we don't have thread messages, use the current message's read status
+      if (!props.threadMessages || props.threadMessages.length === 0) {
+        return props.message.is_read === false ? 1 : 0;
+      }
+      
+      // Find all messages in this thread that are for this user and unread
+      const threadUnreadCount = props.threadMessages.filter(msg => {
+        // Check if message is for the current user (is a recipient)
+        const isRecipient = msg.recipients && 
+          Array.isArray(msg.recipients) && 
+          msg.recipients.some(recipient => {
+            if (currentUser.value) {
+              // Check by UID
+              if (recipient.uid && currentUser.value.uid && recipient.uid === currentUser.value.uid) {
+                return true;
+              }
+              
+              // Check by user_tag
+              if (recipient.user_tag && currentUser.value.user_tag && recipient.user_tag === currentUser.value.user_tag) {
+                return true;
+              }
+              
+              // Check by email for backward compatibility
+              if (recipient.user_tag && currentUser.value.email && recipient.user_tag === currentUser.value.email) {
+                return true;
+              }
+            }
+            return false;
+          });
+        
+        // Count if it's for this user and unread
+        return isRecipient && msg.is_read === false;
+      }).length;
+      
+      return threadUnreadCount;
     });
     
     return {
@@ -746,7 +820,10 @@ export default {
       isTogglingReadStatus,
       toggleReadStatus,
       copyMessageJson,
-      copyMessageText
+      copyMessageText,
+      toggleReadStatusOrDropdown,
+      truncatedContent,
+      unreadCount
     };
   },
   
@@ -763,6 +840,34 @@ export default {
   margin-bottom: var(--space-md);
   transition: all var(--transition-fast);
   position: relative;
+}
+
+/* Add styling for list view mode */
+.message-node.list-view {
+  width: 100%;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-normal);
+}
+
+/* Ensure consistent width in list view by overriding sibling-specific styling */
+.message-node.list-view .message-content {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  max-width: 100% !important;
+}
+
+.message-node.list-view:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--color-card-shadow, 0 4px 6px rgba(0, 0, 0, 0.1));
+}
+
+.message-node.list-view .message-body {
+  max-height: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Add extra horizontal margin for messages with siblings */
@@ -824,16 +929,6 @@ export default {
   font-size: var(--font-size-xs);
 }
 
-.unread-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--color-error, #ff3860);
-  margin-right: 6px;
-  vertical-align: middle;
-}
-
 .visibility-indicator, .recipients-toggle {
   /* Apply consistent base styling to both types of indicators */
   font-size: var(--font-size-xs);
@@ -878,6 +973,24 @@ export default {
   background-color: var(--color-info);
   color: var(--color-text-inverse);
   border: none;
+  position: relative; /* Added for positioning the unread indicator */
+}
+
+/* Styling for the unread count badge inside To You button */
+.unread-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-error, #ff3860);
+  color: white;
+  border-radius: 12px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: bold;
+  margin-right: 5px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .recipients-toggle.author-toggle {
@@ -1059,49 +1172,6 @@ export default {
   font-weight: 500;
 }
 
-.read-status-toggle {
-  display: flex;
-  align-items: center;
-}
-
-.read-toggle-button {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: var(--font-size-xs);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  background-color: transparent;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  transition: all var(--transition-fast);
-}
-
-.read-toggle-button:hover {
-  background-color: var(--color-hover-overlay);
-}
-
-.read-toggle-button .loading-indicator {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border: 2px solid rgba(0, 0, 0, 0.1);
-  border-top-color: var(--primary-color, #007bff);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-right: 4px;
-}
-
-.read-toggle-button.loading {
-  opacity: 0.7;
-  cursor: wait;
-}
-
-.envelope-icon {
-  font-size: 0.9em;
-}
-
 /* Modal styles */
 .modal-overlay {
   position: fixed;
@@ -1266,5 +1336,26 @@ export default {
 .json-icon, .text-icon {
   font-size: var(--font-size-sm);
   line-height: 1;
+}
+
+.recipients-toggle.to-you.loading {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.recipients-toggle .loading-indicator {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-right: 4px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style>

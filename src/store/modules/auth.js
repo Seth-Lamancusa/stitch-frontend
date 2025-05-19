@@ -20,6 +20,7 @@ export default {
       if (!user) {
         state.user = null;
         state.isAuthenticated = false;
+        // Don't change other state props here - they should be explicitly set
         return;
       }
       
@@ -30,7 +31,8 @@ export default {
         displayName: user.displayName || '',
         user_tag: user.user_tag || '',
         photoURL: user.photoURL || null,
-        status: user.status || 'unverified'
+        // Only set status if explicitly provided, otherwise keep existing value
+        status: user.status !== undefined ? user.status : (state.user ? state.user.status : 'unverified')
       };
       
       state.isAuthenticated = !!user;
@@ -63,6 +65,9 @@ export default {
     // Centralized auth initialization - only called once from main.js or App.vue
     async initAuth({ commit, dispatch }) {
       try {
+        // Start with auth not ready
+        commit('SET_AUTH_READY', false);
+        
         await initializeFirebase();
         const auth = getFirebaseAuth();
         
@@ -78,6 +83,9 @@ export default {
             const unsubscribe = auth.onAuthStateChanged(async (userData) => {
               clearTimeout(authTimeout);
               
+              // Reset to not ready while we fetch user data
+              commit('SET_AUTH_READY', false);
+              
               if (userData) {
                 // Set basic user data immediately
                 commit('SET_USER', {
@@ -90,23 +98,29 @@ export default {
                 // Fetch complete user data in one go
                 if (userData.email) {
                   await dispatch('fetchCompleteUserData', userData);
+                } else {
+                  // If no email but signed in somehow, mark as ready
+                  commit('SET_AUTH_READY', true);
                 }
               } else {
+                // No user - just clear everything
                 commit('SET_USER', null);
                 commit('SET_WHITELIST_STATUS', false);
                 commit('SET_ADMIN_STATUS', false);
+                commit('SET_AUTH_READY', true);
               }
               
-              commit('SET_AUTH_READY', true);
               resolve();
               // Keep listening for auth changes
             });
           });
         } else {
+          // No auth object - mark as ready and resolve
           commit('SET_AUTH_READY', true);
         }
       } catch (error) {
         console.error('Failed to initialize auth:', error);
+        // Even on error, make sure auth is eventually marked ready
         commit('SET_AUTH_READY', true);
       }
     },
@@ -114,16 +128,22 @@ export default {
     // New action that combines all user data fetching in one place
     async fetchCompleteUserData({ commit, dispatch }, userData) {
       try {
+        // Set auth to not ready during fetch
+        commit('SET_AUTH_READY', false);
+        
         // Register user if needed (this will either create or fetch)
         await dispatch('registerUser', userData);
         
         // Get complete profile from backend
         await dispatch('fetchUserData', userData.uid);
-        
-        // Don't need explicit whitelist/admin checks here anymore
-        // as fetchUserData already sets these based on user.status
       } catch (error) {
         console.error('Error fetching complete user data:', error);
+        // Even on error, make sure we default auth status correctly
+        commit('SET_WHITELIST_STATUS', false);
+        commit('SET_ADMIN_STATUS', false);
+      } finally {
+        // Always mark auth as ready when complete
+        commit('SET_AUTH_READY', true);
       }
     },
     
@@ -140,27 +160,42 @@ export default {
     },
     
     setUser({ commit, dispatch }, userData) {
-      if (userData) {
-        // Ensure we have a consistent user object with all required fields
-        const userWithDefaults = {
-          uid: userData.uid,
-          email: userData.email || '',
-          displayName: userData.displayName || '',
-          photoURL: userData.photoURL || null,
-          user_tag: userData.user_tag || '',
-          status: userData.status || 'unverified'
-        };
+      // When logging out or setting null user
+      if (!userData) {
+        // First set auth to loading state to prevent showing wrong status
+        commit('SET_AUTH_READY', false);
         
-        commit('SET_USER', userWithDefaults);
-        
-        if (userData.email) {
-          // Fetch complete data rather than just checking status
-          dispatch('fetchCompleteUserData', userData);
-        }
-      } else {
+        // Then clear user and status flags
         commit('SET_USER', null);
         commit('SET_WHITELIST_STATUS', false);
         commit('SET_ADMIN_STATUS', false);
+        
+        // Finally mark auth as ready
+        commit('SET_AUTH_READY', true);
+        return;
+      }
+      
+      // Signing in - ensure we have a consistent user object
+      const userWithDefaults = {
+        uid: userData.uid,
+        email: userData.email || '',
+        displayName: userData.displayName || '',
+        photoURL: userData.photoURL || null,
+        user_tag: userData.user_tag || '',
+        // Don't set a default status here - let the backend determine it
+        status: userData.status
+      };
+      
+      // Set the basic user data
+      commit('SET_USER', userWithDefaults);
+      
+      // Only fetch complete data if we have an email
+      if (userData.email) {
+        // Fetch complete data rather than just checking status
+        dispatch('fetchCompleteUserData', userData);
+      } else {
+        // If no email, ensure auth is marked as ready
+        commit('SET_AUTH_READY', true);
       }
     },
     

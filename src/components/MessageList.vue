@@ -4,6 +4,7 @@ import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
 import { initializeFirebase } from '../firebase';
 import MessageService from '../services/MessageService';
+import MessageNode from './MessageNode.vue';
 
 /**
  * MessageList component displays a list of message threads based on the current route.
@@ -207,6 +208,13 @@ const viewMessage = (messageId) => {
   router.push({ path: `/messages/${messageId}` });
 };
 
+// Handle message deletion requests
+const confirmDeleteMessage = (message) => {
+  // If a message is deleted from the list view, use the UI store to handle confirmation
+  store.dispatch('ui/showDeleteConfirm', message);
+  // The actual deletion is handled by the UI store and messages module
+};
+
 // Create a new message thread
 const createNewThread = () => {
   // Store current route before navigation
@@ -258,6 +266,47 @@ function isCurrentUserAuthor(message) {
   }
   
   return false;
+}
+
+// Get all messages in a thread (for unread count calculation)
+function getThreadMessages(threadId) {
+  // Get all loaded messages
+  const allMessages = store.getters['messages/getLoadedMessages'];
+  
+  // Find thread root in case threadId is not the actual root
+  let rootId = threadId;
+  let currentMessage = allMessages.find(m => m.id === threadId);
+  
+  // Traverse up to find the root if needed
+  while (currentMessage && currentMessage.parent_id) {
+    const parent = allMessages.find(m => m.id === currentMessage.parent_id);
+    if (parent) {
+      rootId = parent.id;
+      currentMessage = parent;
+    } else {
+      break;
+    }
+  }
+  
+  // Find all messages in this thread (having rootId as ancestor)
+  const threadMessages = allMessages.filter(message => {
+    // Include the root itself
+    if (message.id === rootId) return true;
+    
+    // Check if this message has rootId as an ancestor
+    let parent = message;
+    while (parent && parent.parent_id) {
+      if (parent.parent_id === rootId) return true;
+      
+      // Move up to the parent
+      parent = allMessages.find(m => m.id === parent.parent_id);
+      if (!parent) break;
+    }
+    
+    return false;
+  });
+  
+  return threadMessages;
 }
 
 // Watch for tab changes to reset and reload
@@ -482,6 +531,32 @@ onUnmounted(() => {
 
 <template>
   <div class="message-list" ref="messageListRef">
+    <!-- Tab info boxes - now inside the message list so they scroll with content -->
+    <div v-if="activeTab === 'feed'" class="tab-info">
+      <p>Public feed of all messages in reverse chronological order.</p>
+      <p>Pinned messages appear at the top.</p>
+    </div>
+    
+    <div v-if="activeTab === 'curated'" class="tab-info">
+      <p>Curated messages selected based on quality and relevance.</p>
+      <p>Feature under development.</p>
+    </div>
+    
+    <div v-if="activeTab === 'private'" class="tab-info">
+      <p>Direct messages sent to you or by you to specific recipients.</p>
+      <p>Shows the most recent message from each conversation.</p>
+    </div>
+    
+    <div v-if="activeTab === 'profile'" class="tab-info">
+      <p>All messages you've created, both public and private.</p>
+      <p>Listed in reverse chronological order.</p>
+    </div>
+    
+    <div v-if="activeTab === 'local'" class="tab-info local-message-info">
+      <p>This tab will display messages saved to your local filesystem.</p>
+      <p>Feature coming soon.</p>
+    </div>
+
     <!-- Empty state - only shown when no messages and not loading -->
     <div v-if="shouldShowEmptyState" class="empty-state">
       <!-- Show login message for auth-dependent tabs -->
@@ -495,37 +570,24 @@ onUnmounted(() => {
     
     <!-- Messages container -->
     <div class="messages-container">
-      <!-- Messages list -->
+      <!-- Messages list - now using MessageNode component -->
       <div 
         v-for="thread in threads" 
         :key="thread.id" 
-        class="message-item"
-        :class="{ 'pinned-message': thread.is_pinned }"
-        :data-thread-id="thread.id"
+        class="message-list-item"
         @click="viewMessage(thread.id)"
       >
-        <div class="message-header">
-          <h3 class="message-title">
-            <span v-if="thread.is_pinned">📌</span> 
-            <span v-if="thread.is_read === false" class="unread-indicator"></span>
-            {{ getMessageTitle(thread) }}
-          </h3>
-          <div class="author-info">
-            <div class="author-pin-section">
-              <span class="message-author" :class="{ 'current-user-name': isCurrentUserAuthor(thread) }">{{ getAuthorDisplay(thread) }}</span>
-              <span v-if="getAuthorUserTag(thread)" class="author-user-tag">@{{ getAuthorUserTag(thread) }}</span>
-            </div>
-          </div>
-        </div>
-        
-        <p class="message-desc">
-          {{ getMessageDescription(thread) }}
-        </p>
-        
-        <div class="message-footer">
-          <span class="reply-count">{{ getReplyCount(thread) }} replies</span>
-          <span class="message-date">{{ new Date(thread.timestamp).toLocaleString() }}</span>
-        </div>
+        <MessageNode
+          :message="thread"
+          :is-selected="false"
+          :indent-level="0"
+          :loaded-replies="getReplyCount(thread)"
+          :total-replies="getReplyCount(thread)"
+          :can-reply="false"
+          :inListView="true"
+          :threadMessages="getThreadMessages(thread.id)"
+          @delete="confirmDeleteMessage"
+        />
       </div>
       
       <!-- Unified loading indicator - show when loading or will trigger loading -->
@@ -569,6 +631,30 @@ onUnmounted(() => {
   scroll-behavior: smooth;
 }
 
+.tab-info {
+  max-width: 600px;
+  margin: 0 auto var(--space-md) auto;
+  padding: 16px 20px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  background-color: var(--color-surface-light);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.tab-info p {
+  margin: 0 0 8px 0;
+}
+
+.tab-info p:last-child {
+  margin-bottom: 0;
+}
+
+.local-message-info {
+  background-color: var(--color-surface-light);
+}
+
 .section-title {
   font-size: var(--font-size-lg);
   margin-bottom: var(--space-sm);
@@ -584,76 +670,16 @@ onUnmounted(() => {
   gap: var(--space-md);
 }
 
-.message-item {
-  background-color: var(--color-surface);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  padding: var(--space-md);
+.message-list-item {
+  width: 100%;
   cursor: pointer;
-  transition: box-shadow var(--transition-normal), transform var(--transition-fast);
   position: relative;
-}
-
-.message-item:hover {
-  box-shadow: var(--color-card-shadow);
-  transform: translateY(-2px);
-}
-
-.pinned-message {
-  border-color: var(--color-primary-light);
-}
-
-.message-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: var(--space-sm);
-}
-
-.author-pin-section {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.message-title {
-  margin: 0;
-  color: var(--color-primary);
-  font-size: var(--font-size-lg);
-}
-
-.author-info {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.message-author {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
-
-.message-author.current-user-name {
-  font-weight: 800;
-  color: var(--color-primary);
-}
-
-.author-user-tag {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-  opacity: 0.8;
-}
-
-.message-desc {
   margin-bottom: var(--space-md);
-  color: var(--color-text);
+  transition: transform var(--transition-fast), opacity var(--transition-fast);
 }
 
-.message-footer {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+.message-list-item:hover {
+  opacity: 0.95;
 }
 
 .loading-indicator {
@@ -762,14 +788,6 @@ onUnmounted(() => {
   opacity: 0.5;
   cursor: not-allowed;
   pointer-events: all;
-}
-
-.page-title {
-  font-size: var(--font-size-xl);
-  margin-bottom: var(--space-md);
-  color: var(--color-text);
-  padding-bottom: var(--space-sm);
-  border-bottom: 1px solid var(--color-border);
 }
 
 .unread-indicator {

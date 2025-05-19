@@ -6,7 +6,7 @@ export default {
   selectedMessageId: null,
   messageCallback: null,
   pingInterval: null,
-  debugMode: true,
+  debugMode: false,
 
   // Simple connection method - returns a promise that resolves when connected
   async connectToThread(threadId, messageId) {

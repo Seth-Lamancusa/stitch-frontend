@@ -32,7 +32,10 @@ export default {
     messages: {},
     
     // Track selected message
-    selectedMessageId: null
+    selectedMessageId: null,
+
+    // Track total unread message count
+    unreadMessageCount: 0
   },
   
   mutations: {
@@ -247,6 +250,11 @@ export default {
           is_read: isRead
         };
       }
+    },
+
+    // Add a new mutation to update the unread message count
+    SET_UNREAD_MESSAGE_COUNT(state, count) {
+      state.unreadMessageCount = count;
     }
   },
   
@@ -959,6 +967,20 @@ export default {
         throw error;
       }
     },
+
+    // New action to fetch unread message count
+    async fetchUnreadMessageCount({ commit }) {
+      try {
+        const response = await MessageService.getUnreadMessageCount();
+        const count = response.data.count || 0;
+        
+        commit('SET_UNREAD_MESSAGE_COUNT', count);
+        return count;
+      } catch (error) {
+        console.error('Error fetching unread message count:', error);
+        return 0;
+      }
+    }
   },
   
   getters: {
@@ -1153,7 +1175,10 @@ export default {
       
       // Check if all children are loaded
       return message.child_ids.every(childId => state.messages[childId]);
-    }
+    },
+
+    // Getter for unread message count
+    getUnreadMessageCount: state => state.unreadMessageCount
   }
 }
 

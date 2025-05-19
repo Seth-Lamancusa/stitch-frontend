@@ -240,5 +240,13 @@ export default {
   async markMessageAsUnread(id) {
     const headers = await getAuthHeaders();
     return axios.post(`${apiBaseUrl}/messages/${id}/mark-unread`, {}, { headers });
+  },
+  
+  // Get unread message count for the current user
+  async getUnreadMessageCount() {
+    const headers = await getAuthHeaders();
+    const response = await axios.get(`${apiBaseUrl}/tabs/unread-count`, { headers });
+    console.log('[DEBUG] MessageService - getUnreadMessageCount response:', response.data);
+    return response;
   }
 };

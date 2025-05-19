@@ -42,7 +42,7 @@ export function useAuthentication() {
 
   /**
    * Signs out the current user
-   * On success, clears store and navigates to login
+   * On success, clears store and stays on the current page
    */
   const logout = async () => {
     try {
@@ -52,7 +52,7 @@ export function useAuthentication() {
       // Let the store handle clearing user state
       store.dispatch('auth/setUser', null);
       
-      router.push('/');
+      // No redirect - stay on the current page
     } catch (e) {
       error.value = e.message;
     }

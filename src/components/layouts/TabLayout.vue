@@ -19,7 +19,17 @@
             class="tab-button" 
             :class="{ 'active': activeTab === 'private' }"
             @click="navigateToTab('private')"
-          >Direct</button>
+          >
+            Direct
+            <!-- Unread Message Badge -->
+            <span 
+              v-if="user && unreadMessageCount > 0" 
+              class="unread-badge" 
+              :title="`${unreadMessageCount} unread message${unreadMessageCount > 1 ? 's' : ''}`"
+            >
+              {{ unreadMessageCount > 99 ? '99+' : unreadMessageCount }}
+            </span>
+          </button>
           <button 
             class="tab-button" 
             :class="{ 'active': activeTab === 'profile' }"
@@ -40,10 +50,19 @@
               <span class="edit-icon" title="Edit profile">✎</span>
             </div>
             <span v-else class="username">Guest</span>
-            <span v-if="user && user.status === 'admin'" class="admin-badge" title="Admin">⛊</span>
-            <span v-else-if="user && user.status === 'whitelisted'" class="whitelist-badge" title="Whitelisted">✓</span>
-            <span v-else-if="user && user.status !== 'admin' && user.status !== 'whitelisted'" class="non-whitelist-badge" title="Not whitelisted">✗</span>
-            <span v-if="!user" class="guest-badge" title="Not logged in">?</span>
+            
+            <!-- Auth status badges - only shown when auth is ready -->
+            <template v-if="authReady">
+              <span v-if="user && user.status === 'admin'" class="admin-badge" title="Admin">⛊</span>
+              <span v-else-if="user && user.status === 'whitelisted'" class="whitelist-badge" title="Whitelisted">✓</span>
+              <span v-else-if="user && user.status !== 'admin' && user.status !== 'whitelisted'" class="non-whitelist-badge" title="Not whitelisted">✗</span>
+              <span v-if="!user" class="guest-badge" title="Not logged in">?</span>
+            </template>
+            
+            <!-- Loading spinner when auth is not ready -->
+            <span v-else class="auth-loading-badge" title="Loading authentication status">
+              <span class="auth-loading-spinner"></span>
+            </span>
           </div>
           <button v-if="user" @click="logout" class="logout-btn">Logout</button>
           <button v-else @click="handleLogin" class="login-btn" :disabled="isLoggingIn">
@@ -73,7 +92,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useStore } from 'vuex';
 import { useAuthentication } from '../../composables/useAuthentication';
@@ -104,8 +123,10 @@ const user = computed(() => store.getters['auth/user']);
 const isWhitelisted = computed(() => store.getters['auth/isWhitelisted']);
 const isAdmin = computed(() => store.getters['auth/isAdmin']);
 const canInteract = computed(() => store.getters['auth/canInteract']);
+const authReady = computed(() => store.getters['auth/authReady']);
 const isLoggingIn = ref(false);
 const isProfileModalOpen = ref(false);
+const unreadMessageCount = computed(() => store.getters['messages/getUnreadMessageCount']);
 
 // User display properties
 const userDisplayName = computed(() => {
@@ -117,6 +138,13 @@ const userTag = computed(() => {
   if (!user.value) return null;
   return user.value.user_tag || null;
 });
+
+// Fetch unread message count
+const fetchUnreadMessageCount = async () => {
+  if (user.value) {
+    await store.dispatch('messages/fetchUnreadMessageCount');
+  }
+};
 
 const handleLogin = async () => {
   isLoggingIn.value = true;
@@ -130,6 +158,9 @@ const handleLogin = async () => {
       // Default redirect to feed page
       router.push('/feed');
     }
+    
+    // Fetch unread count after login
+    fetchUnreadMessageCount();
   } catch (e) {
     console.error("Login error:", e);
   } finally {
@@ -164,12 +195,31 @@ const navigateToTab = (tab) => {
   router.push(routes[tab]);
 };
 
+// Watch for auth ready state to fetch unread count
+watch(authReady, async (isReady) => {
+  if (isReady && user.value) {
+    console.log('Auth ready, fetching unread message count');
+    await fetchUnreadMessageCount();
+  }
+});
+
+// Watch for user changes
+watch(user, async (newUser) => {
+  if (newUser && authReady.value) {
+    console.log('User changed, fetching unread message count');
+    await fetchUnreadMessageCount();
+  }
+});
+
 // Load messages for this tab
 onMounted(async () => {
   // Dispatch the provided fetch action
   if (props.fetchAction && props.activeTab !== 'local') {
     await store.dispatch(props.fetchAction);
   }
+  
+  // Fetch unread message count
+  fetchUnreadMessageCount();
 });
 </script>
 
@@ -221,6 +271,7 @@ onMounted(async () => {
   flex: 1;
   text-align: center;
   max-width: 120px;
+  position: relative; /* Make sure this is here for absolute positioning of the badge */
 }
 
 .tab-button.active {
@@ -375,5 +426,51 @@ onMounted(async () => {
 .guest-badge {
   background-color: var(--color-text-secondary);
   color: var(--color-text-inverse);
+}
+
+.auth-loading-badge {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 18px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+  margin-left: var(--space-xs);
+}
+
+.auth-loading-spinner {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.unread-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background-color: var(--color-error, #ff3860);
+  color: white;
+  border-radius: 50%;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style> 
