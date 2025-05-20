@@ -1,5 +1,5 @@
 <template>
-  <div class="reply-container">
+  <div v-if="isReplying || isTemporaryThread" class="reply-container">
     <div class="reply-form">
       <div class="reply-settings">
         <label class="visibility-toggle">
@@ -202,6 +202,7 @@ const isPublic = computed({
   set: (value) => store.dispatch('navigation/updateReplyVisibility', value)
 });
 const recipients = computed(() => store.getters['navigation/replyRecipients']);
+const isReplying = computed(() => store.getters['navigation/isReplying']);
 
 // Check if the reply can be added
 const canAddRecipient = computed(() => {
@@ -210,9 +211,14 @@ const canAddRecipient = computed(() => {
 
 // Generate placeholder text
 const placeholderText = computed(() => {
-  // First check if no message is selected
+  // First priority: check if we're in a temporary thread
+  if (props.isTemporaryThread) {
+    return "Type your message to create a new thread (no parent message)...";
+  }
+  
+  // Second: check if no message is selected
   if (!props.isMessageSelected) {
-    return "Select a message to reply";
+    return "Click 'Reply' on a message to respond";
   }
   
   // If user can't interact, show a message explaining why
@@ -221,10 +227,6 @@ const placeholderText = computed(() => {
       return "You need to log in to send messages";
     }
     return "You need to be whitelisted to send messages";
-  }
-
-  if (props.isTemporaryThread) {
-    return "Type your message to create this thread...";
   }
   
   // If we're replying to a message, show "Reply to [author]..."
@@ -253,7 +255,7 @@ const toggleVisibility = () => {
   // Toggle to opposite
   store.dispatch('navigation/updateReplyVisibility', !currentState);
   
-  // Only sync with selected message if we're not in a temporary thread
+  // Only sync with message being replied to if we're not in a temporary thread
   if (!props.isTemporaryThread) {
     // Force sync settings after toggle
     store.dispatch('navigation/syncReplySettingsWithSelectedMessage');
@@ -277,7 +279,7 @@ const toggleRecipientSelector = () => {
 };
 
 const ensureReplyingActive = () => {
-  if (!store.getters['navigation/isReplying'] && store.getters['navigation/selectedMessageId']) {
+  if (!isReplying.value && props.targetId) {
     store.dispatch('navigation/toggleReply', true);
   }
 };
@@ -619,9 +621,24 @@ const getAuthorUserTag = (message) => {
   return null;
 };
 
+// Add method to handle clicks outside the reply box
+const handleClickOutside = (event) => {
+  // If the click was not on the reply box or any of its children,
+  // and not on a reply button, hide the reply box
+  const replyBox = document.querySelector('.reply-container');
+  const replyButtons = document.querySelectorAll('.reply-button');
+  
+  if (replyBox && !replyBox.contains(event.target) && 
+      Array.from(replyButtons).every(btn => !btn.contains(event.target))) {
+    // Cancel replying
+    store.dispatch('navigation/toggleReply', false);
+  }
+};
+
 // Close search results when clicking outside
 onMounted(() => {
   document.addEventListener('click', handleClickOutsideSearch);
+  document.addEventListener('click', handleClickOutside);
   console.log("ReplyBox mounted, canInteract:", props.canInteract);
 });
 
@@ -632,6 +649,7 @@ watch(() => props.canInteract, (newValue, oldValue) => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutsideSearch);
+  document.removeEventListener('click', handleClickOutside);
 });
 
 const handleClickOutsideSearch = (event) => {

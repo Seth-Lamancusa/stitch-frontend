@@ -31,11 +31,14 @@ export default {
     // Flat storage of messages by ID
     messages: {},
     
-    // Track selected message
-    selectedMessageId: null,
-
     // Track total unread message count
-    unreadMessageCount: 0
+    unreadMessageCount: 0,
+    
+    // Track loading states for various operations
+    loadingStates: {},
+    
+    // Store the selected profile for profile filtering
+    selectedProfile: null
   },
   
   mutations: {
@@ -146,10 +149,6 @@ export default {
       }
     },
     
-    SET_SELECTED_MESSAGE(state, messageId) {
-      state.selectedMessageId = messageId;
-    },
-    
     // Consolidated branch path mutation
     SET_BRANCH_PATH(state, messageId) {
       // First ensure the message exists
@@ -255,6 +254,16 @@ export default {
     // Add a new mutation to update the unread message count
     SET_UNREAD_MESSAGE_COUNT(state, count) {
       state.unreadMessageCount = count;
+    },
+
+    // Add a new mutation to track loading states
+    SET_LOADING(state, { key, isLoading }) {
+      state.loadingStates[key] = isLoading;
+    },
+
+    // Add new mutation for setting selected profile
+    SET_SELECTED_PROFILE(state, profile) {
+      state.selectedProfile = profile;
     }
   },
   
@@ -290,11 +299,11 @@ export default {
     // This should be called before using getVisibleBranchMessages
     prepareBranchPath({ commit, state }, threadRootId) {
       if (!threadRootId || !state.messages[threadRootId]) {
-        console.log(`[prepareBranchPath] Cannot prepare path: message ${threadRootId} not found`);
+        console.log(`[prepareBranchPath] ⚠️ Cannot prepare path: message ${threadRootId} not found`);
         return false;
       }
       
-      console.log(`[prepareBranchPath] Preparing branch path for message ID: ${threadRootId}`);
+      console.log(`[prepareBranchPath] 🌳 PREPARE_PATH starting for message ID: ${threadRootId}, called by:`, new Error().stack);
       
       // STEP 1: First trace UPWARD to find the highest ancestor in the store
       let startingMessage = state.messages[threadRootId];
@@ -305,9 +314,10 @@ export default {
       // Trace up through parent_id as far as we can go
       while (currentParentId && state.messages[currentParentId]) {
         const parentMessage = state.messages[currentParentId];
-        console.log(`[prepareBranchPath] Tracing upward: found parent ${currentParentId} for child ${childMessage.id}`);
+        console.log(`[prepareBranchPath] 🌳 PREPARE_PATH tracing upward: found parent ${currentParentId} for child ${childMessage.id}`);
         
         // Set this parent's branch_child to point to the child we came from
+        console.log(`[prepareBranchPath] 🌳 PREPARE_PATH setting branch_child of ${currentParentId} to ${childMessage.id}`);
         commit('SET_BRANCH_CHILD', { 
           messageId: currentParentId, 
           childId: childMessage.id 
@@ -319,16 +329,19 @@ export default {
         currentParentId = parentMessage.parent_id;
       }
       
-      console.log(`[prepareBranchPath] Highest ancestor found: ${highestAncestor.id}`);
+      console.log(`[prepareBranchPath] 🌳 PREPARE_PATH highest ancestor found: ${highestAncestor.id}`);
       
       // STEP 2: Now follow the branch path down, ensuring each node has branch_child set
       let currentMessage = highestAncestor;
+      
+      // Log the downward path that will be created
+      console.log(`[prepareBranchPath] 🌳 PREPARE_PATH beginning downward traversal from ${highestAncestor.id}`);
       
       // Trace downward, ensuring each node has a branch_child if it has children
       while (true) {
         // If message has no branch child but has child_ids, set first child as branch_child
         if (!currentMessage.branch_child && currentMessage.child_ids && currentMessage.child_ids.length > 0) {
-          console.log(`[prepareBranchPath] Setting branch_child for ${currentMessage.id} to first child ${currentMessage.child_ids[0]}`);
+          console.log(`[prepareBranchPath] 🌳 PREPARE_PATH setting branch_child for ${currentMessage.id} to first child ${currentMessage.child_ids[0]}`);
           
           commit('SET_BRANCH_CHILD', { 
             messageId: currentMessage.id, 
@@ -341,7 +354,7 @@ export default {
         
         // If message has no branch child (even after trying to set one), break
         if (!currentMessage.branch_child) {
-          console.log(`[prepareBranchPath] No branch_child for ${currentMessage.id}, ending traversal`);
+          console.log(`[prepareBranchPath] 🌳 PREPARE_PATH no branch_child for ${currentMessage.id}, ending traversal`);
           break;
         }
         
@@ -349,15 +362,16 @@ export default {
         
         // If child doesn't exist in the store, break
         if (!state.messages[childId]) {
-          console.log(`[prepareBranchPath] Child ${childId} not found in store, ending traversal`);
+          console.log(`[prepareBranchPath] 🌳 PREPARE_PATH child ${childId} not found in store, ending traversal`);
           break;
         }
         
         // Move to the next message
+        console.log(`[prepareBranchPath] 🌳 PREPARE_PATH traversing to child ${childId}`);
         currentMessage = state.messages[childId];
       }
       
-      console.log(`[prepareBranchPath] Branch path preparation complete`);
+      console.log(`[prepareBranchPath] 🌳 PREPARE_PATH complete for message ID: ${threadRootId}`);
       return true;
     },
     
@@ -712,15 +726,15 @@ export default {
     },
     
     // Fetch user's own messages (Profile tab)
-    async fetchUserMessages({ commit, rootState, dispatch }, { cursor = null } = {}) {
+    async fetchUserMessages({ commit, rootState, dispatch, state }, { cursor = null, userId = null } = {}) {
       try {
         // Set loading state in UI
         commit('ui/SET_LOADING', { key: 'threads', value: true }, { root: true });
         
-        console.log(`[DEBUG] Fetching user messages - cursor: ${cursor}`);
+        console.log(`[DEBUG] Fetching user messages - cursor: ${cursor}, userId: ${userId}`);
         
         // Use the dedicated by-user endpoint
-        const response = await MessageService.getUserMessages(10, cursor);
+        const response = await MessageService.getUserMessages(10, cursor, userId);
         const messages = response.data.messages || [];
         const exhausted = response.data.exhausted || false;
         const nextCursor = response.data.next_cursor;
@@ -739,7 +753,7 @@ export default {
         };
       } catch (error) {
         commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
-        commit('ui/SET_ERROR', error.message || 'Failed to load your messages', { root: true });
+        commit('ui/SET_ERROR', error.message || 'Failed to load user messages', { root: true });
         console.error('Error fetching user messages:', error);
         return {
           messages: [],
@@ -751,11 +765,6 @@ export default {
     
     removeTemporaryThread({ commit }, threadId) {
       commit('REMOVE_TEMP_THREAD', threadId);
-    },
-    
-    // Select a message
-    selectMessage({ commit }, messageId) {
-      commit('SET_SELECTED_MESSAGE', messageId);
     },
     
     // Clear cache of all loaded messages (except thread preview messages needed for list view)
@@ -836,11 +845,21 @@ export default {
       }
     },
     
-    // New action to mark a message as read
+    // Mark a message as read and update unread count
     async markMessageAsRead({ commit, state }, messageId) {
       try {
+        // Check if message is currently unread before making API call
+        const message = state.messages[messageId];
+        const wasUnread = message && message.is_read === false;
+        
         await MessageService.markMessageAsRead(messageId);
         commit('UPDATE_MESSAGE_READ_STATUS', { messageId, isRead: true });
+        
+        // If the message was previously unread, decrement the unread count
+        if (wasUnread) {
+          commit('SET_UNREAD_MESSAGE_COUNT', Math.max(0, state.unreadMessageCount - 1));
+        }
+        
         return true;
       } catch (error) {
         console.error(`Error marking message ${messageId} as read:`, error);
@@ -848,11 +867,21 @@ export default {
       }
     },
     
-    // New action to mark a message as unread
+    // Mark a message as unread and update unread count
     async markMessageAsUnread({ commit, state }, messageId) {
       try {
+        // Check if message is currently read before making API call
+        const message = state.messages[messageId];
+        const wasRead = message && message.is_read !== false;
+        
         await MessageService.markMessageAsUnread(messageId);
         commit('UPDATE_MESSAGE_READ_STATUS', { messageId, isRead: false });
+        
+        // If the message was previously read, increment the unread count
+        if (wasRead) {
+          commit('SET_UNREAD_MESSAGE_COUNT', state.unreadMessageCount + 1);
+        }
+        
         return true;
       } catch (error) {
         console.error(`Error marking message ${messageId} as unread:`, error);
@@ -877,7 +906,7 @@ export default {
     },
     
     // New action to handle sibling navigation
-    navigateToSibling({ commit, state, dispatch, rootState }, { messageId, direction }) {
+    async navigateToSibling({ commit, state, dispatch, rootState }, { messageId, direction }) {
       const message = state.messages[messageId];
       if (!message || !message.child_ids || message.child_ids.length <= 1) {
         return false;
@@ -906,6 +935,39 @@ export default {
       if (newIndex !== currentIndex) {
         const newChildId = message.child_ids[newIndex];
         const oldChildId = currentChildId;
+        
+        // Check if the new sibling is loaded in the store
+        const isNewChildLoaded = !!state.messages[newChildId];
+        
+        // If the sibling isn't loaded, load it before changing branch_child
+        if (!isNewChildLoaded) {
+          console.log(`[navigateToSibling] Target sibling ${newChildId} not loaded, loading it first`);
+          
+          // We need to load this message before we can navigate to it
+          try {
+            // Show loading state
+            commit('SET_LOADING', { key: `sibling_${messageId}`, isLoading: true });
+            
+            // Load the message
+            await dispatch('loadMessage', newChildId);
+            
+            // If this loaded successfully, load its children too
+            if (state.messages[newChildId]) {
+              // Load its children to populate branch
+              await dispatch('loadMessageBranchDown', {
+                messageId: newChildId,
+                depth: 2
+              });
+            }
+            
+            // End loading state
+            commit('SET_LOADING', { key: `sibling_${messageId}`, isLoading: false });
+          } catch (error) {
+            console.error(`[navigateToSibling] Failed to load sibling ${newChildId}:`, error);
+            commit('SET_LOADING', { key: `sibling_${messageId}`, isLoading: false });
+            return false;
+          }
+        }
         
         // Update the branch child
         commit('SET_BRANCH_CHILD', { 
@@ -980,6 +1042,24 @@ export default {
         console.error('Error fetching unread message count:', error);
         return 0;
       }
+    },
+
+    // Add new action to set the selected profile
+    setSelectedProfile({ commit, dispatch }, profile) {
+      commit('SET_SELECTED_PROFILE', profile);
+      
+      // If we have a profile selected, fetch their messages
+      if (profile) {
+        dispatch('fetchUserMessages', { 
+          cursor: null,
+          userId: profile.uid
+        });
+      } else {
+        // No profile selected, fetch default messages
+        dispatch('fetchUserMessages', { cursor: null });
+      }
+      
+      return profile;
     }
   },
   
@@ -987,8 +1067,6 @@ export default {
     getMessage: (state) => (id) => {
       return state.messages[id];
     },
-    
-    getSelectedMessage: state => state.messages[state.selectedMessageId],
     
     getChildIds: state => parentId => {
       const message = state.messages[parentId];
@@ -1178,7 +1256,15 @@ export default {
     },
 
     // Getter for unread message count
-    getUnreadMessageCount: state => state.unreadMessageCount
+    getUnreadMessageCount: state => state.unreadMessageCount,
+
+    // Add a getter to check loading state
+    isLoading: state => key => {
+      return state.loadingStates[key] === true;
+    },
+
+    // Add new getter for selected profile
+    getSelectedProfile: state => state.selectedProfile
   }
 }
 

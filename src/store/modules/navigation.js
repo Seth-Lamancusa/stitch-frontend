@@ -2,8 +2,8 @@ export default {
   namespaced: true,
   
   state: {
-    selectedMessageId: null,
-    isSelectedMessageLoading: false,
+    replyingToMessageId: null,
+    isLoadingReplyMessage: false,
     isReplying: false,
     previousRoute: '/feed', // Default to feed as fallback
     replySettings: {
@@ -13,16 +13,23 @@ export default {
   },
   
   mutations: {
-    SET_SELECTED_MESSAGE(state, id) {
-      state.selectedMessageId = id;
+    SET_REPLYING_TO_MESSAGE(state, id) {
+      state.replyingToMessageId = id;
+      // When setting a message to reply to, automatically set isReplying to true
+      // when id is valid, or false when id is null
+      state.isReplying = !!id;
     },
     
-    SET_SELECTED_MESSAGE_LOADING(state, isLoading) {
-      state.isSelectedMessageLoading = isLoading;
+    SET_REPLY_MESSAGE_LOADING(state, isLoading) {
+      state.isLoadingReplyMessage = isLoading;
     },
     
     SET_REPLYING(state, isReplying) {
       state.isReplying = isReplying;
+      // Clear replyingToMessageId if not replying
+      if (!isReplying) {
+        state.replyingToMessageId = null;
+      }
     },
     
     SET_PREVIOUS_ROUTE(state, route) {
@@ -55,13 +62,13 @@ export default {
   },
   
   actions: {
-    selectMessage({ commit, dispatch }, messageId) {
+    setReplyingTo({ commit, dispatch }, messageId) {
       if (!messageId) {
-        commit('SET_SELECTED_MESSAGE', null);
+        commit('SET_REPLYING_TO_MESSAGE', null);
         return;
       }
       
-      commit('SET_SELECTED_MESSAGE', messageId);
+      commit('SET_REPLYING_TO_MESSAGE', messageId);
       
       dispatch('resetReplySettings', messageId);
     },
@@ -87,8 +94,18 @@ export default {
       }
     },
     
-    toggleReply({ commit }, isReplying) {
+    toggleReply({ commit, state }, isReplying) {
       commit('SET_REPLYING', isReplying);
+      
+      // If toggling off replying, also clear the replying to message
+      if (!isReplying && state.replyingToMessageId) {
+        commit('SET_REPLYING_TO_MESSAGE', null);
+      }
+    },
+    
+    // Clear reply when scrolled too far or branch changed
+    clearReplyingTo({ commit }) {
+      commit('SET_REPLYING_TO_MESSAGE', null);
     },
     
     updateReplyVisibility({ commit }, isPublic) {
@@ -129,26 +146,38 @@ export default {
     
     setPreviousRoute({ commit }, route) {
       commit('SET_PREVIOUS_ROUTE', route);
+    },
+    
+    // Sync reply settings with a message
+    syncReplySettingsWithSelectedMessage({ commit, state, rootGetters }) {
+      if (!state.replyingToMessageId) return;
+      
+      const message = rootGetters['messages/getMessage'](state.replyingToMessageId);
+      if (message) {
+        // Copy settings from the message
+        const isPublic = message.public === 1 || message.public === true;
+        commit('SET_REPLY_PUBLIC', isPublic);
+      }
     }
   },
   
   getters: {
-    selectedMessageId: state => state.selectedMessageId,
+    replyingToMessageId: state => state.replyingToMessageId,
     isReplying: state => state.isReplying,
     replyIsPublic: state => state.replySettings.isPublic,
     replyRecipients: state => state.replySettings.recipients,
     
-    replyTargetId: state => state.selectedMessageId,
+    replyTargetId: state => state.replyingToMessageId,
     
     replyTargetAuthor: (state, getters, rootState, rootGetters) => {
-      const messageId = state.selectedMessageId;
+      const messageId = state.replyingToMessageId;
       if (!messageId) return '';
       
       const message = rootGetters['messages/getMessage'](messageId);
       return message ? message.content_author : '';
     },
     
-    isSelectedMessageLoading: state => state.isSelectedMessageLoading,
+    isReplyMessageLoading: state => state.isLoadingReplyMessage,
     
     previousRoute: state => state.previousRoute
   }

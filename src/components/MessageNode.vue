@@ -29,25 +29,24 @@
             Public
           </span>
           
-          <!-- To You badge (for recipients) with unread indicator -->
+          <!-- To You badge (for recipients) with read/unread circle indicator -->
           <div v-if="isUserRecipient" class="recipients-dropdown-container">
             <button 
               @click.stop="toggleReadStatusOrDropdown($event)" 
               class="recipients-toggle to-you"
               :class="{ 'loading': isTogglingReadStatus }"
-              :title="unreadCount > 0 ? `${unreadCount} unread message${unreadCount !== 1 ? 's' : ''} in this thread` : (message.is_read === false ? 'Click to mark as read (Shift+click to see all recipients)' : 'Click to mark as unread (Shift+click to see all recipients)')"
+              :title="message.is_read === false ? 'Click to mark as read (Shift+click to see all recipients)' : 'Click to mark as unread (Shift+click to see all recipients)'"
               :disabled="isTogglingReadStatus"
               ref="toYouButton"
             >
               <span v-if="isTogglingReadStatus" class="loading-indicator"></span>
+              <span v-else class="read-status-indicator" :class="{ 'unread': message.is_read === false }"></span>
               <!-- If only the user is recipient -->
-              <span v-else-if="recipientsExcludingUser.length === 0">
-                <span v-if="unreadCount > 0" class="unread-count">{{ unreadCount }}</span>
+              <span v-if="recipientsExcludingUser.length === 0">
                 To You
               </span>
               <!-- If there are other recipients -->
               <span v-else>
-                <span v-if="unreadCount > 0" class="unread-count">{{ unreadCount }}</span>
                 To You and {{ recipientsExcludingUser.length }} other{{ recipientsExcludingUser.length > 1 ? 's' : '' }}
               </span>
             </button>
@@ -144,6 +143,17 @@
           <div class="reply-count">
             {{ totalReplies }} {{ totalReplies === 1 ? 'reply' : 'replies' }}
           </div>
+          
+          <!-- Add reply button, but hide it in list view -->
+          <button 
+            v-if="!inListView"
+            @click.stop="$emit('reply', message.id)" 
+            class="reply-button"
+            title="Reply to this message"
+          >
+            <span class="reply-icon">↩️</span>
+            Reply
+          </button>
           
           <!-- Copy JSON Button - Admin only -->
           <button 
@@ -741,47 +751,7 @@ export default {
       document.removeEventListener('click', handleClickOutside, true);
     });
     
-    // Add unreadCount computed property
-    const unreadCount = computed(() => {
-      // If not in list view, we don't need to calculate thread unread count
-      if (!props.inListView) return 0;
-      
-      // If we don't have thread messages, use the current message's read status
-      if (!props.threadMessages || props.threadMessages.length === 0) {
-        return props.message.is_read === false ? 1 : 0;
-      }
-      
-      // Find all messages in this thread that are for this user and unread
-      const threadUnreadCount = props.threadMessages.filter(msg => {
-        // Check if message is for the current user (is a recipient)
-        const isRecipient = msg.recipients && 
-          Array.isArray(msg.recipients) && 
-          msg.recipients.some(recipient => {
-            if (currentUser.value) {
-              // Check by UID
-              if (recipient.uid && currentUser.value.uid && recipient.uid === currentUser.value.uid) {
-                return true;
-              }
-              
-              // Check by user_tag
-              if (recipient.user_tag && currentUser.value.user_tag && recipient.user_tag === currentUser.value.user_tag) {
-                return true;
-              }
-              
-              // Check by email for backward compatibility
-              if (recipient.user_tag && currentUser.value.email && recipient.user_tag === currentUser.value.email) {
-                return true;
-              }
-            }
-            return false;
-          });
-        
-        // Count if it's for this user and unread
-        return isRecipient && msg.is_read === false;
-      }).length;
-      
-      return threadUnreadCount;
-    });
+    // We've simplified the read/unread handling - each message now just shows its own status
     
     return {
       currentUser,
@@ -822,8 +792,7 @@ export default {
       copyMessageJson,
       copyMessageText,
       toggleReadStatusOrDropdown,
-      truncatedContent,
-      unreadCount
+      truncatedContent
     };
   },
   
@@ -973,24 +942,29 @@ export default {
   background-color: var(--color-info);
   color: var(--color-text-inverse);
   border: none;
-  position: relative; /* Added for positioning the unread indicator */
+  position: relative;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding-left: 8px;
 }
 
-/* Styling for the unread count badge inside To You button */
-.unread-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--color-error, #ff3860);
-  color: white;
-  border-radius: 12px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  font-size: 11px;
-  font-weight: bold;
-  margin-right: 5px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+/* Read status indicator - circle that shows if message is read/unread */
+.read-status-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--color-text-inverse);
+  background-color: transparent;
+  flex-shrink: 0;
+}
+
+/* Unread state - filled red circle */
+.read-status-indicator.unread {
+  background-color: var(--color-error);
+  border-color: var(--color-error);
 }
 
 .recipients-toggle.author-toggle {
@@ -1357,5 +1331,30 @@ export default {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+.reply-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  padding: 5px 8px;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--color-text-secondary);
+}
+
+.reply-button:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+  color: var(--color-primary);
+}
+
+.reply-icon {
+  font-size: var(--font-size-sm);
+  line-height: 1;
 }
 </style>

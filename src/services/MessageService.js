@@ -143,13 +143,18 @@ export default {
   },
   
   // Get messages authored by the current user (for Profile tab)
-  async getUserMessages(limit = 10, cursor = null) {
+  async getUserMessages(limit = 10, cursor = null, userId = null) {
     const headers = await getAuthHeaders();
     let url = `${apiBaseUrl}/tabs/by-user?limit=${limit}`;
     
     // Add cursor parameter if provided
     if (cursor !== null) {
       url += `&cursor=${cursor}`;
+    }
+    
+    // Add userId parameter if provided
+    if (userId) {
+      url += `&user_id=${encodeURIComponent(userId)}`;
     }
     
     const response = await axios.get(url, { headers });

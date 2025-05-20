@@ -3,23 +3,23 @@
     <button 
       @click.stop="navigate('prev')" 
       class="nav-button nav-prev"
-      :class="{ 'disabled': !canNavigatePrev, 'loading': isParentLoading }"
-      :disabled="!canNavigatePrev || isParentLoading"
+      :class="{ 'disabled': !canNavigatePrev, 'loading': isLoading }"
+      :disabled="!canNavigatePrev || isLoading"
       title="Previous reply"
     >
-      <div v-if="isParentLoading" class="loading-dot"></div>
-      <template v-else>&lt;</template>
+      <div v-if="isLoading" class="loading-dot"></div>
+      <div v-else class="triangle-icon left-triangle"></div>
     </button>
     
     <button 
       @click.stop="navigate('next')" 
       class="nav-button nav-next"
-      :class="{ 'disabled': !canNavigateNext, 'loading': isParentLoading }"
-      :disabled="!canNavigateNext || isParentLoading" 
+      :class="{ 'disabled': !canNavigateNext, 'loading': isLoading }"
+      :disabled="!canNavigateNext || isLoading" 
       title="Next reply"
     >
-      <div v-if="isParentLoading" class="loading-dot"></div>
-      <template v-else>&gt;</template>
+      <div v-if="isLoading" class="loading-dot"></div>
+      <div v-else class="triangle-icon right-triangle"></div>
     </button>
   </div>
 </template>
@@ -55,6 +55,16 @@ const isParentLoading = computed(() => {
   return !parent;
 });
 
+// Check if siblings are currently loading
+const isSiblingLoading = computed(() => {
+  return store.getters['messages/isLoading'](`sibling_${props.parentId}`);
+});
+
+// Combined loading state
+const isLoading = computed(() => {
+  return isParentLoading.value || isSiblingLoading.value;
+});
+
 // Get message siblings from the store
 const siblings = computed(() => {
   const parent = store.getters['messages/getMessage'](props.parentId);
@@ -68,7 +78,7 @@ const totalSiblings = computed(() => siblings.value.length);
 
 // Find current message position in siblings array (0-indexed)
 const currentPosition = computed(() => {
-  if (isParentLoading.value || !siblings.value || !siblings.value.length) return 0;
+  if (isLoading.value || !siblings.value || !siblings.value.length) return 0;
   
   const childIds = siblings.value;
   const branchChild = store.getters['messages/getBranchChild'](props.parentId);
@@ -81,35 +91,39 @@ const currentPosition = computed(() => {
 
 // Navigation availability
 const canNavigatePrev = computed(() => {
-  if (isParentLoading.value) return false;
+  if (isLoading.value) return false;
   return siblings.value.length > 1 && currentPosition.value > 1;
 });
 
 const canNavigateNext = computed(() => {
-  if (isParentLoading.value) return false;
+  if (isLoading.value) return false;
   return siblings.value.length > 1 && currentPosition.value < siblings.value.length;
 });
 
 // Navigation handler
-const navigate = (direction) => {
-  if (isParentLoading.value) return;
+const navigate = async (direction) => {
+  if (isLoading.value) return;
   
-  // Call the central store action for sibling navigation
-  const success = store.dispatch('messages/navigateToSibling', {
-    messageId: props.parentId,
-    direction: direction
-  });
-  
-  if (success) {
-    // Get the new branch child after navigation
-    const newBranchChild = store.getters['messages/getBranchChild'](props.parentId);
-    
-    // Emit event with new target sibling
-    emit('navigate', {
-      direction,
-      targetSiblingId: newBranchChild,
-      parentId: props.parentId
+  try {
+    // Call the central store action for sibling navigation
+    const success = await store.dispatch('messages/navigateToSibling', {
+      messageId: props.parentId,
+      direction: direction
     });
+    
+    if (success) {
+      // Get the new branch child after navigation
+      const newBranchChild = store.getters['messages/getBranchChild'](props.parentId);
+      
+      // Emit event with new target sibling
+      emit('navigate', {
+        direction,
+        targetSiblingId: newBranchChild,
+        parentId: props.parentId
+      });
+    }
+  } catch (error) {
+    console.error("Error navigating to sibling:", error);
   }
 };
 </script>
@@ -127,17 +141,15 @@ const navigate = (direction) => {
 
 .nav-button {
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 0;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 38px;
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 50%;
-  font-size: 18px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   color: var(--color-text);
   transition: all var(--transition-fast);
@@ -145,24 +157,76 @@ const navigate = (direction) => {
   line-height: 1;
   pointer-events: auto; /* Re-enable pointer events for buttons */
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transform: none;
 }
 
 .nav-prev {
-  left: -40px;
+  left: -5px; /* Flush against the left side */
+  border-top-right-radius: 7px;
+  border-bottom-right-radius: 7px;
 }
 
 .nav-next {
-  right: -40px;
+  right: -5px; /* Flush against the right side */
+  border-top-left-radius: 7px;
+  border-bottom-left-radius: 7px;
 }
 
+/* Triangle icon styling */
+.triangle-icon {
+  width: 0;
+  height: 0;
+  border-style: solid;
+}
+
+.left-triangle {
+  border-width: 8px 12px 8px 0;
+  border-color: transparent var(--color-text-secondary) transparent transparent;
+}
+
+.right-triangle {
+  border-width: 8px 0 8px 12px;
+  border-color: transparent transparent transparent var(--color-text-secondary);
+}
+
+/* Hover styles - not disabled */
 .nav-button:hover:not(:disabled) {
   background-color: var(--color-primary-light);
   border-color: var(--color-primary);
-  color: var(--color-primary);
-  transform: translateY(-50%) scale(1.1);
   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+  transform: none;
 }
 
+.nav-button:hover:not(:disabled) .left-triangle {
+  border-color: transparent var(--color-primary) transparent transparent;
+}
+
+.nav-button:hover:not(:disabled) .right-triangle {
+  border-color: transparent transparent transparent var(--color-primary);
+}
+
+/* Active (non-disabled) styling with gradient connection */
+.nav-button:not(.disabled):not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.nav-button.nav-prev:not(.disabled):not(:disabled) {
+  background: linear-gradient(to right, var(--color-surface), var(--color-primary-light, #e6f0ff));
+}
+
+.nav-button.nav-next:not(.disabled):not(:disabled) {
+  background: linear-gradient(to left, var(--color-surface), var(--color-primary-light, #e6f0ff));
+}
+
+.nav-button.nav-prev:not(.disabled):not(:disabled) .left-triangle {
+  border-color: transparent var(--color-primary) transparent transparent;
+}
+
+.nav-button.nav-next:not(.disabled):not(:disabled) .right-triangle {
+  border-color: transparent transparent transparent var(--color-primary);
+}
+
+/* Disabled state - slightly transparent */
 .nav-button.disabled {
   opacity: 0.5;
   cursor: not-allowed;

@@ -1,10 +1,11 @@
 <script setup>
-import { computed, onMounted, ref, onUnmounted, nextTick } from 'vue';
+import { computed, onMounted, ref, onUnmounted, nextTick, watch } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
 import { initializeFirebase } from '../firebase';
 import MessageService from '../services/MessageService';
 import MessageNode from './MessageNode.vue';
+import ProfileFilter from './ProfileFilter.vue';
 
 /**
  * MessageList component displays a list of message threads based on the current route.
@@ -72,6 +73,9 @@ const messageListRef = ref(null);
 // Reference to the loading indicator for intersection observer
 const loadingIndicatorRef = ref(null);
 
+// Profile filter state from store
+const selectedProfileFilter = computed(() => store.getters['messages/getSelectedProfile']);
+
 // Determine active tab from route path
 const activeTab = computed(() => {
   const path = route.path;
@@ -100,12 +104,46 @@ const threads = computed(() => {
   const currentUid = currentUser?.uid;
   
   // Filter messages based on the for_tabs array
-  const filteredMessages = allMessages.filter(msg => {
+  let filteredMessages = allMessages.filter(msg => {
     // Check if the message belongs to the current tab
     // Either via the legacy for_tab property or the new for_tabs array
     return (msg.for_tabs && Array.isArray(msg.for_tabs) && msg.for_tabs.includes(activeTab.value)) || 
            msg.for_tab === activeTab.value;
   });
+  
+  // Apply profile filter if we're in the profile tab and have a selected profile
+  if (activeTab.value === 'profile' && selectedProfileFilter.value) {
+    filteredMessages = filteredMessages.filter(msg => {
+      // Check all possible match conditions (implement OR logic)
+      
+      // 1. User tag match (most reliable in new data)
+      if (msg.author_user_tag && selectedProfileFilter.value.user_tag && 
+          msg.author_user_tag === selectedProfileFilter.value.user_tag) {
+        return true;
+      }
+      
+      // 2. UID match (content_author often contains the UID)
+      if (msg.content_author && selectedProfileFilter.value.uid && 
+          msg.content_author === selectedProfileFilter.value.uid) {
+        return true;
+      }
+      
+      // 3. Email matches user tag (for backward compatibility)
+      if (msg.author_email && selectedProfileFilter.value.user_tag && 
+          msg.author_email === selectedProfileFilter.value.user_tag) {
+        return true;
+      }
+      
+      // 4. Display name match (less reliable but can be useful)
+      if (msg.author_display_name && selectedProfileFilter.value.display_name && 
+          msg.author_display_name === selectedProfileFilter.value.display_name) {
+        return true;
+      }
+      
+      // No match found
+      return false;
+    });
+  }
   
   // For curated tab, sort by curation score/ranking
   if (activeTab.value === 'curated') {
@@ -418,7 +456,22 @@ const loadMessagesForTab = async (tabName, isInitial = true) => {
         response = await store.dispatch('messages/fetchDirectMessages', { cursor });
         break;
       case 'profile':
-        response = await store.dispatch('messages/fetchUserMessages', { cursor });
+        if (selectedProfileFilter.value) {
+          // Pass user ID to ensure the API can find the right user
+          response = await store.dispatch('messages/fetchUserMessages', { 
+            cursor,
+            userId: selectedProfileFilter.value.uid
+          });
+        } else if (user.value) {
+          // If no filter but user is logged in, show their own messages
+          response = await store.dispatch('messages/fetchUserMessages', { 
+            cursor,
+            userId: user.value.uid
+          });
+        } else {
+          // Fallback: no filter, no logged in user - show general messages
+          response = await store.dispatch('messages/fetchUserMessages', { cursor });
+        }
         break;
       case 'local':
         // Local messages are stored client-side, no API call needed
@@ -533,7 +586,7 @@ onUnmounted(() => {
   <div class="message-list" ref="messageListRef">
     <!-- Tab info boxes - now inside the message list so they scroll with content -->
     <div v-if="activeTab === 'feed'" class="tab-info">
-      <p>Public feed of all messages in reverse chronological order.</p>
+      <p>All public messages in reverse chronological order.</p>
       <p>Pinned messages appear at the top.</p>
     </div>
     
@@ -543,14 +596,20 @@ onUnmounted(() => {
     </div>
     
     <div v-if="activeTab === 'private'" class="tab-info">
-      <p>Direct messages sent to you or by you to specific recipients.</p>
-      <p>Shows the most recent message from each conversation.</p>
+      <p>Direct messages sent to you specifically.</p>
+      <p>Reverse chronological order.</p>
     </div>
     
     <div v-if="activeTab === 'profile'" class="tab-info">
       <p>All messages you've created, both public and private.</p>
       <p>Listed in reverse chronological order.</p>
+      <p>Filter by username or tag to view other profiles.</p>
     </div>
+    
+    <!-- Profile Filter Component - only shown in profile tab -->
+    <ProfileFilter 
+      v-if="activeTab === 'profile'"
+    />
     
     <div v-if="activeTab === 'local'" class="tab-info local-message-info">
       <p>This tab will display messages saved to your local filesystem.</p>

@@ -78,7 +78,8 @@ export default {
     return {
       isVisible: false,
       observer: null,
-      hasEmittedLoad: false // Track if we've emitted load-more for this render cycle
+      hasEmittedLoad: false,
+      initialLoadDelay: false
     };
   },
   
@@ -113,6 +114,11 @@ export default {
     if (this.active && this.state === 'waiting') {
       this.setupObserver();
     }
+    
+    // After 2 seconds, allow the adaptive marker to trigger loads
+    setTimeout(() => {
+      this.initialLoadDelay = true;
+    }, 2000);
   },
   
   beforeUnmount() {
@@ -171,32 +177,37 @@ export default {
         return;
       }
       
-      this.observer = new IntersectionObserver(entries => {
-        const isIntersecting = entries[0].isIntersecting;
-        
-        if (isIntersecting) {
-          this.isVisible = true;
+      // Add a small delay before setting up observer to prevent immediate triggering
+      setTimeout(() => {
+        this.observer = new IntersectionObserver(entries => {
+          const isIntersecting = entries[0].isIntersecting;
           
-          // Only emit load-more if we haven't already for this cycle
-          // and we're in waiting state
-          if (!this.hasEmittedLoad && this.state === 'waiting') {
-            // Add a small delay to avoid too many rapid events
-            setTimeout(() => {
-              this.hasEmittedLoad = true;
-              this.$emit('load-more');
-            }, 300);
+          if (isIntersecting) {
+            this.isVisible = true;
+            
+            // Only emit load-more if we haven't already for this cycle,
+            // we're in waiting state, AND the user has been on the page for at least 2 seconds
+            // This prevents auto-triggering during initial load
+            if (!this.hasEmittedLoad && this.state === 'waiting' && 
+                (this.initialLoadDelay || performance.now() > 2000)) {
+              // Add a small delay to avoid too many rapid events
+              setTimeout(() => {
+                this.hasEmittedLoad = true;
+                this.$emit('load-more');
+              }, 300);
+            }
+          } else {
+            this.isVisible = false;
           }
-        } else {
-          this.isVisible = false;
+        }, {
+          rootMargin: '100px', // Start loading a bit before scrolling into view
+          threshold: 0.1
+        });
+        
+        if (this.$refs.markerElement) {
+          this.observer.observe(this.$refs.markerElement);
         }
-      }, {
-        rootMargin: '100px', // Start loading a bit before scrolling into view
-        threshold: 0.1
-      });
-      
-      if (this.$refs.markerElement) {
-        this.observer.observe(this.$refs.markerElement);
-      }
+      }, 1000); // Delay observer setup by 1 second
     }
   }
 }
