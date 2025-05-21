@@ -198,27 +198,43 @@ const WebSocketService = {
       }
     }
     
-    // Mark the message as read if we're looking at it
+    // Mark the message as read if it's in the current branch path
     const currentRoute = store.getters['navigation/currentRoute'];
     const currentThreadId = currentRoute?.params?.id;
     
     if (currentThreadId) {
       this.log(`Current thread ID: ${currentThreadId}`);
-      // Only auto-mark as read if we're looking at the relevant thread
-      const isMessageInCurrentThread = 
-        // It's the current thread
-        (messageData.id === parseInt(currentThreadId)) ||
-        // It's a direct child of the current thread
-        (messageData.parent_id === parseInt(currentThreadId)) ||
-        // It's part of the current thread branch
-        store.getters['messages/getMessageBranch'](parseInt(currentThreadId))
-          .some(msg => msg.id === messageData.parent_id);
-          
-      this.log(`Message in current thread: ${isMessageInCurrentThread}`);
       
-      if (isMessageInCurrentThread) {
+      // Get current branch path
+      const branchPath = store.getters['messages/getMessageBranch'](parseInt(currentThreadId));
+      
+      // Check if message is in the branch path
+      const isInBranchPath = branchPath.some(msg => msg.id === messageData.id);
+          
+      this.log(`Message in branch path: ${isInBranchPath}`);
+      
+      if (isInBranchPath) {
         this.log(`Marking message ${messageData.id} as read`);
-        store.dispatch('messages/markMessageAsRead', messageData.id);
+        
+        // Set loading state for "to you" badge
+        store.commit('ui/SET_TO_YOU_BADGE_LOADING', true);
+        
+        // Mark as read and handle completion
+        this.log(`🔍 Calling backend to mark message ${messageData.id} as read`);
+        store.dispatch('messages/markMessageAsRead', messageData.id)
+          .then(() => {
+            this.log(`✅ Successfully marked message ${messageData.id} as read on backend`);
+            // Force refresh unread count from server to ensure consistency
+            return store.dispatch('messages/fetchUnreadMessageCount');
+          })
+          .catch(error => {
+            this.log(`❌ Error marking message ${messageData.id} as read: ${error.message}`);
+            console.error(`[WebSocket] Error marking message as read:`, error);
+          })
+          .finally(() => {
+            // Reset loading state when request completes
+            store.commit('ui/SET_TO_YOU_BADGE_LOADING', false);
+          });
       }
     }
     

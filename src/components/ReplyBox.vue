@@ -38,9 +38,9 @@
         
         <div class="reply-actions">
           <button 
-            @click="sendReply" 
+            @click.stop="sendReply" 
             class="send-button"
-            :disabled="!canInteract || !content.trim() || isSending"
+            :disabled="!canSendReply"
           >
             <span v-if="!isSending">Send</span>
             <div v-else class="button-spinner"></div>
@@ -208,6 +208,11 @@ const canAddRecipient = computed(() => {
   return newRecipient.value.trim() !== '' && isTagValid.value;
 });
 
+// Centralized validation logic
+const canSendReply = computed(() => {
+  return props.canInteract && content.value.trim() !== '' && !isSending.value;
+});
+
 // Generate placeholder text
 const placeholderText = computed(() => {
   // First priority: check if we're in a temporary thread
@@ -275,12 +280,9 @@ const handleTextareaKeyDown = (event) => {
     
     event.preventDefault();
     
-    // Don't allow sending if already sending a message or content is empty
-    if (isSending.value || !content.value.trim()) {
-      return;
+    if (canSendReply.value) {
+      sendReply();
     }
-    
-    sendReply();
   }
 };
 
@@ -312,7 +314,7 @@ const autoResizeTextarea = () => {
 };
 
 const sendReply = async () => {
-  if (!content.value.trim() || isSending.value) return;
+  if (!canSendReply.value) return;
   
   // Make sure we have a user and email
   const currentUser = store.getters['auth/user'];
@@ -379,13 +381,13 @@ const sendReply = async () => {
           });
           console.log('[ReplyBox] Added child relationship:', props.targetId, '->', newMessage.id);
           
-              // Always set this as branch_child, regardless of whether it's the first reply
-    // Set immediately without rechecking child_ids to avoid race conditions
-    store.commit('messages/SET_BRANCH_CHILD', {
-      messageId: props.targetId,
-      childId: newMessage.id
-    });
-    console.log('[ReplyBox] Set as branch_child for parent:', props.targetId);
+          // Always set this as branch_child, regardless of whether it's the first reply
+          // Set immediately without rechecking child_ids to avoid race conditions
+          store.commit('messages/SET_BRANCH_CHILD', {
+            messageId: props.targetId,
+            childId: newMessage.id
+          });
+          console.log('[ReplyBox] Set as branch_child for parent:', props.targetId);
         }
         
         // 4. Force re-render the thread to show the new message
@@ -402,14 +404,22 @@ const sendReply = async () => {
               store.dispatch('messages/prepareBranchPath', parseInt(currentThreadId, 10));
             }
           }
-        }, 50);
-      }
-      
-      // 6. Hide the reply box by clearing the replying state
-      // Only do this for normal messages, not temporary threads
-      if (!props.isTemporaryThread) {
-        console.log('[ReplyBox] Hiding reply box after successful send');
-        store.dispatch('navigation/clearReplyingTo');
+          
+          // 6. Only hide the reply box after ensuring all UI updates are processed
+          // This prevents prematurely closing the reply box before the UI updates
+          if (!props.isTemporaryThread) {
+            console.log('[ReplyBox] Hiding reply box after successful send');
+            setTimeout(() => {
+              store.dispatch('navigation/clearReplyingTo');
+            }, 150); // Short delay to ensure UI updates complete
+          }
+        }, 100);
+      } else {
+        // Only hide the reply box if we didn't find the parent message
+        if (!props.isTemporaryThread) {
+          console.log('[ReplyBox] Hiding reply box after successful send (no parent found)');
+          store.dispatch('navigation/clearReplyingTo');
+        }
       }
     }
     

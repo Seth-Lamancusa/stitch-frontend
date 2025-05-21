@@ -21,13 +21,15 @@
             @click="navigateToTab('private')"
           >
             Direct
-            <!-- Unread Message Badge -->
+            <!-- Unread Message Badge with loading state -->
             <span 
               v-if="user && unreadMessageCount > 0" 
               class="unread-badge" 
+              :class="{ 'loading': toYouBadgeLoading }"
               :title="`${unreadMessageCount} unread message${unreadMessageCount > 1 ? 's' : ''}`"
             >
-              {{ unreadMessageCount > 99 ? '99+' : unreadMessageCount }}
+              <span v-if="toYouBadgeLoading" class="badge-loading-spinner"></span>
+              <span v-else>{{ unreadMessageCount > 99 ? '99+' : unreadMessageCount }}</span>
             </span>
           </button>
           <button 
@@ -122,6 +124,7 @@ const authReady = computed(() => store.getters['auth/authReady']);
 const isLoggingIn = ref(false);
 const isProfileModalOpen = ref(false);
 const unreadMessageCount = computed(() => store.getters['messages/getUnreadMessageCount']);
+const toYouBadgeLoading = computed(() => store.getters['ui/getToYouBadgeLoading']);
 
 // User display properties
 const userDisplayName = computed(() => {
