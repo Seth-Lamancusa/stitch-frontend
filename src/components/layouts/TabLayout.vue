@@ -106,11 +106,6 @@ const props = defineProps({
     type: String,
     required: true,
     validator: (value) => ['feed', 'curated', 'private', 'profile', 'local'].includes(value)
-  },
-  // The Vuex action to fetch messages (e.g., 'messages/fetchFeedMessages')
-  fetchAction: {
-    type: String,
-    required: true
   }
 });
 
@@ -211,15 +206,33 @@ watch(user, async (newUser) => {
   }
 });
 
-// Load messages for this tab
-onMounted(async () => {
-  // Dispatch the provided fetch action
-  if (props.fetchAction && props.activeTab !== 'local') {
-    await store.dispatch(props.fetchAction);
+// Add a watcher for tab changes to refresh unread count
+watch(() => props.activeTab, (newTab) => {
+  // When switching to Direct tab, refresh unread message count
+  if (newTab === 'private') {
+    fetchUnreadMessageCount();
   }
-  
+});
+
+// Only fetch unread count on mount, not messages
+onMounted(async () => {
   // Fetch unread message count
   fetchUnreadMessageCount();
+  
+  // Add store subscription to watch for unread message count changes
+  const unsubscribe = store.subscribe((mutation) => {
+    // If unread count changes in the store, update the UI
+    if (mutation.type === 'messages/SET_UNREAD_MESSAGE_COUNT') {
+      console.log('Unread message count updated:', mutation.payload);
+    }
+  });
+  
+  // Clean up subscription when component unmounts
+  onBeforeUnmount(() => {
+    if (unsubscribe) {
+      unsubscribe();
+    }
+  });
 });
 </script>
 

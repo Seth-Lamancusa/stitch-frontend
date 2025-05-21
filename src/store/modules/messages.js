@@ -38,7 +38,10 @@ export default {
     loadingStates: {},
     
     // Store the selected profile for profile filtering
-    selectedProfile: null
+    selectedProfile: null,
+    
+    // Track direct messages last updated timestamp
+    directMessagesLastUpdated: Date.now()
   },
   
   mutations: {
@@ -264,6 +267,12 @@ export default {
     // Add new mutation for setting selected profile
     SET_SELECTED_PROFILE(state, profile) {
       state.selectedProfile = profile;
+    },
+
+    REFRESH_DIRECT_MESSAGES(state) {
+      // This is a trigger mutation that doesn't actually modify state
+      // It will be observed by components to know when to refresh their view
+      state.directMessagesLastUpdated = Date.now();
     }
   },
   
@@ -465,23 +474,37 @@ export default {
     // Send a reply to a message
     async sendReply({ commit, dispatch, rootState, state }, { parentId, content, isPrivate, recipients, content_author }) {
       try {
+        console.log('[Messages Store] Starting sendReply', { 
+          parentId, 
+          isPrivate, 
+          recipientsCount: recipients?.length || 0,
+          hasAuthor: !!content_author 
+        });
+
         // Use the current user if content_author is not provided
         const effectiveAuthor = content_author || rootState.user?.email;
         
         // Process recipients to extract UIDs
         let recipientUids = [];
         if (recipients && recipients.length > 0) {
+          console.log('[Messages Store] Processing recipients:', recipients);
+          
           recipientUids = recipients.map(recipient => {
             // If recipient is already an object with a uid
             if (typeof recipient === 'object' && recipient.uid) {
+              console.log('[Messages Store] Using recipient UID from object:', recipient.uid);
               return recipient.uid;
             }
             // If recipient is a string (backward compatibility)
             else if (typeof recipient === 'string') {
+              console.log('[Messages Store] Using recipient as string:', recipient);
               return recipient; // Will be resolved by server
             }
+            console.log('[Messages Store] Invalid recipient format:', recipient);
             return null;
           }).filter(uid => uid !== null); // Remove any nulls
+          
+          console.log('[Messages Store] Final recipient UIDs:', recipientUids);
         }
         
         // Only add the author as recipient in private messages with no recipients
@@ -489,9 +512,18 @@ export default {
         if (isPrivate && recipientUids.length === 0 && effectiveAuthor) {
           // If effectiveAuthor is an email, it will be resolved to UID by server
           recipientUids.push(effectiveAuthor);
+          console.log('[Messages Store] Added author as recipient:', effectiveAuthor);
         }
         
         // Make API call to create the reply
+        console.log('[Messages Store] Calling MessageService.sendReply with:', {
+          parentId, 
+          contentLength: content?.length || 0,
+          isPrivate,
+          recipientUids,
+          effectiveAuthor 
+        });
+        
         const response = await MessageService.sendReply(
           parentId, 
           content, 
@@ -499,6 +531,12 @@ export default {
           recipientUids, 
           effectiveAuthor
         );
+        
+        console.log('[Messages Store] sendReply response:', response?.data?.id ? {
+          messageId: response.data.id,
+          hasMessage: !!response.data,
+          responseStatus: response.status,
+        } : 'No message ID in response');
         
         const newMessage = response.data;
         
@@ -517,7 +555,13 @@ export default {
         
         return newMessage;
       } catch (error) {
-        console.error("Error sending reply:", error);
+        console.error("[Messages Store] Error sending reply:", error);
+        console.error("[Messages Store] Error details:", {
+          message: error.message,
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data
+        });
         throw error;
       }
     },

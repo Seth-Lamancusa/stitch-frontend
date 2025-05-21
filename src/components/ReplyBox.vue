@@ -1,53 +1,55 @@
 <template>
-  <div v-if="isReplying || isTemporaryThread" class="reply-container">
-    <div class="reply-form">
-      <div class="reply-settings">
-        <label class="visibility-toggle">
-          <input 
-            type="checkbox" 
-            :checked="isPublic" 
-            @click="toggleVisibility"
+  <div class="reply-box-wrapper">
+    <div v-if="isReplying || isTemporaryThread" class="reply-container">
+      <div class="reply-form">
+        <div class="reply-settings">
+          <label class="visibility-toggle">
+            <input 
+              type="checkbox" 
+              :checked="isPublic" 
+              @click="toggleVisibility"
+              :disabled="!canInteract"
+            >
+            <span>Public reply</span>
+          </label>
+          
+          <button 
+            class="recipients-toggle" 
+            @click="toggleRecipientSelector"
             :disabled="!canInteract"
           >
-          <span>Public reply</span>
-        </label>
-        
-        <button 
-          class="recipients-toggle" 
-          @click="toggleRecipientSelector"
-          :disabled="!canInteract"
-        >
-          Recipients ({{ recipients.length }})
-        </button>
+            Recipients ({{ recipients.length }})
+          </button>
+        </div>
       </div>
-    </div>
-    
-    <div class="textarea-container">
-      <textarea 
-        v-model="content" 
-        :placeholder="placeholderText" 
-        class="reply-input"
-        ref="replyTextarea"
-        @keydown="handleTextareaKeyDown"
-        @focus="ensureReplyingActive"
-        @input="autoResizeTextarea"
-        :disabled="!canInteract"
-        :class="{ 'disabled': !canInteract }"
-      ></textarea>
       
-      <div class="reply-actions">
-        <button 
-          @click="sendReply" 
-          class="send-button"
-          :disabled="!canInteract || !content.trim() || isSending"
-        >
-          <span v-if="!isSending">Send</span>
-          <div v-else class="button-spinner"></div>
-        </button>
+      <div class="textarea-container">
+        <textarea 
+          v-model="content" 
+          :placeholder="placeholderText" 
+          class="reply-input"
+          ref="replyTextarea"
+          @keydown="handleTextareaKeyDown"
+          @focus="ensureReplyingActive"
+          @input="autoResizeTextarea"
+          :disabled="!canInteract"
+          :class="{ 'disabled': !canInteract }"
+        ></textarea>
+        
+        <div class="reply-actions">
+          <button 
+            @click="sendReply" 
+            class="send-button"
+            :disabled="!canInteract || !content.trim() || isSending"
+          >
+            <span v-if="!isSending">Send</span>
+            <div v-else class="button-spinner"></div>
+          </button>
+        </div>
       </div>
     </div>
 
-    <!-- Recipients modal with centered design -->
+    <!-- Recipients modal moved outside the reply-container but inside the wrapper -->
     <div v-if="showRecipientSelector" class="modal-overlay" @click.self="showRecipientSelector = false">
       <div class="recipient-modal">
         <div class="modal-header">
@@ -83,9 +85,7 @@
             >Add</button>
           </div>
           
-          <!-- Search results container - this will be where all results and messages appear -->
           <div class="search-results-container">
-            <!-- Search results dropdown (shown when results exist) -->
             <div v-if="showSearchResults && searchResults && searchResults.length > 0" class="search-results-list">
               <div 
                 v-for="(user, index) in searchResults" 
@@ -100,7 +100,6 @@
               </div>
             </div>
 
-            <!-- No results message (shown when search performed but no results) -->
             <div v-else-if="searchResults.length === 0 && hasSearched && !isSearching" class="no-search-results">
               No users found. Try a different search term.
             </div>
@@ -137,7 +136,7 @@
         </div>
         
         <div class="modal-footer">
-          <button @click="showRecipientSelector = false" class="done-button">Done</button>
+          <button @click="closeRecipientSelector" class="done-button">Done</button>
         </div>
       </div>
     </div>
@@ -262,22 +261,6 @@ const toggleVisibility = () => {
   }
 };
 
-const toggleRecipientSelector = () => {
-  showRecipientSelector.value = !showRecipientSelector.value;
-  
-  // Reset input field when opening the modal
-  if (showRecipientSelector.value) {
-    newRecipient.value = '';
-    
-    // Focus the input field after DOM update
-    nextTick(() => {
-      if (recipientInput.value) {
-        recipientInput.value.focus();
-      }
-    });
-  }
-};
-
 const ensureReplyingActive = () => {
   if (!isReplying.value && props.targetId) {
     store.dispatch('navigation/toggleReply', true);
@@ -291,9 +274,13 @@ const handleTextareaKeyDown = (event) => {
     }
     
     event.preventDefault();
-    if (content.value.trim()) {
-      sendReply();
+    
+    // Don't allow sending if already sending a message or content is empty
+    if (isSending.value || !content.value.trim()) {
+      return;
     }
+    
+    sendReply();
   }
 };
 
@@ -307,7 +294,7 @@ const autoResizeTextarea = () => {
     return;
   }
   
-  // Only resize if we've added a line break
+  // Only resize if we have line breaks or content exceeds current height
   if (content.value.includes('\n')) {
     // Reset height to auto to get new scrollHeight
     textarea.style.height = 'auto';
@@ -315,6 +302,9 @@ const autoResizeTextarea = () => {
     // Calculate new height (with minimum)
     const newHeight = Math.max(40, textarea.scrollHeight);
     textarea.style.height = `${newHeight}px`;
+  } else if (textarea.scrollHeight > textarea.clientHeight) {
+    // Content exceeds current height without line breaks
+    textarea.style.height = `${textarea.scrollHeight}px`;
   } else if (textarea.style.height === '' || textarea.style.height === 'auto') {
     // Set initial height if not set
     textarea.style.height = '40px';
@@ -322,7 +312,7 @@ const autoResizeTextarea = () => {
 };
 
 const sendReply = async () => {
-  if (!content.value.trim()) return;
+  if (!content.value.trim() || isSending.value) return;
   
   // Make sure we have a user and email
   const currentUser = store.getters['auth/user'];
@@ -333,6 +323,11 @@ const sendReply = async () => {
   
   try {
     isSending.value = true;
+    console.log('[ReplyBox] Starting to send message', {
+      parentId: props.targetId,
+      isPrivate: !isPublic.value,
+      recipientsCount: recipients.value.length
+    });
     
     // Create a new message using the store action
     const newMessage = await store.dispatch('messages/sendReply', {
@@ -342,6 +337,11 @@ const sendReply = async () => {
       recipients: recipients.value,
       // Ensure the author is explicitly set to the user's email
       content_author: currentUser.email
+    });
+    
+    console.log('[ReplyBox] Message sent successfully', {
+      messageId: newMessage?.id,
+      response: newMessage
     });
     
     // Clear the input
@@ -354,11 +354,76 @@ const sendReply = async () => {
     // WebSockets will handle updates for replies to existing messages
     if (props.isTemporaryThread) {
       emit('send-success', newMessage);
+    } else if (newMessage && props.targetId) {
+      // For replies to existing messages, manually add to UI
+      // This ensures the message appears immediately without waiting for WebSocket
+      
+      // 1. Add the message to the store if not already there
+      if (!store.getters['messages/getMessage'](newMessage.id)) {
+        store.commit('messages/SET_MESSAGE', newMessage);
+        console.log('[ReplyBox] Added new message to store:', newMessage.id);
+      }
+      
+      // 2. Get the parent message and add child relationship if needed
+      const parentMessage = store.getters['messages/getMessage'](props.targetId);
+      if (parentMessage) {
+        // Check if child relationship already exists
+        const childExists = parentMessage.child_ids && 
+                          parentMessage.child_ids.includes(newMessage.id);
+        
+        if (!childExists) {
+          // Add child to parent
+          store.commit('messages/ADD_CHILD_TO_PARENT', {
+            parentId: props.targetId,
+            childId: newMessage.id
+          });
+          console.log('[ReplyBox] Added child relationship:', props.targetId, '->', newMessage.id);
+          
+          // 3. If this is the first reply, set as branch_child
+          const updatedParent = store.getters['messages/getMessage'](props.targetId);
+          if (updatedParent.child_ids && updatedParent.child_ids.length === 1) {
+            store.commit('messages/SET_BRANCH_CHILD', {
+              messageId: props.targetId,
+              childId: newMessage.id
+            });
+            console.log('[ReplyBox] Set as branch_child for parent:', props.targetId);
+          }
+        }
+        
+        // 4. Force re-render the thread to show the new message
+        // This uses the global event bus to trigger a re-render in ThreadView
+        store.commit('messages/REFRESH_DIRECT_MESSAGES');
+        
+        // 5. Force reload the branch path in case it's not already updated
+        // This needs to be done after a short delay to ensure store is updated
+        setTimeout(() => {
+          console.log('[ReplyBox] Reloading thread after sending reply');
+          if (store.state.navigation && store.state.navigation.currentRoute) {
+            const currentThreadId = store.state.navigation.currentRoute.params.id;
+            if (currentThreadId) {
+              store.dispatch('messages/prepareBranchPath', parseInt(currentThreadId, 10));
+            }
+          }
+        }, 50);
+      }
+      
+      // 6. Hide the reply box by clearing the replying state
+      // Only do this for normal messages, not temporary threads
+      if (!props.isTemporaryThread) {
+        console.log('[ReplyBox] Hiding reply box after successful send');
+        store.dispatch('navigation/clearReplyingTo');
+      }
     }
     
     return newMessage;
   } catch (error) {
-    console.error('Error sending message:', error);
+    console.error('[ReplyBox] Error sending message:', error);
+    console.error('[ReplyBox] Error details:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data
+    });
     store.commit('ui/SET_ERROR', 'Failed to send message. Please try again.');
     emit('send-error', error);
     throw error;
@@ -621,8 +686,54 @@ const getAuthorUserTag = (message) => {
   return null;
 };
 
-// Add method to handle clicks outside the reply box
+// Add new ref to track if reply box can be closed
+const canCloseReplyBox = ref(true);
+
+// Toggle recipient selector visibility
+const toggleRecipientSelector = () => {
+  // If opening the selector, block immediate closing
+  if (!showRecipientSelector.value) {
+    canCloseReplyBox.value = false;
+  }
+  
+  showRecipientSelector.value = !showRecipientSelector.value;
+  
+  // Reset input field when opening the modal
+  if (showRecipientSelector.value) {
+    newRecipient.value = '';
+    
+    // Focus the input field after DOM update
+    nextTick(() => {
+      if (recipientInput.value) {
+        recipientInput.value.focus();
+      }
+    });
+  }
+};
+
+// Add this new method to handle modal closing
+const closeRecipientSelector = (event) => {
+  // Stop event propagation to prevent the document click event
+  if (event) {
+    event.stopPropagation();
+  }
+  
+  // Close the modal
+  showRecipientSelector.value = false;
+  
+  // Set a short timeout to prevent immediate closing of reply box
+  setTimeout(() => {
+    canCloseReplyBox.value = true;
+  }, 100);
+};
+
+// Update handleClickOutside to use canCloseReplyBox
 const handleClickOutside = (event) => {
+  // If the recipient selector is open or we can't close the reply box, return
+  if (showRecipientSelector.value || !canCloseReplyBox.value) {
+    return;
+  }
+  
   // If the click was not on the reply box or any of its children,
   // and not on a reply button, hide the reply box
   const replyBox = document.querySelector('.reply-container');
@@ -686,6 +797,12 @@ defineExpose({
 </script>
 
 <style scoped>
+/* Add styles for new wrapper */
+.reply-box-wrapper {
+  /* This ensures the wrapper doesn't affect layout */
+  display: contents;
+}
+
 .reply-container {
   position: fixed;
   bottom: 20px; /* Reduced bottom spacing */
@@ -755,7 +872,7 @@ defineExpose({
   max-height: 150px; /* Maximum height before scrolling */
   padding: 10px 14px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill); /* More rounded corners */
+  border-radius: var(--radius-md); /* Less rounded corners */
   resize: none; /* Disable manual resizing since we're doing it programmatically */
   margin-bottom: 0;
   font-family: inherit;
@@ -820,23 +937,28 @@ defineExpose({
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.6);
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: var(--z-index-modal);
+  z-index: 1000; /* Higher explicit z-index */
+  backdrop-filter: blur(2px);
 }
 
 .recipient-modal {
+  position: relative; /* Change from fixed to relative */
+  max-width: 450px;
+  width: 95%;
   background-color: var(--color-surface);
   padding: var(--space-lg);
   border-radius: var(--radius-md);
-  max-width: 400px;
-  width: 90%;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
   border: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
+  z-index: 1001; /* Higher than overlay */
+  max-height: 80vh; /* Prevent from being too tall on smaller screens */
+  overflow-y: auto; /* Allow scrolling if needed */
 }
 
 .modal-header {

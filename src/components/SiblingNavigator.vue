@@ -131,12 +131,13 @@ const navigate = async (direction) => {
 <style scoped>
 .sibling-navigator {
   position: absolute;
-  top: 0;
+  top: 50%;
   left: 0;
   width: 100%;
-  height: 100%;
+  height: 50px;
   pointer-events: none;
   z-index: 5;
+  transform: translateY(-50%);
 }
 
 .nav-button {
@@ -161,13 +162,13 @@ const navigate = async (direction) => {
 }
 
 .nav-prev {
-  left: -5px; /* Flush against the left side */
+  left: -10px; /* Flush against the left side */
   border-top-right-radius: 7px;
   border-bottom-right-radius: 7px;
 }
 
 .nav-next {
-  right: -5px; /* Flush against the right side */
+  right: -10px; /* Flush against the right side */
   border-top-left-radius: 7px;
   border-bottom-left-radius: 7px;
 }
@@ -207,7 +208,7 @@ const navigate = async (direction) => {
 
 /* Active (non-disabled) styling with gradient connection */
 .nav-button:not(.disabled):not(:disabled) {
-  border-color: var(--color-primary);
+  border-color: var(--color-border);
 }
 
 .nav-button.nav-prev:not(.disabled):not(:disabled) {

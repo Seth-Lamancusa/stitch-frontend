@@ -347,13 +347,56 @@ function getThreadMessages(threadId) {
   return threadMessages;
 }
 
+// Add a new function to check if we need to load messages for a tab
+const shouldLoadMessagesForTab = (tabName) => {
+  // Check if we already have messages for this tab
+  const tabMessages = store.getters['messages/getLoadedMessages'].filter(
+    msg => {
+      return (msg.for_tabs && Array.isArray(msg.for_tabs) && msg.for_tabs.includes(tabName)) || 
+             msg.for_tab === tabName;
+    }
+  );
+  
+  return (
+    // No messages for this tab
+    tabMessages.length === 0 ||
+    // Or special case for feed tab - always reload if no pinned messages found
+    (tabName === 'feed' && !tabMessages.some(msg => msg.is_pinned))
+  );
+};
+
 // Watch for tab changes to reset and reload
-onMounted(() => {
+onMounted(async () => {
+  try {
+    // Initialize Firebase first
+    await initializeFirebase();
+    firebaseReady.value = true;
+  } catch (error) {
+    console.error("Firebase initialization failed in MessageList:", error);
+  }
+
   // Keep track of the current active tab
   let previousTab = activeTab.value;
   
-  // Initial load for the first tab
-  loadMessages(true);
+  // Check if we need to load messages or can use the cache
+  const currentTab = activeTab.value;
+  const needsLoading = shouldLoadMessagesForTab(currentTab);
+  
+  console.log(`[Debug] Initial mount for ${currentTab} tab, needs loading: ${needsLoading}`);
+  
+  if (needsLoading) {
+    // Initial load for the first tab if needed
+    await loadMessages(true);
+  } else {
+    // Use cached data
+    console.log(`[Debug] Using cached data for ${currentTab} tab`);
+    // Update loading state manually since we're not calling loadMessages()
+    loadingStates.value[currentTab].isLoading = false;
+    loadingStates.value[currentTab].isAllLoaded = false; // Be optimistic - allow more messages to be loaded
+  }
+  
+  // Set up intersection observer for infinite loading
+  setupInfiniteLoading();
   
   router.afterEach((to, from) => {
     // Only process if the path actually changed
@@ -363,22 +406,11 @@ onMounted(() => {
       
       // Only reload if we're switching to a different tab
       if (newTab !== previousTab) {
-        // Check if we already have messages for this tab
-        const tabMessages = store.getters['messages/getLoadedMessages'].filter(
-          msg => {
-            return (msg.for_tabs && Array.isArray(msg.for_tabs) && msg.for_tabs.includes(newTab)) || 
-                   msg.for_tab === newTab;
-          }
-        );
-        
-        const shouldReload = 
-          // No messages for this tab
-          tabMessages.length === 0 ||
-          // Or special case for feed tab - always reload if no pinned messages found
-          (newTab === 'feed' && !tabMessages.some(msg => msg.is_pinned));
+        // Check if we need to load messages or can use the cache
+        const needsLoading = shouldLoadMessagesForTab(newTab);
         
         // Always start with a clean loading state for the new tab
-        if (shouldReload) {
+        if (needsLoading) {
           console.log(`[Debug] Reloading ${newTab} tab data...`);
           if (newTab === 'feed') {
             console.log(`[Debug] Feed tab needs a full refresh to get pinned+regular messages`);  
@@ -397,7 +429,7 @@ onMounted(() => {
             }
           }, 0);
         } else {
-          console.log(`[Debug] Using cached data for ${newTab} tab - found ${tabMessages.length} messages`);
+          console.log(`[Debug] Using cached data for ${newTab} tab - found cached messages`);
           // Update loading state manually since we're not calling loadMessages()
           loadingStates.value[newTab].isLoading = false;
           loadingStates.value[newTab].isAllLoaded = false; // Be optimistic - allow more messages to be loaded
@@ -529,22 +561,6 @@ const loadMessagesForTab = async (tabName, isInitial = true) => {
   }
 };
 
-// Load messages on mount
-onMounted(async () => {
-  try {
-    await initializeFirebase();
-    firebaseReady.value = true;
-  } catch (error) {
-    console.error("Firebase initialization failed in MessageList:", error);
-  }
-  
-  // Load initial messages
-  await loadMessages(true);
-  
-  // Set up intersection observer for infinite loading
-  setupInfiniteLoading();
-});
-
 // Set up intersection observer for infinite loading
 const setupInfiniteLoading = () => {
   if (!loadingIndicatorRef.value) return;
@@ -578,6 +594,22 @@ onUnmounted(() => {
   if (loadingIndicatorRef.value) {
     const observer = setupInfiniteLoading();
     if (observer) observer();
+  }
+});
+
+// Add watcher for directMessagesLastUpdated to refresh message display
+watch(() => store.state.messages.directMessagesLastUpdated, (newVal, oldVal) => {
+  if (newVal !== oldVal && activeTab.value === 'private') {
+    console.log('[MessageList] Detected direct messages update trigger, refreshing view');
+    // No need to fetch from server as the WebSocket has already added the message to the store
+    // Just force a re-computation of the threads computed property
+    // This is a trick to force Vue to re-evaluate the computed property
+    nextTick(() => {
+      store.commit('ui/SET_LOADING', { key: 'directMessagesRefresh', isLoading: true });
+      setTimeout(() => {
+        store.commit('ui/SET_LOADING', { key: 'directMessagesRefresh', isLoading: false });
+      }, 50);
+    });
   }
 });
 </script>

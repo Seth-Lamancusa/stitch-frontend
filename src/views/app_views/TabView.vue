@@ -1,7 +1,6 @@
 <template>
   <TabLayout 
-    :activeTab="activeTab" 
-    :fetchAction="fetchAction"
+    :activeTab="activeTab"
   >
     <!-- Force component remount on tab change using :key -->
     <template #content>
@@ -29,24 +28,6 @@ const activeTab = computed(() => {
   if (path.includes('/curated')) return 'curated';
   if (path.includes('/feed')) return 'feed';
   return 'feed'; // Default tab
-});
-
-/**
- * Select the appropriate fetch action based on the active tab
- */
-const fetchAction = computed(() => {
-  switch (activeTab.value) {
-    case 'private':
-      return 'messages/fetchDirectMessages';
-    case 'profile':
-      return 'messages/fetchUserMessages';
-    case 'curated':
-      return 'messages/fetchCuratedMessages';
-    case 'local':
-      return ''; // Local tab has no fetch action
-    default:
-      return 'messages/fetchFeedMessages';
-  }
 });
 </script>
 

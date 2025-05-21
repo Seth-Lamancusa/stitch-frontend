@@ -95,6 +95,15 @@ export default {
                   photoURL: userData.photoURL
                 });
                 
+                // Get and store the auth token in localStorage
+                try {
+                  const token = await userData.getIdToken();
+                  console.log('Got Firebase auth token, storing in localStorage');
+                  localStorage.setItem('auth_token', token);
+                } catch (tokenError) {
+                  console.error('Error getting Firebase auth token:', tokenError);
+                }
+                
                 // Fetch complete user data in one go
                 if (userData.email) {
                   await dispatch('fetchCompleteUserData', userData);
@@ -107,6 +116,8 @@ export default {
                 commit('SET_USER', null);
                 commit('SET_WHITELIST_STATUS', false);
                 commit('SET_ADMIN_STATUS', false);
+                // Clear the auth token when the user signs out
+                localStorage.removeItem('auth_token');
                 commit('SET_AUTH_READY', true);
               }
               
@@ -170,6 +181,9 @@ export default {
         commit('SET_WHITELIST_STATUS', false);
         commit('SET_ADMIN_STATUS', false);
         
+        // Clear auth token from localStorage
+        localStorage.removeItem('auth_token');
+        
         // Finally mark auth as ready
         commit('SET_AUTH_READY', true);
         return;
@@ -188,6 +202,16 @@ export default {
       
       // Set the basic user data
       commit('SET_USER', userWithDefaults);
+      
+      // Get and store the user's auth token
+      if (userData.getIdToken) {
+        userData.getIdToken().then(token => {
+          console.log('Setting auth token in localStorage during setUser');
+          localStorage.setItem('auth_token', token);
+        }).catch(err => {
+          console.error('Error getting token during setUser:', err);
+        });
+      }
       
       // Only fetch complete data if we have an email
       if (userData.email) {

@@ -5,7 +5,7 @@ import store from './store';
 
 // Import components
 import ThreadView from './views/app_views/ThreadView.vue';
-import TempThreadView from './views/app_views/TempThreadView.vue';
+import NewThreadView from './views/app_views/NewThreadView.vue';
 import HomeView from './views/info_views/HomeView.vue';
 import AboutView from './views/info_views/AboutView.vue';
 import RoadmapView from './views/info_views/RoadmapView.vue';
@@ -93,7 +93,7 @@ const routes = [
   {
     path: '/new-thread',
     name: 'new-thread',
-    component: TempThreadView,
+    component: NewThreadView,
     meta: { requiresAuth: true }
   },
   // Redirect from /legal to /terms to handle existing links

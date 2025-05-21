@@ -88,7 +88,7 @@ const getActiveTabName = () => {
 // Computed properties from store
 const user = computed(() => store.getters['auth/user']);
 const canInteract = computed(() => {
-  console.log("TempThreadView - checking canInteract:", 
+  console.log("NewThreadView - checking canInteract:", 
     user.value?.status, 
     store.getters['auth/isAdmin'], 
     store.getters['auth/isWhitelisted'],
@@ -121,7 +121,7 @@ const isCreatingThread = ref(false);
 // Lifecycle hooks
 onMounted(async () => {
   // Reset visibility settings for new threads
-  console.log(`[TempThreadView] Resetting visibility settings for new thread`);
+  console.log(`[NewThreadView] Resetting visibility settings for new thread`);
   
   // Set default visibility to public and clear recipients in one call
   store.dispatch('navigation/setVisibilitySettings', {

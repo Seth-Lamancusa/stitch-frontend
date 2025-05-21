@@ -47,15 +47,15 @@ const validateTag = () => {
     return true;
   }
   
-  // Check if tag is alphanumeric
-  if (!/^[a-zA-Z0-9]+$/.test(tag.value)) {
-    tagError.value = 'Tag must contain only letters and numbers';
+  // Check if tag is alphanumeric with underscores and hyphens
+  if (!/^[a-zA-Z0-9_-]+$/.test(tag.value)) {
+    tagError.value = 'Tag must contain only letters, numbers, underscores, and hyphens';
     return false;
   }
   
   // Check minimum length
-  if (tag.value.length < 3) {
-    tagError.value = 'Tag must be at least 3 characters long';
+  if (tag.value.length < 1) {
+    tagError.value = 'Tag must be at least 1 character long';
     return false;
   }
   
@@ -192,7 +192,7 @@ const closeModal = () => {
               @blur="validateTag"
             />
             <div v-if="tagError" class="field-error">{{ tagError }}</div>
-            <div v-else class="field-hint">A unique identifier for your account (letters and numbers only)</div>
+            <div v-else class="field-hint">A unique identifier for your account (letters, numbers, underscores, and hyphens only)</div>
           </div>
           
           <div v-if="errorMessage" class="error-message">

@@ -6,6 +6,7 @@ import router from './router.js'
 import store from './store'
 import { initializeFirebase } from './firebase.js'
 import { initFormatters } from './components/FormattedContent/init'
+import WebSocketService from './services/WebSocketService'
 
 console.log('Main.js starting execution');
 
@@ -25,68 +26,56 @@ const initApp = async () => {
     
     // Then initialize auth store
     await store.dispatch('auth/initAuth');
-    console.log("Auth store initialized");
+    console.log("Auth initialized");
     
-    // Fetch unread message count if user is logged in
-    const currentUser = store.getters['auth/user'];
-    if (currentUser) {
-      console.log("User is logged in, fetching unread message count");
-      await store.dispatch('messages/fetchUnreadMessageCount');
+    // Then initialize formatters (for rich text)
+    initFormatters();
+    console.log("Formatters initialized");
+    
+    // Check if user is authenticated AND has a token before initializing WebSocket
+    const user = store.getters['auth/user'];
+    const authToken = localStorage.getItem('auth_token');
+    
+    if (user && authToken) {
+      console.log(`User ${user.uid} is authenticated with valid token, initializing WebSocket`);
+      await WebSocketService.initialize();
+      console.log("WebSocket initialized with authenticated user");
+    } else if (user && !authToken) {
+      console.log(`User ${user.uid} is authenticated but token is missing, WebSocket initialization skipped`);
+    } else {
+      console.log("No authenticated user at startup, WebSocket will initialize on login");
     }
     
-    // Initialize the formatters
-    initFormatters();
-    console.log("Content formatters initialized");
-    
-    // Add global click handler for beta.html links
-    document.addEventListener('click', (event) => {
-      // Check if the click was on an anchor tag
-      const anchor = event.target.closest('a');
-      if (anchor) {
-        const href = anchor.getAttribute('href');
-        // Check if the href contains beta.html
-        if (href && href.includes('beta.html')) {
-          event.preventDefault();
-          console.log('Intercepted click on beta.html link, redirecting to /beta');
-          router.push('/beta');
+    // Add auth state change listener to handle WebSocket reconnection
+    store.watch(
+      () => store.getters['auth/user'],
+      (newUser, oldUser) => {
+        // Get current token state
+        const currentToken = localStorage.getItem('auth_token');
+        
+        if (newUser && !oldUser && currentToken) {
+          console.log(`User ${newUser.uid} authenticated with token, initializing WebSocket`);
+          WebSocketService.initialize();
+        } else if (newUser && !oldUser && !currentToken) {
+          console.log(`User ${newUser.uid} authenticated but no token available, skipping WebSocket`);
+        } else if (!newUser && oldUser) {
+          console.log("User logged out, cleaning up WebSocket");
+          WebSocketService.cleanup();
+        } else if (newUser && oldUser && newUser.uid !== oldUser.uid && currentToken) {
+          console.log(`User changed from ${oldUser.uid} to ${newUser.uid}, reinitializing WebSocket`);
+          WebSocketService.cleanup();
+          WebSocketService.initialize();
         }
       }
-    });
-    
-    try {
-      app.mount('#app');
-      console.log('Vue app mounted successfully');
-    } catch (mountError) {
-      console.error('CRITICAL ERROR: Failed to mount Vue app:', mountError);
-      // Try to render at least an error message in the DOM
-      document.body.innerHTML = '<div style="padding: 20px; color: red;">Failed to initialize app. Check console for details.</div>';
-    }
-  } catch (error) {
-    console.error("Failed to initialize:", error);
-    
-    // Create a simple error handler in global scope for tracking
-    window.appInitError = error;
-    
-    // Mount anyway, your components should handle initialization failures
-    console.warn("Mounting app despite initialization failure");
-    try {
-      app.mount('#app');
-      console.log('Vue app mounted despite initialization failure');
-    } catch (mountError) {
-      console.error('CRITICAL ERROR: Failed to mount Vue app after initialization failed:', mountError);
-      document.body.innerHTML = '<div style="padding: 20px; color: red;">Failed to initialize app. Check console for details.</div>';
-    }
+    );
+
+    // Mount the app
+    app.mount('#app');
+    console.log("App mounted");
+  } catch (e) {
+    console.error("Error initializing app:", e);
   }
 };
 
-// Add global error handler
-window.addEventListener('error', (event) => {
-  console.error('Global error caught:', event.error);
-});
-
-// Add unhandled promise rejection handler
-window.addEventListener('unhandledrejection', (event) => {
-  console.error('Unhandled promise rejection:', event.reason);
-});
-
+// Start initialization
 initApp();

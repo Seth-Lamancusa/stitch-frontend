@@ -51,6 +51,14 @@ export default {
   
   // Send a message or reply
   async sendReply(parentId, content, isPrivate = false, recipients = [], content_author = null) {
+    console.log('[MessageService] sendReply called with:', {
+      parentId,
+      contentLength: content?.length || 0,
+      isPrivate,
+      recipients,
+      content_author
+    });
+    
     const headers = await getAuthHeaders();
     const auth = getFirebaseAuth();
     
@@ -72,7 +80,33 @@ export default {
     }
     // For regular users, backend will use the authenticated user's UID from token
     
-    return axios.post(`${apiBaseUrl}/messages`, messageData, { headers });
+    console.log('[MessageService] Sending API request with data:', {
+      endpoint: `${apiBaseUrl}/messages`,
+      messageData: {
+        ...messageData,
+        content: messageData.content ? `${messageData.content.substring(0, 50)}...` : null
+      },
+      hasHeaders: !!headers
+    });
+    
+    try {
+      const response = await axios.post(`${apiBaseUrl}/messages`, messageData, { headers });
+      console.log('[MessageService] API request successful:', {
+        status: response.status,
+        messageId: response.data?.id,
+        hasData: !!response.data
+      });
+      return response;
+    } catch (error) {
+      console.error('[MessageService] API request failed:', error);
+      console.error('[MessageService] Error details:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
+      throw error;
+    }
   },
   
   // Get recommended messages for feed
