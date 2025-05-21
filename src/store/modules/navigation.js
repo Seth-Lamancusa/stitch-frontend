@@ -70,28 +70,11 @@ export default {
       
       commit('SET_REPLYING_TO_MESSAGE', messageId);
       
-      dispatch('resetReplySettings', messageId);
+      dispatch('syncReplySettings', messageId);
     },
     
-    resetReplySettings({ commit, state, rootGetters }, messageId) {
-      commit('SET_REPLY_PUBLIC', true);
-      commit('CLEAR_REPLY_RECIPIENTS');
-      
-      if (messageId) {
-        const message = rootGetters['messages/getMessage'](messageId);
-        if (message) {
-          // Add message author as recipient
-          if (message.author_user_tag && message.content_author) {
-            // Create a recipient object with the available info
-            const authorRecipient = {
-              uid: message.content_author,
-              display_name: message.author_display_name || message.author_user_tag,
-              user_tag: message.author_user_tag
-            };
-            commit('ADD_REPLY_RECIPIENT', authorRecipient);
-          }
-        }
-      }
+    resetReplySettings({ dispatch }, messageId) {
+      dispatch('syncReplySettings', messageId);
     },
     
     toggleReply({ commit, state }, isReplying) {
@@ -148,16 +131,68 @@ export default {
       commit('SET_PREVIOUS_ROUTE', route);
     },
     
-    // Sync reply settings with a message
-    syncReplySettingsWithSelectedMessage({ commit, state, rootGetters }) {
-      if (!state.replyingToMessageId) return;
+    syncReplySettings({ commit, state, rootGetters, rootState }, messageId) {
+      const targetId = messageId || state.replyingToMessageId;
+      if (!targetId) return;
       
-      const message = rootGetters['messages/getMessage'](state.replyingToMessageId);
-      if (message) {
-        // Copy settings from the message
-        const isPublic = message.public === 1 || message.public === true;
-        commit('SET_REPLY_PUBLIC', isPublic);
+      const message = rootGetters['messages/getMessage'](targetId);
+      if (!message) return;
+      
+      const currentUser = rootGetters['auth/user'];
+      
+      // 1. Set visibility to match parent message
+      const isPublic = message.public === 1 || message.public === true;
+      commit('SET_REPLY_PUBLIC', isPublic);
+      
+      // 2. Start with empty recipients
+      commit('CLEAR_REPLY_RECIPIENTS');
+      
+      // 3. Get unique recipients from the parent message
+      const newRecipients = [];
+      const addedUids = new Set();
+      
+      // Check if current user is the author of the message being replied to
+      const isCurrentUserAuthor = currentUser && 
+                                message.content_author === currentUser.uid;
+      
+      // 4. Always add the original author 
+      // (include current user only if they authored the message being replied to)
+      if (message.content_author) {
+        if (isCurrentUserAuthor || message.content_author !== currentUser?.uid) {
+          const authorInfo = {
+            uid: message.content_author,
+            display_name: message.author_display_name || message.author_user_tag || message.content_author,
+            user_tag: message.author_user_tag
+          };
+          newRecipients.push(authorInfo);
+          addedUids.add(message.content_author);
+        }
       }
+      
+      // 5. Add all recipients from the parent
+      // (include current user only if they authored the message being replied to)
+      if (message.recipients && Array.isArray(message.recipients)) {
+        message.recipients.forEach(recipient => {
+          const recipientUid = recipient.uid;
+          // Skip if this recipient is already added
+          // or is the current user (unless current user is the author)
+          if (!recipientUid || 
+              addedUids.has(recipientUid) || 
+              (!isCurrentUserAuthor && currentUser && recipientUid === currentUser.uid)) {
+            return;
+          }
+          
+          newRecipients.push({
+            uid: recipientUid,
+            display_name: recipient.display_name || recipient.user_tag || recipientUid,
+            user_tag: recipient.user_tag
+          });
+          addedUids.add(recipientUid);
+        });
+      }
+      
+      // 6. Set the full list of compiled recipients
+      commit('SET_REPLY_RECIPIENTS', newRecipients);
     }
   },
   

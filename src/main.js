@@ -28,6 +28,10 @@ const initApp = async () => {
     await store.dispatch('auth/initAuth');
     console.log("Auth initialized");
     
+    // Initialize unread message count
+    await store.dispatch('messages/initializeUnreadCount');
+    console.log("Unread message count initialized");
+    
     // Then initialize formatters (for rich text)
     initFormatters();
     console.log("Formatters initialized");
@@ -56,15 +60,21 @@ const initApp = async () => {
         if (newUser && !oldUser && currentToken) {
           console.log(`User ${newUser.uid} authenticated with token, initializing WebSocket`);
           WebSocketService.initialize();
+          // Also refresh unread message count when user logs in
+          store.dispatch('messages/fetchUnreadMessageCount');
         } else if (newUser && !oldUser && !currentToken) {
           console.log(`User ${newUser.uid} authenticated but no token available, skipping WebSocket`);
         } else if (!newUser && oldUser) {
           console.log("User logged out, cleaning up WebSocket");
           WebSocketService.cleanup();
+          // Reset unread count to 0 on logout
+          store.commit('messages/SET_UNREAD_MESSAGE_COUNT', 0);
         } else if (newUser && oldUser && newUser.uid !== oldUser.uid && currentToken) {
           console.log(`User changed from ${oldUser.uid} to ${newUser.uid}, reinitializing WebSocket`);
           WebSocketService.cleanup();
           WebSocketService.initialize();
+          // Refresh unread count for new user
+          store.dispatch('messages/fetchUnreadMessageCount');
         }
       }
     );

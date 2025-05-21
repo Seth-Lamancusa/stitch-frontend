@@ -168,6 +168,7 @@
           
           <!-- Copy Text Button -->
           <button 
+            v-if="!inListView"
             @click.stop="copyMessageText" 
             class="text-button"
             title="Copy message text with metadata to clipboard"
@@ -1122,6 +1123,11 @@ export default {
   margin-bottom: var(--space-md);
   white-space: normal;
   word-wrap: break-word;
+}
+
+/* Add larger font size when not in list view */
+.message-node .plaintext-content {
+  font-size: 1.2rem;
 }
 
 .message-footer {

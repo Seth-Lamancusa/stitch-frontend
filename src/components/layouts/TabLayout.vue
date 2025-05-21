@@ -214,11 +214,8 @@ watch(() => props.activeTab, (newTab) => {
   }
 });
 
-// Only fetch unread count on mount, not messages
+// Only fetch unread count on mount if it's needed for some reason
 onMounted(async () => {
-  // Fetch unread message count
-  fetchUnreadMessageCount();
-  
   // Add store subscription to watch for unread message count changes
   const unsubscribe = store.subscribe((mutation) => {
     // If unread count changes in the store, update the UI

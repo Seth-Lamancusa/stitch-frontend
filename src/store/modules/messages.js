@@ -1,6 +1,9 @@
 import MessageService from '../../services/MessageService'
 import WebSocketService from '../../services/WebSocketService'
 
+// Add a flag to track if initial fetch has been done
+let initialUnreadCountFetched = false;
+
 // Helper function to check if a message is a descendant of another
 function isDescendantOf(state, messageId, ancestorId) {
   if (!messageId || !ancestorId || messageId === ancestorId) return false;
@@ -1075,8 +1078,15 @@ export default {
     },
 
     // New action to fetch unread message count
-    async fetchUnreadMessageCount({ commit }) {
+    async fetchUnreadMessageCount({ commit, rootState }) {
       try {
+        // Only proceed if user is logged in
+        if (!rootState.auth?.user) {
+          // Reset count to 0 if not logged in
+          commit('SET_UNREAD_MESSAGE_COUNT', 0);
+          return 0;
+        }
+        
         const response = await MessageService.getUnreadMessageCount();
         const count = response.data.count || 0;
         
@@ -1086,6 +1096,21 @@ export default {
         console.error('Error fetching unread message count:', error);
         return 0;
       }
+    },
+
+    // New action to initialize unread message count at app startup
+    async initializeUnreadCount({ dispatch, rootState }) {
+      // Skip if already fetched or user not logged in
+      if (initialUnreadCountFetched || !rootState.auth?.user) {
+        return;
+      }
+      
+      // Set flag to prevent duplicate fetches
+      initialUnreadCountFetched = true;
+      
+      // Fetch the count
+      await dispatch('fetchUnreadMessageCount');
+      console.log('Initialized unread message count');
     },
 
     // Add new action to set the selected profile

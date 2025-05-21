@@ -257,7 +257,7 @@ const toggleVisibility = () => {
   // Only sync with message being replied to if we're not in a temporary thread
   if (!props.isTemporaryThread) {
     // Force sync settings after toggle
-    store.dispatch('navigation/syncReplySettingsWithSelectedMessage');
+    store.dispatch('navigation/syncReplySettings');
   }
 };
 
@@ -379,15 +379,13 @@ const sendReply = async () => {
           });
           console.log('[ReplyBox] Added child relationship:', props.targetId, '->', newMessage.id);
           
-          // 3. If this is the first reply, set as branch_child
-          const updatedParent = store.getters['messages/getMessage'](props.targetId);
-          if (updatedParent.child_ids && updatedParent.child_ids.length === 1) {
-            store.commit('messages/SET_BRANCH_CHILD', {
-              messageId: props.targetId,
-              childId: newMessage.id
-            });
-            console.log('[ReplyBox] Set as branch_child for parent:', props.targetId);
-          }
+              // Always set this as branch_child, regardless of whether it's the first reply
+    // Set immediately without rechecking child_ids to avoid race conditions
+    store.commit('messages/SET_BRANCH_CHILD', {
+      messageId: props.targetId,
+      childId: newMessage.id
+    });
+    console.log('[ReplyBox] Set as branch_child for parent:', props.targetId);
         }
         
         // 4. Force re-render the thread to show the new message

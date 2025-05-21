@@ -965,7 +965,6 @@ const deleteMessage = async () => {
   if (!messageToDelete.value || isDeleting.value) return;
   
   const deletedId = messageToDelete.value.id;
-  const deletedParentId = messageToDelete.value.parent_id;
   
   try {
     // Set deleting state to true
@@ -973,37 +972,18 @@ const deleteMessage = async () => {
     
     await store.dispatch('messages/deleteMessage', deletedId);
     
-    // Handle navigation if we're deleting the current message being replied to
-    if (replyingToMessageId.value === deletedId) {
-      // If there's a parent, navigate to it
-      if (deletedParentId) {
-        store.dispatch('navigation/setReplyingTo', deletedParentId);
-      } else {
-        // Otherwise go back to thread list
-        router.push('/messages');
-      }
-    }
+    // Get the previous route to return to
+    const prevRoute = store.getters['navigation/previousRoute'];
+    const defaultRoute = '/feed'; // Default to feed if no previous route
     
-    // Force an immediate UI refresh by checking displayedMessages
-    await nextTick();
-    if (displayedMessages.value.length === 0) {
-      // If there are no more displayed messages, go back to thread list
-      router.push('/messages');
-    } else {
-      // Refresh the thread or go back to thread list if root was deleted
-      if (deletedParentId) {
-        refreshThread();
-      } else {
-        router.push('/messages');
-      }
-    }
+    // Always redirect out after deletion
+    router.push(prevRoute || defaultRoute);
     
     // Hide confirmation modal after successful deletion
     store.commit('ui/SET_DELETE_CONFIRM', { show: false, message: null });
   } catch (error) {
     console.error('Error deleting message:', error);
     store.commit('ui/SET_ERROR', 'Failed to delete message: ' + error.message);
-    refreshThread();
   } finally {
     // Reset deleting state
     isDeleting.value = false;
