@@ -5,12 +5,24 @@
     heroClass="roadmap-hero"
     :showBetaBanner="true"
     betaBannerIcon="🚀"
-    betaBannerTitle="Beta Phase: Google Cloud Platform Deployment"
-    betaBannerText="During our beta phase, we're running on GCP for reliability and rapid iteration. Our architecture is designed for scalability, performance, and seamless AI integration."
-    footerTagline="Building the multiplayer AI chat platform for seamless human-AI collaboration"
+    betaBannerTitle="Beta phase coming eventually"
+    betaBannerText="We'll open up the platform to outsiders in the order they joined the waitlist."
+    footerTagline="Where you're going and where you came from are the same."
   >
+    <!-- Coming Soon Section - Will replace with actual content later -->
+    <section class="coming-soon-section">
+      <div class="container">
+        <div class="coming-soon-content">
+          <div class="coming-soon-icon">🗺️</div>
+          <h2>Roadmap Coming Soon</h2>
+          <p>Our detailed product and technology roadmap is being finalized and will be published here soon.</p>
+          <router-link to="/feed" class="btn primary-btn">Go to Stitch App</router-link>
+        </div>
+      </div>
+    </section>
+    
     <!-- Technical Details Layout -->
-    <div class="tech-details-layout">
+    <div class="tech-details-layout" style="display: none;">
       <!-- Navigation Sidebar -->
       <aside class="section-nav">
         <h3>Quick Navigation</h3>
@@ -405,6 +417,39 @@ onBeforeUnmount(() => {
 </script>
 
 <style>
+/* Coming Soon Styles */
+.coming-soon-section {
+  padding: 5rem 2rem;
+  text-align: center;
+  background-color: var(--background-dark);
+}
+
+.coming-soon-content {
+  max-width: 800px;
+  margin: 0 auto;
+  background-color: var(--card-background);
+  border-radius: var(--border-radius);
+  padding: 3rem 2rem;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--card-border);
+}
+
+.coming-soon-icon {
+  font-size: 4rem;
+  margin-bottom: 1.5rem;
+}
+
+.coming-soon-content h2 {
+  color: var(--primary-color);
+  margin-bottom: 1.5rem;
+  font-size: 2.5rem;
+}
+
+.coming-soon-content p {
+  margin-bottom: 2rem;
+  font-size: 1.2rem;
+}
+
 /* Technical details layout styles */
 .tech-details-layout {
   display: grid;

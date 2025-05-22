@@ -1,16 +1,28 @@
 <template>
   <InfoViewLayout
     pageTitle="Terms & Conditions"
-    pageSubtitle="Guidelines for using the Stitch AI chat platform"
+    pageSubtitle="Legal notes regarding our use of crossposting between platforms, webscraping, intellectual property, and terms of use."
     heroClass="legal-hero"
     :showBetaBanner="true"
     betaBannerIcon="📝"
-    betaBannerTitle="Beta Terms Notice"
-    betaBannerText="As we're currently in beta, these terms may be updated frequently as our service evolves. Please check back regularly for updates."
+    betaBannerTitle="A Legal Landscape"
+    betaBannerText="Our legal system finds itself at the intersection of a sudden political upheaval and a technological revolution that demands active engagement with intellectual property law."
     footerTagline="Building the multiplayer AI chat platform for seamless human-AI collaboration"
   >
-    <!-- Legal Details Layout -->
-    <div class="legal-details-layout">
+    <!-- Coming Soon Section - Will replace with actual content later -->
+    <section class="coming-soon-section">
+      <div class="container">
+        <div class="coming-soon-content">
+          <div class="coming-soon-icon">📄</div>
+          <h2>Terms & Conditions Coming Soon</h2>
+          <p>Our legal team is finalizing our terms and conditions. The complete document will be available here soon.</p>
+          <router-link to="/feed" class="btn primary-btn">Go to Stitch App</router-link>
+        </div>
+      </div>
+    </section>
+    
+    <!-- Legal Details Layout - Hidden until content is ready -->
+    <div class="legal-details-layout" style="display: none;">
       <!-- Navigation Sidebar -->
       <aside class="section-nav">
         <h3>Quick Navigation</h3>
@@ -307,6 +319,39 @@ onBeforeUnmount(() => {
 </script>
 
 <style>
+/* Coming Soon Styles */
+.coming-soon-section {
+  padding: 5rem 2rem;
+  text-align: center;
+  background-color: var(--background-dark);
+}
+
+.coming-soon-content {
+  max-width: 800px;
+  margin: 0 auto;
+  background-color: var(--card-background);
+  border-radius: var(--border-radius);
+  padding: 3rem 2rem;
+  box-shadow: var(--box-shadow);
+  border: 1px solid var(--card-border);
+}
+
+.coming-soon-icon {
+  font-size: 4rem;
+  margin-bottom: 1.5rem;
+}
+
+.coming-soon-content h2 {
+  color: var(--primary-color);
+  margin-bottom: 1.5rem;
+  font-size: 2.5rem;
+}
+
+.coming-soon-content p {
+  margin-bottom: 2rem;
+  font-size: 1.2rem;
+}
+
 /* Legal-specific styles */
 .section-nav {
   position: sticky;

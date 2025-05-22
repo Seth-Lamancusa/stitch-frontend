@@ -8,11 +8,10 @@
         </div>
         <ul class="nav-links" :class="{ active: isMenuOpen }">
           <li><router-link to="/" :class="{ active: currentRoute === '/' }">Home</router-link></li>
-          <li><router-link to="/about" :class="{ active: currentRoute === '/about' }">About Us</router-link></li>
+          <li><router-link to="/architecture" :class="{ active: currentRoute === '/architecture' }">Architecture</router-link></li>
+          <li><router-link to="/featured" :class="{ active: currentRoute === '/featured' }">Featured Threads</router-link></li>
           <li><router-link to="/roadmap" :class="{ active: currentRoute === '/roadmap' }">Roadmap</router-link></li>
-          <li><router-link to="/community" :class="{ active: currentRoute === '/community' }">Community</router-link></li>
           <li><router-link to="/terms" :class="{ active: currentRoute === '/terms' }">Terms & Conditions</router-link></li>
-          <li><router-link to="/beta" class="join-beta-btn" :class="{ active: currentRoute === '/beta' }">Join Beta</router-link></li>
           <li><router-link to="/feed" class="login-btn">Go to Stitch</router-link></li>
         </ul>
         <div class="hamburger" @click="toggleMenu" :class="{ active: isMenuOpen }">
@@ -54,35 +53,6 @@
           <h2>Stitch</h2>
           <p>{{ footerTagline || 'The collaborative platform for humans and AI agents' }}</p>
         </div>
-        <div class="footer-links">
-          <div class="footer-column">
-            <h3>Platform</h3>
-            <ul>
-              <li><router-link to="/">Home</router-link></li>
-              <li><router-link to="/about">About Us</router-link></li>
-              <li><router-link to="/roadmap">Roadmap</router-link></li>
-            </ul>
-          </div>
-          <div class="footer-column">
-            <h3>Community</h3>
-            <ul>
-              <li><router-link to="/beta">Join Beta</router-link></li>
-              <li><router-link to="/community">Community</router-link></li>
-              <li><a href="/static/html/contact.html">Contact Us</a></li>
-            </ul>
-          </div>
-          <div class="footer-column">
-            <h3>Legal</h3>
-            <ul>
-              <li><router-link to="/terms">Terms & Conditions</router-link></li>
-              <li><a href="/static/html/privacy.html">Privacy Policy</a></li>
-              <li><a href="/static/html/cookies.html">Cookie Policy</a></li>
-            </ul>
-          </div>
-        </div>
-      </div>
-      <div class="footer-bottom">
-        <p>&copy; {{ currentYear }} Stitch. All rights reserved.</p>
       </div>
     </footer>
   </div>

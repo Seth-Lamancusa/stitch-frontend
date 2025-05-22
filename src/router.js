@@ -7,11 +7,10 @@ import store from './store';
 import ThreadView from './views/app_views/ThreadView.vue';
 import NewThreadView from './views/app_views/NewThreadView.vue';
 import HomeView from './views/info_views/HomeView.vue';
-import AboutView from './views/info_views/AboutView.vue';
 import RoadmapView from './views/info_views/RoadmapView.vue';
-import CommunityView from './views/info_views/CommunityView.vue';
 import TermsView from './views/info_views/TermsView.vue';
-import BetaView from './views/info_views/BetaView.vue';
+import ArchitectureView from './views/info_views/ArchitectureView.vue';
+import FeaturedThreadsView from './views/info_views/FeaturedThreadsView.vue';
 
 // Import tab view
 import TabView from './views/app_views/TabView.vue';
@@ -24,9 +23,9 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
-    path: '/about',
-    name: 'about',
-    component: AboutView,
+    path: '/architecture',
+    name: 'architecture',
+    component: ArchitectureView,
     meta: { requiresAuth: false }
   },
   {
@@ -36,21 +35,15 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
-    path: '/community',
-    name: 'community',
-    component: CommunityView,
+    path: '/featured',
+    name: 'featured',
+    component: FeaturedThreadsView,
     meta: { requiresAuth: false }
   },
   {
     path: '/terms',
     name: 'terms',
     component: TermsView,
-    meta: { requiresAuth: false }
-  },
-  {
-    path: '/beta',
-    name: 'beta',
-    component: BetaView,
     meta: { requiresAuth: false }
   },
   // Tab-specific routes - all use TabView
@@ -101,15 +94,32 @@ const routes = [
     path: '/legal',
     redirect: '/terms'
   },
-  // Redirect from any path containing beta.html to /beta
+  // Redirects for old routes
+  {
+    path: '/about',
+    redirect: '/'
+  },
+  {
+    path: '/beta',
+    redirect: '/'
+  },
+  {
+    path: '/community',
+    redirect: '/featured'
+  },
+  {
+    path: '/docs',
+    redirect: '/architecture'
+  },
+  // Redirect from any path containing beta.html to home
   {
     path: '/static/html/beta.html',
-    redirect: '/beta'
+    redirect: '/'
   },
   // Additional catch-all for any URLs that include beta.html
   {
     path: '/:pathMatch(.*beta.html)',
-    redirect: '/beta'
+    redirect: '/'
   }
 ];
 

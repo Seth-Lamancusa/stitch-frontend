@@ -1,0 +1,75 @@
+/**
+ * Stitch - Website Variables
+ * 
+ * CSS variables for the website/marketing pages
+ */
+
+:root {
+  /* Core Colors */
+  --primary-color: #10a37f; /* ChatGPT green instead of blue */
+  --primary-dark: #0d8c6d;  /* Darker green */
+  --primary-light: #1fc59d; /* Lighter green */
+  --accent-color: #6e48aa;  /* Purple accent */
+  --secondary-color: #6e48aa; /* For compatibility with existing code */
+  
+  --primary-rgb: 16, 163, 127;
+  --secondary-rgb: 110, 72, 170;
+  
+  /* Text Colors */
+  --text-dark: #333333;
+  --text-light: #e0e0e0;
+  --text-secondary: #aaaaaa;
+  
+  /* Background Colors */
+  --background-dark: #121212;
+  --background-light: #fafafa;
+  --secondary-background: #1A1A1A;
+  --tertiary-background: #0A0A0A;
+  
+  /* Component Colors */
+  --card-background: #1E1E1E;
+  --card-border: #333333;
+  --input-background: #2A2A2A;
+  --input-border: #444444;
+  --input-text: #E0E0E0;
+  
+  /* Gradients */
+  --gradient-primary: linear-gradient(45deg, #10a37f 0%, #1fc59d 100%);
+  --gradient-dark: radial-gradient(circle at center, #6e48aa 0%, #5a3a8c 100%);
+  --gradient-accent: linear-gradient(45deg, #6e48aa 0%, #9d50bb 100%);
+  
+  /* Effects */
+  --box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  --border-radius: 8px;
+  --transition: all 0.3s ease;
+  
+  /* Footer */
+  --footer-bg: #0A0A0A;
+  --footer-border: #333333;
+  --footer-text: #999;
+  
+  /* Banner */
+  --banner-background: rgba(16, 163, 127, 0.15);
+  --banner-border: rgba(16, 163, 127, 0.3);
+  
+  /* Hero Backgrounds */
+  --home-hero-bg: linear-gradient(135deg, rgba(16, 163, 127, 0.2) 0%, rgba(31, 197, 157, 0.2) 100%);
+  --architecture-hero-bg: linear-gradient(135deg, rgba(16, 163, 127, 0.2) 0%, rgba(13, 140, 109, 0.15) 100%);
+  --featured-hero-bg: linear-gradient(135deg, rgba(110, 72, 170, 0.15) 0%, rgba(157, 80, 187, 0.1) 100%);
+  --roadmap-hero-bg: linear-gradient(135deg, rgba(16, 163, 127, 0.15) 0%, rgba(110, 72, 170, 0.1) 100%);
+  --legal-hero-bg: linear-gradient(135deg, rgba(16, 163, 127, 0.1) 0%, rgba(31, 197, 157, 0.1) 100%);
+  
+  /* Button Colors */
+  --button-primary-bg: #10a37f;
+  --button-primary-text: #ffffff;
+  --button-secondary-bg: transparent;
+  --button-secondary-border: #10a37f;
+  --button-secondary-text: #10a37f;
+  --button-accent-bg: #6e48aa;
+  
+  /* Typography */
+  --font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 
+    Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  --line-height-base: 1.6;
+  --font-size-base: 16px;
+} 

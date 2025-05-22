@@ -4,11 +4,14 @@
 /* Import highlight.js CSS (GitHub theme) */
 @import 'highlight.js/styles/github.css';
 
+/* Import variables for app styling */
+@import '../../assets/vars_app.css';
+
 /**
  * Stitch - Formatted Content Styles
  * 
  * Styles for rendered content including Markdown, LaTeX, and code blocks.
- * These styles use the global variables defined in variables.css.
+ * These styles use the global variables defined in vars_app.css.
  */
 
 /* ===== Code Blocks ===== */
