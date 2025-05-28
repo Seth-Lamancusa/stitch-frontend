@@ -210,19 +210,6 @@ export default {
     return axios.delete(`${apiBaseUrl}/messages/${id}`, { headers });
   },
   
-  // Import a ChatGPT conversation
-  async importChatGPT(content, isPublic = true, recipients = []) {
-    const headers = await getAuthHeaders();
-    
-    const importData = {
-      content,
-      public: isPublic,
-      recipients
-    };
-    
-    return axios.post(`${apiBaseUrl}/messages/import-chatgpt`, importData, { headers });
-  },
-  
   // Pin a message (admin only)
   async pinMessage(id) {
     const headers = await getAuthHeaders();

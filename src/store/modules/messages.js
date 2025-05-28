@@ -894,22 +894,35 @@ export default {
     
     // Mark a message as read and update unread count
     async markMessageAsRead({ commit, state }, messageId) {
+      console.log(`[Store] markMessageAsRead called for message ${messageId}`);
+      
       try {
         // Check if message is currently unread before making API call
         const message = state.messages[messageId];
         const wasUnread = message && message.is_read === false;
         
-        await MessageService.markMessageAsRead(messageId);
-        commit('UPDATE_MESSAGE_READ_STATUS', { messageId, isRead: true });
+        console.log(`[Store] Message ${messageId} check:`, {
+          exists: !!message,
+          currentReadStatus: message?.is_read,
+          wasUnread,
+          willCallAPI: wasUnread
+        });
         
-        // If the message was previously unread, decrement the unread count
         if (wasUnread) {
+          console.log(`[Store] Calling API to mark message ${messageId} as read`);
+          await MessageService.markMessageAsRead(messageId);
+          console.log(`[Store] API call successful, updating store`);
+          commit('UPDATE_MESSAGE_READ_STATUS', { messageId, isRead: true });
+          
+          // If the message was previously unread, decrement the unread count
           commit('SET_UNREAD_MESSAGE_COUNT', Math.max(0, state.unreadMessageCount - 1));
+        } else {
+          console.log(`[Store] Skipping API call for message ${messageId} - already read or not found`);
         }
         
         return true;
       } catch (error) {
-        console.error(`Error marking message ${messageId} as read:`, error);
+        console.error(`[Store] Error marking message ${messageId} as read:`, error);
         return false;
       }
     },
@@ -1052,29 +1065,6 @@ export default {
       }
       
       return false;
-    },
-    
-    // Import a ChatGPT conversation
-    async importChatGPT({ commit, dispatch }, { content, isPublic, recipients }) {
-      try {
-        console.log(`Importing ChatGPT conversation (public: ${isPublic}, recipients: ${recipients.length})`);
-        
-        // Make API call to import the conversation
-        const response = await MessageService.importChatGPT(content, isPublic, recipients);
-        
-        // Get the root message (first message of the thread)
-        const rootMessage = response.data;
-        
-        // Add to store - the message will be a thread root
-        if (rootMessage) {
-          commit('SET_MESSAGE', rootMessage);
-        }
-        
-        return rootMessage;
-      } catch (error) {
-        console.error('Error importing ChatGPT conversation:', error);
-        throw error;
-      }
     },
 
     // New action to fetch unread message count
@@ -1242,31 +1232,7 @@ export default {
       return 0;
     },
     
-    // Get message branch (all messages in the current path)
-    getMessageBranch: (state) => (messageId) => {
-      const branch = [];
-      let currentId = messageId;
-      
-      // Add self
-      if (state.messages[currentId]) {
-        branch.push(state.messages[currentId]);
-      }
-      
-      // Add all ancestors
-      while (true) {
-        const message = state.messages[currentId];
-        if (!message || !message.parent_id) break;
-        
-        const parentId = message.parent_id;
-        const parent = state.messages[parentId];
-        if (!parent) break;
-        
-        branch.unshift(parent);
-        currentId = parentId;
-      }
-      
-      return branch;
-    },
+
     
     getPinnedMessages: (state, getters, rootState) => {
       const activeTab = rootState.ui?.activeTab || 'public';

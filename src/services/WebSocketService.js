@@ -171,11 +171,8 @@ const WebSocketService = {
         this.log(`Parent ${parentId} not found in store`);
       }
       
-      // Check if we need to update the unread count
-      const user = store.getters['auth/user'];
+      // Log message details for debugging
       if (user) {
-        // Only increment unread count if message is directed to the user
-        // and it's from someone other than the user
         const isToCurrentUser = messageData.recipients && 
                                messageData.recipients.some(r => 
                                  (r.uid && r.uid === user.uid) || 
@@ -185,78 +182,12 @@ const WebSocketService = {
                                  messageData.author_user_tag === user.user_tag;
         
         this.log(`Message to current user: ${isToCurrentUser}, from current user: ${isFromCurrentUser}`);
-        
-        if (isToCurrentUser && !isFromCurrentUser) {
-          this.log('Incrementing unread message count');
-          // Update unread count in store
-          const currentCount = store.getters['messages/getUnreadMessageCount'];
-          store.commit('messages/SET_UNREAD_MESSAGE_COUNT', currentCount + 1);
-          
-          // Also refresh unread count from the server to ensure accuracy
-          store.dispatch('messages/fetchUnreadMessageCount');
-        }
       }
     }
     
-    // Mark the message as read if it's in the current branch path
-    const currentRoute = store.getters['navigation/currentRoute'];
-    const currentThreadId = currentRoute?.params?.id;
-    
-    if (currentThreadId) {
-      this.log(`Current thread ID: ${currentThreadId}`);
-      
-      // Get current branch path
-      const branchPath = store.getters['messages/getMessageBranch'](parseInt(currentThreadId));
-      
-      // Check if message is in the branch path
-      const isInBranchPath = branchPath.some(msg => msg.id === messageData.id);
-          
-      this.log(`Message in branch path: ${isInBranchPath}`);
-      
-      if (isInBranchPath) {
-        this.log(`Marking message ${messageData.id} as read`);
-        
-        // Set loading state for "to you" badge
-        store.commit('ui/SET_TO_YOU_BADGE_LOADING', true);
-        
-        // Mark as read and handle completion
-        this.log(`🔍 Calling backend to mark message ${messageData.id} as read`);
-        store.dispatch('messages/markMessageAsRead', messageData.id)
-          .then(() => {
-            this.log(`✅ Successfully marked message ${messageData.id} as read on backend`);
-            // Force refresh unread count from server to ensure consistency
-            return store.dispatch('messages/fetchUnreadMessageCount');
-          })
-          .catch(error => {
-            this.log(`❌ Error marking message ${messageData.id} as read: ${error.message}`);
-            console.error(`[WebSocket] Error marking message as read:`, error);
-          })
-          .finally(() => {
-            // Reset loading state when request completes
-            store.commit('ui/SET_TO_YOU_BADGE_LOADING', false);
-          });
-      }
-    }
-    
-    // Update unread message count
-    this.log('Fetching updated unread message count');
-    store.dispatch('messages/fetchUnreadMessageCount');
-    
-    // Additional processing based on current tab
-    const activeTab = store.getters['ui/activeTab'];
-    this.log(`Current active tab: ${activeTab}`);
-    
-    // If we're on the Direct tab and this is a direct message, trigger a refresh
-    if (activeTab === 'private') {
-      if (isDirectMessage) {
-        this.log('New direct message received while on Direct tab, triggering refresh');
-        // Create a refresh trigger mutation to tell the UI to update
-        store.commit('messages/REFRESH_DIRECT_MESSAGES');
-      } else {
-        this.log('User is on Direct tab, refreshing messages');
-        // For backward compatibility, still do the fetch on non-direct messages
-        store.dispatch('messages/fetchDirectMessages', { cursor: null });
-      }
+    // Refresh direct messages if this is a direct message
+    if (isDirectMessage) {
+      store.commit('messages/REFRESH_DIRECT_MESSAGES');
     }
   },
 

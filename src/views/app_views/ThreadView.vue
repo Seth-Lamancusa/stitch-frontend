@@ -247,7 +247,7 @@ const topMarkerState = computed(() => {
 });
 
 // Update the consolidated thread rendering function to mark messages as read
-const renderThread = async (preserveScroll = false, preserveBranchPath = false) => {
+const renderThread = async (preserveScroll = false, preserveBranchPath = true) => {
   try {
     console.log(`[ThreadView] ⭐️ RENDER THREAD called for messageId: ${messageId.value} (preserveScroll: ${preserveScroll}, preserveBranchPath: ${preserveBranchPath})`);
     console.log(`[ThreadView] ⭐️ RENDER THREAD called by:`, new Error().stack);
@@ -471,10 +471,8 @@ watch(() => store.state.messages.messages, (newMessages, oldMessages) => {
   
   // Check if any new message is a reply to a message in our current branch
   const branchMessageIds = displayedMessages.value.map(m => m.id);
-  const lastVisibleMessageId = displayedMessages.value[displayedMessages.value.length - 1].id;
   
   console.log(`[ThreadView] Current branch messages: ${branchMessageIds.join(', ')}`);
-  console.log(`[ThreadView] Last visible message: ${lastVisibleMessageId}`);
   
   let needsRender = false;
   let newRelevantMessage = null;
@@ -485,35 +483,21 @@ watch(() => store.state.messages.messages, (newMessages, oldMessages) => {
     // Log detailed information about the new message
     console.log(`[ThreadView] Examining new message ${key}:`, {
       parentId: newMessage.parent_id,
-      isParentInBranch: newMessage.parent_id && branchMessageIds.includes(newMessage.parent_id),
-      isParentLastMessage: newMessage.parent_id === lastVisibleMessageId
+      isParentInBranch: newMessage.parent_id && branchMessageIds.includes(newMessage.parent_id)
     });
     
     // Check if the message is a reply to any message in our branch
     if (newMessage.parent_id && branchMessageIds.includes(newMessage.parent_id)) {
       console.log(`[ThreadView] New message ${key} is a reply to message ${newMessage.parent_id} in our branch`);
       
-      // Get the parent message and check if new message is set as branch child
-      const parentMessage = newMessages[newMessage.parent_id];
-      if (parentMessage) {
-        console.log(`[ThreadView] Parent message branch_child:`, {
-          parentId: newMessage.parent_id,
-          branchChild: parentMessage.branch_child,
-          isNewMessageBranchChild: parentMessage.branch_child === Number(key),
-          childIds: parentMessage.child_ids
-        });
-      }
-      
-      // If this is a reply to the last message in our branch, we need to re-render
-      if (newMessage.parent_id === lastVisibleMessageId) {
-        console.log(`[ThreadView] New message is a reply to the last message in our branch, re-rendering`);
-        needsRender = true;
-        newRelevantMessage = newMessage;
-      }
+      // Always re-render if message belongs to our thread
+      needsRender = true;
+      newRelevantMessage = newMessage;
+      break; // Found a relevant message, no need to check others
     }
   }
   
-  // Re-render the thread if needed, preserving scroll position and branch path
+  // Re-render the thread if needed, preserving scroll position but NOT branch path
   if (needsRender && newRelevantMessage) {
     console.log(`[ThreadView] Re-rendering thread to include new message:`, {
       messageId: newRelevantMessage.id,
@@ -524,8 +508,9 @@ watch(() => store.state.messages.messages, (newMessages, oldMessages) => {
     console.log(`[ThreadView] Current branch path before rendering:`, 
       store.state.messages.branchPath || 'No branch path set');
     
-    // Re-render the thread with the new message
-    renderThread(true, true).then(() => {
+    // Re-render the thread with the new message, preserving scroll but NOT branch path
+    // This ensures the new message is properly incorporated into the thread
+    renderThread(true, false).then(() => {
       // After rendering, check if the new message is now visible
       const newDisplayedIds = displayedMessages.value.map(m => m.id);
       console.log(`[ThreadView] After rendering, displayed messages:`, newDisplayedIds);
@@ -614,19 +599,11 @@ const loadInitialContent = async (targetMessageId) => {
       console.log(`[ThreadView] 🔄 INITIAL LOAD sufficient child messages already in cache for ${targetMessageId}`);
     }
     
-    // 6. Mark loaded messages as read
-    if (loadedMessages.length > 0) {
-      await markMessagesAsRead(loadedMessages);
-    }
-    
-    // 7. Prepare branch path for rendering
+    // 6. Prepare branch path for rendering
     console.log(`[ThreadView] 🔄 INITIAL LOAD calling prepareBranchPath with message ID: ${targetMessageId}`);
     await store.dispatch('messages/prepareBranchPath', targetMessageId);
     
-    // 8. REMOVED: No longer automatically select message on load
-    // Don't set replyingTo on initial load
-    
-    // 9. Render the thread
+    // 7. Render the thread
     console.log(`[ThreadView] 🔄 INITIAL LOAD calling renderThread`);
     await renderThread();
     console.log(`[ThreadView] 🔄 INITIAL LOAD complete, displayed messages: ${displayedMessages.value.length}`);
@@ -880,7 +857,13 @@ const ensureCorrectScroll = () => {
 
 // New helper function to mark messages as read
 const markMessagesAsRead = async (messages) => {
+  console.log(`[ThreadView] markMessagesAsRead called with ${messages?.length || 0} messages`);
+  
   if (!messages || messages.length === 0 || !store.getters['auth/user']) {
+    console.log(`[ThreadView] Skipping markMessagesAsRead:`, {
+      hasMessages: !!messages && messages.length > 0,
+      hasUser: !!store.getters['auth/user']
+    });
     return; // No messages to mark or user not logged in
   }
   
@@ -914,17 +897,26 @@ const markMessagesAsRead = async (messages) => {
       });
     }
     
+    console.log(`[ThreadView] Message ${message.id} check:`, {
+      isUnread,
+      isRecipient,
+      recipients: message.recipients?.length || 0
+    });
+    
     return isUnread && isRecipient;
   });
   
+  console.log(`[ThreadView] Found ${messagesToMark.length} messages to mark as read:`, 
+    messagesToMark.map(m => m.id));
+  
   // Mark each message as read
   for (const message of messagesToMark) {
-    console.log(`[ThreadView] Marking message ${message.id} as read`);
+    console.log(`[ThreadView] Calling store action to mark message ${message.id} as read`);
     await store.dispatch('messages/markMessageAsRead', message.id);
   }
   
   if (messagesToMark.length > 0) {
-    console.log(`[ThreadView] Marked ${messagesToMark.length} message(s) as read`);
+    console.log(`[ThreadView] Completed marking ${messagesToMark.length} message(s) as read`);
   }
 };
 
