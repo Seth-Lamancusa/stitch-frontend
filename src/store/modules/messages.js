@@ -624,6 +624,26 @@ export default {
       }
     },
     
+    // Reformat a message
+    async reformatMessage({ commit, state }, messageId) {
+      try {
+        console.log(`[Store] Reformatting message: ${messageId}`);
+        
+        // Call the API to reformat the message
+        const response = await MessageService.reformatMessage(messageId);
+        
+        // Update the message in the store with the reformatted content
+        if (response.data) {
+          commit('SET_MESSAGE', response.data);
+        }
+        
+        return true;
+      } catch (error) {
+        console.error('[Store] Error reformatting message:', error);
+        throw error;
+      }
+    },
+    
     // Fetch threads based on active tab
     async fetchThreads({ commit, rootState, dispatch }) {
       try {

@@ -274,5 +274,11 @@ export default {
     const response = await axios.get(`${apiBaseUrl}/tabs/unread-count`, { headers });
     console.log('[DEBUG] MessageService - getUnreadMessageCount response:', response.data);
     return response;
+  },
+
+  // Reformat a message according to Stitch guidelines
+  async reformatMessage(messageId) {
+    const headers = await getAuthHeaders();
+    return axios.post(`${apiBaseUrl}/messages/${messageId}/reformat`, {}, { headers });
   }
 };
