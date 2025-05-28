@@ -13,7 +13,7 @@ export interface User {
  */
 export interface Message {
   /** Unique identifier for the thread */
-  id: number;
+  id: string;
   
   /** DEFAULT Thread title */
   title: string;

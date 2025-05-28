@@ -148,8 +148,8 @@ const isLoadingChildren = ref(false);
 // Message ID from route
 const messageId = computed(() => {
   const id = route.params.id;
-  // Convert to number (all real threads are numeric)
-  return Number(id);
+  // Return the ID as-is (can be numeric or alphanumeric)
+  return id;
 });
 
 // Computed properties from namespaced store modules
