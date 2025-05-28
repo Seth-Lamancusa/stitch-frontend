@@ -155,6 +155,20 @@
             Reply
           </button>
           
+          <!-- Add reformat button -->
+          <button 
+            v-if="!inListView"
+            @click.stop="handleReformat" 
+            class="reformat-button"
+            :class="{ 'loading': isReformatting }"
+            :disabled="isReformatting"
+            title="Reformat this message according to Stitch guidelines"
+          >
+            <span v-if="isReformatting" class="loading-indicator"></span>
+            <span v-else class="reformat-icon">✨</span>
+            Reformat
+          </button>
+          
           <!-- Copy JSON Button - Admin only -->
           <button 
             v-if="isAdmin"
@@ -309,6 +323,8 @@ export default {
     
     // For regular users, just use token info
     const isTogglingReadStatus = ref(false);
+    
+    const isReformatting = ref(false);
     
     const openTitleDescriptionModal = () => {
       editableTitle.value = props.message.title || '';
@@ -739,6 +755,19 @@ export default {
       return contentWithoutNewlines;
     });
     
+    const handleReformat = async () => {
+      if (isReformatting.value) return;
+      
+      isReformatting.value = true;
+      try {
+        await store.dispatch('messages/reformatMessage', props.message.id);
+      } catch (error) {
+        console.error('Error reformatting message:', error);
+      } finally {
+        isReformatting.value = false;
+      }
+    };
+    
     // Initialize formatters when the component is first created
     onMounted(() => {
       // Initialize formatters if not already done
@@ -793,7 +822,9 @@ export default {
       copyMessageJson,
       copyMessageText,
       toggleReadStatusOrDropdown,
-      truncatedContent
+      truncatedContent,
+      isReformatting,
+      handleReformat
     };
   },
   
@@ -1360,6 +1391,46 @@ export default {
 }
 
 .reply-icon {
+  font-size: var(--font-size-sm);
+  line-height: 1;
+}
+
+.reformat-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  padding: 5px 8px;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--color-text-secondary);
+}
+
+.reformat-button:hover:not(:disabled) {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+  color: var(--color-primary);
+}
+
+.reformat-button.loading {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.reformat-button .loading-indicator {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.reformat-icon {
   font-size: var(--font-size-sm);
   line-height: 1;
 }
