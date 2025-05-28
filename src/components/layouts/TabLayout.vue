@@ -55,9 +55,9 @@
             
             <!-- Auth status badges - only shown when auth is ready -->
             <template v-if="authReady">
-              <span v-if="user && user.status === 'admin'" class="admin-badge" title="Admin">⛊</span>
-              <span v-else-if="user && user.status === 'whitelisted'" class="whitelist-badge" title="Whitelisted">✓</span>
-              <span v-else-if="user && user.status !== 'admin' && user.status !== 'whitelisted'" class="non-whitelist-badge" title="Not whitelisted">✗</span>
+              <span v-if="isAdmin" class="admin-badge" title="Admin">⛊</span>
+              <span v-else-if="isWhitelisted" class="whitelist-badge" title="Whitelisted">✓</span>
+              <span v-else-if="user && !isWhitelisted" class="non-whitelist-badge" title="Not whitelisted">✗</span>
               <span v-if="!user" class="guest-badge" title="Not logged in">?</span>
             </template>
             

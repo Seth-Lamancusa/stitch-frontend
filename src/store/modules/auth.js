@@ -9,8 +9,6 @@ export default {
   state: {
     user: null,
     isAuthenticated: false,
-    isWhitelisted: false,
-    isAdmin: false,
     authReady: false
   },
   
@@ -32,18 +30,10 @@ export default {
         user_tag: user.user_tag || '',
         photoURL: user.photoURL || null,
         // Only set status if explicitly provided, otherwise keep existing value
-        status: user.status !== undefined ? user.status : (state.user ? state.user.status : 'unverified')
+        status: user.status !== undefined ? user.status : (state.user ? state.user.status : null)
       };
       
       state.isAuthenticated = !!user;
-    },
-    
-    SET_WHITELIST_STATUS(state, status) {
-      state.isWhitelisted = status;
-    },
-    
-    SET_ADMIN_STATUS(state, status) {
-      state.isAdmin = status;
     },
     
     SET_AUTH_READY(state, status) {
@@ -114,8 +104,6 @@ export default {
               } else {
                 // No user - just clear everything
                 commit('SET_USER', null);
-                commit('SET_WHITELIST_STATUS', false);
-                commit('SET_ADMIN_STATUS', false);
                 // Clear the auth token when the user signs out
                 localStorage.removeItem('auth_token');
                 commit('SET_AUTH_READY', true);
@@ -149,9 +137,6 @@ export default {
         await dispatch('fetchUserData', userData.uid);
       } catch (error) {
         console.error('Error fetching complete user data:', error);
-        // Even on error, make sure we default auth status correctly
-        commit('SET_WHITELIST_STATUS', false);
-        commit('SET_ADMIN_STATUS', false);
       } finally {
         // Always mark auth as ready when complete
         commit('SET_AUTH_READY', true);
@@ -178,8 +163,6 @@ export default {
         
         // Then clear user and status flags
         commit('SET_USER', null);
-        commit('SET_WHITELIST_STATUS', false);
-        commit('SET_ADMIN_STATUS', false);
         
         // Clear auth token from localStorage
         localStorage.removeItem('auth_token');
@@ -227,11 +210,9 @@ export default {
     async checkWhitelistStatus({ commit }, email) {
       try {
         const isWhitelisted = await WhitelistService.checkWhitelistStatus(email);
-        commit('SET_WHITELIST_STATUS', isWhitelisted);
         return isWhitelisted;
       } catch (error) {
         console.error('Error checking whitelist status:', error);
-        commit('SET_WHITELIST_STATUS', false);
         return false;
       }
     },
@@ -239,11 +220,9 @@ export default {
     async checkAdminStatus({ commit }, email) {
       try {
         const isAdmin = await WhitelistService.checkAdminStatus(email);
-        commit('SET_ADMIN_STATUS', isAdmin);
         return isAdmin;
       } catch (error) {
         console.error('Error checking admin status:', error);
-        commit('SET_ADMIN_STATUS', false);
         return false;
       }
     },
@@ -354,18 +333,6 @@ export default {
             user_tag: userData.user_tag || '',
             status: userData.status
           });
-          
-          // Update whitelist status
-          if (userData.status === 'admin') {
-            commit('SET_ADMIN_STATUS', true);
-            commit('SET_WHITELIST_STATUS', true);
-          } else if (userData.status === 'whitelisted') {
-            commit('SET_ADMIN_STATUS', false);
-            commit('SET_WHITELIST_STATUS', true);
-          } else {
-            commit('SET_ADMIN_STATUS', false);
-            commit('SET_WHITELIST_STATUS', false);
-          }
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
@@ -397,13 +364,35 @@ export default {
   getters: {
     user: state => state.user,
     isAuthenticated: state => state.isAuthenticated,
-    isWhitelisted: state => state.isWhitelisted,
-    isAdmin: state => state.isAdmin,
     authReady: state => state.authReady,
+    
+    // Permission-based getters using status directly
+    isAdmin: state => {
+      return state.user && state.user.status === 'admin';
+    },
+    
+    isWhitelisted: state => {
+      return state.user && ['whitelisted', 'admin'].includes(state.user.status);
+    },
+    
     canInteract: state => {
-      if (!state.isAuthenticated || !state.user) return false;
-      // Check user status directly instead of isWhitelisted flag
-      return state.user.status === 'admin' || state.user.status === 'whitelisted';
+      return state.user && ['whitelisted', 'admin'].includes(state.user.status);
+    },
+    
+    canCreateMessages: state => {
+      return state.user && ['whitelisted', 'admin'].includes(state.user.status);
+    },
+    
+    canModerateContent: state => {
+      return state.user && state.user.status === 'admin';
+    },
+    
+    canManageUsers: state => {
+      return state.user && state.user.status === 'admin';
+    },
+    
+    userStatus: state => {
+      return state.user ? state.user.status : null;
     }
   }
 }
