@@ -526,7 +526,7 @@ const backToList = async () => {
   const prevRoute = store.getters['navigation/previousRoute'];
   
   // Navigate back to the previous route - keep cache for faster return
-  router.push(prevRoute || '/feed'); // Fallback to feed if no previous route
+  router.push(prevRoute || '/cloud'); // Fallback to cloud if no previous route
 };
 
 // Update the loadInitialContent function to mark messages as read after loading
@@ -729,11 +729,21 @@ const updateReplyingToMessagePosition = () => {
 const handleScroll = () => {
   if (!messageList.value || !replyingToMessageId.value) return;
   
+  // Get current scroll position
+  const currentScrollPosition = messageList.value.scrollTop;
+  
+  // Determine scroll direction
+  const isScrollingDown = currentScrollPosition > lastScrollPosition.value;
+  
   // Update the position of the message being replied to
   updateReplyingToMessagePosition();
   
-  // Only proceed if we have a valid message rect
-  if (!messageBeingRepliedToRect.value) return;
+  // Only proceed if we have a valid message rect and we're scrolling down
+  if (!messageBeingRepliedToRect.value || !isScrollingDown) {
+    // Store current position for next comparison
+    lastScrollPosition.value = currentScrollPosition;
+    return;
+  }
   
   // Get viewport dimensions
   const containerRect = messageList.value.getBoundingClientRect();
@@ -743,14 +753,14 @@ const handleScroll = () => {
   const distanceFromTop = messageRect.bottom - containerRect.top;
   const distanceFromBottom = containerRect.bottom - messageRect.top;
   
-  // If message is more than 600px away in either direction, hide reply box
+  // Only hide reply box when scrolling down AND message is too far away
   if (distanceFromTop < -600 || distanceFromBottom < -600) {
-    console.log('Message scrolled too far, hiding reply box');
+    console.log('Message scrolled too far down, hiding reply box');
     store.dispatch('navigation/clearReplyingTo');
   }
   
   // Store this position for comparison
-  lastScrollPosition.value = messageList.value.scrollTop;
+  lastScrollPosition.value = currentScrollPosition;
 };
 
 // Check if branch has changed and clear replying if so
@@ -966,7 +976,7 @@ const deleteMessage = async () => {
     
     // Get the previous route to return to
     const prevRoute = store.getters['navigation/previousRoute'];
-    const defaultRoute = '/feed'; // Default to feed if no previous route
+    const defaultRoute = '/cloud'; // Default to cloud if no previous route
     
     // Always redirect out after deletion
     router.push(prevRoute || defaultRoute);

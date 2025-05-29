@@ -16,7 +16,7 @@
           <div class="coming-soon-icon">📐</div>
           <h2>Architecture Documentation Coming Soon</h2>
           <p>Our detailed technical architecture documentation is being prepared and will be available soon.</p>
-          <router-link to="/feed" class="btn primary-btn">Go to Stitch App</router-link>
+          <router-link to="/cloud" class="btn primary-btn">Go to Stitch App</router-link>
         </div>
       </div>
     </section>

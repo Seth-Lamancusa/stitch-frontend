@@ -46,39 +46,22 @@ const routes = [
     component: TermsView,
     meta: { requiresAuth: false }
   },
-  // Tab-specific routes - all use TabView
+  // New simplified tab routes
   {
-    path: '/feed',
-    name: 'feed',
+    path: '/cloud',
+    name: 'cloud',
     component: TabView,
     meta: { requiresAuth: false }
   },
   {
-    path: '/curated',
-    name: 'curated',
+    path: '/ground',
+    name: 'ground',
     component: TabView,
     meta: { requiresAuth: false }
   },
+  // Thread view - updated to use /cloud/{id}
   {
-    path: '/direct',
-    name: 'direct',
-    component: TabView,
-    meta: { requiresAuth: false }
-  },
-  {
-    path: '/profile',
-    name: 'profile',
-    component: TabView,
-    meta: { requiresAuth: false }
-  },
-  {
-    path: '/local',
-    name: 'local',
-    component: TabView,
-    meta: { requiresAuth: false }
-  },
-  {
-    path: '/messages/:id',
+    path: '/cloud/:id',
     name: 'thread',
     component: ThreadView,
     meta: { requiresAuth: false }
@@ -93,6 +76,31 @@ const routes = [
   {
     path: '/legal',
     redirect: '/terms'
+  },
+  // Redirects for old routes to new structure
+  {
+    path: '/feed',
+    redirect: '/cloud'
+  },
+  {
+    path: '/curated',
+    redirect: '/cloud'
+  },
+  {
+    path: '/direct',
+    redirect: '/cloud'
+  },
+  {
+    path: '/profile',
+    redirect: '/cloud'
+  },
+  {
+    path: '/local',
+    redirect: '/ground'
+  },
+  {
+    path: '/messages/:id',
+    redirect: to => `/cloud/${to.params.id}`
   },
   // Redirects for old routes
   {

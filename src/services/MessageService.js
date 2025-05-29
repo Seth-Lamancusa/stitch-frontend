@@ -122,86 +122,24 @@ export default {
     return response;
   },
   
-  // Get public messages (for Feed tab)
-  async getPublicMessages(limit = 10, cursor = null) {
-    const headers = await getAuthHeaders();
-    let url = `${apiBaseUrl}/tabs/feed?limit=${limit}`;
-    
-    // Add cursor parameter if provided
-    if (cursor !== null) {
-      url += `&cursor=${cursor}`;
+  // Get chronological messages (for cloud tab main list)
+  async getChronologicalMessages(limit = 10, cursor = null, filters = {}) {
+    try {
+      const headers = await getAuthHeaders();
+      const params = new URLSearchParams();
+      if (cursor) params.append('cursor', cursor);
+      if (limit) params.append('limit', limit);
+      
+      // Add filter parameters
+      if (filters.authorUid) params.append('author_uid', filters.authorUid);
+      if (filters.visibility) params.append('visibility', filters.visibility);
+      
+      const response = await axios.get(`${apiBaseUrl}/messages/chronological?${params.toString()}`, { headers });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching chronological messages:', error);
+      throw error;
     }
-    
-    const response = await axios.get(url, { headers });
-    console.log('[DEBUG] MessageService - getPublicMessages response:', 
-      response.data.messages?.length > 0 ? 
-      {count: response.data.messages.length, firstMessage: response.data.messages[0], nextCursor: response.data.next_cursor} : 
-      {count: 0, nextCursor: response.data.next_cursor});
-    return response;
-  },
-  
-  // Get curated messages (for Curated tab)
-  async getCuratedMessages(limit = 10, cursor = null) {
-    const headers = await getAuthHeaders();
-    let url = `${apiBaseUrl}/tabs/curated?limit=${limit}`;
-    
-    // Add cursor parameter if provided
-    if (cursor !== null) {
-      url += `&cursor=${cursor}`;
-    }
-    
-    const response = await axios.get(url, { headers });
-    console.log('[DEBUG] MessageService - getCuratedMessages response:', 
-      response.data.messages?.length > 0 ? 
-      {count: response.data.messages.length, firstMessage: response.data.messages[0], nextCursor: response.data.next_cursor} : 
-      {count: 0, nextCursor: response.data.next_cursor});
-    return response;
-  },
-  
-  // Get direct messages for current user
-  async getDirectMessages(limit = 10, cursor = null) {
-    const headers = await getAuthHeaders();
-    let url = `${apiBaseUrl}/tabs/direct?limit=${limit}`;
-    
-    // Add cursor parameter if provided
-    if (cursor !== null) {
-      url += `&cursor=${cursor}`;
-    }
-    
-    const response = await axios.get(url, { headers });
-    console.log('[DEBUG] MessageService - getDirectMessages response:', 
-      response.data.messages?.length > 0 ? 
-      {count: response.data.messages.length, firstMessage: response.data.messages[0], nextCursor: response.data.next_cursor} : 
-      {count: 0, nextCursor: response.data.next_cursor});
-    return response;
-  },
-  
-  // Get messages authored by the current user (for Profile tab)
-  async getUserMessages(limit = 10, cursor = null, userId = null) {
-    const headers = await getAuthHeaders();
-    let url = `${apiBaseUrl}/tabs/by-user?limit=${limit}`;
-    
-    // Add cursor parameter if provided
-    if (cursor !== null) {
-      url += `&cursor=${cursor}`;
-    }
-    
-    // Add userId parameter if provided
-    if (userId) {
-      url += `&user_id=${encodeURIComponent(userId)}`;
-    }
-    
-    const response = await axios.get(url, { headers });
-    console.log('[DEBUG] MessageService - getUserMessages response:', 
-      response.data.messages?.length > 0 ? 
-      {count: response.data.messages.length, firstMessage: response.data.messages[0], nextCursor: response.data.next_cursor} : 
-      {count: 0, nextCursor: response.data.next_cursor});
-    return response;
-  },
-  
-  // For backward compatibility - alias to getDirectMessages
-  async getPrivateMessages() {
-    return this.getDirectMessages();
   },
   
   // Delete a message and all its descendants
