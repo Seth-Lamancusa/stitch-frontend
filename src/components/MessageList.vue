@@ -5,14 +5,11 @@ import { useRouter, useRoute } from 'vue-router';
 import { initializeFirebase } from '../firebase';
 import MessageService from '../services/MessageService';
 import MessageNode from './MessageNode.vue';
-import ProfileFilter from './ProfileFilter.vue';
 
 /**
  * MessageList component displays a list of message threads based on the current route.
- * Public messages (/messages/public) - Shows pinned public messages
- * Direct messages (/messages/direct) - Shows private messages for the current user
- * Profile messages (/messages/profile) - Shows messages authored by the current user
- * Local messages (/messages/local) - Shows locally stored messages
+ * Cloud tab (/cloud) - Shows chronological non-pinned public messages
+ * Ground tab (/ground) - Shows locally stored messages (future feature)
  */
 
 const store = useStore();
@@ -21,23 +18,11 @@ const route = useRoute();
 
 // Track loading states per tab - simplified
 const loadingStates = ref({
-  feed: {
+  cloud: {
     isLoading: false,
     isAllLoaded: false
   },
-  curated: {
-    isLoading: false,
-    isAllLoaded: false
-  },
-  private: {
-    isLoading: false,
-    isAllLoaded: false
-  },
-  profile: {
-    isLoading: false,
-    isAllLoaded: false
-  },
-  local: {
+  ground: {
     isLoading: false,
     isAllLoaded: false
   }
@@ -55,16 +40,14 @@ const shouldShowEmptyState = computed(() => {
 // Show login message for auth-dependent tabs when user is not logged in
 const shouldShowLoginMessage = computed(() => {
   if (user.value) return false;
-  return ['private', 'profile'].includes(activeTab.value) && shouldShowEmptyState.value;
+  // Currently no auth-dependent tabs, but keeping the structure
+  return false && shouldShowEmptyState.value;
 });
 
 // Track cursors for each tab
 const cursors = ref({
-  feed: null,
-  curated: null,
-  private: null,
-  profile: null,
-  local: null
+  cloud: null,
+  ground: null
 });
 
 // Reference to the message list container for scroll detection
@@ -73,111 +56,59 @@ const messageListRef = ref(null);
 // Reference to the loading indicator for intersection observer
 const loadingIndicatorRef = ref(null);
 
-// Profile filter state from store
-const selectedProfileFilter = computed(() => store.getters['messages/getSelectedProfile']);
-
 // Determine active tab from route path
 const activeTab = computed(() => {
   const path = route.path;
-  if (path.includes('/direct')) return 'private';
-  if (path.includes('/profile')) return 'profile';
-  if (path.includes('/local')) return 'local';
-  if (path.includes('/curated')) return 'curated';
-  if (path.includes('/feed')) return 'feed';
-  return 'feed'; // Default tab
+  if (path.includes('/ground')) return 'ground';
+  if (path.includes('/cloud')) return 'cloud';
+  return 'cloud'; // Default tab
 });
 
 const messageListTitle = computed(() => {
   switch (activeTab.value) {
-    case 'feed': return 'Feed Messages';
-    case 'curated': return 'Curated Messages';
-    case 'private': return 'Direct Messages';
-    case 'profile': return 'My Messages';
-    case 'local': return 'Local Messages';
+    case 'cloud': return 'Cloud Messages';
+    case 'ground': return 'Ground Messages';
     default: return 'Messages';
   }
 });
 
 const threads = computed(() => {
   const allMessages = store.getters['messages/getLoadedMessages'] || [];
-  const currentUser = store.getters['auth/user'];
-  const currentUid = currentUser?.uid;
+  const selectedProfile = store.getters['messages/getSelectedProfile'];
+  const visibilityFilter = store.getters['messages/getVisibilityFilter'];
   
-  // Filter messages based on the for_tabs array
-  let filteredMessages = allMessages.filter(msg => {
-    // Check if the message belongs to the current tab
-    // Either via the legacy for_tab property or the new for_tabs array
-    return (msg.for_tabs && Array.isArray(msg.for_tabs) && msg.for_tabs.includes(activeTab.value)) || 
-           msg.for_tab === activeTab.value;
+  // For ground tab, show no messages for now
+  if (activeTab.value === 'ground') {
+    return [];
+  }
+  
+  // Filter messages based on selected profile and visibility
+  let filteredMessages = allMessages.filter(message => {
+    // Exclude pinned messages (shown separately)
+    const isPinned = message.is_pinned === 1 || message.is_pinned === true;
+    if (isPinned) return false;
+    
+    // Apply profile filter if selected
+    if (selectedProfile) {
+      const isMatchingAuthor = 
+        message.author_user_tag === selectedProfile.user_tag ||
+        message.author_email === selectedProfile.email ||
+        message.content_author === selectedProfile.uid;
+      if (!isMatchingAuthor) return false;
+    }
+    
+    // Apply visibility filter based on public boolean
+    const isPublic = message.public === true || message.public === 1;
+    if (visibilityFilter === 'public') {
+      return isPublic;
+    } else if (visibilityFilter === 'not-public') {
+      return !isPublic;
+    }
+    
+    return true;
   });
   
-  // Apply profile filter if we're in the profile tab and have a selected profile
-  if (activeTab.value === 'profile' && selectedProfileFilter.value) {
-    filteredMessages = filteredMessages.filter(msg => {
-      // Check all possible match conditions (implement OR logic)
-      
-      // 1. User tag match (most reliable in new data)
-      if (msg.author_user_tag && selectedProfileFilter.value.user_tag && 
-          msg.author_user_tag === selectedProfileFilter.value.user_tag) {
-        return true;
-      }
-      
-      // 2. UID match (content_author often contains the UID)
-      if (msg.content_author && selectedProfileFilter.value.uid && 
-          msg.content_author === selectedProfileFilter.value.uid) {
-        return true;
-      }
-      
-      // 3. Email matches user tag (for backward compatibility)
-      if (msg.author_email && selectedProfileFilter.value.user_tag && 
-          msg.author_email === selectedProfileFilter.value.user_tag) {
-        return true;
-      }
-      
-      // 4. Display name match (less reliable but can be useful)
-      if (msg.author_display_name && selectedProfileFilter.value.display_name && 
-          msg.author_display_name === selectedProfileFilter.value.display_name) {
-        return true;
-      }
-      
-      // No match found
-      return false;
-    });
-  }
-  
-  // For curated tab, sort by curation score/ranking
-  if (activeTab.value === 'curated') {
-    // Sort by curation score (higher scores first), then by timestamp
-    return filteredMessages.sort((a, b) => {
-      const scoreA = a.curation_score || 0;
-      const scoreB = b.curation_score || 0;
-      
-      if (scoreA !== scoreB) {
-        return scoreB - scoreA; // Higher scores first
-      }
-      
-      // If scores are equal, sort by timestamp (newest first)
-      return new Date(b.timestamp) - new Date(a.timestamp);
-    });
-  }
-  
-  // For feed tab, sort by pinned status first, then timestamp
-  if (activeTab.value === 'feed') {
-    return filteredMessages.sort((a, b) => {
-      const aIsPinned = a.is_pinned === 1 || a.is_pinned === true;
-      const bIsPinned = b.is_pinned === 1 || b.is_pinned === true;
-      
-      // If pinned status differs, prioritize pinned messages
-      if (aIsPinned !== bIsPinned) {
-        return aIsPinned ? -1 : 1;
-      }
-      
-      // Otherwise sort by timestamp
-      return new Date(b.timestamp) - new Date(a.timestamp);
-    });
-  }
-  
-  // For all other tabs, just sort by timestamp (newest first)
+  // Sort all messages by timestamp (newest first)
   return filteredMessages.sort((a, b) => {
     return new Date(b.timestamp) - new Date(a.timestamp);
   });
@@ -243,7 +174,7 @@ const viewMessage = (messageId) => {
   // Store current route before navigation
   store.dispatch('navigation/setPreviousRoute', route.path);
   
-  router.push({ path: `/messages/${messageId}` });
+  router.push({ path: `/cloud/${messageId}` });
 };
 
 // Handle message deletion requests
@@ -349,20 +280,14 @@ function getThreadMessages(threadId) {
 
 // Add a new function to check if we need to load messages for a tab
 const shouldLoadMessagesForTab = (tabName) => {
-  // Check if we already have messages for this tab
-  const tabMessages = store.getters['messages/getLoadedMessages'].filter(
-    msg => {
-      return (msg.for_tabs && Array.isArray(msg.for_tabs) && msg.for_tabs.includes(tabName)) || 
-             msg.for_tab === tabName;
-    }
-  );
+  // For ground tab, never load messages (showing empty for now)
+  if (tabName === 'ground') {
+    return false;
+  }
   
-  return (
-    // No messages for this tab
-    tabMessages.length === 0 ||
-    // Or special case for feed tab - always reload if no pinned messages found
-    (tabName === 'feed' && !tabMessages.some(msg => msg.is_pinned))
-  );
+  // For cloud tab, check if we already have messages
+  const allMessages = store.getters['messages/getLoadedMessages'];
+  return allMessages.length === 0;
 };
 
 // Watch for tab changes to reset and reload
@@ -412,9 +337,6 @@ onMounted(async () => {
         // Always start with a clean loading state for the new tab
         if (needsLoading) {
           console.log(`[Debug] Reloading ${newTab} tab data...`);
-          if (newTab === 'feed') {
-            console.log(`[Debug] Feed tab needs a full refresh to get pinned+regular messages`);  
-          }
           
           // Reset the loading state for the new tab BEFORE loading
           loadingStates.value[newTab].isLoading = true;
@@ -471,45 +393,20 @@ const loadMessagesForTab = async (tabName, isInitial = true) => {
   try {
     console.log(`[Debug] ${isInitial ? 'Loading' : 'Loading more'} messages for specific tab:`, tabName);
     
+    // For ground tab, don't load anything for now
+    if (tabName === 'ground') {
+      loadingStates.value[tabName].isAllLoaded = true;
+      return;
+    }
+    
     // Get current cursor for this tab
     const cursor = cursors.value[tabName];
     console.log(`[Debug] Using cursor for ${tabName}:`, cursor);
     
-    // Use different endpoint based on tab name
+    // For cloud tab, use chronological messages endpoint
     let response;
-    switch (tabName) {
-      case 'feed':
-        response = await store.dispatch('messages/fetchFeedMessages', { cursor });
-        break;
-      case 'curated':
-        response = await store.dispatch('messages/fetchCuratedMessages', { cursor });
-        break;
-      case 'private':
-        response = await store.dispatch('messages/fetchDirectMessages', { cursor });
-        break;
-      case 'profile':
-        if (selectedProfileFilter.value) {
-          // Pass user ID to ensure the API can find the right user
-          response = await store.dispatch('messages/fetchUserMessages', { 
-            cursor,
-            userId: selectedProfileFilter.value.uid
-          });
-        } else if (user.value) {
-          // If no filter but user is logged in, show their own messages
-          response = await store.dispatch('messages/fetchUserMessages', { 
-            cursor,
-            userId: user.value.uid
-          });
-        } else {
-          // Fallback: no filter, no logged in user - show general messages
-          response = await store.dispatch('messages/fetchUserMessages', { cursor });
-        }
-        break;
-      case 'local':
-        // Local messages are stored client-side, no API call needed
-        break;
-      default:
-        response = await store.dispatch('messages/fetchFeedMessages', { cursor });
+    if (tabName === 'cloud') {
+      response = await store.dispatch('messages/fetchChronologicalMessages', { cursor });
     }
     
     // Detailed logging of the response
@@ -532,18 +429,6 @@ const loadMessagesForTab = async (tabName, isInitial = true) => {
       if (response.nextCursor !== undefined && response.nextCursor !== null) {
         cursors.value[tabName] = response.nextCursor;
         console.log(`[Debug] Updated cursor for ${tabName} to: ${response.nextCursor}`);
-        
-        // Special case for feed tab: If this was the initial load (pinned messages)
-        // and cursor is specifically "PINNED_DONE", immediately load the next batch (regular messages)
-        if (isInitial && tabName === 'feed' && response.nextCursor === "PINNED_DONE" && activeTab.value === 'feed') {
-          console.log('[Debug] Feed tab: Pinned messages loaded, immediately loading regular messages');
-          // We need to wait a tick to avoid state conflicts
-          await nextTick();
-          // Set loading state to false temporarily to avoid loading conflict
-          loadingStates.value[tabName].isLoading = false;
-          // Load regular messages
-          await loadMessages(false);
-        }
       }
     }
   } catch (error) {
@@ -599,7 +484,7 @@ onUnmounted(() => {
 
 // Add watcher for directMessagesLastUpdated to refresh message display
 watch(() => store.state.messages.directMessagesLastUpdated, (newVal, oldVal) => {
-  if (newVal !== oldVal && activeTab.value === 'private') {
+  if (newVal !== oldVal && activeTab.value === 'cloud') {
     console.log('[MessageList] Detected direct messages update trigger, refreshing view');
     // No need to fetch from server as the WebSocket has already added the message to the store
     // Just force a re-computation of the threads computed property
@@ -646,44 +531,17 @@ const deleteMessage = async () => {
 
 <template>
   <div class="message-list" ref="messageListRef">
-    <!-- Tab info boxes - now inside the message list so they scroll with content -->
-    <div v-if="activeTab === 'feed'" class="tab-info">
-      <p>All public messages in reverse chronological order.</p>
-      <p>Pinned messages appear at the top.</p>
-    </div>
-    
-    <div v-if="activeTab === 'curated'" class="tab-info">
-      <p>Curated messages selected based on quality and relevance.</p>
+    <!-- Tab info boxes - only for ground tab now -->
+    <div v-if="activeTab === 'ground'" class="tab-info">
+      <p>Local messages stored on your device.</p>
       <p>Feature under development.</p>
-    </div>
-    
-    <div v-if="activeTab === 'private'" class="tab-info">
-      <p>Direct messages sent to you specifically.</p>
-      <p>Reverse chronological order.</p>
-    </div>
-    
-    <div v-if="activeTab === 'profile'" class="tab-info">
-      <p>All messages you've created, both public and private.</p>
-      <p>Listed in reverse chronological order.</p>
-      <p>Filter by username or tag to view other profiles.</p>
-    </div>
-    
-    <!-- Profile Filter Component - only shown in profile tab -->
-    <ProfileFilter 
-      v-if="activeTab === 'profile'"
-    />
-    
-    <div v-if="activeTab === 'local'" class="tab-info local-message-info">
-      <p>This tab will display messages saved to your local filesystem.</p>
-      <p>Feature coming soon.</p>
     </div>
 
     <!-- Empty state - only shown when no messages and not loading -->
     <div v-if="shouldShowEmptyState" class="empty-state">
       <!-- Show login message for auth-dependent tabs -->
       <div v-if="shouldShowLoginMessage">
-        <p>Please log in to view {{ activeTab === 'private' ? 'direct' : 'your' }} messages.</p>
-        <p>The {{ activeTab === 'private' ? 'Direct' : 'Profile' }} tab requires authentication.</p>
+        <p>Please log in to view messages.</p>
       </div>
       <!-- Default empty state -->
       <p v-else>No {{ activeTab }} messages found.</p>
@@ -763,11 +621,8 @@ const deleteMessage = async () => {
 .message-list {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  overflow-y: auto;
-  padding: var(--space-md);
+  flex: 1;
   gap: var(--space-md);
-  scroll-behavior: smooth;
 }
 
 .tab-info {
@@ -813,7 +668,6 @@ const deleteMessage = async () => {
   width: 100%;
   cursor: pointer;
   position: relative;
-  margin-bottom: var(--space-md);
   transition: transform var(--transition-fast), opacity var(--transition-fast);
 }
 

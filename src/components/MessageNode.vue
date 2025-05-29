@@ -838,7 +838,7 @@ export default {
 
 <style scoped>
 .message-node {
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-xs);
   transition: all var(--transition-fast);
   position: relative;
 }
@@ -1158,7 +1158,7 @@ export default {
 
 /* Add larger font size when not in list view */
 .message-node .plaintext-content {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
 }
 
 .message-footer {

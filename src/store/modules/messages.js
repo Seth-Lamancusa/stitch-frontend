@@ -44,7 +44,10 @@ export default {
     selectedProfile: null,
     
     // Track direct messages last updated timestamp
-    directMessagesLastUpdated: Date.now()
+    directMessagesLastUpdated: Date.now(),
+    
+    // Add to state
+    visibilityFilter: 'public', // 'public' or 'private'
   },
   
   mutations: {
@@ -53,32 +56,12 @@ export default {
         id: message.id,
         author_display_name: message.author_display_name,
         author_user_tag: message.author_user_tag,
-        content_author: message.content_author,
-        for_tab: message.for_tab
+        content_author: message.content_author
       });
       
       // Ensure child_ids is always an array
       if (!message.child_ids) {
         message.child_ids = [];
-      }
-
-      // Convert single for_tab to array if it's a string
-      if (message.for_tab && typeof message.for_tab === 'string') {
-        message.for_tabs = [message.for_tab];
-        // Keep for_tab for backward compatibility
-        message.for_tab = message.for_tab;
-      } else if (message.for_tab && Array.isArray(message.for_tab)) {
-        message.for_tabs = [...message.for_tab];
-        // Set for_tab to the first element for backward compatibility
-        message.for_tab = message.for_tab[0];
-      } else if (message.for_tabs && Array.isArray(message.for_tabs)) {
-        // Already using for_tabs array, keep it
-        // Set for_tab to the first element for backward compatibility if not empty
-        if (message.for_tabs.length > 0) {
-          message.for_tab = message.for_tabs[0];
-        }
-      } else {
-        message.for_tabs = [];
       }
       
       // Check if message already exists in store - if so, merge it
@@ -93,25 +76,13 @@ export default {
           // Combine child IDs without duplicates
           mergedChildIds = [...new Set([...existingMessage.child_ids, ...message.child_ids])];
         }
-        
-        // Merge for_tabs arrays without duplicates
-        let mergedForTabs = [...(message.for_tabs || [])];
-        if (existingMessage.for_tabs && existingMessage.for_tabs.length > 0) {
-          mergedForTabs = [...new Set([...existingMessage.for_tabs, ...(message.for_tabs || [])])];
-        }
 
         // Create the merged message
         const mergedMessage = {
           ...existingMessage, // Start with existing message properties
           ...message,         // Override with new message properties
-          for_tabs: mergedForTabs, // Use the merged for_tabs array
           child_ids: mergedChildIds // Use combined child_ids
         };
-        
-        // Set for_tab to the first element of for_tabs for backward compatibility
-        if (mergedForTabs.length > 0) {
-          mergedMessage.for_tab = mergedForTabs[0];
-        }
         
         // Default branch_child to first child if there are children and no previous selection
         const hasChildren = mergedChildIds.length > 0;
@@ -138,10 +109,7 @@ export default {
         }
         
         // Add to store
-        state.messages[message.id] = { 
-          ...message,
-          for_tabs: message.for_tabs || [] // Ensure for_tabs is set
-        };
+        state.messages[message.id] = { ...message };
       }
     },
     
@@ -276,7 +244,12 @@ export default {
       // This is a trigger mutation that doesn't actually modify state
       // It will be observed by components to know when to refresh their view
       state.directMessagesLastUpdated = Date.now();
-    }
+    },
+
+    // Add to mutations
+    SET_VISIBILITY_FILTER(state, filter) {
+      state.visibilityFilter = filter;
+    },
   },
   
   actions: {
@@ -351,13 +324,13 @@ export default {
       
       // Trace downward, ensuring each node has a branch_child if it has children
       while (true) {
-        // If message has no branch child but has child_ids, set first child as branch_child
+        // If message has no branch child but has child_ids, set last child as branch_child (most recent)
         if (!currentMessage.branch_child && currentMessage.child_ids && currentMessage.child_ids.length > 0) {
-          console.log(`[prepareBranchPath] 🌳 PREPARE_PATH setting branch_child for ${currentMessage.id} to first child ${currentMessage.child_ids[0]}`);
+          console.log(`[prepareBranchPath] 🌳 PREPARE_PATH setting branch_child for ${currentMessage.id} to last child ${currentMessage.child_ids[currentMessage.child_ids.length - 1]} (most recent)`);
           
           commit('SET_BRANCH_CHILD', { 
             messageId: currentMessage.id, 
-            childId: currentMessage.child_ids[0] 
+            childId: currentMessage.child_ids[currentMessage.child_ids.length - 1] 
           });
           
           // Get updated message reference
@@ -674,25 +647,26 @@ export default {
       }
     },
     
-    // Fetch feed messages (Feed tab)
-    async fetchFeedMessages({ commit, rootState, dispatch }, { cursor = null } = {}) {
+    // Fetch chronological messages (for cloud tab main list)
+    async fetchChronologicalMessages({ commit, state, rootState }, { cursor = null } = {}) {
       try {
         // Set loading state in UI
         commit('ui/SET_LOADING', { key: 'threads', value: true }, { root: true });
         
-        // For Feed tab, special behavior:
-        // - First call (cursor = null): get ALL pinned messages
-        // - Second call (cursor = "PINNED_DONE"): get first batch of regular public messages
-        // - Subsequent calls (cursor = timestamp string): get next batch of regular messages
+        console.log(`[DEBUG] Fetching chronological messages - cursor: ${cursor}`);
         
-        console.log(`[DEBUG] Fetching feed messages - cursor: ${cursor}`);
+        // Build filters object
+        const filters = {
+          authorUid: state.selectedProfile?.uid,
+          visibility: state.visibilityFilter
+        };
         
-        const response = await MessageService.getPublicMessages(10, cursor);
-        const messages = response.data.messages || [];
-        const exhausted = response.data.exhausted || false;
-        const nextCursor = response.data.next_cursor;
+        const response = await MessageService.getChronologicalMessages(10, cursor, filters);
+        const messages = response.messages || [];
+        const exhausted = response.exhausted || false;
+        const nextCursor = response.next_cursor;
         
-        console.log(`[DEBUG] Feed response - messages: ${messages.length}, exhausted: ${exhausted}, nextCursor: ${nextCursor}`);
+        console.log(`[DEBUG] Chronological response - messages: ${messages.length}, exhausted: ${exhausted}, nextCursor: ${nextCursor}`);
         
         // Commit all messages to store
         commit('SET_MESSAGES', messages);
@@ -708,120 +682,8 @@ export default {
         };
       } catch (error) {
         commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
-        commit('ui/SET_ERROR', error.message || 'Failed to load feed messages', { root: true });
-        console.error('Error fetching feed messages:', error);
-        return {
-          messages: [],
-          exhausted: true,
-          nextCursor: null
-        };
-      }
-    },
-    
-    // Fetch curated messages (Curated tab)
-    async fetchCuratedMessages({ commit, rootState, dispatch }, { cursor = null } = {}) {
-      try {
-        // Set loading state in UI
-        commit('ui/SET_LOADING', { key: 'threads', value: true }, { root: true });
-        
-        console.log(`[DEBUG] Fetching curated messages - cursor: ${cursor}`);
-        
-        const response = await MessageService.getCuratedMessages(10, cursor);
-        const messages = response.data.messages || [];
-        const exhausted = response.data.exhausted || false;
-        const nextCursor = response.data.next_cursor;
-        
-        // Commit all messages to store
-        commit('SET_MESSAGES', messages);
-        
-        // Clear loading state
-        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
-        
-        // Return the response data with exhausted flag and next cursor
-        return {
-          messages,
-          exhausted,
-          nextCursor
-        };
-      } catch (error) {
-        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
-        commit('ui/SET_ERROR', error.message || 'Failed to load curated messages', { root: true });
-        console.error('Error fetching curated messages:', error);
-        return {
-          messages: [],
-          exhausted: true,
-          nextCursor: null
-        };
-      }
-    },
-    
-    // Fetch direct messages (Direct tab)
-    async fetchDirectMessages({ commit, rootState, dispatch }, { cursor = null } = {}) {
-      try {
-        // Set loading state in UI
-        commit('ui/SET_LOADING', { key: 'threads', value: true }, { root: true });
-        
-        console.log(`[DEBUG] Fetching direct messages - cursor: ${cursor}`);
-        
-        const response = await MessageService.getDirectMessages(10, cursor);
-        const messages = response.data.messages || [];
-        const exhausted = response.data.exhausted || false;
-        const nextCursor = response.data.next_cursor;
-        
-        // Commit all messages to store
-        commit('SET_MESSAGES', messages);
-        
-        // Clear loading state
-        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
-        
-        // Return the response data with exhausted flag and next cursor
-        return {
-          messages,
-          exhausted,
-          nextCursor
-        };
-      } catch (error) {
-        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
-        commit('ui/SET_ERROR', error.message || 'Failed to load direct messages', { root: true });
-        console.error('Error fetching direct messages:', error);
-        return {
-          messages: [],
-          exhausted: true,
-          nextCursor: null
-        };
-      }
-    },
-    
-    // Fetch user's own messages (Profile tab)
-    async fetchUserMessages({ commit, rootState, dispatch, state }, { cursor = null, userId = null } = {}) {
-      try {
-        // Set loading state in UI
-        commit('ui/SET_LOADING', { key: 'threads', value: true }, { root: true });
-        
-        console.log(`[DEBUG] Fetching user messages - cursor: ${cursor}, userId: ${userId}`);
-        
-        // Use the dedicated by-user endpoint
-        const response = await MessageService.getUserMessages(10, cursor, userId);
-        const messages = response.data.messages || [];
-        const exhausted = response.data.exhausted || false;
-        const nextCursor = response.data.next_cursor;
-        
-        // Commit all messages to store
-        commit('SET_MESSAGES', messages);
-        
-        // Clear loading state
-        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
-        
-        // Return the response data with exhausted flag and next cursor
-        return {
-          messages,
-          exhausted,
-          nextCursor
-        };
-      } catch (error) {
-        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
-        commit('ui/SET_ERROR', error.message || 'Failed to load user messages', { root: true });
-        console.error('Error fetching user messages:', error);
+        commit('ui/SET_ERROR', error.message || 'Failed to load chronological messages', { root: true });
+        console.error('Error fetching chronological messages:', error);
         return {
           messages: [],
           exhausted: true,
@@ -1124,22 +986,16 @@ export default {
     },
 
     // Add new action to set the selected profile
-    setSelectedProfile({ commit, dispatch }, profile) {
+    setSelectedProfile({ commit }, profile) {
       commit('SET_SELECTED_PROFILE', profile);
       
-      // If we have a profile selected, fetch their messages
-      if (profile) {
-        dispatch('fetchUserMessages', { 
-          cursor: null,
-          userId: profile.uid
-        });
-      } else {
-        // No profile selected, fetch default messages
-        dispatch('fetchUserMessages', { cursor: null });
-      }
-      
       return profile;
-    }
+    },
+
+    // Add to actions
+    setVisibilityFilter({ commit }, filter) {
+      commit('SET_VISIBILITY_FILTER', filter);
+    },
   },
   
   getters: {
@@ -1252,8 +1108,6 @@ export default {
       return 0;
     },
     
-
-    
     getPinnedMessages: (state, getters, rootState) => {
       const activeTab = rootState.ui?.activeTab || 'public';
       const currentUser = rootState.auth?.user;
@@ -1319,7 +1173,10 @@ export default {
     },
 
     // Add new getter for selected profile
-    getSelectedProfile: state => state.selectedProfile
+    getSelectedProfile: state => state.selectedProfile,
+
+    // Add new getter for visibility filter
+    getVisibilityFilter: state => state.visibilityFilter,
   }
 }
 

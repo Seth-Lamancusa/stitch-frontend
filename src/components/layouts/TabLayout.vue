@@ -7,20 +7,10 @@
         <div class="tab-navigation">
           <button 
             class="tab-button" 
-            :class="{ 'active': activeTab === 'feed' }"
-            @click="navigateToTab('feed')"
-          >Feed</button>
-          <button 
-            class="tab-button" 
-            :class="{ 'active': activeTab === 'curated' }"
-            @click="navigateToTab('curated')"
-          >Curated</button>
-          <button 
-            class="tab-button" 
-            :class="{ 'active': activeTab === 'private' }"
-            @click="navigateToTab('private')"
+            :class="{ 'active': activeTab === 'cloud' }"
+            @click="navigateToTab('cloud')"
           >
-            Direct
+            Cloud
             <!-- Unread Message Badge with loading state -->
             <span 
               v-if="user && unreadMessageCount > 0" 
@@ -34,14 +24,9 @@
           </button>
           <button 
             class="tab-button" 
-            :class="{ 'active': activeTab === 'profile' }"
-            @click="navigateToTab('profile')"
-          >Profile</button>
-          <button 
-            class="tab-button" 
-            :class="{ 'active': activeTab === 'local' }"
-            @click="navigateToTab('local')"
-          >Local</button>
+            :class="{ 'active': activeTab === 'ground' }"
+            @click="navigateToTab('ground')"
+          >Ground</button>
         </div>
         
         <div class="user-controls">
@@ -103,11 +88,11 @@ import ProfileEditModal from '../../components/ProfileEditModal.vue';
 
 // Props
 const props = defineProps({
-  // The active tab identifier: 'feed', 'curated', 'private', 'profile', 'local'
+  // The active tab identifier: 'cloud', 'ground'
   activeTab: {
     type: String,
     required: true,
-    validator: (value) => ['feed', 'curated', 'private', 'profile', 'local'].includes(value)
+    validator: (value) => ['cloud', 'ground'].includes(value)
   }
 });
 
@@ -153,8 +138,8 @@ const handleLogin = async () => {
     if (route.query.redirect) {
       router.push(route.query.redirect);
     } else {
-      // Default redirect to feed page
-      router.push('/feed');
+      // Default redirect to cloud page
+      router.push('/cloud');
     }
     
     // Fetch unread count after login
@@ -179,11 +164,8 @@ const closeProfileModal = () => {
 // Navigation to other tabs
 const navigateToTab = (tab) => {
   const routes = {
-    'feed': '/feed',
-    'curated': '/curated',
-    'private': '/direct',
-    'profile': '/profile',
-    'local': '/local'
+    'cloud': '/cloud',
+    'ground': '/ground'
   };
   
   // Store current route before navigation
@@ -211,8 +193,8 @@ watch(user, async (newUser) => {
 
 // Add a watcher for tab changes to refresh unread count
 watch(() => props.activeTab, (newTab) => {
-  // When switching to Direct tab, refresh unread message count
-  if (newTab === 'private') {
+  // When switching to Cloud tab, refresh unread message count
+  if (newTab === 'cloud') {
     fetchUnreadMessageCount();
   }
 });

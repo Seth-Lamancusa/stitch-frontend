@@ -2,8 +2,22 @@
   <TabLayout 
     :activeTab="activeTab"
   >
-    <!-- Force component remount on tab change using :key -->
-    <template #content>
+    <!-- Custom content for cloud tab -->
+    <template #content v-if="activeTab === 'cloud'">
+      <div class="cloud-tab-container">
+        <!-- Pinned Messages at the top -->
+        <PinnedMessageList />
+        
+        <!-- Message Filters -->
+        <MessageFilters />
+        
+        <!-- Regular Message List -->
+        <MessageList :key="activeTab" />
+      </div>
+    </template>
+    
+    <!-- Default content for other tabs -->
+    <template #content v-else>
       <MessageList :key="activeTab" />
     </template>
   </TabLayout>
@@ -14,6 +28,8 @@ import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import TabLayout from '../../components/layouts/TabLayout.vue';
 import MessageList from '../../components/MessageList.vue';
+import PinnedMessageList from '../../components/PinnedMessageList.vue';
+import MessageFilters from '../../components/MessageFilters.vue';
 
 const route = useRoute();
 
@@ -22,12 +38,9 @@ const route = useRoute();
  */
 const activeTab = computed(() => {
   const path = route.path;
-  if (path.includes('/direct')) return 'private';
-  if (path.includes('/profile')) return 'profile';
-  if (path.includes('/local')) return 'local';
-  if (path.includes('/curated')) return 'curated';
-  if (path.includes('/feed')) return 'feed';
-  return 'feed'; // Default tab
+  if (path.includes('/ground')) return 'ground';
+  if (path.includes('/cloud')) return 'cloud';
+  return 'cloud'; // Default tab
 });
 </script>
 
@@ -58,5 +71,14 @@ const activeTab = computed(() => {
 
 .tab-info p:last-child, .local-message-info p:last-child {
   margin-bottom: 0;
+}
+
+.cloud-tab-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-md);
+  gap: var(--space-lg);
 }
 </style> 

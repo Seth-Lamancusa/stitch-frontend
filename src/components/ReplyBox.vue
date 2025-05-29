@@ -121,7 +121,11 @@
                 <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
               </div>
               <div class="recipient-actions">
-                <button @click="() => removeRecipient(index)" class="remove-recipient-btn">×</button>
+                <button 
+                  v-if="!isAuthorRecipient(recipient)"
+                  @click="() => removeRecipient(index)" 
+                  class="remove-recipient-btn"
+                >×</button>
               </div>
             </div>
             
