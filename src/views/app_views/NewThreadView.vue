@@ -25,7 +25,75 @@
         </div>
         
         <div class="import-content">
-          <div class="import-panel">
+          <div v-if="activeImportTab === 'chatgpt'" class="import-panel">
+            <h3>Import from ChatGPT</h3>
+            
+            <div class="import-instructions">
+              <p>To import a ChatGPT conversation:</p>
+              <ol>
+                <li>Copy your entire ChatGPT conversation (from web interface, mobile app, or chat export)</li>
+                <li>Paste it in the text area below - no formatting needed</li>
+                <li>Click "Import Conversation"</li>
+              </ol>
+              <p class="import-warning">⚠️ Paste the raw conversation without modifications for best results</p>
+            </div>
+            
+            <textarea 
+              v-model="importText"
+              class="import-textarea"
+              placeholder="Paste your ChatGPT conversation here..."
+              :disabled="isImporting"
+            />
+            
+            <!-- Content and preview container -->
+            <div v-if="parsedMessages.length > 0 || formatDetection.hint" class="import-content-container">
+              <!-- Preview section -->
+              <div v-if="parsedMessages.length > 0" class="import-preview">
+                <div class="preview-header">
+                  <h4>Preview ({{ parsedMessages.length }} messages)</h4>
+                  <!-- Format detection hint positioned next to preview title -->
+                  <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
+                    <span class="format-icon">{{ getFormatIcon() }}</span>
+                    <span class="format-hint">{{ formatDetection.hint }}</span>
+                  </div>
+                </div>
+                <div class="preview-messages">
+                  <div v-for="(msg, index) in parsedMessages.slice(0, 3)" :key="index" class="preview-message">
+                    <span class="preview-role">{{ msg.role === 'user' ? 'You' : 'ChatGPT' }}:</span>
+                    <span class="preview-content">{{ truncateContent(msg.content) }}</span>
+                  </div>
+                  <div v-if="parsedMessages.length > 3" class="preview-more">
+                    ... and {{ parsedMessages.length - 3 }} more messages
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Format detection when no preview (standalone) -->
+              <div v-else-if="formatDetection.hint" class="format-detection standalone" :class="formatDetection.format">
+                <span class="format-icon">{{ getFormatIcon() }}</span>
+                <span class="format-hint">{{ formatDetection.hint }}</span>
+              </div>
+            </div>
+            
+            <!-- Validation errors -->
+            <div v-if="importErrors.length > 0" class="import-errors">
+              <p class="error-title">Please fix the following issues:</p>
+              <ul>
+                <li v-for="(error, index) in importErrors" :key="index">{{ error }}</li>
+              </ul>
+            </div>
+            
+            <button 
+              @click="importChatGPT"
+              :disabled="!canImport || isImporting"
+              class="import-button"
+              :class="{ 'importing': isImporting }"
+            >
+              <span v-if="!isImporting">Import Conversation</span>
+              <span v-else>Importing...</span>
+            </button>
+          </div>
+          <div v-else class="import-panel">
             <h3>Import from {{ getActiveTabName() }}</h3>
             <p class="under-development">This feature is under development</p>
           </div>
@@ -45,19 +113,34 @@
     <!-- Loading Overlay (for both sending and importing) -->
     <div v-if="isCreatingThread" class="loading-overlay">
       <div class="loading-content">
+        <div v-if="importSuccess" class="success-animation">
+          <svg class="checkmark" viewBox="0 0 52 52">
+            <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
+            <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+          </svg>
+          <p class="success-message">Import Successful!</p>
+          <p class="success-submessage">Redirecting to your imported conversation...</p>
+        </div>
+        <div v-else>
         <div class="import-spinner"></div>
-        <p class="loading-message">Creating new thread...</p>
-        <p class="loading-submessage">This will only take a moment</p>
+          <p class="loading-message">{{ loadingMessage }}</p>
+          <p class="loading-submessage">{{ loadingSubmessage }}</p>
+        </div>
       </div>
     </div>
+
+    <!-- Global Notifications component -->
+    <GlobalNotifications />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
 import ReplyBox from '../../components/ReplyBox.vue';
+import ImportService from '../../services/ImportService';
+import GlobalNotifications from '../../components/GlobalNotifications.vue';
 
 // Setup store and routing
 const store = useStore();
@@ -79,10 +162,38 @@ const importTabs = [
 ];
 const activeImportTab = ref('chatgpt');
 
+// Import-specific refs
+const importText = ref('');
+const isImporting = ref(false);
+const parsedMessages = ref([]);
+const importErrors = ref([]);
+const importSuccess = ref(false);
+const loadingMessage = ref('Creating new thread...');
+const loadingSubmessage = ref('This will only take a moment');
+const formatDetection = ref({ format: 'unknown', confidence: 0, hint: '' });
+
 // Function to get active tab name
 const getActiveTabName = () => {
   const tab = importTabs.find(tab => tab.id === activeImportTab.value);
   return tab ? tab.name : '';
+};
+
+// Function to get format icon
+const getFormatIcon = () => {
+  switch (formatDetection.value.format) {
+    case 'standard':
+    case 'openai':
+    case 'anthropic':
+    case 'chatgpt-web':
+    case 'explicit-markers':
+      return '✅';
+    case 'partial':
+      return '⚠️';
+    case 'unstructured':
+      return '❓';
+    default:
+      return '💬';
+  }
 };
 
 // Computed properties from store
@@ -117,6 +228,32 @@ const previousRoute = computed(() => store.getters['navigation/previousRoute']);
 
 // Update the refs
 const isCreatingThread = ref(false);
+
+// Computed property for import button state
+const canImport = computed(() => {
+  return importText.value.trim().length > 0 && 
+         parsedMessages.value.length > 0 && 
+         importErrors.value.length === 0;
+});
+
+// Watch for changes in import text
+watch(importText, (newText) => {
+  if (newText.trim()) {
+    // Detect format
+    formatDetection.value = ImportService.detectConversationFormat(newText);
+    
+    // Parse the conversation
+    parsedMessages.value = ImportService.parseChatGPTConversation(newText);
+    
+    // Validate the parsed messages
+    const validation = ImportService.validateMessages(parsedMessages.value);
+    importErrors.value = validation.errors;
+  } else {
+    parsedMessages.value = [];
+    importErrors.value = [];
+    formatDetection.value = { format: 'unknown', confidence: 0, hint: '' };
+  }
+});
 
 // Lifecycle hooks
 onMounted(async () => {
@@ -160,6 +297,8 @@ const handleSendSuccess = async (newMessage) => {
   try {
     // Set loading state to show overlay
     isCreatingThread.value = true;
+    loadingMessage.value = 'Creating new thread...';
+    loadingSubmessage.value = 'This will only take a moment';
     
     // Redirect to the new thread
     router.replace({ path: `/messages/${newMessage.id}` });
@@ -175,6 +314,79 @@ const handleSendSuccess = async (newMessage) => {
 const handleSendError = (error) => {
   console.error('Error sending message:', error);
   store.commit('ui/SET_ERROR', 'Failed to create thread. Please try again.');
+};
+
+// Import methods
+const truncateContent = (content) => {
+  const maxLength = 100;
+  if (content.length <= maxLength) return content;
+  return content.substring(0, maxLength) + '...';
+};
+
+const importChatGPT = async () => {
+  if (!canImport.value || isImporting.value) return;
+  
+  try {
+    isImporting.value = true;
+    isCreatingThread.value = true;
+    importSuccess.value = false;
+    
+    // Update loading messages for import
+    loadingMessage.value = `Importing ${parsedMessages.value.length} messages...`;
+    loadingSubmessage.value = 'Processing your ChatGPT conversation';
+    
+    // Import the conversation
+    const result = await ImportService.importChatGPTConversation(
+      parsedMessages.value,
+      null
+    );
+    
+    if (result.success && result.thread_id) {
+      // Show success animation
+      importSuccess.value = true;
+      loadingMessage.value = 'Import Successful!';
+      loadingSubmessage.value = 'Redirecting to your imported conversation...';
+      
+      // Wait a moment to show the success animation
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Navigate to the imported thread
+      router.replace({ path: `/messages/${result.thread_id}` });
+      
+      // Show success message
+      store.commit('ui/SET_SUCCESS', `Successfully imported ${result.message_count} messages`);
+    } else {
+      throw new Error('Import returned unexpected result');
+    }
+  } catch (error) {
+    console.error('Import failed:', error);
+    
+    // Show detailed error message based on error type
+    let errorMessage = 'Failed to import conversation';
+    
+    if (error.response?.status === 429) {
+      // Rate limit error
+      errorMessage = error.response.data?.detail || 'You have exceeded the import rate limit. Please try again later.';
+    } else if (error.response?.status === 403) {
+      // Permission error
+      errorMessage = 'You do not have permission to import conversations. Only whitelisted users and admins can import.';
+    } else if (error.response?.status === 400) {
+      // Validation error
+      errorMessage = error.response.data?.detail || 'Invalid conversation format.';
+    } else if (error.response?.data?.detail) {
+      // Other API errors
+      errorMessage = error.response.data.detail;
+    } else if (error.message) {
+      // JS errors
+      errorMessage = error.message;
+    }
+    
+    store.commit('ui/SET_ERROR', errorMessage);
+    
+    isImporting.value = false;
+    isCreatingThread.value = false;
+    importSuccess.value = false;
+  }
 };
 </script>
 
@@ -280,7 +492,7 @@ const handleSendError = (error) => {
   border: 1px solid var(--color-border);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   overflow: hidden;
-  height: 300px;
+  min-height: 300px;
   background-color: var(--color-surface);
 }
 
@@ -352,6 +564,192 @@ const handleSendError = (error) => {
   font-size: var(--font-size-md);
 }
 
+/* Import UI Styles */
+.import-instructions {
+  margin-bottom: var(--space-lg);
+  text-align: left;
+}
+
+.import-instructions ol {
+  margin: var(--space-sm) 0;
+  padding-left: var(--space-lg);
+}
+
+.import-instructions li {
+  margin: var(--space-xs) 0;
+  color: var(--color-text);
+}
+
+.import-warning {
+  font-size: var(--font-size-sm);
+  color: var(--color-warning);
+  font-weight: 500;
+  margin-top: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  background-color: rgba(255, 193, 7, 0.1);
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  border-radius: var(--radius-xs);
+}
+
+/* Import content container - simplified since we're not doing side-by-side anymore */
+.import-content-container {
+  margin-bottom: var(--space-md);
+}
+
+/* Stack vertically on smaller screens */
+@media (max-width: 768px) {
+  .import-content-container {
+    /* No special mobile styling needed anymore */
+  }
+}
+
+/* Format detection styles */
+.format-detection {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xxs) var(--space-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  transition: all var(--transition-fast);
+}
+
+/* Standalone format detection (when no preview) */
+.format-detection.standalone {
+  margin-bottom: var(--space-md);
+}
+
+/* Preview section */
+.import-preview {
+  background-color: var(--color-surface-light);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--space-xl) * 3);
+  margin-bottom: var(--space-sm);
+}
+
+.import-preview h4 {
+  margin: 0;
+  color: var(--color-primary);
+  font-size: var(--font-size-md);
+}
+
+.preview-messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.preview-message {
+  display: flex;
+  gap: var(--space-xs);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+
+.preview-role {
+  font-weight: 600;
+  color: var(--color-primary);
+  min-width: 60px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.preview-content {
+  color: var(--color-text-secondary);
+  word-break: break-word;
+  text-align: left;
+}
+
+.preview-more {
+  font-style: italic;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-xs);
+}
+
+/* Error section */
+.import-errors {
+  background-color: rgba(220, 38, 38, 0.1);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+  animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+  20%, 40%, 60%, 80% { transform: translateX(2px); }
+}
+
+.error-title {
+  margin: 0 0 var(--space-xs) 0;
+  color: var(--color-error);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.error-title::before {
+  content: "⚠️";
+  font-size: var(--font-size-lg);
+}
+
+.import-errors ul {
+  margin: 0;
+  padding-left: var(--space-lg);
+}
+
+.import-errors li {
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  margin: var(--space-xs) 0;
+  line-height: 1.4;
+}
+
+/* Import button */
+.import-button {
+  padding: var(--space-sm) var(--space-lg);
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  min-width: 160px;
+}
+
+.import-button:hover:not(:disabled) {
+  background-color: var(--color-primary-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.import-button:disabled {
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.import-button.importing {
+  background-color: var(--color-accent);
+  cursor: wait;
+}
+
 /* Loading overlay styles */
 .loading-overlay {
   position: fixed;
@@ -387,7 +785,8 @@ const handleSendError = (error) => {
   border-top: 5px solid var(--color-accent);
   border-radius: 50%;
   animation: import-spin 1.2s linear infinite;
-  margin-bottom: var(--space-md);
+  margin: 0 auto var(--space-md) auto; /* Center horizontally with auto margins */
+  display: block; /* Ensure block display for margin auto to work */
 }
 
 .loading-message {
@@ -539,5 +938,165 @@ const handleSendError = (error) => {
     border-color: rgba(255, 255, 255, 0.1);
     border-top-color: #10a37f;
   }
+  
+  /* Dark theme for import UI */
+  .import-tabs-sidebar {
+    background-color: #1a1a1a;
+  }
+  
+  .import-tab-button {
+    border-color: #333;
+  }
+  
+  .import-tab-button:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+  
+  .import-tab-button.active {
+    background-color: rgba(16, 163, 127, 0.2);
+  }
+  
+  .import-textarea {
+    background-color: #1a1a1a;
+    border-color: #333;
+    color: #eee;
+  }
+  
+  .import-textarea:focus {
+    border-color: #10a37f;
+    box-shadow: 0 0 0 2px rgba(16, 163, 127, 0.2);
+  }
+  
+  .import-preview {
+    background-color: #1a1a1a;
+    border-color: #333;
+  }
+  
+  .import-errors {
+    background-color: rgba(220, 38, 38, 0.1);
+    border-color: #dc2626;
+  }
+  
+  /* Ensure color variables use proper fallback values */
+  .import-button:not(:disabled) {
+    background-color: #10a37f;
+  }
+  
+  .import-button:hover:not(:disabled) {
+    background-color: #0e906e;
+  }
+  
+  .import-button:disabled {
+    background-color: #333;
+    color: #666;
+  }
+}
+
+/* Success animation styles */
+.success-animation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.checkmark {
+  width: 80px;
+  height: 80px;
+}
+
+.checkmark-circle {
+  stroke-dasharray: 166;
+  stroke-dashoffset: 166;
+  stroke-width: 2;
+  stroke-miterlimit: 10;
+  stroke: #10a37f;
+  fill: none;
+  animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+}
+
+.checkmark-check {
+  transform-origin: 50% 50%;
+  stroke-dasharray: 48;
+  stroke-dashoffset: 48;
+  stroke: #10a37f;
+  stroke-width: 3;
+  animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards;
+}
+
+@keyframes stroke {
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.success-message {
+  font-size: var(--font-size-xl);
+  font-weight: bold;
+  color: #10a37f;
+  margin: 0;
+}
+
+.success-submessage {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.format-detection.standard,
+.format-detection.openai,
+.format-detection.anthropic,
+.format-detection.chatgpt-web,
+.format-detection.explicit-markers {
+  background-color: rgba(16, 163, 127, 0.1);
+  border: 1px solid rgba(16, 163, 127, 0.3);
+  color: #10a37f;
+}
+
+.format-detection.partial {
+  background-color: rgba(255, 193, 7, 0.1);
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  color: var(--color-warning);
+}
+
+.format-detection.unstructured,
+.format-detection.unknown {
+  background-color: rgba(108, 117, 125, 0.1);
+  border: 1px solid rgba(108, 117, 125, 0.3);
+  color: var(--color-text-secondary);
+}
+
+.format-icon {
+  font-size: var(--font-size-lg);
+}
+
+.format-hint {
+  flex: 1;
+}
+
+.import-textarea {
+  width: 100%;
+  min-height: 200px;
+  max-height: 400px;
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: monospace;
+  font-size: var(--font-size-sm);
+  resize: vertical;
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  margin-bottom: var(--space-md);
+}
+
+.import-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.2);
+}
+
+.import-textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style> 

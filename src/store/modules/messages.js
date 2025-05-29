@@ -209,6 +209,61 @@ export default {
       delete state.messages[messageId];
     },
     
+    // New mutation for cascade delete (matches backend behavior)
+    REMOVE_MESSAGE_CASCADE(state, messageId) {
+      // Helper function to recursively collect all descendants
+      const collectDescendants = (msgId, collected = new Set()) => {
+        if (collected.has(msgId)) return collected; // Prevent infinite loops
+        
+        const message = state.messages[msgId];
+        if (!message) return collected;
+        
+        collected.add(msgId);
+        
+        // Recursively collect all children
+        if (message.child_ids && message.child_ids.length > 0) {
+          for (const childId of message.child_ids) {
+            collectDescendants(childId, collected);
+          }
+        }
+        
+        return collected;
+      };
+
+      // Get all messages that need to be deleted (including descendants)
+      const messagesToDelete = collectDescendants(messageId);
+      
+      console.log(`[REMOVE_MESSAGE_CASCADE] Deleting ${messagesToDelete.size} messages:`, Array.from(messagesToDelete));
+      
+      // Remove each message using the existing REMOVE_MESSAGE logic
+      for (const msgId of messagesToDelete) {
+        if (state.messages[msgId]) {
+          // Update parent's child_ids if this message has a parent
+          const message = state.messages[msgId];
+          if (message.parent_id && state.messages[message.parent_id] && !messagesToDelete.has(message.parent_id)) {
+            const parent = state.messages[message.parent_id];
+            if (parent.child_ids) {
+              const index = parent.child_ids.indexOf(msgId);
+              if (index !== -1) {
+                // Create a new array without the deleted message ID
+                const newChildIds = [...parent.child_ids];
+                newChildIds.splice(index, 1);
+                
+                // Update the parent with new child_ids array
+                state.messages[message.parent_id] = {
+                  ...parent,
+                  child_ids: newChildIds
+                };
+              }
+            }
+          }
+          
+          // Delete the message
+          delete state.messages[msgId];
+        }
+      }
+    },
+    
     // Restore REMOVE_TEMP_THREAD mutation
     REMOVE_TEMP_THREAD(state, threadId) {
       if (state.messages[threadId]) {
@@ -577,16 +632,29 @@ export default {
         // Save reference to the message before deletion
         const messageToDelete = state.messages[messageId];
         
-        // If message doesn't exist, just return
+        // If message doesn't exist in frontend state, check if it might have been cascade-deleted
         if (!messageToDelete) {
+          console.log(`[deleteMessage] Message ${messageId} not found in frontend state - may have been cascade deleted`);
           return true;
         }
         
         // Get parent ID before deletion
         const parentId = messageToDelete.parent_id;
         
-        // API call to delete the message
-        await MessageService.deleteMessage(messageId);
+        try {
+          // API call to delete the message
+          await MessageService.deleteMessage(messageId);
+          console.log(`[deleteMessage] Successfully deleted message ${messageId} via API`);
+        } catch (error) {
+          // Handle 404 case - message might have been cascade deleted already
+          if (error.response && error.response.status === 404) {
+            console.log(`[deleteMessage] Message ${messageId} returned 404 - already deleted via cascade, cleaning up frontend state`);
+            // Continue with frontend cleanup even though backend returned 404
+          } else {
+            // For other errors, rethrow
+            throw error;
+          }
+        }
         
         // Check if this message was the branch_child of its parent
         let wasParentBranchChild = false;
@@ -597,12 +665,12 @@ export default {
           wasParentBranchChild = parentMessage.branch_child === messageId;
         }
         
-        // Remove from store
-        commit('REMOVE_MESSAGE', messageId);
+        // Remove from store (handles cascade delete of descendants)
+        commit('REMOVE_MESSAGE_CASCADE', messageId);
         
         // If this was the parent's branch_child, set a new one
         if (wasParentBranchChild && parentMessage && parentMessage.child_ids && parentMessage.child_ids.length > 0) {
-          // Get updated parent after REMOVE_MESSAGE might have modified it
+          // Get updated parent after REMOVE_MESSAGE_CASCADE might have modified it
           const updatedParent = state.messages[parentId];
           
           // If parent has remaining children, set the first one as branch_child

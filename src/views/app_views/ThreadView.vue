@@ -975,7 +975,26 @@ const deleteMessage = async () => {
     store.commit('ui/SET_DELETE_CONFIRM', { show: false, message: null });
   } catch (error) {
     console.error('Error deleting message:', error);
-    store.commit('ui/SET_ERROR', 'Failed to delete message: ' + error.message);
+    
+    // Provide specific error message for cascade delete scenarios
+    let errorMessage = 'Failed to delete message';
+    
+    if (error.response?.status === 404) {
+      errorMessage = 'This message has already been deleted (likely when its parent was deleted)';
+      // Hide confirmation modal and navigate away since the message is already gone
+      store.commit('ui/SET_DELETE_CONFIRM', { show: false, message: null });
+      
+      // Navigate back since the current thread no longer exists
+      const prevRoute = store.getters['navigation/previousRoute'];
+      const defaultRoute = '/feed';
+      router.push(prevRoute || defaultRoute);
+    } else if (error.response?.status === 403) {
+      errorMessage = 'You do not have permission to delete this message';
+    } else if (error.message) {
+      errorMessage = 'Failed to delete message: ' + error.message;
+    }
+    
+    store.commit('ui/SET_ERROR', errorMessage);
   } finally {
     // Reset deleting state
     isDeleting.value = false;

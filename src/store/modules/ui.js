@@ -7,6 +7,7 @@ export default {
       threads: false
     },
     error: null,
+    success: null,
     showDeleteConfirm: false,
     messageToDelete: null,
     tempThread: null
@@ -19,6 +20,10 @@ export default {
     
     SET_ERROR(state, error) {
       state.error = error;
+    },
+    
+    SET_SUCCESS(state, message) {
+      state.success = message;
     },
     
     SET_DELETE_CONFIRM(state, { show, message }) {
@@ -53,6 +58,10 @@ export default {
     
     setError({ commit }, error) {
       commit('SET_ERROR', error);
+    },
+    
+    setSuccess({ commit }, message) {
+      commit('SET_SUCCESS', message);
     },
     
     showDeleteConfirm({ commit }, message) {
@@ -111,6 +120,7 @@ export default {
   getters: {
     isLoading: state => type => state.loading[type],
     error: state => state.error,
+    success: state => state.success,
     showDeleteConfirm: state => state.showDeleteConfirm,
     messageToDelete: state => state.messageToDelete,
     tempThread: state => state.tempThread,

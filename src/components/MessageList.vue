@@ -636,7 +636,21 @@ const deleteMessage = async () => {
     // No need to navigate - the message will disappear from the list
   } catch (error) {
     console.error('Error deleting message:', error);
-    store.commit('ui/SET_ERROR', 'Failed to delete message: ' + error.message);
+    
+    // Provide specific error message for cascade delete scenarios
+    let errorMessage = 'Failed to delete message';
+    
+    if (error.response?.status === 404) {
+      errorMessage = 'This message has already been deleted (likely when its parent was deleted)';
+      // Hide confirmation modal since the message is already gone
+      store.commit('ui/SET_DELETE_CONFIRM', { show: false, message: null });
+    } else if (error.response?.status === 403) {
+      errorMessage = 'You do not have permission to delete this message';
+    } else if (error.message) {
+      errorMessage = 'Failed to delete message: ' + error.message;
+    }
+    
+    store.commit('ui/SET_ERROR', errorMessage);
   } finally {
     // Reset deleting state
     isDeleting.value = false;

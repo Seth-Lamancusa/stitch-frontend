@@ -90,6 +90,9 @@
       :isOpen="isProfileModalOpen" 
       @close="closeProfileModal" 
     />
+    
+    <!-- Global Notifications -->
+    <GlobalNotifications />
   </div>
 </template>
 
@@ -100,6 +103,7 @@ import { useStore } from 'vuex';
 import { useAuthentication } from '../../composables/useAuthentication';
 import MessageList from '../../components/MessageList.vue';
 import ProfileEditModal from '../../components/ProfileEditModal.vue';
+import GlobalNotifications from '../../components/GlobalNotifications.vue';
 
 // Props
 const props = defineProps({
