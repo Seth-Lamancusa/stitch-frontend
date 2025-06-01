@@ -93,6 +93,99 @@
               <span v-else>Importing...</span>
             </button>
           </div>
+          <div v-else-if="activeImportTab === 'cursor'" class="import-panel">
+            <h3>Import from Cursor</h3>
+            
+            <div class="import-instructions">
+              <p>To import a Cursor conversation:</p>
+              <ol>
+                <li>Select which AI model was used in your Cursor conversation</li>
+                <li>Export your Cursor chat conversation as a markdown file</li>
+                <li>Select the markdown file below</li>
+                <li>Click "Import Conversation"</li>
+              </ol>
+              <p class="import-warning">⚠️ Only markdown (.md) files are supported</p>
+            </div>
+            
+            <!-- Model Selection -->
+            <div class="model-selection-container">
+              <label class="model-selection-label">AI Model Used:</label>
+              <select 
+                v-model="selectedCursorModel"
+                class="model-selection-dropdown"
+                :disabled="isImporting"
+              >
+                <option value="chatgpt">ChatGPT</option>
+                <option value="claude">Claude</option>
+                <option value="gemini">Gemini</option>
+              </select>
+            </div>
+            
+            <div class="file-upload-container">
+              <input 
+                type="file" 
+                ref="cursorFileInput"
+                accept=".md,.markdown"
+                @change="handleCursorFileUpload"
+                :disabled="isImporting"
+                class="file-input"
+                id="cursor-file-input"
+              />
+              <label for="cursor-file-input" class="file-upload-label" :class="{ 'disabled': isImporting }">
+                <span v-if="!cursorFileName">Choose Markdown File</span>
+                <span v-else>{{ cursorFileName }}</span>
+                <span class="file-icon">📁</span>
+              </label>
+            </div>
+            
+            <!-- Content and preview container -->
+            <div v-if="parsedMessages.length > 0 || formatDetection.hint" class="import-content-container">
+              <!-- Preview section -->
+              <div v-if="parsedMessages.length > 0" class="import-preview">
+                <div class="preview-header">
+                  <h4>Preview ({{ parsedMessages.length }} messages)</h4>
+                  <!-- Format detection hint positioned next to preview title -->
+                  <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
+                    <span class="format-icon">{{ getFormatIcon() }}</span>
+                    <span class="format-hint">{{ formatDetection.hint }}</span>
+                  </div>
+                </div>
+                <div class="preview-messages">
+                  <div v-for="(msg, index) in parsedMessages.slice(0, 3)" :key="index" class="preview-message">
+                    <span class="preview-role">{{ msg.role === 'user' ? 'You' : 'Cursor' }}:</span>
+                    <span class="preview-content">{{ truncateContent(msg.content) }}</span>
+                  </div>
+                  <div v-if="parsedMessages.length > 3" class="preview-more">
+                    ... and {{ parsedMessages.length - 3 }} more messages
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Format detection when no preview (standalone) -->
+              <div v-else-if="formatDetection.hint" class="format-detection standalone" :class="formatDetection.format">
+                <span class="format-icon">{{ getFormatIcon() }}</span>
+                <span class="format-hint">{{ formatDetection.hint }}</span>
+              </div>
+            </div>
+            
+            <!-- Validation errors -->
+            <div v-if="importErrors.length > 0" class="import-errors">
+              <p class="error-title">Please fix the following issues:</p>
+              <ul>
+                <li v-for="(error, index) in importErrors" :key="index">{{ error }}</li>
+              </ul>
+            </div>
+            
+            <button 
+              @click="importCursor"
+              :disabled="!canImport || isImporting"
+              class="import-button"
+              :class="{ 'importing': isImporting }"
+            >
+              <span v-if="!isImporting">Import Conversation</span>
+              <span v-else>Importing...</span>
+            </button>
+          </div>
           <div v-else class="import-panel">
             <h3>Import from {{ getActiveTabName() }}</h3>
             <p class="under-development">This feature is under development</p>
@@ -122,8 +215,10 @@
           <p class="success-submessage">Redirecting to your imported conversation...</p>
         </div>
         <div v-else>
-        <div class="import-spinner"></div>
-          <p class="loading-message">{{ loadingMessage }}</p>
+          <div class="loading-main-line">
+            <p class="loading-message">{{ loadingMessage }}</p>
+            <div class="import-spinner"></div>
+          </div>
           <p class="loading-submessage">{{ loadingSubmessage }}</p>
         </div>
       </div>
@@ -150,10 +245,12 @@ const route = useRoute();
 // Refs
 const messageList = ref(null);
 const replyBox = ref(null);
+const cursorFileInput = ref(null);
 
 // Import tabs configuration
 const importTabs = [
   { id: 'chatgpt', name: 'ChatGPT' },
+  { id: 'cursor', name: 'Cursor' },
   { id: 'x', name: 'X' },
   { id: 'reddit', name: 'Reddit' },
   { id: 'claude', name: 'Claude' },
@@ -164,6 +261,9 @@ const activeImportTab = ref('chatgpt');
 
 // Import-specific refs
 const importText = ref('');
+const cursorFileName = ref('');
+const cursorFileContent = ref('');
+const selectedCursorModel = ref('chatgpt');
 const isImporting = ref(false);
 const parsedMessages = ref([]);
 const importErrors = ref([]);
@@ -186,6 +286,8 @@ const getFormatIcon = () => {
     case 'anthropic':
     case 'chatgpt-web':
     case 'explicit-markers':
+    case 'cursor':
+    case 'cursor-markdown':
       return '✅';
     case 'partial':
       return '⚠️';
@@ -231,18 +333,31 @@ const isCreatingThread = ref(false);
 
 // Computed property for import button state
 const canImport = computed(() => {
-  return importText.value.trim().length > 0 && 
-         parsedMessages.value.length > 0 && 
-         importErrors.value.length === 0;
+  if (activeImportTab.value === 'cursor') {
+    // For Cursor: need file content, parsed messages, and no errors
+    return cursorFileContent.value.trim().length > 0 && 
+           parsedMessages.value.length > 0 && 
+           importErrors.value.length === 0;
+  } else {
+    // For ChatGPT and others: need text input, parsed messages, and no errors
+    return importText.value.trim().length > 0 && 
+           parsedMessages.value.length > 0 && 
+           importErrors.value.length === 0;
+  }
 });
 
-// Watch for changes in import text
+// Watch for changes in import text (ChatGPT only)
 watch(importText, (newText) => {
+  // Only process if we're on the ChatGPT tab
+  if (activeImportTab.value !== 'chatgpt') {
+    return;
+  }
+  
   if (newText.trim()) {
     // Detect format
     formatDetection.value = ImportService.detectConversationFormat(newText);
     
-    // Parse the conversation
+    // Parse the ChatGPT conversation
     parsedMessages.value = ImportService.parseChatGPTConversation(newText);
     
     // Validate the parsed messages
@@ -323,6 +438,76 @@ const truncateContent = (content) => {
   return content.substring(0, maxLength) + '...';
 };
 
+const handleCursorFileUpload = async (event) => {
+  const file = event.target.files[0];
+  if (!file) {
+    cursorFileName.value = '';
+    cursorFileContent.value = '';
+    parsedMessages.value = [];
+    importErrors.value = [];
+    formatDetection.value = { format: 'unknown', confidence: 0, hint: '' };
+    return;
+  }
+  
+  // Check file type
+  if (!file.name.toLowerCase().endsWith('.md') && !file.name.toLowerCase().endsWith('.markdown')) {
+    importErrors.value = ['Please select a markdown (.md) file'];
+    cursorFileName.value = '';
+    cursorFileContent.value = '';
+    parsedMessages.value = [];
+    formatDetection.value = { format: 'unknown', confidence: 0, hint: 'Invalid file type' };
+    return;
+  }
+  
+  // Check file size (max 10MB)
+  if (file.size > 10 * 1024 * 1024) {
+    importErrors.value = ['File is too large (max 10MB)'];
+    cursorFileName.value = '';
+    cursorFileContent.value = '';
+    parsedMessages.value = [];
+    formatDetection.value = { format: 'unknown', confidence: 0, hint: 'File too large' };
+    return;
+  }
+  
+  try {
+    // Read file content
+    const content = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = (e) => reject(e);
+      reader.readAsText(file);
+    });
+    
+    // Store file info
+    cursorFileName.value = file.name;
+    cursorFileContent.value = content;
+    
+    // Process the markdown content
+    if (content.trim()) {
+      // Detect format
+      formatDetection.value = ImportService.detectConversationFormat(content);
+      
+      // Parse the conversation
+      parsedMessages.value = ImportService.parseCursorConversation(content);
+      
+      // Validate the parsed messages
+      const validation = ImportService.validateMessages(parsedMessages.value);
+      importErrors.value = validation.errors;
+    } else {
+      parsedMessages.value = [];
+      importErrors.value = ['File is empty'];
+      formatDetection.value = { format: 'unknown', confidence: 0, hint: 'Empty file' };
+    }
+  } catch (error) {
+    console.error('Error reading file:', error);
+    importErrors.value = ['Failed to read file'];
+    cursorFileName.value = '';
+    cursorFileContent.value = '';
+    parsedMessages.value = [];
+    formatDetection.value = { format: 'unknown', confidence: 0, hint: 'Read error' };
+  }
+};
+
 const importChatGPT = async () => {
   if (!canImport.value || isImporting.value) return;
   
@@ -339,6 +524,73 @@ const importChatGPT = async () => {
     const result = await ImportService.importChatGPTConversation(
       parsedMessages.value,
       null
+    );
+    
+    if (result.success && result.thread_id) {
+      // Show success animation
+      importSuccess.value = true;
+      loadingMessage.value = 'Import Successful!';
+      loadingSubmessage.value = 'Redirecting to your imported conversation...';
+      
+      // Wait a moment to show the success animation
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Navigate to the imported thread
+      router.replace({ path: `/messages/${result.thread_id}` });
+      
+      // Show success message
+      store.commit('ui/SET_SUCCESS', `Successfully imported ${result.message_count} messages`);
+    } else {
+      throw new Error('Import returned unexpected result');
+    }
+  } catch (error) {
+    console.error('Import failed:', error);
+    
+    // Show detailed error message based on error type
+    let errorMessage = 'Failed to import conversation';
+    
+    if (error.response?.status === 429) {
+      // Rate limit error
+      errorMessage = error.response.data?.detail || 'You have exceeded the import rate limit. Please try again later.';
+    } else if (error.response?.status === 403) {
+      // Permission error
+      errorMessage = 'You do not have permission to import conversations. Only whitelisted users and admins can import.';
+    } else if (error.response?.status === 400) {
+      // Validation error
+      errorMessage = error.response.data?.detail || 'Invalid conversation format.';
+    } else if (error.response?.data?.detail) {
+      // Other API errors
+      errorMessage = error.response.data.detail;
+    } else if (error.message) {
+      // JS errors
+      errorMessage = error.message;
+    }
+    
+    store.commit('ui/SET_ERROR', errorMessage);
+    
+    isImporting.value = false;
+    isCreatingThread.value = false;
+    importSuccess.value = false;
+  }
+};
+
+const importCursor = async () => {
+  if (!canImport.value || isImporting.value) return;
+  
+  try {
+    isImporting.value = true;
+    isCreatingThread.value = true;
+    importSuccess.value = false;
+    
+    // Update loading messages for import
+    loadingMessage.value = `Importing ${parsedMessages.value.length} messages...`;
+    loadingSubmessage.value = 'Processing your Cursor conversation';
+    
+    // Import the conversation with the selected model
+    const result = await ImportService.importCursorConversation(
+      parsedMessages.value,
+      null,
+      selectedCursorModel.value // Pass the selected model
     );
     
     if (result.success && result.thread_id) {
@@ -778,21 +1030,28 @@ const importChatGPT = async () => {
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
 }
 
+.loading-main-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-xs);
+  width: 100%;
+}
+
 .import-spinner {
-  width: 48px;
-  height: 48px;
-  border: 5px solid var(--color-border);
-  border-top: 5px solid var(--color-accent);
+  width: 24px; /* Smaller for inline appearance */
+  height: 24px; /* Smaller for inline appearance */
+  border: 3px solid var(--color-border); /* Adjusted border width */
+  border-top: 3px solid var(--color-accent); /* Adjusted border width */
   border-radius: 50%;
   animation: import-spin 1.2s linear infinite;
-  margin: 0 auto var(--space-md) auto; /* Center horizontally with auto margins */
-  display: block; /* Ensure block display for margin auto to work */
+  margin-left: var(--space-sm); /* Adds padding between text and spinner */
 }
 
 .loading-message {
   font-size: var(--font-size-lg);
   font-weight: bold;
-  margin: 0 0 var(--space-xs) 0;
+  margin: 0; /* Removed old margins */
   color: var(--color-text);
 }
 
@@ -1098,5 +1357,86 @@ const importChatGPT = async () => {
 .import-textarea:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* File upload styles */
+.file-upload-container {
+  margin-bottom: var(--space-md);
+  position: relative;
+}
+
+.file-input {
+  display: none;
+}
+
+.file-upload-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md);
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-light);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-size: var(--font-size-md);
+  color: var(--color-text);
+  min-height: 60px;
+}
+
+.file-upload-label:hover:not(.disabled) {
+  border-color: var(--color-primary);
+  background-color: rgba(var(--color-primary-rgb), 0.05);
+}
+
+.file-upload-label.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.file-icon {
+  font-size: var(--font-size-xl);
+  opacity: 0.7;
+}
+
+/* Model selection styles */
+.model-selection-container {
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm);
+  background-color: var(--color-surface-light);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.model-selection-label {
+  display: block;
+  margin-bottom: var(--space-xs);
+  font-weight: 600;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+}
+
+.model-selection-dropdown {
+  width: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.model-selection-dropdown:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.2);
+}
+
+.model-selection-dropdown:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: var(--color-border-light);
 }
 </style> 
