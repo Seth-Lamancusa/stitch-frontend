@@ -2,10 +2,6 @@ export default {
   namespaced: true,
   
   state: {
-    loading: {
-      messages: false,
-      threads: false
-    },
     error: null,
     success: null,
     showDeleteConfirm: false,
@@ -14,9 +10,6 @@ export default {
   },
   
   mutations: {
-    SET_LOADING(state, { key, value }) {
-      state.loading[key] = value;
-    },
     
     SET_ERROR(state, error) {
       state.error = error;
@@ -118,7 +111,6 @@ export default {
   },
   
   getters: {
-    isLoading: state => type => state.loading[type],
     error: state => state.error,
     success: state => state.success,
     showDeleteConfirm: state => state.showDeleteConfirm,

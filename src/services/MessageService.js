@@ -125,19 +125,75 @@ export default {
   // Get chronological messages (for cloud tab main list)
   async getChronologicalMessages(limit = 10, cursor = null, filters = {}) {
     try {
+      console.log('[MessageService] getChronologicalMessages called with:', {
+        limit,
+        cursor,
+        filters: {
+          ...filters,
+          authorsCount: filters.authors?.length || 0,
+          recipientsCount: filters.recipients?.length || 0
+        }
+      });
+      
       const headers = await getAuthHeaders();
       const params = new URLSearchParams();
       if (cursor) params.append('cursor', cursor);
       if (limit) params.append('limit', limit);
       
-      // Add filter parameters
-      if (filters.authorUid) params.append('author_uid', filters.authorUid);
-      if (filters.visibility) params.append('visibility', filters.visibility);
+      // Add filter parameters - multiple authors support
+      if (filters.authors && filters.authors.length > 0) {
+        filters.authors.forEach(uid => params.append('author_uid', uid));
+      }
       
-      const response = await axios.get(`${apiBaseUrl}/messages/chronological?${params.toString()}`, { headers });
+      // Handle three-state public filter: 'public', 'private', 'all'
+      if (filters.isPublic === 'public') {
+        params.append('public', 'true');
+      } else if (filters.isPublic === 'private') {
+        params.append('public', 'false');
+      }
+      // If 'all', don't add public parameter to get both public and private messages
+      
+      if (filters.recipients && filters.recipients.length > 0) {
+        filters.recipients.forEach(uid => params.append('recipients', uid));
+      }
+      
+      // Add date filtering support
+      if (filters.dateRange) {
+        if (filters.dateRange.start) {
+          params.append('date_start', filters.dateRange.start);
+        }
+        if (filters.dateRange.end) {
+          params.append('date_end', filters.dateRange.end);
+        }
+      }
+
+      // Add sort order parameter (simplified)
+      if (filters.sortOrder) {
+        params.append('sort_order', filters.sortOrder);
+      }
+
+      const finalUrl = `${apiBaseUrl}/messages/chronological?${params.toString()}`;
+      console.log('[MessageService] Making API request to:', finalUrl);
+      console.log('[MessageService] Request params string:', params.toString());
+      
+      const response = await axios.get(finalUrl, { headers });
+      
+      console.log('[MessageService] API response received:', {
+        status: response.status,
+        dataType: typeof response.data,
+        messagesCount: response.data?.messages?.length || 0,
+        exhausted: response.data?.exhausted,
+        nextCursor: response.data?.next_cursor
+      });
+      
       return response.data;
     } catch (error) {
-      console.error('Error fetching chronological messages:', error);
+      console.error('[MessageService] Error fetching chronological messages:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
       throw error;
     }
   },

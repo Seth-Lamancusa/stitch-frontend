@@ -16,38 +16,13 @@ const store = useStore();
 const router = useRouter();
 const route = useRoute();
 
-// Track loading states per tab - simplified
-const loadingStates = ref({
-  cloud: {
-    isLoading: false,
-    isAllLoaded: false
-  },
-  ground: {
-    isLoading: false,
-    isAllLoaded: false
-  }
-});
+// Simple local state for infinite scroll - no loading state, just pagination
+const isAllLoaded = ref(false);
+const cursor = ref(null);
 
-// Simple convenience getters
-const isLoading = computed(() => loadingStates.value[activeTab.value].isLoading);
-const isAllMessagesLoaded = computed(() => loadingStates.value[activeTab.value].isAllLoaded);
-
-// Show empty state when no messages and not currently loading
-const shouldShowEmptyState = computed(() => {
-  return !isLoading.value && threads.value.length === 0;
-});
-
-// Show login message for auth-dependent tabs when user is not logged in
-const shouldShowLoginMessage = computed(() => {
-  if (user.value) return false;
-  // Currently no auth-dependent tabs, but keeping the structure
-  return false && shouldShowEmptyState.value;
-});
-
-// Track cursors for each tab
-const cursors = ref({
-  cloud: null,
-  ground: null
+// Store loading state - single source of truth
+const isLoading = computed(() => {
+  return store.getters['messages/isLoading']('fetchingMessages');
 });
 
 // Reference to the message list container for scroll detection
@@ -64,59 +39,87 @@ const activeTab = computed(() => {
   return 'cloud'; // Default tab
 });
 
-const messageListTitle = computed(() => {
-  switch (activeTab.value) {
-    case 'cloud': return 'Cloud Messages';
-    case 'ground': return 'Ground Messages';
-    default: return 'Messages';
-  }
-});
-
 const threads = computed(() => {
   const allMessages = store.getters['messages/getLoadedMessages'] || [];
-  const selectedProfile = store.getters['messages/getSelectedProfile'];
-  const visibilityFilter = store.getters['messages/getVisibilityFilter'];
+  
+  console.log('[MessageList] threads computed - processing messages:', {
+    totalLoadedMessages: allMessages.length,
+    activeTab: activeTab.value
+  });
   
   // For ground tab, show no messages for now
   if (activeTab.value === 'ground') {
+    console.log('[MessageList] threads computed - ground tab, returning empty array');
     return [];
   }
   
-  // Filter messages based on selected profile and visibility
+  // Only apply minimal client-side filtering since backend handles most filtering
   let filteredMessages = allMessages.filter(message => {
-    // Exclude pinned messages (shown separately)
+    // Exclude pinned messages (shown separately) - this is the only client-side filter we need
     const isPinned = message.is_pinned === 1 || message.is_pinned === true;
-    if (isPinned) return false;
-    
-    // Apply profile filter if selected
-    if (selectedProfile) {
-      const isMatchingAuthor = 
-        message.author_user_tag === selectedProfile.user_tag ||
-        message.author_email === selectedProfile.email ||
-        message.content_author === selectedProfile.uid;
-      if (!isMatchingAuthor) return false;
-    }
-    
-    // Apply visibility filter based on public boolean
-    const isPublic = message.public === true || message.public === 1;
-    if (visibilityFilter === 'public') {
-      return isPublic;
-    } else if (visibilityFilter === 'not-public') {
-      return !isPublic;
-    }
-    
-    return true;
+    return !isPinned;
   });
   
-  // Sort all messages by timestamp (newest first)
-  return filteredMessages.sort((a, b) => {
-    return new Date(b.timestamp) - new Date(a.timestamp);
+  console.log('[MessageList] threads computed - after pinned filter:', {
+    filteredCount: filteredMessages.length,
+    pinnedFilteredOut: allMessages.length - filteredMessages.length
   });
+  
+  const sortedMessages = filteredMessages.sort((a, b) => {
+    const dateA = new Date(a.timestamp);
+    const dateB = new Date(b.timestamp);
+    
+    // Use store's sort order preference
+    const sortOrder = store.getters['messages/getSortOrder'];
+    if (sortOrder === 'newest') {
+      return dateB - dateA; // Newest first
+    } else {
+      return dateA - dateB; // Oldest first
+    }
+  });
+  
+  console.log('[MessageList] threads computed - final result:', {
+    finalCount: sortedMessages.length,
+    sortOrder: store.getters['messages/getSortOrder'],
+    firstMessageId: sortedMessages[0]?.id || 'none',
+    lastMessageId: sortedMessages[sortedMessages.length - 1]?.id || 'none'
+  });
+  
+  return sortedMessages;
 });
 
-// For completeness, still include the global loading state
-const globalLoadingState = computed(() => {
-  return store.getters['ui/isLoading']('threads');
+// Loading indicator should be visible if:
+// 1. No messages loaded yet AND not all loaded (triggers initial load)
+// 2. Messages loaded but not all loaded yet (triggers infinite scroll)
+// 3. Store is loading (filtering operations)
+const shouldShowLoadingIndicator = computed(() => {
+  const result = (!isAllLoaded.value && (threads.value.length === 0 || threads.value.length > 0)) || isLoading.value;
+  console.log('[MessageList] shouldShowLoadingIndicator computed:', {
+    isAllLoaded: isAllLoaded.value,
+    threadsLength: threads.value.length,
+    isLoading: isLoading.value,
+    showing: result
+  });
+  return result;
+});
+
+// Empty state only shows if we've loaded and have no messages
+const shouldShowEmptyState = computed(() => {
+  const result = !isLoading.value && isAllLoaded.value && threads.value.length === 0;
+  console.log('[MessageList] shouldShowEmptyState computed:', {
+    isLoading: isLoading.value,
+    isAllLoaded: isAllLoaded.value,
+    threadsLength: threads.value.length,
+    showing: result
+  });
+  return result;
+});
+
+// Show login message for auth-dependent scenarios
+const shouldShowLoginMessage = computed(() => {
+  if (user.value) return false;
+  // Currently no auth-dependent tabs, but keeping the structure
+  return false && shouldShowEmptyState.value;
 });
 
 const error = computed(() => store.getters['ui/error']);
@@ -130,33 +133,6 @@ const replyCounts = ref({}); // Track reply counts by thread ID
 // Get display version of author for a message
 function getAuthorDisplay(message) {
   return message.author_display_name || '';
-}
-
-// Get author user tag
-function getAuthorUserTag(message) {
-  return message.author_user_tag || null;
-}
-
-// Get message title with fallback if both title and description are null/empty
-function getMessageTitle(message) {
-  if ((!message.title || message.title.trim() === '') && 
-      (!message.description || message.description.trim() === '')) {
-    return `Message from ${getAuthorDisplay(message)}`;
-  }
-  return message.title || 'Untitled Message';
-}
-
-// Get message description with fallback to content preview if both title and description are null/empty
-function getMessageDescription(message) {
-  if ((!message.title || message.title.trim() === '') && 
-      (!message.description || message.description.trim() === '')) {
-    // Get first 200 characters of content
-    const contentPreview = message.content || '';
-    return contentPreview.length > 200 ? 
-      contentPreview.substring(0, 200) + '...' : 
-      contentPreview;
-  }
-  return message.description || 'No description';
 }
 
 // Get reply count from child_ids
@@ -278,177 +254,69 @@ function getThreadMessages(threadId) {
   return threadMessages;
 }
 
-// Add a new function to check if we need to load messages for a tab
-const shouldLoadMessagesForTab = (tabName) => {
-  // For ground tab, never load messages (showing empty for now)
-  if (tabName === 'ground') {
-    return false;
-  }
-  
-  // For cloud tab, check if we already have messages
-  const allMessages = store.getters['messages/getLoadedMessages'];
-  return allMessages.length === 0;
-};
-
-// Watch for tab changes to reset and reload
-onMounted(async () => {
-  try {
-    // Initialize Firebase first
-    await initializeFirebase();
-    firebaseReady.value = true;
-  } catch (error) {
-    console.error("Firebase initialization failed in MessageList:", error);
-  }
-
-  // Keep track of the current active tab
-  let previousTab = activeTab.value;
-  
-  // Check if we need to load messages or can use the cache
-  const currentTab = activeTab.value;
-  const needsLoading = shouldLoadMessagesForTab(currentTab);
-  
-  console.log(`[Debug] Initial mount for ${currentTab} tab, needs loading: ${needsLoading}`);
-  
-  if (needsLoading) {
-    // Initial load for the first tab if needed
-    await loadMessages(true);
-  } else {
-    // Use cached data
-    console.log(`[Debug] Using cached data for ${currentTab} tab`);
-    // Update loading state manually since we're not calling loadMessages()
-    loadingStates.value[currentTab].isLoading = false;
-    loadingStates.value[currentTab].isAllLoaded = false; // Be optimistic - allow more messages to be loaded
-  }
-  
-  // Set up intersection observer for infinite loading
-  setupInfiniteLoading();
-  
-  router.afterEach((to, from) => {
-    // Only process if the path actually changed
-    if (to.path !== from.path) {
-      const newTab = activeTab.value;
-      console.log(`[Debug] Tab navigation from ${previousTab} to ${newTab}`);
-      
-      // Only reload if we're switching to a different tab
-      if (newTab !== previousTab) {
-        // Check if we need to load messages or can use the cache
-        const needsLoading = shouldLoadMessagesForTab(newTab);
-        
-        // Always start with a clean loading state for the new tab
-        if (needsLoading) {
-          console.log(`[Debug] Reloading ${newTab} tab data...`);
-          
-          // Reset the loading state for the new tab BEFORE loading
-          loadingStates.value[newTab].isLoading = true;
-          loadingStates.value[newTab].isAllLoaded = false;
-          
-          // Load new tab data - we're not in the previous tab anymore
-          const currentTabName = newTab; // Capture current tab name in closure
-          setTimeout(() => {
-            // Make sure we're still on this tab when the timeout fires
-            if (activeTab.value === currentTabName) {
-              loadMessagesForTab(currentTabName, true);
-            }
-          }, 0);
-        } else {
-          console.log(`[Debug] Using cached data for ${newTab} tab - found cached messages`);
-          // Update loading state manually since we're not calling loadMessages()
-          loadingStates.value[newTab].isLoading = false;
-          loadingStates.value[newTab].isAllLoaded = false; // Be optimistic - allow more messages to be loaded
-        }
-        
-        // Update the previous tab reference
-        previousTab = newTab;
-      }
-    }
+// Simple load messages function - dispatches to store
+const loadMessages = async () => {
+  console.log('[MessageList] loadMessages called:', {
+    currentIsLoading: isLoading.value,
+    currentIsAllLoaded: isAllLoaded.value,
+    currentCursor: cursor.value,
+    currentThreadsCount: threads.value.length
   });
-});
-
-// Modified loadMessages function to use the tab-specific version
-const loadMessages = async (isInitial = true) => {
-  const tabName = activeTab.value;
   
-  // Don't reload if we're already loading or all messages are loaded and it's not initial
-  if (loadingStates.value[tabName].isLoading || 
-      (!isInitial && loadingStates.value[tabName].isAllLoaded)) {
+  if (isLoading.value || isAllLoaded.value) {
+    console.log('[MessageList] loadMessages early return due to:', {
+      isLoading: isLoading.value,
+      isAllLoaded: isAllLoaded.value
+    });
     return;
   }
   
-  // Set loading state
-  loadingStates.value[tabName].isLoading = true;
-  
-  // Call the tab-specific loading function
-  return loadMessagesForTab(tabName, isInitial);
-};
-
-// New function to load messages for a specific tab
-const loadMessagesForTab = async (tabName, isInitial = true) => {
-  if (isInitial) {
-    // Reset cursor when doing an initial load
-    cursors.value[tabName] = null;
-    // Also reset allLoaded state
-    loadingStates.value[tabName].isAllLoaded = false;
-  }
-  
   try {
-    console.log(`[Debug] ${isInitial ? 'Loading' : 'Loading more'} messages for specific tab:`, tabName);
+    console.log(`[MessageList] Dispatching fetchChronologicalMessages with cursor:`, cursor.value);
     
-    // For ground tab, don't load anything for now
-    if (tabName === 'ground') {
-      loadingStates.value[tabName].isAllLoaded = true;
-      return;
-    }
+    const response = await store.dispatch('messages/fetchChronologicalMessages', {
+      cursor: cursor.value
+    });
     
-    // Get current cursor for this tab
-    const cursor = cursors.value[tabName];
-    console.log(`[Debug] Using cursor for ${tabName}:`, cursor);
+    console.log('[MessageList] Fetch response:', {
+      hasResponse: !!response,
+      exhausted: response?.exhausted,
+      nextCursor: response?.nextCursor,
+      messagesReceived: response?.messages?.length || 0
+    });
     
-    // For cloud tab, use chronological messages endpoint
-    let response;
-    if (tabName === 'cloud') {
-      response = await store.dispatch('messages/fetchChronologicalMessages', { cursor });
-    }
-    
-    // Detailed logging of the response
-    if (response) {
-      console.log(`[Debug] Response details for ${tabName}:`, {
-        messagesCount: response.messages ? response.messages.length : 0,
-        exhausted: response.exhausted,
-        nextCursor: response.nextCursor
-      });
-    }
-    
-    // Check if there are no more messages to load
     if (response) {
       if (response.exhausted) {
-        loadingStates.value[tabName].isAllLoaded = true;
-        console.log(`[Debug] All messages loaded for ${tabName} tab - exhausted flag is TRUE`);
+        console.log('[MessageList] Response indicates exhausted=true, setting isAllLoaded');
+        isAllLoaded.value = true;
+      } else {
+        console.log('[MessageList] Response indicates exhausted=false, keeping isAllLoaded=false');
+        isAllLoaded.value = false;
       }
-      
-      // Update cursor for next request
       if (response.nextCursor !== undefined && response.nextCursor !== null) {
-        cursors.value[tabName] = response.nextCursor;
-        console.log(`[Debug] Updated cursor for ${tabName} to: ${response.nextCursor}`);
+        cursor.value = response.nextCursor;
+        console.log('[MessageList] Updated cursor to:', cursor.value);
       }
     }
+    
+    console.log('[MessageList] Final state:', {
+      isLoading: isLoading.value,
+      isAllLoaded: isAllLoaded.value,
+      threadsLength: threads.value.length
+    });
   } catch (error) {
-    console.error(`Error ${isInitial ? 'loading' : 'loading more'} messages for ${tabName}:`, error);
-  } finally {
-    // Make sure we only update the UI state if this is still the active tab
-    if (activeTab.value === tabName) {
-      // Update loading state
-      loadingStates.value[tabName].isLoading = false;
-      
-      console.log(`[Debug] Finished ${isInitial ? 'loading' : 'loading more'} messages for ${tabName}`);
-    } else {
-      console.log(`[Debug] Tab changed from ${tabName} to ${activeTab.value} before loading completed - not updating UI state`);
-    }
+    console.error('[MessageList] Error loading messages:', error);
   }
 };
 
-// Set up intersection observer for infinite loading
+// Set up intersection observer for automatic loading
 const setupInfiniteLoading = () => {
-  if (!loadingIndicatorRef.value) return;
+  if (!loadingIndicatorRef.value) {
+    console.log('[MessageList] setupInfiniteLoading - no loadingIndicatorRef available');
+    return;
+  }
+  
+  console.log('[MessageList] Setting up intersection observer');
   
   const options = {
     root: null, // Use the viewport
@@ -458,43 +326,51 @@ const setupInfiniteLoading = () => {
   
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
-      if (entry.isIntersecting && !loadingStates.value[activeTab.value].isAllLoaded) {
-        console.log('[Debug] Loading indicator visible, loading more messages');
-        loadMessages(false);
+      console.log('[MessageList] Intersection observer triggered:', {
+        isIntersecting: entry.isIntersecting,
+        isAllLoaded: isAllLoaded.value,
+        isLoading: isLoading.value,
+        willLoadMessages: entry.isIntersecting && !isAllLoaded.value && !isLoading.value
+      });
+      
+      if (entry.isIntersecting && !isAllLoaded.value && !isLoading.value) {
+        console.log('[MessageList] Loading indicator visible, loading messages');
+        loadMessages();
       }
     });
   }, options);
   
   observer.observe(loadingIndicatorRef.value);
+  console.log('[MessageList] Intersection observer set up and observing');
   
   return () => {
     if (loadingIndicatorRef.value) {
+      console.log('[MessageList] Cleaning up intersection observer');
       observer.unobserve(loadingIndicatorRef.value);
     }
   };
 };
 
+// Initialize component
+onMounted(async () => {
+  try {
+    // Initialize Firebase first
+    await initializeFirebase();
+    firebaseReady.value = true;
+  } catch (error) {
+    console.error("Firebase initialization failed in MessageList:", error);
+  }
+
+  // Set up intersection observer - it will automatically trigger initial load if needed
+  await nextTick(); // Ensure DOM is ready
+  setupInfiniteLoading();
+});
+
 // Clean up observers
 onUnmounted(() => {
   if (loadingIndicatorRef.value) {
-    const observer = setupInfiniteLoading();
-    if (observer) observer();
-  }
-});
-
-// Add watcher for directMessagesLastUpdated to refresh message display
-watch(() => store.state.messages.directMessagesLastUpdated, (newVal, oldVal) => {
-  if (newVal !== oldVal && activeTab.value === 'cloud') {
-    console.log('[MessageList] Detected direct messages update trigger, refreshing view');
-    // No need to fetch from server as the WebSocket has already added the message to the store
-    // Just force a re-computation of the threads computed property
-    // This is a trick to force Vue to re-evaluate the computed property
-    nextTick(() => {
-      store.commit('ui/SET_LOADING', { key: 'directMessagesRefresh', isLoading: true });
-      setTimeout(() => {
-        store.commit('ui/SET_LOADING', { key: 'directMessagesRefresh', isLoading: false });
-      }, 50);
-    });
+    const cleanup = setupInfiniteLoading();
+    if (cleanup) cleanup();
   }
 });
 
@@ -541,6 +417,69 @@ const deleteMessage = async () => {
     isDeleting.value = false;
   }
 };
+
+// Reset state when filters change (watch for directMessagesLastUpdated trigger)
+watch(() => store.state.messages.directMessagesLastUpdated, (newVal, oldVal) => {
+  console.log('[MessageList] directMessagesLastUpdated changed:', {
+    oldVal,
+    newVal,
+    activeTab: activeTab.value,
+    currentIsLoading: isLoading.value,
+    currentIsAllLoaded: isAllLoaded.value
+  });
+  
+  if (newVal !== oldVal && activeTab.value === 'cloud') {
+    console.log('[MessageList] Triggering refresh');
+    nextTick(() => {
+      isLoading.value = true;
+      console.log('[MessageList] Set temporary loading state');
+      setTimeout(() => {
+        isLoading.value = false;
+        console.log('[MessageList] Cleared temporary loading state');
+      }, 50);
+    });
+  }
+});
+
+// Watch for cache clearing and reset loading states
+watch(() => store.getters['messages/getLoadedMessages'].length, (newLength, oldLength) => {
+  console.log('[MessageList] Message count changed:', {
+    oldLength,
+    newLength,
+    currentIsAllLoaded: isAllLoaded.value,
+    currentCursor: cursor.value,
+    currentIsLoading: isLoading.value
+  });
+  
+  // If messages were cleared (count went from > 0 to 0), reset loading states
+  if (oldLength > 0 && newLength === 0) {
+    console.log('[MessageList] Messages cleared, resetting loading states');
+    isAllLoaded.value = false;
+    cursor.value = null;
+    console.log('[MessageList] Reset states - isAllLoaded:', isAllLoaded.value, 'cursor:', cursor.value);
+    // Store will handle loading state
+  }
+});
+
+// Watch for loading completion to reset infinite scroll states appropriately
+watch(() => isLoading.value, (newVal, oldVal) => {
+  console.log('[MessageList] Loading state changed:', {
+    oldVal,
+    newVal,
+    threadsCount: threads.value.length,
+    shouldCheckStates: oldVal === true && newVal === false
+  });
+  
+  // When loading completes, the loadMessages function will have already
+  // set isAllLoaded based on the API's exhausted flag
+  if (oldVal === true && newVal === false) {
+    const messageCount = threads.value.length;
+    console.log('[MessageList] Loading completed, checking states. Message count:', messageCount);
+    
+    // Don't override isAllLoaded here - let the API response determine it
+    // The loadMessages function sets isAllLoaded based on response.exhausted
+  }
+});
 </script>
 
 <template>
@@ -551,7 +490,20 @@ const deleteMessage = async () => {
       <p>Feature under development.</p>
     </div>
 
-    <!-- Empty state - only shown when no messages and not loading -->
+    <!-- Message list header -->
+    <div class="message-list-header">
+      <div class="header-controls">
+        <button 
+          class="new-message-btn"
+          :class="{ 'disabled': !canInteract }"
+          @click="handleNewThreadClick"
+        >
+          <span class="btn-icon">+</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Empty state - only shown when no messages and finished loading -->
     <div v-if="shouldShowEmptyState" class="empty-state">
       <!-- Show login message for auth-dependent tabs -->
       <div v-if="shouldShowLoginMessage">
@@ -583,32 +535,24 @@ const deleteMessage = async () => {
         />
       </div>
       
-      <!-- Unified loading indicator - show when loading or will trigger loading -->
+      <!-- Loading indicator - visible when more content available, triggers loading automatically -->
       <div 
-        v-if="!isAllMessagesLoaded" 
+        v-if="shouldShowLoadingIndicator" 
         ref="loadingIndicatorRef"
         class="loading-indicator" 
         :class="{ 'full-height': threads.length === 0, 'loading': isLoading }"
       >
         <div class="loading-spinner" v-if="isLoading"></div>
-        <p v-if="isLoading">{{ threads.length === 0 ? 'Loading messages...' : 'Loading more messages...' }}</p>
+        <p v-if="isLoading">{{ 
+          threads.length === 0 ? 'Loading messages...' : 'Loading more messages...' 
+        }}</p>
         <p v-else class="load-more-hint">Scroll for more messages</p>
       </div>
       
       <!-- End of results message when all messages are loaded -->
-      <div v-if="!isLoading && isAllMessagesLoaded && threads.length > 0" class="end-of-results">
+      <div v-if="!isLoading && isAllLoaded && threads.length > 0" class="end-of-results">
         <p>No more messages to load</p>
       </div>
-    </div>
-    
-    <div class="message-list-header">
-      <button 
-        class="new-message-btn"
-        :class="{ 'disabled': !canInteract }"
-        @click="handleNewThreadClick"
-      >
-        <span class="btn-icon">+</span>
-      </button>
     </div>
 
     <!-- Add the Confirmation Modal -->
@@ -903,5 +847,18 @@ const deleteMessage = async () => {
   border-top: 2px solid var(--color-text-inverse);
   border-radius: 50%;
   animation: spin 1s linear infinite;
+}
+
+.message-list-header {
+  display: flex;
+  justify-content: flex-start;
+  padding: var(--space-xxs);
+  position: relative;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
 }
 </style> 

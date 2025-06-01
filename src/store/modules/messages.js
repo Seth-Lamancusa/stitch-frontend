@@ -33,21 +33,22 @@ export default {
   state: {
     // Flat storage of messages by ID
     messages: {},
+
+    // Simplified filters object that includes sorting
+    filters: {
+      authors: [],
+      recipients: [],
+      isPublic: 'all', // Changed from boolean to string: 'public', 'private', 'all'
+      dateRange: { start: null, end: null },
+      sortOrder: 'newest' // 'newest' or 'oldest'
+    },
     
     // Track total unread message count
     unreadMessageCount: 0,
-    
+
     // Track loading states for various operations
     loadingStates: {},
-    
-    // Store the selected profile for profile filtering
-    selectedProfile: null,
-    
-    // Track direct messages last updated timestamp
-    directMessagesLastUpdated: Date.now(),
-    
-    // Add to state
-    visibilityFilter: 'public', // 'public' or 'private'
+
   },
   
   mutations: {
@@ -177,7 +178,7 @@ export default {
       delete state.messages[messageId];
     },
     
-    // New mutation for cascade delete (matches backend behavior)
+    // Optimized cascade delete (matches backend behavior)
     REMOVE_MESSAGE_CASCADE(state, messageId) {
       // Helper function to recursively collect all descendants
       const collectDescendants = (msgId, collected = new Set()) => {
@@ -203,30 +204,35 @@ export default {
       
       console.log(`[REMOVE_MESSAGE_CASCADE] Deleting ${messagesToDelete.size} messages:`, Array.from(messagesToDelete));
       
-      // Remove each message using the existing REMOVE_MESSAGE logic
+      // Optimized deletion: collect all parent updates first, then delete all messages
+      const parentUpdates = new Map();
+      
+      // First pass: collect all parent updates needed
+      for (const msgId of messagesToDelete) {
+        const message = state.messages[msgId];
+        if (message && message.parent_id && state.messages[message.parent_id] && !messagesToDelete.has(message.parent_id)) {
+          // Only update parents that aren't being deleted themselves
+          if (!parentUpdates.has(message.parent_id)) {
+            parentUpdates.set(message.parent_id, new Set(state.messages[message.parent_id].child_ids || []));
+          }
+          // Remove this message from its parent's child_ids
+          parentUpdates.get(message.parent_id).delete(msgId);
+        }
+      }
+      
+      // Apply all parent updates
+      for (const [parentId, newChildIds] of parentUpdates) {
+        if (state.messages[parentId]) {
+          state.messages[parentId] = {
+            ...state.messages[parentId],
+            child_ids: Array.from(newChildIds)
+          };
+        }
+      }
+      
+      // Second pass: delete all messages
       for (const msgId of messagesToDelete) {
         if (state.messages[msgId]) {
-          // Update parent's child_ids if this message has a parent
-          const message = state.messages[msgId];
-          if (message.parent_id && state.messages[message.parent_id] && !messagesToDelete.has(message.parent_id)) {
-            const parent = state.messages[message.parent_id];
-            if (parent.child_ids) {
-              const index = parent.child_ids.indexOf(msgId);
-              if (index !== -1) {
-                // Create a new array without the deleted message ID
-                const newChildIds = [...parent.child_ids];
-                newChildIds.splice(index, 1);
-                
-                // Update the parent with new child_ids array
-                state.messages[message.parent_id] = {
-                  ...parent,
-                  child_ids: newChildIds
-                };
-              }
-            }
-          }
-          
-          // Delete the message
           delete state.messages[msgId];
         }
       }
@@ -290,21 +296,46 @@ export default {
       state.loadingStates[key] = isLoading;
     },
 
-    // Add new mutation for setting selected profile
-    SET_SELECTED_PROFILE(state, profile) {
-      state.selectedProfile = profile;
-    },
-
     REFRESH_DIRECT_MESSAGES(state) {
       // This is a trigger mutation that doesn't actually modify state
       // It will be observed by components to know when to refresh their view
       state.directMessagesLastUpdated = Date.now();
     },
 
-    // Add to mutations
-    SET_VISIBILITY_FILTER(state, filter) {
-      state.visibilityFilter = filter;
+    // Consolidated filter mutations
+    SET_FILTERS(state, filters) {
+      state.filters = {
+        ...state.filters,
+        ...filters
+      };
     },
+
+    SET_AUTHORS(state, authors) {
+      state.filters.authors = authors;
+    },
+
+    SET_RECIPIENTS(state, recipients) {
+      state.filters.recipients = recipients;
+    },
+
+    SET_IS_PUBLIC(state, isPublic) {
+      console.log('[Store mutation] SET_IS_PUBLIC called with value:', isPublic);
+      state.filters.isPublic = isPublic;
+      console.log('[Store mutation] isPublic filter updated in state to:', state.filters.isPublic);
+    },
+
+    SET_DATE_RANGE(state, { start, end }) {
+      state.filters.dateRange = { start, end };
+    },
+
+    SET_SORT_ORDER(state, order) {
+      state.filters.sortOrder = order;
+    },
+
+    // Remove old filter mutations
+    // SET_PUBLIC_FILTER
+    // SET_SELECTED_RECIPIENTS
+    // SET_SELECTED_AUTHOR
   },
   
   actions: {
@@ -685,62 +716,52 @@ export default {
       }
     },
     
-    // Fetch threads based on active tab
-    async fetchThreads({ commit, rootState, dispatch }) {
-      try {
-        // Set loading state in UI
-        commit('ui/SET_LOADING', { key: 'threads', value: true }, { root: true });
-        
-        const response = await MessageService.getPinnedMessages(50);
-        const messages = response.data || [];
-        
-        // Process messages to get reply counts
-        const messagesWithChildCounts = [];
-        for (let message of messages) {
-          // Add to list
-          messagesWithChildCounts.push(message);
-        }
-        
-        // Commit all messages to store
-        commit('SET_MESSAGES', messagesWithChildCounts);
-        
-        // Clear loading state
-        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
-        return messagesWithChildCounts;
-      } catch (error) {
-        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
-        commit('ui/SET_ERROR', error.message || 'Failed to load messages', { root: true });
-        console.error('Error fetching threads:', error);
-        return [];
-      }
-    },
-    
     // Fetch chronological messages (for cloud tab main list)
-    async fetchChronologicalMessages({ commit, state, rootState }, { cursor = null } = {}) {
+    async fetchChronologicalMessages({ commit, state, rootState }, { cursor = null, filters = {} } = {}) {
       try {
-        // Set loading state in UI
-        commit('ui/SET_LOADING', { key: 'threads', value: true }, { root: true });
+        // Set loading state
+        commit('SET_LOADING', { key: 'fetchingMessages', isLoading: true });
         
-        console.log(`[DEBUG] Fetching chronological messages - cursor: ${cursor}`);
+        console.log(`[Store] fetchChronologicalMessages called with:`, {
+          cursor,
+          filtersParam: filters,
+          stateFilters: state.filters,
+          currentMessagesCount: Object.keys(state.messages).length
+        });
         
-        // Build filters object
-        const filters = {
-          authorUid: state.selectedProfile?.uid,
-          visibility: state.visibilityFilter
+        // Build filters object using simplified filter structure
+        const apiFilters = {
+          authors: state.filters.authors,
+          recipients: state.filters.recipients,
+          isPublic: state.filters.isPublic,
+          dateRange: state.filters.dateRange,
+          sortOrder: state.filters.sortOrder,
+          // Include any additional filters passed in
+          ...filters
         };
         
-        const response = await MessageService.getChronologicalMessages(10, cursor, filters);
+        console.log(`[Store] Final API filters:`, apiFilters);
+        
+        const response = await MessageService.getChronologicalMessages(10, cursor, apiFilters);
         const messages = response.messages || [];
         const exhausted = response.exhausted || false;
         const nextCursor = response.next_cursor;
         
-        console.log(`[DEBUG] Chronological response - messages: ${messages.length}, exhausted: ${exhausted}, nextCursor: ${nextCursor}`);
+        console.log(`[Store] API response:`, {
+          messagesCount: messages.length,
+          exhausted,
+          nextCursor,
+          firstMessageId: messages[0]?.id || 'none'
+        });
         
         // Commit all messages to store
-        commit('SET_MESSAGES', messages);
-        
-        // Clear loading state
-        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
+        if (messages.length > 0) {
+          console.log(`[Store] Committing ${messages.length} messages to store`);
+          commit('SET_MESSAGES', messages);
+          console.log(`[Store] Store now has ${Object.keys(state.messages).length} total messages`);
+        } else {
+          console.log(`[Store] No messages to commit`);
+        }
         
         // Return the response data with exhausted flag and next cursor
         return {
@@ -749,14 +770,16 @@ export default {
           nextCursor
         };
       } catch (error) {
-        commit('ui/SET_LOADING', { key: 'threads', value: false }, { root: true });
+        console.error('[Store] Error in fetchChronologicalMessages:', error);
         commit('ui/SET_ERROR', error.message || 'Failed to load chronological messages', { root: true });
-        console.error('Error fetching chronological messages:', error);
         return {
           messages: [],
           exhausted: true,
           nextCursor: null
         };
+      } finally {
+        // Always clear loading state
+        commit('SET_LOADING', { key: 'fetchingMessages', isLoading: false });
       }
     },
     
@@ -764,32 +787,30 @@ export default {
       commit('REMOVE_TEMP_THREAD', threadId);
     },
     
-    // Clear cache of all loaded messages (except thread preview messages needed for list view)
-    async clearCache({ commit, state, rootState }) {
-      console.log('[DEBUG] Clearing messages cache');
+    // Clear cache of all loaded messages
+    async clearCache({ commit, state, rootState }, options = {}) {
+      console.log('[Store] clearCache called with options:', options);
+      console.log('[Store] Current message count before clear:', Object.keys(state.messages).length);
       
-      // Keep a record of thread preview messages (those shown in list view)
-      // This is more efficient than reloading them when returning to list view
-      const threadsToKeep = {};
-      
-      // Find top-level thread messages (those with no parent or parent not loaded)
-      Object.values(state.messages).forEach(message => {
-        // If message has no parent or parent isn't loaded, it's likely a thread root
-        const isThreadRoot = !message.parent_id || !state.messages[message.parent_id];
+      if (options.excludePinned) {
+        // Preserve pinned messages while clearing the rest
+        const pinnedMessages = {};
+        Object.values(state.messages).forEach(message => {
+          if (message.is_pinned === 1 || message.is_pinned === true) {
+            pinnedMessages[message.id] = message;
+          }
+        });
         
-        if (isThreadRoot) {
-          // Keep the minimal info needed for list view
-          threadsToKeep[message.id] = {
-            ...message,
-            // Clear branch path information
-            in_branch_path: false,
-          };
-        }
-      });
+        // Replace state with only pinned messages
+        state.messages = pinnedMessages;
+        console.log(`[Store] Preserved ${Object.keys(pinnedMessages).length} pinned messages`);
+      } else {
+        // Clear all messages from state
+        state.messages = {};
+        console.log('[Store] Cleared all messages from cache');
+      }
       
-      // Clear the state and re-add only the thread previews
-      state.messages = { ...threadsToKeep };
-      
+      console.log('[Store] Message count after clear:', Object.keys(state.messages).length);
       return true;
     },
     
@@ -1053,17 +1074,37 @@ export default {
       console.log('Initialized unread message count');
     },
 
-    // Add new action to set the selected profile
-    setSelectedProfile({ commit }, profile) {
-      commit('SET_SELECTED_PROFILE', profile);
-      
-      return profile;
+    // Consolidated filter actions
+    setFilters({ commit }, filters) {
+      commit('SET_FILTERS', filters);
     },
 
-    // Add to actions
-    setVisibilityFilter({ commit }, filter) {
-      commit('SET_VISIBILITY_FILTER', filter);
+    setAuthors({ commit }, authors) {
+      commit('SET_AUTHORS', authors);
     },
+
+    setRecipients({ commit }, recipients) {
+      commit('SET_RECIPIENTS', recipients);
+    },
+
+    setIsPublic({ commit }, isPublic) {
+      console.log('[Store action] setIsPublic called with value:', isPublic);
+      commit('SET_IS_PUBLIC', isPublic);
+      console.log('[Store action] setIsPublic completed');
+    },
+
+    setDateRange({ commit }, { start, end }) {
+      commit('SET_DATE_RANGE', { start, end });
+    },
+
+    setSortOrder({ commit }, order) {
+      commit('SET_SORT_ORDER', order);
+    },
+
+    // Remove old filter actions
+    // setPublicFilter
+    // setSelectedRecipients
+    // setSelectedAuthor
   },
   
   getters: {
@@ -1243,8 +1284,19 @@ export default {
     // Add new getter for selected profile
     getSelectedProfile: state => state.selectedProfile,
 
-    // Add new getter for visibility filter
-    getVisibilityFilter: state => state.visibilityFilter,
+    // Add new getter for public filter
+    getPublicFilter: state => state.publicFilter,  // Renamed from getVisibilityFilter
+
+    // Add new getter for selected recipients
+    getSelectedRecipients: state => state.selectedRecipients,
+
+    // Consolidated filter getters
+    getFilters: state => state.filters,
+    getAuthors: state => state.filters.authors,
+    getRecipients: state => state.filters.recipients,
+    getIsPublic: state => state.filters.isPublic,
+    getDateRange: state => state.filters.dateRange,
+    getSortOrder: state => state.filters.sortOrder
   }
 }
 

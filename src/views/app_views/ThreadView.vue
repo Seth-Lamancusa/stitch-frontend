@@ -156,7 +156,9 @@ const messageId = computed(() => {
 const user = computed(() => store.getters['auth/user']);
 const isAuthReady = computed(() => store.getters['auth/authReady']);
 const canInteract = computed(() => store.getters['auth/canInteract']);
-const isLoading = computed(() => store.getters['ui/isLoading']('messages'));
+const isLoading = computed(() => {
+  return isLoadingFromUrl.value || isLoadingParents.value || isLoadingChildren.value;
+});
 const error = computed(() => store.getters['ui/error']);
 const showDeleteConfirm = computed(() => store.getters['ui/showDeleteConfirm']);
 const messageToDelete = computed(() => store.getters['ui/messageToDelete']);
