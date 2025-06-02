@@ -1422,6 +1422,8 @@ export default {
 @media (max-width: 768px) {
   .message-node {
     width: 100%;
+    position: relative;
+    z-index: 1; /* Ensure it's below header elements */
   }
   
   .message-content {

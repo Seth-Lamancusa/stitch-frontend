@@ -1466,6 +1466,7 @@ const findEndOfBranchMessage = () => {
   .reply-box-container {
     padding: 0 16px; /* Reduce padding on mobile */
     bottom: 10px; /* Position slightly higher on mobile */
+    z-index: 10; /* Lower than the header controls (z-index 50) */
   }
   
   /* Make the reply box take up more width on mobile */

@@ -377,6 +377,13 @@ onMounted(async () => {
     padding: var(--space-xs) var(--space-sm);
     justify-content: flex-end;
     background-color: var(--color-surface);
+    position: relative;
+    z-index: 50; /* Ensure it stays above content */
+  }
+  
+  .logout-btn, .login-btn {
+    position: relative;
+    z-index: 51; /* Higher than user-controls */
   }
   
   .username {
