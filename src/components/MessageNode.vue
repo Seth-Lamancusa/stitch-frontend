@@ -886,6 +886,7 @@ export default {
   border-radius: var(--radius-md);
   padding: var(--space-md);
   border: 1px solid var(--color-border);
+  width: 100%;
 }
 
 .message-node.selected .message-content {
@@ -1154,6 +1155,7 @@ export default {
   margin-bottom: var(--space-md);
   white-space: normal;
   word-wrap: break-word;
+  width: 100%;
 }
 
 /* Add larger font size when not in list view */
@@ -1167,12 +1169,14 @@ export default {
   align-items: center;
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
+  width: 100%;
 }
 
 .message-actions {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex-wrap: wrap;
 }
 
 .pin-status-indicator {
@@ -1370,7 +1374,7 @@ export default {
   100% { transform: rotate(360deg); }
 }
 
-.reply-button {
+.reply-button, .reformat-button, .text-button, .json-button {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1384,7 +1388,7 @@ export default {
   color: var(--color-text-secondary);
 }
 
-.reply-button:hover {
+.reply-button:hover, .reformat-button:hover:not(:disabled), .text-button:hover, .json-button:hover {
   background-color: var(--color-surface-hover);
   border-color: var(--color-border-hover);
   color: var(--color-primary);
@@ -1395,24 +1399,9 @@ export default {
   line-height: 1;
 }
 
-.reformat-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
-  padding: 5px 8px;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  color: var(--color-text-secondary);
-}
-
-.reformat-button:hover:not(:disabled) {
-  background-color: var(--color-surface-hover);
-  border-color: var(--color-border-hover);
-  color: var(--color-primary);
+.reformat-icon {
+  font-size: var(--font-size-sm);
+  line-height: 1;
 }
 
 .reformat-button.loading {
@@ -1430,8 +1419,60 @@ export default {
   animation: spin 1s linear infinite;
 }
 
-.reformat-icon {
-  font-size: var(--font-size-sm);
-  line-height: 1;
+@media (max-width: 768px) {
+  .message-node {
+    width: 100%;
+  }
+  
+  .message-content {
+    width: 100%;
+  }
+  
+  .message-header {
+    flex-wrap: wrap;
+  }
+  
+  .author-section {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .message-actions {
+    gap: 12px;
+    margin-top: 8px;
+    justify-content: flex-start;
+  }
+  
+  .reply-button,
+  .reformat-button,
+  .text-button,
+  .json-button {
+    padding: 6px 10px;
+    gap: 4px;
+    min-width: 70px;
+    justify-content: center;
+  }
+  
+  /* Ensure message content takes full width */
+  .message-node > .sibling-navigator ~ .message-content {
+    margin-left: 0;
+    margin-right: 0;
+    max-width: 100%;
+  }
+  
+  /* Make the action buttons more touch-friendly */
+  .message-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+    width: 100%;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  
+  /* Adjust reply count to fit better in mobile layout */
+  .reply-count {
+    grid-column: 1 / -1;
+    margin-bottom: 5px;
+  }
 }
 </style>
