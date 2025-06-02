@@ -24,15 +24,6 @@
         <h2 class="thread-title">{{ rootMessage?.title || 'Untitled Thread' }}</h2>
       </div>
       
-      <!-- Mobile swipe indicators (only shown when multiple messages) -->
-      <div v-if="displayedMessages.length > 1" class="swipe-indicators">
-        <div class="swipe-indicator-text">Swipe to navigate between replies</div>
-        <div class="swipe-indicator-arrows">
-          <span class="arrow left">&larr;</span>
-          <span class="arrow right">&rarr;</span>
-        </div>
-      </div>
-      
       <!-- Messages container with fixed spacing -->
       <div class="messages-container" ref="messageList" @click="handleContainerClick">
         <!-- Top of thread marker - always show -->
@@ -141,16 +132,6 @@ const messageList = ref(null);
 let unsubscribeMessages = null;
 const isLoadingFromUrl = ref(false); // Track if we're loading a thread from URL
 const isDeleting = ref(false);
-
-// Add swipe navigation state
-const touchStartX = ref(0);
-const touchEndX = ref(0);
-const touchStartTime = ref(0);
-const isSwiping = ref(false);
-const swipeDirection = ref(null);
-const currentReplyIndex = ref(0);
-const isAnimating = ref(false);
-const isShaking = ref(false);
 
 // Add new loading state for initial content loading
 const isInitialContentLoading = ref(false);
@@ -426,11 +407,6 @@ onMounted(async () => {
   // Add scroll event listener for reply box management
   if (messageList.value) {
     messageList.value.addEventListener('scroll', handleScroll);
-    
-    // Add touch event listeners for swipe navigation
-    messageList.value.addEventListener('touchstart', handleSwipeStart, { passive: true });
-    messageList.value.addEventListener('touchmove', handleSwipeMove, { passive: true });
-    messageList.value.addEventListener('touchend', handleSwipeEnd, { passive: true });
   }
   
   console.log(`[ThreadView] 🔧 MOUNT onMounted complete`);
@@ -458,12 +434,9 @@ onBeforeUnmount(() => {
     websocketDebounceTimer.value = null;
   }
   
-  // Remove scroll and touch event listeners
+  // Remove scroll event listener
   if (messageList.value) {
     messageList.value.removeEventListener('scroll', handleScroll);
-    messageList.value.removeEventListener('touchstart', handleSwipeStart);
-    messageList.value.removeEventListener('touchmove', handleSwipeMove);
-    messageList.value.removeEventListener('touchend', handleSwipeEnd);
   }
   
   // Clear replying message when leaving the thread view
@@ -1227,182 +1200,6 @@ const findEndOfBranchMessage = () => {
   const lastMessage = displayedMessages.value[displayedMessages.value.length - 1];
   return lastMessage;
 };
-
-// Add a method to handle swipe navigation
-const handleSwipeStart = (e) => {
-  // Only enable swipe on mobile
-  if (window.innerWidth > 768) return;
-  
-  // Only allow swiping if there are multiple messages
-  if (displayedMessages.value.length <= 1) return;
-  
-  touchStartX.value = e.touches[0].clientX;
-  touchStartTime.value = Date.now();
-  isSwiping.value = true;
-};
-
-const handleSwipeMove = (e) => {
-  if (!isSwiping.value) return;
-  
-  const currentX = e.touches[0].clientX;
-  const diff = currentX - touchStartX.value;
-  
-  // Determine swipe direction
-  if (diff > 20) {
-    swipeDirection.value = 'right';
-  } else if (diff < -20) {
-    swipeDirection.value = 'left';
-  } else {
-    swipeDirection.value = null;
-  }
-};
-
-const handleSwipeEnd = (e) => {
-  if (!isSwiping.value) return;
-  
-  touchEndX.value = e.changedTouches[0].clientX;
-  const swipeTime = Date.now() - touchStartTime.value;
-  const swipeDistance = touchEndX.value - touchStartX.value;
-  
-  // Check if it's a valid swipe (min distance and max time)
-  if (Math.abs(swipeDistance) > 50 && swipeTime < 300) {
-    // Handle swipe navigation
-    navigateBySwipe(swipeDistance > 0 ? 'prev' : 'next');
-  }
-  
-  isSwiping.value = false;
-  swipeDirection.value = null;
-};
-
-// Add a method to provide haptic feedback if supported
-const triggerHapticFeedback = (type = 'medium') => {
-  // Check if vibration API is supported
-  if (navigator.vibrate) {
-    if (type === 'success') {
-      navigator.vibrate(50);
-    } else if (type === 'error') {
-      navigator.vibrate([50, 30, 50]);
-    } else {
-      navigator.vibrate(25);
-    }
-  }
-};
-
-const navigateBySwipe = (direction) => {
-  if (isAnimating.value) return;
-  
-  // Check if there are multiple messages
-  if (displayedMessages.value.length <= 1) {
-    triggerShakeAnimation();
-    triggerHapticFeedback('error');
-    return;
-  }
-  
-  isAnimating.value = true;
-  
-  // Calculate new index
-  let newIndex = currentReplyIndex.value;
-  if (direction === 'next') {
-    newIndex++;
-    if (newIndex >= displayedMessages.value.length) {
-      triggerShakeAnimation();
-      triggerHapticFeedback('error');
-      isAnimating.value = false;
-      return;
-    }
-  } else {
-    newIndex--;
-    if (newIndex < 0) {
-      triggerShakeAnimation();
-      triggerHapticFeedback('error');
-      isAnimating.value = false;
-      return;
-    }
-  }
-  
-  // Set the new index
-  currentReplyIndex.value = newIndex;
-  
-  // Get the target message
-  const targetMessage = displayedMessages.value[newIndex];
-  
-  // Trigger haptic feedback for successful navigation
-  triggerHapticFeedback('success');
-  
-  // Scroll to the message
-  scrollToMessageWithAnimation(targetMessage.id);
-};
-
-const scrollToMessageWithAnimation = (messageId) => {
-  // Find the message element
-  const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-  if (!messageElement || !messageList.value) {
-    isAnimating.value = false;
-    return;
-  }
-  
-  // Add animation class based on swipe direction
-  if (swipeDirection.value === 'right') {
-    messageElement.classList.add('swipe-animation-right');
-  } else {
-    messageElement.classList.add('swipe-animation-left');
-  }
-  
-  // Calculate scroll position
-  const containerRect = messageList.value.getBoundingClientRect();
-  const messageRect = messageElement.getBoundingClientRect();
-  const scrollTop = messageList.value.scrollTop + messageRect.top - containerRect.top - 70;
-  
-  // Smooth scroll to the message
-  messageList.value.scrollTo({
-    top: scrollTop,
-    behavior: 'smooth'
-  });
-  
-  // Remove animation class after transition completes
-  setTimeout(() => {
-    messageElement.classList.remove('swipe-animation-right');
-    messageElement.classList.remove('swipe-animation-left');
-    isAnimating.value = false;
-  }, 500);
-};
-
-const triggerShakeAnimation = () => {
-  if (isShaking.value) return;
-  
-  isShaking.value = true;
-  
-  // Find the messages container
-  if (messageList.value) {
-    messageList.value.classList.add('shake-animation');
-    
-    // Remove shake animation after it completes
-    setTimeout(() => {
-      messageList.value.classList.remove('shake-animation');
-      isShaking.value = false;
-    }, 500);
-  } else {
-    isShaking.value = false;
-  }
-};
-
-// Watch for changes in displayedMessages to update currentReplyIndex
-watch(displayedMessages, (newMessages) => {
-  if (newMessages.length > 0) {
-    // Find the current message ID from the URL
-    const currentId = messageId.value;
-    
-    // Find the index of the current message in the displayed messages
-    const index = newMessages.findIndex(msg => msg.id === currentId);
-    
-    // If found, update the current index
-    if (index >= 0) {
-      currentReplyIndex.value = index;
-    } else {
-      currentReplyIndex.value = 0;
-    }
-  }
-}, { immediate: true });
 </script>
 
 <style scoped>
@@ -1475,7 +1272,6 @@ watch(displayedMessages, (newMessages) => {
     padding-left: 16px;
     padding-right: 16px;
     padding-bottom: 120px; /* More space for the reply box on mobile */
-    touch-action: pan-y; /* Enable vertical scrolling but handle horizontal swipes */
   }
   
   .thread-header {
@@ -1676,134 +1472,6 @@ watch(displayedMessages, (newMessages) => {
   /* Make the reply box take up more width on mobile */
   .reply-box {
     width: 100%;
-  }
-}
-
-/* Swipe animation styles */
-.swipe-animation-left, .swipe-animation-right {
-  transform-origin: center center;
-  backface-visibility: hidden;
-  animation-duration: 0.5s;
-  animation-fill-mode: forwards;
-  animation-timing-function: ease-out;
-}
-
-.swipe-animation-left {
-  animation-name: page-turn-left;
-}
-
-.swipe-animation-right {
-  animation-name: page-turn-right;
-}
-
-.shake-animation {
-  animation: shake 0.5s ease-in-out;
-}
-
-@keyframes page-turn-left {
-  0% {
-    transform: perspective(1200px) rotateY(-90deg);
-    opacity: 0;
-    filter: blur(3px);
-  }
-  40% {
-    transform: perspective(1200px) rotateY(-45deg);
-    opacity: 0.7;
-  }
-  100% {
-    transform: perspective(1200px) rotateY(0deg);
-    opacity: 1;
-    filter: blur(0);
-  }
-}
-
-@keyframes page-turn-right {
-  0% {
-    transform: perspective(1200px) rotateY(90deg);
-    opacity: 0;
-    filter: blur(3px);
-  }
-  40% {
-    transform: perspective(1200px) rotateY(45deg);
-    opacity: 0.7;
-  }
-  100% {
-    transform: perspective(1200px) rotateY(0deg);
-    opacity: 1;
-    filter: blur(0);
-  }
-}
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-  20%, 40%, 60%, 80% { transform: translateX(5px); }
-}
-
-/* Swipe indicators */
-.swipe-indicators {
-  display: none;
-  flex-direction: column;
-  align-items: center;
-  padding: 8px 0;
-  background-color: rgba(0, 0, 0, 0.03);
-  border-bottom: 1px solid var(--color-border);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-}
-
-.swipe-indicator-text {
-  margin-bottom: 4px;
-}
-
-.swipe-indicator-arrows {
-  display: flex;
-  gap: 16px;
-}
-
-.arrow {
-  font-size: var(--font-size-md);
-  animation: pulse 2s infinite;
-}
-
-.arrow.left {
-  animation-delay: 0s;
-}
-
-.arrow.right {
-  animation-delay: 1s;
-}
-
-@keyframes pulse {
-  0% { opacity: 0.3; transform: scale(0.9); }
-  50% { opacity: 1; transform: scale(1.1); }
-  100% { opacity: 0.3; transform: scale(0.9); }
-}
-
-/* Update mobile styles for swipe capability */
-@media (max-width: 768px) {
-  .swipe-indicators {
-    display: flex; /* Only show on mobile */
-  }
-  
-  .messages-container {
-    padding-left: 16px;
-    padding-right: 16px;
-    padding-bottom: 120px; /* More space for the reply box on mobile */
-    touch-action: pan-y; /* Enable vertical scrolling but handle horizontal swipes */
-  }
-  
-  .message-node {
-    will-change: transform; /* Optimize for animations */
-    transition: transform 0.3s ease-out;
-  }
-  
-  .thread-header {
-    padding: var(--space-xs) var(--space-sm);
-  }
-  
-  .thread-title {
-    font-size: var(--font-size-md);
   }
 }
 </style> 

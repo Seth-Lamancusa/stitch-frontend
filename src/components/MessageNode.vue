@@ -1439,21 +1439,48 @@ export default {
     gap: 8px;
   }
   
+  /* Make the action buttons more consistent and clean for mobile */
   .message-actions {
-    gap: 12px;
-    margin-top: 8px;
-    justify-content: flex-start;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    width: 100%;
+    margin-top: 12px;
+    gap: 8px;
   }
   
+  /* Button container that holds all action buttons */
+  .message-actions {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  
+  /* All action buttons share same consistent styling */
   .reply-button,
   .reformat-button,
   .text-button,
   .json-button {
-    padding: 4px 6px;
-    gap: 2px;
-    min-width: 60px;
+    width: 100%;
+    padding: 6px 4px;
+    border-radius: var(--radius-sm);
     font-size: calc(var(--font-size-xs) - 1px);
+    display: flex;
+    align-items: center;
     justify-content: center;
+    gap: 4px;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    height: 32px;
+  }
+  
+  /* Put reply count in its own row */
+  .reply-count {
+    grid-column: 1 / -1;
+    margin-bottom: 5px;
+    text-align: left;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
   }
   
   /* Ensure message content takes full width */
@@ -1461,21 +1488,6 @@ export default {
     margin-left: 0;
     margin-right: 0;
     max-width: 100%;
-  }
-  
-  /* Make the action buttons more touch-friendly */
-  .message-actions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
-    width: 100%;
-    gap: 6px;
-    margin-top: 10px;
-  }
-  
-  /* Adjust reply count to fit better in mobile layout */
-  .reply-count {
-    grid-column: 1 / -1;
-    margin-bottom: 5px;
   }
 }
 </style>
