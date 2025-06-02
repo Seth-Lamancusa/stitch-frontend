@@ -4,9 +4,16 @@
     :class="{ 
       'selected': isSelected, 
       'pinned': isPinned,
-      'list-view': inListView 
+      'list-view': inListView,
+      'swiping': isSwiping,
+      'swipe-left': swipeDirection === 'left',
+      'swipe-right': swipeDirection === 'right'
     }"
     :data-message-id="message.id"
+    @touchstart="handleTouchStart"
+    @touchmove="handleTouchMove"
+    @touchend="handleTouchEnd"
+    @touchcancel="handleTouchCancel"
   >
     <!-- Add sibling navigator if message has a parent -->
     <sibling-navigator
@@ -14,6 +21,7 @@
       :message-id="message.id"
       :parent-id="message.parent_id"
       @navigate="handleSiblingNavigation"
+      ref="siblingNavigator"
     />
     
     <div class="message-content">
@@ -325,6 +333,99 @@ export default {
     const isTogglingReadStatus = ref(false);
     
     const isReformatting = ref(false);
+    
+    const siblingNavigator = ref(null);
+    
+    // Track touch events for mobile swipe functionality
+    let touchStartX = 0;
+    let touchEndX = 0;
+    let currentTouchX = 0;
+    const minSwipeDistance = 50; // Minimum distance required for a swipe
+    const isMobile = computed(() => window.innerWidth <= 768);
+    const isSwiping = ref(false);
+    const swipeDirection = ref(null);
+
+    // Handle touch start
+    const handleTouchStart = (event) => {
+      // Only handle touch events on mobile
+      if (!isMobile.value || !props.message.parent_id || props.inListView) return;
+      
+      touchStartX = event.touches[0].clientX;
+      isSwiping.value = false;
+      swipeDirection.value = null;
+    };
+    
+    // Handle touch move for real-time feedback
+    const handleTouchMove = (event) => {
+      // Only handle touch events on mobile
+      if (!isMobile.value || !props.message.parent_id || props.inListView) return;
+      
+      currentTouchX = event.touches[0].clientX;
+      const swipeDistance = currentTouchX - touchStartX;
+      
+      // Only start swiping visual feedback if we've moved far enough
+      if (Math.abs(swipeDistance) > 20) {
+        isSwiping.value = true;
+        
+        // Determine direction for visual feedback
+        if (swipeDistance > 0) {
+          // Can only swipe right if there's a previous message
+          if (siblingNavigator.value?.canNavigatePrev) {
+            swipeDirection.value = 'right';
+          }
+        } else {
+          // Can only swipe left if there's a next message
+          if (siblingNavigator.value?.canNavigateNext) {
+            swipeDirection.value = 'left';
+          }
+        }
+      } else {
+        isSwiping.value = false;
+        swipeDirection.value = null;
+      }
+    };
+
+    // Handle touch end
+    const handleTouchEnd = (event) => {
+      // Only handle touch events on mobile
+      if (!isMobile.value || !props.message.parent_id || props.inListView) return;
+      
+      touchEndX = event.changedTouches[0].clientX;
+      handleSwipe();
+      
+      // Reset swipe state
+      isSwiping.value = false;
+      swipeDirection.value = null;
+    };
+    
+    // Handle touch cancel
+    const handleTouchCancel = () => {
+      isSwiping.value = false;
+      swipeDirection.value = null;
+    };
+
+    // Process swipe and trigger navigation
+    const handleSwipe = () => {
+      const swipeDistance = touchEndX - touchStartX;
+      
+      // Check if swipe distance is significant enough
+      if (Math.abs(swipeDistance) < minSwipeDistance) return;
+      
+      // Get navigation availability from siblingNavigator component
+      if (!siblingNavigator.value) return;
+      
+      if (swipeDistance > 0) {
+        // Swipe right - go to previous
+        if (siblingNavigator.value.canNavigatePrev) {
+          siblingNavigator.value.navigate('prev');
+        }
+      } else {
+        // Swipe left - go to next
+        if (siblingNavigator.value.canNavigateNext) {
+          siblingNavigator.value.navigate('next');
+        }
+      }
+    };
     
     const openTitleDescriptionModal = () => {
       editableTitle.value = props.message.title || '';
@@ -824,7 +925,14 @@ export default {
       toggleReadStatusOrDropdown,
       truncatedContent,
       isReformatting,
-      handleReformat
+      handleReformat,
+      siblingNavigator,
+      handleTouchStart,
+      handleTouchMove,
+      handleTouchEnd,
+      handleTouchCancel,
+      isSwiping,
+      swipeDirection
     };
   },
   
@@ -1419,9 +1527,68 @@ export default {
   animation: spin 1s linear infinite;
 }
 
+/* Mobile swipe styling */
+.message-node.swiping {
+  transition: transform 0.1s ease-out;
+}
+
+.message-node.swipe-left {
+  transform: translateX(-10px);
+}
+
+.message-node.swipe-right {
+  transform: translateX(10px);
+}
+
+/* Add swipe arrows for visual feedback */
+.message-node.swipe-left::before,
+.message-node.swipe-right::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  border-top: 3px solid var(--color-primary);
+  border-right: 3px solid var(--color-primary);
+  opacity: 0.8;
+  z-index: 5;
+}
+
+.message-node.swipe-left::before {
+  right: 10px;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.message-node.swipe-right::after {
+  left: 10px;
+  transform: translateY(-50%) rotate(-135deg);
+}
+
 @media (max-width: 768px) {
   .message-node {
     width: 100%;
+    position: relative;
+    overflow: hidden;
+    user-select: none; /* Prevent text selection during swipe */
+  }
+  
+  /* Add subtle indicator for swipeable content */
+  .message-node:not(.list-view) {
+    position: relative;
+  }
+  
+  .message-node:not(.list-view)::after {
+    content: '';
+    position: absolute;
+    bottom: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 4px;
+    background-color: var(--color-border);
+    border-radius: 2px;
+    opacity: 0.5;
+    pointer-events: none;
   }
   
   .message-content {
@@ -1473,6 +1640,25 @@ export default {
   .reply-count {
     grid-column: 1 / -1;
     margin-bottom: 5px;
+  }
+  
+  /* For messages with siblings, show a subtle swipe indicator */
+  .message-node:has(> .sibling-navigator):not(.list-view) .message-content,
+  .message-node > .sibling-navigator ~ .message-content {
+    position: relative;
+  }
+  
+  .message-node:has(> .sibling-navigator):not(.list-view) .message-content::after,
+  .message-node > .sibling-navigator ~ .message-content::after {
+    content: 'Swipe to see other replies';
+    position: absolute;
+    bottom: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    color: var(--color-text-secondary);
+    opacity: 0.7;
+    white-space: nowrap;
   }
 }
 </style>
