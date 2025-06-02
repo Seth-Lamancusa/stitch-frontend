@@ -11,19 +11,6 @@
       <div v-else class="triangle-icon left-triangle"></div>
     </button>
     
-    <!-- Mobile position indicator -->
-    <div class="mobile-position-indicator">
-      <div class="position-text">{{ currentPosition }} / {{ totalSiblings }}</div>
-      <div class="position-dots">
-        <div 
-          v-for="i in totalSiblings" 
-          :key="i" 
-          class="position-dot"
-          :class="{ 'active': i === currentPosition }"
-        ></div>
-      </div>
-    </div>
-    
     <button 
       @click.stop="navigate('next')" 
       class="nav-button nav-next"
@@ -38,7 +25,7 @@
 </template>
 
 <script setup>
-import { computed, ref, defineExpose } from 'vue';
+import { computed, ref } from 'vue';
 import { useStore } from 'vuex';
 
 const props = defineProps({
@@ -139,51 +126,6 @@ const navigate = async (direction) => {
     console.error("Error navigating to sibling:", error);
   }
 };
-
-// Expose navigate method and computed properties to parent component
-defineExpose({
-  navigate,
-  canNavigatePrev,
-  canNavigateNext,
-  currentPosition,
-  totalSiblings
-});
-
-// Track touch events for mobile swipe functionality
-let touchStartX = 0;
-let touchEndX = 0;
-const minSwipeDistance = 50; // Minimum distance required for a swipe
-
-// Handle touch start
-const handleTouchStart = (event) => {
-  touchStartX = event.touches[0].clientX;
-};
-
-// Handle touch end
-const handleTouchEnd = (event) => {
-  touchEndX = event.changedTouches[0].clientX;
-  handleSwipe();
-};
-
-// Process swipe and navigate if needed
-const handleSwipe = () => {
-  const swipeDistance = touchEndX - touchStartX;
-  
-  // Check if swipe distance is significant enough
-  if (Math.abs(swipeDistance) < minSwipeDistance) return;
-  
-  if (swipeDistance > 0) {
-    // Swipe right - go to previous
-    if (canNavigatePrev.value) {
-      navigate('prev');
-    }
-  } else {
-    // Swipe left - go to next
-    if (canNavigateNext.value) {
-      navigate('next');
-    }
-  }
-};
 </script>
 
 <style scoped>
@@ -229,38 +171,6 @@ const handleSwipe = () => {
   right: -10px; /* Flush against the right side */
   border-top-left-radius: 7px;
   border-bottom-left-radius: 7px;
-}
-
-/* Mobile styles for improved navigation */
-@media (max-width: 768px) {
-  .nav-button {
-    width: 30px; /* Smaller buttons on mobile */
-    height: 40px;
-    opacity: 0.8; /* Make buttons slightly transparent */
-  }
-  
-  .nav-prev {
-    left: -5px; /* Position closer to edge */
-  }
-  
-  .nav-next {
-    right: -5px; /* Position closer to edge */
-  }
-  
-  /* Show mobile navigation status indicator */
-  .sibling-navigator::after {
-    content: ""; 
-    position: absolute;
-    bottom: -15px;
-    left: 50%;
-    transform: translateX(-50%);
-    height: 4px;
-    width: 50px;
-    background: var(--color-surface-light);
-    border-radius: 2px;
-    opacity: 0.7;
-    pointer-events: none;
-  }
 }
 
 /* Triangle icon styling */
@@ -342,74 +252,4 @@ const handleSwipe = () => {
 }
 
 /* Dark theme styles are no longer needed as we're using CSS variables */
-
-/* Mobile position indicator */
-.mobile-position-indicator {
-  position: absolute;
-  bottom: -20px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  user-select: none;
-}
-
-.position-text {
-  font-size: 10px;
-  color: var(--color-text-secondary);
-  margin-bottom: 4px;
-}
-
-.position-dots {
-  display: flex;
-  gap: 4px;
-}
-
-.position-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--color-border);
-}
-
-.position-dot.active {
-  background-color: var(--color-primary);
-  transform: scale(1.2);
-}
-
-@media (max-width: 768px) {
-  .nav-button {
-    width: 30px; /* Smaller buttons on mobile */
-    height: 40px;
-    opacity: 0.8; /* Make buttons slightly transparent */
-  }
-  
-  .nav-prev {
-    left: -5px; /* Position closer to edge */
-  }
-  
-  .nav-next {
-    right: -5px; /* Position closer to edge */
-  }
-  
-  /* Make triangles slightly smaller on mobile */
-  .nav-button .triangle-icon {
-    transform: scale(0.8);
-  }
-  
-  /* Show position indicator on mobile */
-  .mobile-position-indicator {
-    opacity: 1;
-  }
-  
-  /* Add floating position UI for active navigation */
-  .sibling-navigator:hover .mobile-position-indicator,
-  .sibling-navigator:focus-within .mobile-position-indicator {
-    opacity: 1;
-  }
-}
 </style> 
