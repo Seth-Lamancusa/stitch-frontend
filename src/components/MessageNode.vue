@@ -4,15 +4,9 @@
     :class="{ 
       'selected': isSelected, 
       'pinned': isPinned,
-      'list-view': inListView,
-      'swiping': isSwiping,
-      'swipe-left': swipeDirection === 'left',
-      'swipe-right': swipeDirection === 'right'
+      'list-view': inListView 
     }"
     :data-message-id="message.id"
-    @touchstart="handleTouchStart"
-    @touchmove="handleTouchMove"
-    @touchend="handleTouchEnd"
   >
     <!-- Add sibling navigator if message has a parent -->
     <sibling-navigator
@@ -20,7 +14,6 @@
       :message-id="message.id"
       :parent-id="message.parent_id"
       @navigate="handleSiblingNavigation"
-      ref="siblingNavigator"
     />
     
     <div class="message-content">
@@ -318,16 +311,6 @@ export default {
     const toYouButton = ref(null);
     const authorButton = ref(null);
     const dropdownPositionStyle = ref({});
-    
-    // Touch handling for swipe navigation
-    const touchStartX = ref(0);
-    const touchEndX = ref(0);
-    const MIN_SWIPE_DISTANCE = 75; // Minimum distance to trigger a swipe in pixels
-    const isMobile = ref(false);
-    const siblingNavigator = ref(null);
-    const isSwiping = ref(false);
-    const swipeDirection = ref(null);
-    const swipeThreshold = 30; // Threshold to show visual feedback
     
     // Title/Description Modal
     const showTitleDescModal = ref(false);
@@ -785,77 +768,18 @@ export default {
       }
     };
     
-    // Check if we're on a mobile device
+    // Initialize formatters when the component is first created
     onMounted(() => {
       // Initialize formatters if not already done
       initFormatters();
       
       // Listen in the capture phase to get clicks before other handlers
       document.addEventListener('click', handleClickOutside, true);
-      
-      // Check if we're on a mobile device using CSS media query
-      isMobile.value = window.matchMedia('(max-width: 768px)').matches;
-      
-      // Add listener for orientation changes
-      window.addEventListener('resize', checkMobile);
     });
     
     onBeforeUnmount(() => {
       document.removeEventListener('click', handleClickOutside, true);
-      window.removeEventListener('resize', checkMobile);
     });
-    
-    const checkMobile = () => {
-      isMobile.value = window.matchMedia('(max-width: 768px)').matches;
-    };
-    
-    // Touch handlers for swipe navigation
-    const handleTouchStart = (event) => {
-      if (!isMobile.value || !props.message.parent_id || props.inListView) return;
-      touchStartX.value = event.touches[0].clientX;
-      isSwiping.value = false;
-      swipeDirection.value = null;
-    };
-    
-    const handleTouchMove = (event) => {
-      if (!isMobile.value || !props.message.parent_id || props.inListView) return;
-      touchEndX.value = event.touches[0].clientX;
-      
-      const swipeDistance = touchEndX.value - touchStartX.value;
-      
-      // Show visual feedback when swiping
-      if (Math.abs(swipeDistance) > swipeThreshold) {
-        isSwiping.value = true;
-        swipeDirection.value = swipeDistance > 0 ? 'left' : 'right'; // Direction we're swiping
-      } else {
-        isSwiping.value = false;
-        swipeDirection.value = null;
-      }
-    };
-    
-    const handleTouchEnd = (event) => {
-      if (!isMobile.value || !props.message.parent_id || props.inListView) return;
-      
-      const swipeDistance = touchEndX.value - touchStartX.value;
-      
-      // If the swipe distance is greater than our minimum threshold
-      if (Math.abs(swipeDistance) > MIN_SWIPE_DISTANCE) {
-        // Swipe right (next sibling)
-        if (swipeDistance < 0 && siblingNavigator.value) {
-          siblingNavigator.value.navigate('next');
-        }
-        // Swipe left (previous sibling)
-        else if (swipeDistance > 0 && siblingNavigator.value) {
-          siblingNavigator.value.navigate('prev');
-        }
-      }
-      
-      // Reset touch values and visual feedback
-      touchStartX.value = 0;
-      touchEndX.value = 0;
-      isSwiping.value = false;
-      swipeDirection.value = null;
-    };
     
     // We've simplified the read/unread handling - each message now just shows its own status
     
@@ -900,15 +824,7 @@ export default {
       toggleReadStatusOrDropdown,
       truncatedContent,
       isReformatting,
-      handleReformat,
-      touchStartX,
-      touchEndX,
-      MIN_SWIPE_DISTANCE,
-      isMobile,
-      siblingNavigator,
-      isSwiping,
-      swipeDirection,
-      swipeThreshold
+      handleReformat
     };
   },
   
@@ -1506,86 +1422,10 @@ export default {
 @media (max-width: 768px) {
   .message-node {
     width: 100%;
-    position: relative;
   }
   
   .message-content {
     width: 100%;
-    position: relative;
-    overflow: hidden;
-    transition: transform 0.2s ease-out, background-color 0.2s ease;
-  }
-  
-  /* Add swipe arrow indicators */
-  .message-node.swiping .message-content::before {
-    content: "";
-    position: absolute;
-    top: 50%;
-    width: 20px;
-    height: 20px;
-    border-style: solid;
-    border-width: 3px 3px 0 0;
-    transform: translateY(-50%) rotate(45deg);
-    opacity: 0.7;
-    transition: opacity 0.2s ease;
-  }
-  
-  /* Previous indicator (left arrow) */
-  .message-node.swipe-left .message-content::before {
-    left: 15px;
-    border-color: var(--color-primary);
-    transform: translateY(-50%) rotate(-135deg);
-  }
-  
-  /* Next indicator (right arrow) */
-  .message-node.swipe-right .message-content::before {
-    right: 15px;
-    border-color: var(--color-primary);
-    transform: translateY(-50%) rotate(45deg);
-  }
-  
-  /* Add a subtle background effect when swiping */
-  .message-node.swipe-left .message-content {
-    background-color: rgba(var(--color-primary-rgb, 0, 120, 255), 0.05);
-    transform: translateX(10px);
-  }
-  
-  .message-node.swipe-right .message-content {
-    background-color: rgba(var(--color-primary-rgb, 0, 120, 255), 0.05);
-    transform: translateX(-10px);
-  }
-  
-  .message-content::after {
-    content: "Swipe to navigate";
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    font-size: var(--font-size-xs);
-    background-color: rgba(0, 0, 0, 0.05);
-    padding: 4px 8px;
-    border-radius: 12px;
-    opacity: 0;
-    transform: translateX(100%);
-    transition: opacity 0.3s, transform 0.3s;
-    pointer-events: none;
-    color: var(--color-text-secondary);
-  }
-  
-  .message-node:hover .message-content::after {
-    opacity: 0.7;
-    transform: translateX(0);
-  }
-  
-  /* Add swipe animation */
-  @keyframes swipeHint {
-    0% { transform: translateX(0); }
-    25% { transform: translateX(-5px); }
-    75% { transform: translateX(5px); }
-    100% { transform: translateX(0); }
-  }
-  
-  .message-content:active:not(.swiping) {
-    animation: swipeHint 0.5s ease;
   }
   
   .message-header {
@@ -1607,9 +1447,10 @@ export default {
   .reformat-button,
   .text-button,
   .json-button {
-    padding: 6px 10px;
-    gap: 4px;
-    min-width: 70px;
+    padding: 4px 6px;
+    gap: 2px;
+    min-width: 60px;
+    font-size: calc(var(--font-size-xs) - 1px);
     justify-content: center;
   }
   
@@ -1623,9 +1464,9 @@ export default {
   /* Make the action buttons more touch-friendly */
   .message-actions {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
     width: 100%;
-    gap: 8px;
+    gap: 6px;
     margin-top: 10px;
   }
   
