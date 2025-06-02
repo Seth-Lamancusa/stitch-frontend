@@ -144,14 +144,15 @@ const navigate = async (direction) => {
 @media (max-width: 768px) {
   .sibling-navigator {
     top: auto;
-    bottom: 10px;
+    bottom: 70px; /* Adjusted to better align with the reply count text */
     transform: none;
-    height: 40px;
+    height: 32px; /* Match the height to the buttons */
   }
   
   .nav-button {
     width: 32px;
     height: 32px;
+    top: -5px; /* Slight adjustment to align precisely */
   }
   
   .left-triangle {
