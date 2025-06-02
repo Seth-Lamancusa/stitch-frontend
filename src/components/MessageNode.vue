@@ -1445,7 +1445,7 @@ export default {
     flex-wrap: wrap;
     justify-content: space-between;
     width: 100%;
-    margin-top: 12px;
+    margin-top: 4px;  /* Reduced from 12px to move buttons up */
     gap: 8px;
   }
   
@@ -1454,6 +1454,7 @@ export default {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;
+    align-items: start;  /* Align items to the top */
   }
   
   /* All action buttons share same consistent styling */
@@ -1462,7 +1463,7 @@ export default {
   .text-button,
   .json-button {
     width: 100%;
-    padding: 6px 4px;
+    padding: 4px 2px;  /* Reduced padding */
     border-radius: var(--radius-sm);
     font-size: calc(var(--font-size-xs) - 1px);
     display: flex;
@@ -1471,13 +1472,13 @@ export default {
     gap: 4px;
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
-    height: 32px;
+    height: 28px;  /* Reduced from 32px */
   }
   
   /* Put reply count in its own row */
   .reply-count {
     grid-column: 1 / -1;
-    margin-bottom: 5px;
+    margin-bottom: 0px;  /* Reduced from 5px to bring buttons closer */
     text-align: left;
     font-size: var(--font-size-xs);
     color: var(--color-text-secondary);
