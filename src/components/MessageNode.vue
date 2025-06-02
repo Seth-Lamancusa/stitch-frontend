@@ -4,8 +4,7 @@
     :class="{ 
       'selected': isSelected, 
       'pinned': isPinned,
-      'list-view': inListView,
-      'shake-animation': isShaking
+      'list-view': inListView 
     }"
     :data-message-id="message.id"
   >
@@ -17,7 +16,7 @@
       @navigate="handleSiblingNavigation"
     />
     
-    <div class="message-content" ref="messageContentRef">
+    <div class="message-content">
       <div class="message-header">
         <div class="author-section">
           <div class="author-info">
@@ -327,12 +326,6 @@ export default {
     
     const isReformatting = ref(false);
     
-    // Add new refs for swipe functionality
-    const touchStartX = ref(0);
-    const touchEndX = ref(0);
-    const isShaking = ref(false);
-    const messageContentRef = ref(null);
-    
     const openTitleDescriptionModal = () => {
       editableTitle.value = props.message.title || '';
       editableDescription.value = props.message.description || '';
@@ -600,122 +593,11 @@ export default {
       }
     };
     
-    // New method to handle swipe navigation
     const handleSiblingNavigation = ({ direction, targetSiblingId, parentId }) => {
       // No longer automatically select the new target sibling
       // Selection will be handled by the navigateToSibling action
       // based on whether the previous sibling was selected
       console.log(`[MessageNode] Sibling navigation: ${direction}, target: ${targetSiblingId}`);
-    };
-    
-    // Determine if message has siblings for swipe navigation
-    const canNavigatePrev = computed(() => {
-      if (!props.message.parent_id) return false;
-      
-      const parent = store.getters['messages/getMessage'](props.message.parent_id);
-      if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) return false;
-      
-      const siblings = parent.child_ids;
-      if (siblings.length <= 1) return false;
-      
-      const branchChild = store.getters['messages/getBranchChild'](props.message.parent_id);
-      const currentPosition = siblings.indexOf(branchChild);
-      
-      return currentPosition > 0;
-    });
-    
-    const canNavigateNext = computed(() => {
-      if (!props.message.parent_id) return false;
-      
-      const parent = store.getters['messages/getMessage'](props.message.parent_id);
-      if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) return false;
-      
-      const siblings = parent.child_ids;
-      if (siblings.length <= 1) return false;
-      
-      const branchChild = store.getters['messages/getBranchChild'](props.message.parent_id);
-      const currentPosition = siblings.indexOf(branchChild);
-      
-      return currentPosition >= 0 && currentPosition < siblings.length - 1;
-    });
-    
-    // Method to navigate between siblings via swipe
-    const navigateSibling = async (direction) => {
-      if (!props.message.parent_id) return false;
-      
-      try {
-        // Check if navigation is possible
-        if (direction === 'prev' && !canNavigatePrev.value) {
-          triggerShakeAnimation();
-          return false;
-        }
-        if (direction === 'next' && !canNavigateNext.value) {
-          triggerShakeAnimation();
-          return false;
-        }
-        
-        // Call the central store action for sibling navigation
-        const success = await store.dispatch('messages/navigateToSibling', {
-          messageId: props.message.parent_id,
-          direction: direction
-        });
-        
-        if (success) {
-          // Get the new branch child after navigation
-          const newBranchChild = store.getters['messages/getBranchChild'](props.message.parent_id);
-          
-          // Handle navigation event
-          handleSiblingNavigation({
-            direction,
-            targetSiblingId: newBranchChild,
-            parentId: props.message.parent_id
-          });
-          
-          return true;
-        }
-        return false;
-      } catch (error) {
-        console.error("Error swiping to sibling:", error);
-        return false;
-      }
-    };
-    
-    // Method to handle touch start
-    const handleTouchStart = (e) => {
-      touchStartX.value = e.touches[0].clientX;
-    };
-    
-    // Method to handle touch end
-    const handleTouchEnd = (e) => {
-      touchEndX.value = e.changedTouches[0].clientX;
-      handleSwipe();
-    };
-    
-    // Process swipe gesture
-    const handleSwipe = () => {
-      const swipeThreshold = 80; // Minimum swipe distance in pixels
-      const swipeDistance = touchEndX.value - touchStartX.value;
-      
-      // Only trigger on significant horizontal swipes
-      if (Math.abs(swipeDistance) < swipeThreshold) return;
-      
-      if (swipeDistance > 0) {
-        // Swiped right (previous sibling)
-        navigateSibling('prev');
-      } else {
-        // Swiped left (next sibling)
-        navigateSibling('next');
-      }
-    };
-    
-    // Method to trigger shake animation
-    const triggerShakeAnimation = () => {
-      if (isShaking.value) return; // Prevent multiple shakes
-      
-      isShaking.value = true;
-      setTimeout(() => {
-        isShaking.value = false;
-      }, 820); // Animation duration + small buffer
     };
     
     const isCurrentUser = computed(() => {
@@ -886,29 +768,17 @@ export default {
       }
     };
     
-    // Add event listeners
+    // Initialize formatters when the component is first created
     onMounted(() => {
       // Initialize formatters if not already done
       initFormatters();
       
       // Listen in the capture phase to get clicks before other handlers
       document.addEventListener('click', handleClickOutside, true);
-      
-      // Add touch events for mobile swipe navigation
-      if (messageContentRef.value) {
-        messageContentRef.value.addEventListener('touchstart', handleTouchStart, { passive: true });
-        messageContentRef.value.addEventListener('touchend', handleTouchEnd, { passive: true });
-      }
     });
     
     onBeforeUnmount(() => {
       document.removeEventListener('click', handleClickOutside, true);
-      
-      // Clean up touch event listeners
-      if (messageContentRef.value) {
-        messageContentRef.value.removeEventListener('touchstart', handleTouchStart);
-        messageContentRef.value.removeEventListener('touchend', handleTouchEnd);
-      }
     });
     
     // We've simplified the read/unread handling - each message now just shows its own status
@@ -954,9 +824,7 @@ export default {
       toggleReadStatusOrDropdown,
       truncatedContent,
       isReformatting,
-      handleReformat,
-      messageContentRef,
-      isShaking
+      handleReformat
     };
   },
   
@@ -1571,49 +1439,21 @@ export default {
     gap: 8px;
   }
   
-  /* Make the action buttons more consistent and clean for mobile */
   .message-actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    width: 100%;
-    margin-top: 4px;  /* Reduced from 12px to move buttons up */
-    gap: 8px;
+    gap: 12px;
+    margin-top: 8px;
+    justify-content: flex-start;
   }
   
-  /* Button container that holds all action buttons */
-  .message-actions {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    align-items: start;  /* Align items to the top */
-  }
-  
-  /* All action buttons share same consistent styling */
   .reply-button,
   .reformat-button,
   .text-button,
   .json-button {
-    width: 100%;
-    padding: 4px 2px;  /* Reduced padding */
-    border-radius: var(--radius-sm);
+    padding: 4px 6px;
+    gap: 2px;
+    min-width: 60px;
     font-size: calc(var(--font-size-xs) - 1px);
-    display: flex;
-    align-items: center;
     justify-content: center;
-    gap: 4px;
-    background-color: var(--color-surface);
-    border: 1px solid var(--color-border);
-    height: 28px;  /* Reduced from 32px */
-  }
-  
-  /* Put reply count in its own row */
-  .reply-count {
-    grid-column: 1 / -1;
-    margin-bottom: 0px;  /* Reduced from 5px to bring buttons closer */
-    text-align: left;
-    font-size: var(--font-size-xs);
-    color: var(--color-text-secondary);
   }
   
   /* Ensure message content takes full width */
@@ -1622,51 +1462,20 @@ export default {
     margin-right: 0;
     max-width: 100%;
   }
-}
-
-/* Shake animation for invalid swipes */
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-  20%, 40%, 60%, 80% { transform: translateX(5px); }
-}
-
-.shake-animation .message-content {
-  animation: shake 0.8s cubic-bezier(.36,.07,.19,.97) both;
-}
-
-/* Add swipe hint for mobile */
-@media (max-width: 768px) {
-  .message-content {
-    position: relative;
+  
+  /* Make the action buttons more touch-friendly */
+  .message-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
     width: 100%;
-    touch-action: pan-y; /* Allow vertical scrolling but capture horizontal swipes */
+    gap: 6px;
+    margin-top: 10px;
   }
   
-  /* Add subtle visual indicator for swipeable messages */
-  .message-node:not(.list-view):has(> .sibling-navigator) .message-content::after {
-    content: '';
-    position: absolute;
-    bottom: 10px;
-    right: 10px;
-    width: 8px;
-    height: 8px;
-    background-color: var(--color-primary);
-    border-radius: 50%;
-    opacity: 0.5;
-  }
-  
-  /* Fallback for browsers that don't support :has() */
-  .message-node:not(.list-view) > .sibling-navigator ~ .message-content::after {
-    content: '';
-    position: absolute;
-    bottom: 10px;
-    right: 10px;
-    width: 8px;
-    height: 8px;
-    background-color: var(--color-primary);
-    border-radius: 50%;
-    opacity: 0.5;
+  /* Adjust reply count to fit better in mobile layout */
+  .reply-count {
+    grid-column: 1 / -1;
+    margin-bottom: 5px;
   }
 }
 </style>
