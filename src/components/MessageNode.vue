@@ -5,7 +5,8 @@
       'selected': isSelected, 
       'pinned': isPinned,
       'list-view': inListView,
-      'shake-animation': isShaking
+      'shake-animation': isShaking,
+      'being-swiped': isBeingSwiped
     }"
     :data-message-id="message.id"
     :data-has-siblings="hasSiblings"
@@ -18,7 +19,7 @@
       @navigate="handleSiblingNavigation"
     />
     
-    <div class="message-content" ref="messageContentRef">
+    <div class="message-content" ref="messageContentRef" :style="swipeStyle">
       <div class="message-header">
         <div class="author-section">
           <div class="author-info">
@@ -331,10 +332,14 @@ export default {
     // Add new refs for swipe functionality
     const touchStartX = ref(0);
     const touchEndX = ref(0);
-    const touchStartY = ref(0); // Add to detect vertical scrolling
+    const touchStartY = ref(0);
+    const currentTouchX = ref(0); // Track current touch position for live effect
     const isShaking = ref(false);
     const messageContentRef = ref(null);
-    const isMobile = ref(false); // Add to detect mobile devices
+    const isMobile = ref(false);
+    const isBeingSwiped = ref(false); // Track if currently being swiped
+    const swipeProgress = ref(0); // Track swipe progress (-100 to 100)
+    const swipeDirection = ref(null); // 'left' or 'right'
     
     const openTitleDescriptionModal = () => {
       editableTitle.value = props.message.title || '';
@@ -652,6 +657,147 @@ export default {
       return currentPosition >= 0 && currentPosition < siblings.length - 1;
     });
     
+    // Method to handle touch start
+    const handleTouchStart = (e) => {
+      // Only process swipe if on mobile and there are siblings to navigate to
+      if (!isMobile.value || !hasSiblings.value) return;
+      
+      // Store both X and Y positions
+      touchStartX.value = e.touches[0].clientX;
+      touchStartY.value = e.touches[0].clientY;
+      currentTouchX.value = touchStartX.value;
+      isBeingSwiped.value = true;
+      swipeProgress.value = 0;
+      swipeDirection.value = null;
+    };
+    
+    // Method to handle touch move
+    const handleTouchMove = (e) => {
+      if (!isBeingSwiped.value) return;
+      
+      const touchMoveX = e.touches[0].clientX;
+      const touchMoveY = e.touches[0].clientY;
+      currentTouchX.value = touchMoveX;
+      
+      // Calculate vertical movement to check if we should cancel the swipe
+      const verticalMovement = Math.abs(touchMoveY - touchStartY.value);
+      
+      // If significant vertical movement, cancel swipe effect
+      if (verticalMovement > 50) {
+        resetSwipe();
+        return;
+      }
+      
+      // Calculate horizontal movement
+      const horizontalMovement = touchMoveX - touchStartX.value;
+      
+      // Calculate swipe progress as percentage of screen width (max 50%)
+      const screenWidth = window.innerWidth;
+      swipeProgress.value = (horizontalMovement / screenWidth) * 200; // -100 to 100
+      
+      // Limit swipe progress to prevent excessive movement
+      swipeProgress.value = Math.max(Math.min(swipeProgress.value, 100), -100);
+      
+      // Set swipe direction
+      swipeDirection.value = swipeProgress.value > 0 ? 'right' : 'left';
+      
+      // Check if the direction is valid, if not, reduce the effect
+      const canSwipeLeft = canNavigateNext.value;
+      const canSwipeRight = canNavigatePrev.value;
+      
+      if ((swipeDirection.value === 'left' && !canSwipeLeft) || 
+          (swipeDirection.value === 'right' && !canSwipeRight)) {
+        // Reduce the effect by 70% if swiping in invalid direction
+        swipeProgress.value = swipeProgress.value * 0.3;
+      }
+    };
+    
+    // Method to handle touch end
+    const handleTouchEnd = (e) => {
+      if (!isBeingSwiped.value) return;
+      
+      touchEndX.value = e.changedTouches[0].clientX;
+      const touchEndY = e.changedTouches[0].clientY;
+      
+      // Calculate vertical movement
+      const verticalMovement = Math.abs(touchEndY - touchStartY.value);
+      
+      // Only process horizontal swipes with minimal vertical movement
+      if (verticalMovement < 50) {
+        completeSwipe();
+      } else {
+        resetSwipe();
+      }
+    };
+    
+    // Reset the swipe effect without navigation
+    const resetSwipe = () => {
+      // Add a transition class for smooth reset
+      if (messageContentRef.value) {
+        messageContentRef.value.classList.add('swipe-transition');
+        
+        // Reset the transforms after adding transition class
+        setTimeout(() => {
+          swipeProgress.value = 0;
+          
+          // Remove transition class after animation completes
+          setTimeout(() => {
+            if (messageContentRef.value) {
+              messageContentRef.value.classList.remove('swipe-transition');
+              isBeingSwiped.value = false;
+              swipeDirection.value = null;
+            }
+          }, 300);
+        }, 0);
+      } else {
+        // Fallback if ref is not available
+        swipeProgress.value = 0;
+        isBeingSwiped.value = false;
+        swipeDirection.value = null;
+      }
+    };
+    
+    // Complete the swipe with navigation if threshold is met
+    const completeSwipe = () => {
+      const swipeThreshold = 40; // % of progress needed to trigger action
+      
+      if (Math.abs(swipeProgress.value) >= swipeThreshold) {
+        // Add a transition class for smooth completion
+        if (messageContentRef.value) {
+          messageContentRef.value.classList.add('swipe-transition');
+          
+          // Animate to full swipe
+          setTimeout(() => {
+            swipeProgress.value = swipeDirection.value === 'right' ? 100 : -100;
+            
+            // Navigate after animation completes
+            setTimeout(() => {
+              const direction = swipeDirection.value === 'right' ? 'prev' : 'next';
+              navigateSibling(direction);
+              
+              // Reset after navigation
+              if (messageContentRef.value) {
+                messageContentRef.value.classList.remove('swipe-transition');
+              }
+              swipeProgress.value = 0;
+              isBeingSwiped.value = false;
+              swipeDirection.value = null;
+            }, 300);
+          }, 0);
+        } else {
+          // Fallback navigation without animation
+          const direction = swipeDirection.value === 'right' ? 'prev' : 'next';
+          navigateSibling(direction);
+          swipeProgress.value = 0;
+          isBeingSwiped.value = false;
+          swipeDirection.value = null;
+        }
+      } else {
+        // Not enough progress to trigger action, reset
+        resetSwipe();
+      }
+    };
+    
     // Method to navigate between siblings via swipe
     const navigateSibling = async (direction) => {
       // Only allow swipe navigation on mobile and when siblings exist
@@ -696,31 +842,7 @@ export default {
       }
     };
     
-    // Method to handle touch start
-    const handleTouchStart = (e) => {
-      // Store both X and Y positions
-      touchStartX.value = e.touches[0].clientX;
-      touchStartY.value = e.touches[0].clientY;
-    };
-    
-    // Method to handle touch end
-    const handleTouchEnd = (e) => {
-      // Only process swipe if there are siblings to navigate to
-      if (!hasSiblings.value) return;
-      
-      touchEndX.value = e.changedTouches[0].clientX;
-      const touchEndY = e.changedTouches[0].clientY;
-      
-      // Calculate vertical movement
-      const verticalMovement = Math.abs(touchEndY - touchStartY.value);
-      
-      // Only process horizontal swipes with minimal vertical movement
-      if (verticalMovement < 50) {
-        handleSwipe();
-      }
-    };
-    
-    // Process swipe gesture
+    // Process swipe gesture - used for handleTouchEnd
     const handleSwipe = () => {
       const swipeThreshold = 80; // Minimum swipe distance in pixels
       const swipeDistance = touchEndX.value - touchStartX.value;
@@ -920,6 +1042,27 @@ export default {
       isMobile.value = window.innerWidth <= 768;
     };
     
+    // Computed style for swipe effect
+    const swipeStyle = computed(() => {
+      if (!isBeingSwiped.value || swipeProgress.value === 0) {
+        return {};
+      }
+      
+      // Calculate rotation based on swipe progress
+      const rotation = swipeProgress.value * 0.05; // Max 5 degrees
+      
+      // Calculate X translation
+      const translateX = swipeProgress.value * 0.5; // Max 50% of swipe progress
+      
+      // Calculate opacity
+      const opacity = 1 - (Math.abs(swipeProgress.value) / 200); // Fade slightly
+      
+      return {
+        transform: `translateX(${translateX}%) rotate(${rotation}deg)`,
+        opacity: `${opacity + 0.5}`, // Min opacity 0.5
+      };
+    });
+    
     // Add event listeners
     onMounted(() => {
       // Initialize formatters if not already done
@@ -935,6 +1078,7 @@ export default {
       // Add touch events for mobile swipe navigation - only if we have siblings
       if (messageContentRef.value) {
         messageContentRef.value.addEventListener('touchstart', handleTouchStart, { passive: true });
+        messageContentRef.value.addEventListener('touchmove', handleTouchMove, { passive: true });
         messageContentRef.value.addEventListener('touchend', handleTouchEnd, { passive: true });
       }
     });
@@ -946,6 +1090,7 @@ export default {
       // Clean up touch event listeners
       if (messageContentRef.value) {
         messageContentRef.value.removeEventListener('touchstart', handleTouchStart);
+        messageContentRef.value.removeEventListener('touchmove', handleTouchMove);
         messageContentRef.value.removeEventListener('touchend', handleTouchEnd);
       }
     });
@@ -997,7 +1142,11 @@ export default {
       messageContentRef,
       isShaking,
       hasSiblings,
-      isMobile
+      isMobile,
+      swipeStyle,
+      isBeingSwiped,
+      swipeProgress,
+      swipeDirection
     };
   },
   
@@ -1600,7 +1749,11 @@ export default {
   }
   
   .message-content {
+    position: relative;
     width: 100%;
+    touch-action: pan-y; /* Allow vertical scrolling but capture horizontal swipes */
+    /* Default transition for smoother movement */
+    transition: transform 0.02s linear, opacity 0.02s linear;
   }
   
   .message-header {
@@ -1663,6 +1816,19 @@ export default {
     margin-right: 0;
     max-width: 100%;
   }
+  
+  /* Add subtle visual indicator for swipeable messages - only when siblings exist */
+  .message-node:not(.list-view)[data-has-siblings="true"] .message-content::after {
+    content: '';
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    width: 8px;
+    height: 8px;
+    background-color: var(--color-primary);
+    border-radius: 50%;
+    opacity: 0.5;
+  }
 }
 
 /* Shake animation for invalid swipes */
@@ -1676,30 +1842,15 @@ export default {
   animation: shake 0.8s cubic-bezier(.36,.07,.19,.97) both;
 }
 
-/* Add swipe hint for mobile */
-@media (max-width: 768px) {
-  .message-content {
-    position: relative;
-    width: 100%;
-    touch-action: pan-y; /* Allow vertical scrolling but capture horizontal swipes */
-  }
-  
-  /* Add subtle visual indicator for swipeable messages - only when siblings exist */
-  .message-node:not(.list-view) .message-content::after {
-    content: none; /* Default to no indicator */
-  }
-  
-  /* Use attribute selector for hasSiblings to ensure it works in all browsers */
-  .message-node:not(.list-view)[data-has-siblings="true"] .message-content::after {
-    content: '';
-    position: absolute;
-    bottom: 10px;
-    right: 10px;
-    width: 8px;
-    height: 8px;
-    background-color: var(--color-primary);
-    border-radius: 50%;
-    opacity: 0.5;
-  }
+/* Swipe animation effects */
+.swipe-transition {
+  transition: transform 0.3s ease-out, opacity 0.3s ease-out !important;
+}
+
+.being-swiped .message-content {
+  /* Use hardware acceleration */
+  will-change: transform, opacity;
+  /* Add a subtle shadow for depth */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 </style>
