@@ -19,6 +19,24 @@
       @navigate="handleSiblingNavigation"
     />
     
+    <!-- Deck visualization - only show when siblings exist -->
+    <div 
+      v-if="hasSiblings && !inListView" 
+      class="deck-visualization"
+      :class="{ 'swiping-left': swipeDirection === 'left', 'swiping-right': swipeDirection === 'right' }"
+    >
+      <div 
+        v-for="(_, index) in siblingCount" 
+        :key="index" 
+        class="deck-card"
+        :style="{ 
+          zIndex: index, 
+          transform: `translateX(${index * 2}px)`,
+          opacity: 1 - (index * 0.2)
+        }"
+      ></div>
+    </div>
+    
     <div class="message-content" ref="messageContentRef" :style="swipeStyle">
       <div class="message-header">
         <div class="author-section">
@@ -1205,45 +1223,32 @@ export default {
       isMobile.value = window.innerWidth <= 768;
     };
     
-    // Computed style for swipe effect
+    // Computed style for swipe effect - horizontal deck-like movement
     const swipeStyle = computed(() => {
       if (!isBeingSwiped.value || swipeProgress.value === 0) {
         return {};
       }
       
-      // Calculate rotation based on swipe progress
-      const rotation = swipeProgress.value * 0.05; // Max 5 degrees
-      
-      // Calculate X translation
-      const translateX = swipeProgress.value * 0.6; // 60% of swipe progress
-      
-      // Calculate Z rotation for page turning effect (more pronounced)
-      const rotateZ = swipeProgress.value * 0.1; // More rotation for page effect
-      
-      // Calculate Y rotation for page turning effect
-      const rotateY = swipeProgress.value * 0.2; // Perspective effect
-      
-      // Calculate perspective origin
-      const perspectiveOrigin = swipeProgress.value > 0 ? 'left center' : 'right center';
+      // Calculate X translation - pure horizontal movement
+      const translateX = swipeProgress.value * 0.8; // 80% of swipe progress for more pronounced effect
       
       // Calculate opacity (fade out as it swipes away)
-      const opacity = 1 - (Math.abs(swipeProgress.value) / 200); // Fade slightly
+      const opacity = 1 - (Math.abs(swipeProgress.value) / 150); // Fade slightly
       
-      // Book-like page turning effect with perspective
+      // Simple horizontal slide without rotation
       return {
-        transform: `translateX(${translateX}%) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg)`,
-        opacity: `${opacity + 0.5}`, // Min opacity 0.5
-        transformOrigin: perspectiveOrigin,
+        transform: `translateX(${translateX}%)`,
+        opacity: `${opacity + 0.3}`, // Min opacity 0.3
       };
     });
     
-    // Computed style for the incoming card (opposite of the current card)
+    // Computed style for the incoming card - horizontal sliding only
     const incomingCardStyle = computed(() => {
       if (!isBeingSwiped.value || swipeProgress.value === 0 || 
           (!showNextCard.value && !showPrevCard.value)) {
         return { 
           opacity: 0,
-          transform: 'translateX(0) rotateY(0deg)'
+          transform: 'translateX(0)'
         };
       }
       
@@ -1252,24 +1257,17 @@ export default {
       
       // Calculate translation for incoming card
       // Start from off-screen (100% or -100%) and move toward center
-      const startPos = incomingProgress < 0 ? -120 : 120;
+      const startPos = incomingProgress < 0 ? -100 : 100;
       const endPos = 0;
       const progress = Math.abs(swipeProgress.value) / 100;
       const translateX = startPos + (endPos - startPos) * progress;
       
-      // Calculate Y rotation for page turning effect (opposite direction)
-      const rotateY = -incomingProgress * 0.2; // Reverse of outgoing card
-      
       // Calculate opacity based on progress
       const opacity = Math.min(progress * 1.5, 1); // Fade in faster than fade out
       
-      // Perspective origin opposite of outgoing card
-      const perspectiveOrigin = incomingProgress > 0 ? 'left center' : 'right center';
-      
       return {
-        transform: `translateX(${translateX}%) rotateY(${rotateY}deg)`,
+        transform: `translateX(${translateX}%)`,
         opacity: opacity,
-        transformOrigin: perspectiveOrigin,
         zIndex: 0 // Keep behind current card during animation
       };
     });
@@ -1358,6 +1356,17 @@ export default {
     
     // We've simplified the read/unread handling - each message now just shows its own status
     
+    // Compute the total number of siblings for deck visualization
+    const siblingCount = computed(() => {
+      if (!props.message.parent_id) return 0;
+      
+      const parent = store.getters['messages/getMessage'](props.message.parent_id);
+      if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) return 0;
+      
+      // Return the total number of siblings (including current message)
+      return parent.child_ids.length;
+    });
+    
     return {
       currentUser,
       isUserRecipient,
@@ -1412,7 +1421,8 @@ export default {
       showNextCard,
       showPrevCard,
       nextSiblingMessage,
-      prevSiblingMessage
+      prevSiblingMessage,
+      siblingCount
     };
   },
   
@@ -2221,5 +2231,77 @@ export default {
   height: 22px;
   display: inline-flex;
   align-items: center;
+}
+
+/* Deck visualization styling */
+.deck-visualization {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.deck-card {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  pointer-events: none;
+}
+
+/* When swiping left, show the deck on the right side */
+.deck-visualization.swiping-left .deck-card {
+  right: 0;
+  left: auto;
+  width: 20px;
+  transform-origin: right center;
+}
+
+/* When swiping right, show the deck on the left side */
+.deck-visualization.swiping-right .deck-card {
+  left: 0;
+  right: auto;
+  width: 20px;
+  transform-origin: left center;
+}
+
+/* Mobile-specific deck visualization */
+@media (max-width: 768px) {
+  .deck-visualization {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .deck-card {
+    position: absolute;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+  
+  /* Display deck indicator based on swipe direction */
+  .deck-visualization.swiping-left .deck-card {
+    right: -3px;
+    left: auto;
+    width: 8px;
+    height: 80%;
+    box-shadow: 1px 0 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .deck-visualization.swiping-right .deck-card {
+    left: -3px;
+    right: auto;
+    width: 8px;
+    height: 80%;
+    box-shadow: -1px 0 3px rgba(0, 0, 0, 0.1);
+  }
 }
 </style>
