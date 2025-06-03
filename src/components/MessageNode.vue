@@ -202,6 +202,48 @@
       </div>
     </div>
     
+    <!-- Next message preview (shown during left swipe) -->
+    <div 
+      v-if="showNextCard && nextSiblingMessage" 
+      class="sibling-preview next-preview"
+      :style="incomingCardStyle"
+    >
+      <div class="preview-content">
+        <div class="preview-header">
+          <div class="preview-author">
+            {{ nextSiblingMessage.author_display_name || 'Unknown' }}
+          </div>
+          <div class="preview-timestamp">
+            {{ formatTimestamp(nextSiblingMessage.timestamp) }}
+          </div>
+        </div>
+        <div class="preview-body">
+          {{ nextSiblingMessage.content ? (nextSiblingMessage.content.substring(0, 280) + (nextSiblingMessage.content.length > 280 ? '...' : '')) : '' }}
+        </div>
+      </div>
+    </div>
+    
+    <!-- Previous message preview (shown during right swipe) -->
+    <div 
+      v-if="showPrevCard && prevSiblingMessage" 
+      class="sibling-preview prev-preview"
+      :style="incomingCardStyle"
+    >
+      <div class="preview-content">
+        <div class="preview-header">
+          <div class="preview-author">
+            {{ prevSiblingMessage.author_display_name || 'Unknown' }}
+          </div>
+          <div class="preview-timestamp">
+            {{ formatTimestamp(prevSiblingMessage.timestamp) }}
+          </div>
+        </div>
+        <div class="preview-body">
+          {{ prevSiblingMessage.content ? (prevSiblingMessage.content.substring(0, 280) + (prevSiblingMessage.content.length > 280 ? '...' : '')) : '' }}
+        </div>
+      </div>
+    </div>
+    
     <!-- Title/Description Edit Modal -->
     <div v-if="showTitleDescModal" class="modal-overlay" @click.stop="closeTitleDescModal">
       <div class="modal-container" @click.stop>
@@ -340,6 +382,12 @@ export default {
     const isBeingSwiped = ref(false); // Track if currently being swiped
     const swipeProgress = ref(0); // Track swipe progress (-100 to 100)
     const swipeDirection = ref(null); // 'left' or 'right'
+    
+    // New references for next/previous sibling data
+    const nextSiblingMessage = ref(null);
+    const prevSiblingMessage = ref(null);
+    const showNextCard = ref(false);
+    const showPrevCard = ref(false);
     
     const openTitleDescriptionModal = () => {
       editableTitle.value = props.message.title || '';
@@ -705,6 +753,22 @@ export default {
       const canSwipeLeft = canNavigateNext.value;
       const canSwipeRight = canNavigatePrev.value;
       
+      // Preload the next/previous message data for the page turning effect
+      if (swipeDirection.value === 'right' && canSwipeRight && Math.abs(swipeProgress.value) > 15) {
+        // Prepare to show previous (right swipe)
+        preparePrevSibling();
+        showPrevCard.value = true;
+        showNextCard.value = false;
+      } else if (swipeDirection.value === 'left' && canSwipeLeft && Math.abs(swipeProgress.value) > 15) {
+        // Prepare to show next (left swipe)
+        prepareNextSibling();
+        showNextCard.value = true;
+        showPrevCard.value = false;
+      } else {
+        showNextCard.value = false;
+        showPrevCard.value = false;
+      }
+      
       if ((swipeDirection.value === 'left' && !canSwipeLeft) || 
           (swipeDirection.value === 'right' && !canSwipeRight)) {
         // Reduce the effect by 70% if swiping in invalid direction
@@ -746,6 +810,10 @@ export default {
               messageContentRef.value.classList.remove('swipe-transition');
               isBeingSwiped.value = false;
               swipeDirection.value = null;
+              
+              // Clear sibling preview
+              showNextCard.value = false;
+              showPrevCard.value = false;
             }
           }, 300);
         }, 0);
@@ -754,6 +822,8 @@ export default {
         swipeProgress.value = 0;
         isBeingSwiped.value = false;
         swipeDirection.value = null;
+        showNextCard.value = false;
+        showPrevCard.value = false;
       }
     };
     
@@ -782,6 +852,10 @@ export default {
               swipeProgress.value = 0;
               isBeingSwiped.value = false;
               swipeDirection.value = null;
+              showNextCard.value = false;
+              showPrevCard.value = false;
+              nextSiblingMessage.value = null;
+              prevSiblingMessage.value = null;
             }, 300);
           }, 0);
         } else {
@@ -791,6 +865,10 @@ export default {
           swipeProgress.value = 0;
           isBeingSwiped.value = false;
           swipeDirection.value = null;
+          showNextCard.value = false;
+          showPrevCard.value = false;
+          nextSiblingMessage.value = null;
+          prevSiblingMessage.value = null;
         }
       } else {
         // Not enough progress to trigger action, reset
@@ -1052,16 +1130,114 @@ export default {
       const rotation = swipeProgress.value * 0.05; // Max 5 degrees
       
       // Calculate X translation
-      const translateX = swipeProgress.value * 0.5; // Max 50% of swipe progress
+      const translateX = swipeProgress.value * 0.6; // 60% of swipe progress
       
-      // Calculate opacity
+      // Calculate Z rotation for page turning effect (more pronounced)
+      const rotateZ = swipeProgress.value * 0.1; // More rotation for page effect
+      
+      // Calculate Y rotation for page turning effect
+      const rotateY = swipeProgress.value * 0.2; // Perspective effect
+      
+      // Calculate perspective origin
+      const perspectiveOrigin = swipeProgress.value > 0 ? 'left center' : 'right center';
+      
+      // Calculate opacity (fade out as it swipes away)
       const opacity = 1 - (Math.abs(swipeProgress.value) / 200); // Fade slightly
       
+      // Book-like page turning effect with perspective
       return {
-        transform: `translateX(${translateX}%) rotate(${rotation}deg)`,
+        transform: `translateX(${translateX}%) rotateY(${rotateY}deg) rotateZ(${rotateZ}deg)`,
         opacity: `${opacity + 0.5}`, // Min opacity 0.5
+        transformOrigin: perspectiveOrigin,
       };
     });
+    
+    // Computed style for the incoming card (opposite of the current card)
+    const incomingCardStyle = computed(() => {
+      if (!isBeingSwiped.value || swipeProgress.value === 0 || 
+          (!showNextCard.value && !showPrevCard.value)) {
+        return { 
+          opacity: 0,
+          transform: 'translateX(0) rotateY(0deg)'
+        };
+      }
+      
+      // Calculate progress for incoming card (reversed)
+      const incomingProgress = -swipeProgress.value; 
+      
+      // Calculate translation for incoming card
+      // Start from off-screen (100% or -100%) and move toward center
+      const startPos = incomingProgress < 0 ? -120 : 120;
+      const endPos = 0;
+      const progress = Math.abs(swipeProgress.value) / 100;
+      const translateX = startPos + (endPos - startPos) * progress;
+      
+      // Calculate Y rotation for page turning effect (opposite direction)
+      const rotateY = -incomingProgress * 0.2; // Reverse of outgoing card
+      
+      // Calculate opacity based on progress
+      const opacity = Math.min(progress * 1.5, 1); // Fade in faster than fade out
+      
+      // Perspective origin opposite of outgoing card
+      const perspectiveOrigin = incomingProgress > 0 ? 'left center' : 'right center';
+      
+      return {
+        transform: `translateX(${translateX}%) rotateY(${rotateY}deg)`,
+        opacity: opacity,
+        transformOrigin: perspectiveOrigin,
+        zIndex: 0 // Keep behind current card during animation
+      };
+    });
+    
+    // Function to prepare the next sibling message data
+    const prepareNextSibling = async () => {
+      if (!props.message.parent_id || nextSiblingMessage.value) return;
+      
+      const parentId = props.message.parent_id;
+      const parent = store.getters['messages/getMessage'](parentId);
+      
+      if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) return;
+      
+      const siblings = parent.child_ids;
+      if (siblings.length <= 1) return;
+      
+      const branchChild = store.getters['messages/getBranchChild'](parentId);
+      const currentPosition = siblings.indexOf(branchChild);
+      
+      if (currentPosition >= 0 && currentPosition < siblings.length - 1) {
+        const nextSiblingId = siblings[currentPosition + 1];
+        const nextMessage = store.getters['messages/getMessage'](nextSiblingId);
+        
+        if (nextMessage) {
+          nextSiblingMessage.value = nextMessage;
+        }
+      }
+    };
+    
+    // Function to prepare the previous sibling message data
+    const preparePrevSibling = async () => {
+      if (!props.message.parent_id || prevSiblingMessage.value) return;
+      
+      const parentId = props.message.parent_id;
+      const parent = store.getters['messages/getMessage'](parentId);
+      
+      if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) return;
+      
+      const siblings = parent.child_ids;
+      if (siblings.length <= 1) return;
+      
+      const branchChild = store.getters['messages/getBranchChild'](parentId);
+      const currentPosition = siblings.indexOf(branchChild);
+      
+      if (currentPosition > 0) {
+        const prevSiblingId = siblings[currentPosition - 1];
+        const prevMessage = store.getters['messages/getMessage'](prevSiblingId);
+        
+        if (prevMessage) {
+          prevSiblingMessage.value = prevMessage;
+        }
+      }
+    };
     
     // Add event listeners
     onMounted(() => {
@@ -1144,9 +1320,14 @@ export default {
       hasSiblings,
       isMobile,
       swipeStyle,
+      incomingCardStyle,
       isBeingSwiped,
       swipeProgress,
-      swipeDirection
+      swipeDirection,
+      showNextCard,
+      showPrevCard,
+      nextSiblingMessage,
+      prevSiblingMessage
     };
   },
   
@@ -1745,7 +1926,7 @@ export default {
   .message-node {
     width: 100%;
     position: relative;
-    z-index: 1; /* Ensure it's below header elements */
+    perspective: 1000px;
   }
   
   .message-content {
@@ -1754,6 +1935,8 @@ export default {
     touch-action: pan-y; /* Allow vertical scrolling but capture horizontal swipes */
     /* Default transition for smoother movement */
     transition: transform 0.02s linear, opacity 0.02s linear;
+    z-index: 1;
+    background-color: var(--color-surface);
   }
   
   .message-header {
@@ -1852,5 +2035,50 @@ export default {
   will-change: transform, opacity;
   /* Add a subtle shadow for depth */
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Sibling preview styles */
+.sibling-preview {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  will-change: transform, opacity;
+}
+
+.preview-content {
+  padding: var(--space-md);
+}
+
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--space-xs);
+}
+
+.preview-author {
+  font-weight: bold;
+}
+
+.preview-timestamp {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.preview-body {
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  max-height: 200px;
+  overflow: hidden;
+  word-break: break-word;
+  text-overflow: ellipsis;
 }
 </style>
