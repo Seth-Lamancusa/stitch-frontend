@@ -846,7 +846,7 @@ export default {
       }
       
       // Auto-swipe once the finger reaches near the edge of the text box
-      const edgeThreshold = 60; // % of progress at which we auto-swipe
+      const edgeThreshold = 85; // % of progress at which we auto-swipe
       
       if (Math.abs(swipeProgress.value) >= edgeThreshold) {
         // Check if we can navigate in that direction
@@ -932,7 +932,7 @@ export default {
     
     // Complete the swipe with navigation if threshold is met
     const completeSwipe = () => {
-      const swipeThreshold = 40; // % of progress needed to trigger action
+      const swipeThreshold = 70; // % of progress needed to trigger action
       
       if (Math.abs(swipeProgress.value) >= swipeThreshold) {
         // Add a transition class for smooth completion
@@ -1025,7 +1025,7 @@ export default {
     
     // Process swipe gesture - used for handleTouchEnd
     const handleSwipe = () => {
-      const swipeThreshold = 80; // Minimum swipe distance in pixels
+      const swipeThreshold = 150; // Minimum swipe distance in pixels
       const swipeDistance = touchEndX.value - touchStartX.value;
       
       // Only trigger on significant horizontal swipes
@@ -2136,6 +2136,7 @@ export default {
 
 /* Sibling preview styles */
 .sibling-preview {
+  display: none; /* Hide the sibling preview to prevent overlap issues */
   position: absolute;
   top: 0;
   left: 0;
@@ -2237,6 +2238,7 @@ export default {
 
 /* Deck visualization styling */
 .deck-visualization {
+  display: none; /* Hide the deck visualization entirely to prevent stacking/overlapping */
   position: absolute;
   top: 0;
   left: 0;
