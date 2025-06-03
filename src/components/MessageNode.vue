@@ -1485,6 +1485,8 @@ export default {
   padding: var(--space-md);
   border: 1px solid var(--color-border);
   width: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .message-node.selected .message-content {
@@ -2139,7 +2141,7 @@ export default {
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: -1;
+  z-index: 0;
   overflow: hidden;
   pointer-events: none;
   background-color: var(--color-surface);
@@ -2240,7 +2242,7 @@ export default {
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: -1;
+  z-index: 0;
   pointer-events: none;
 }
 
