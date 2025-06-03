@@ -210,8 +210,22 @@
     >
       <div class="preview-content">
         <div class="preview-header">
-          <div class="preview-author">
-            {{ nextSiblingMessage.author_display_name || 'Unknown' }}
+          <div class="author-section">
+            <div class="author-info">
+              <span class="preview-author">{{ nextSiblingMessage.author_display_name || 'Unknown' }}</span>
+              <span v-if="nextSiblingMessage.author_user_tag" class="preview-author-tag">@{{ nextSiblingMessage.author_user_tag }}</span>
+            </div>
+            
+            <!-- Public badge -->
+            <span v-if="nextSiblingMessage.public === 1 || nextSiblingMessage.public === true" class="visibility-indicator public">
+              Public
+            </span>
+            
+            <!-- Recipients badge -->
+            <span v-if="nextSiblingMessage.recipients && typeof nextSiblingMessage.recipients === 'object' && nextSiblingMessage.recipients.length > 0" 
+                  class="recipients-preview">
+              Recipients ({{ nextSiblingMessage.recipients.length }})
+            </span>
           </div>
           <div class="preview-timestamp">
             {{ formatTimestamp(nextSiblingMessage.timestamp) }}
@@ -219,6 +233,18 @@
         </div>
         <div class="preview-body">
           {{ nextSiblingMessage.content ? (nextSiblingMessage.content.substring(0, 280) + (nextSiblingMessage.content.length > 280 ? '...' : '')) : '' }}
+        </div>
+        <div class="preview-footer">
+          <div class="preview-actions">
+            <div class="preview-reply-count">
+              {{ nextSiblingMessage.child_ids && nextSiblingMessage.child_ids.length ? nextSiblingMessage.child_ids.length : 0 }} {{ nextSiblingMessage.child_ids && nextSiblingMessage.child_ids.length === 1 ? 'reply' : 'replies' }}
+            </div>
+            <div class="preview-buttons">
+              <button class="preview-button">Reply</button>
+              <button class="preview-button">Reformat</button>
+              <button class="preview-button">Copy Text</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -231,8 +257,22 @@
     >
       <div class="preview-content">
         <div class="preview-header">
-          <div class="preview-author">
-            {{ prevSiblingMessage.author_display_name || 'Unknown' }}
+          <div class="author-section">
+            <div class="author-info">
+              <span class="preview-author">{{ prevSiblingMessage.author_display_name || 'Unknown' }}</span>
+              <span v-if="prevSiblingMessage.author_user_tag" class="preview-author-tag">@{{ prevSiblingMessage.author_user_tag }}</span>
+            </div>
+            
+            <!-- Public badge -->
+            <span v-if="prevSiblingMessage.public === 1 || prevSiblingMessage.public === true" class="visibility-indicator public">
+              Public
+            </span>
+            
+            <!-- Recipients badge -->
+            <span v-if="prevSiblingMessage.recipients && typeof prevSiblingMessage.recipients === 'object' && prevSiblingMessage.recipients.length > 0" 
+                  class="recipients-preview">
+              Recipients ({{ prevSiblingMessage.recipients.length }})
+            </span>
           </div>
           <div class="preview-timestamp">
             {{ formatTimestamp(prevSiblingMessage.timestamp) }}
@@ -240,6 +280,18 @@
         </div>
         <div class="preview-body">
           {{ prevSiblingMessage.content ? (prevSiblingMessage.content.substring(0, 280) + (prevSiblingMessage.content.length > 280 ? '...' : '')) : '' }}
+        </div>
+        <div class="preview-footer">
+          <div class="preview-actions">
+            <div class="preview-reply-count">
+              {{ prevSiblingMessage.child_ids && prevSiblingMessage.child_ids.length ? prevSiblingMessage.child_ids.length : 0 }} {{ prevSiblingMessage.child_ids && prevSiblingMessage.child_ids.length === 1 ? 'reply' : 'replies' }}
+            </div>
+            <div class="preview-buttons">
+              <button class="preview-button">Reply</button>
+              <button class="preview-button">Reformat</button>
+              <button class="preview-button">Copy Text</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -719,7 +771,7 @@ export default {
       swipeDirection.value = null;
     };
     
-    // Method to handle touch move
+    // Enhanced version of handleTouchMove that triggers auto-swipe at edges
     const handleTouchMove = (e) => {
       if (!isBeingSwiped.value) return;
       
@@ -773,6 +825,39 @@ export default {
           (swipeDirection.value === 'right' && !canSwipeRight)) {
         // Reduce the effect by 70% if swiping in invalid direction
         swipeProgress.value = swipeProgress.value * 0.3;
+      }
+      
+      // Auto-swipe once the finger reaches near the edge of the text box
+      const edgeThreshold = 60; // % of progress at which we auto-swipe
+      
+      if (Math.abs(swipeProgress.value) >= edgeThreshold) {
+        // Check if we can navigate in that direction
+        if ((swipeDirection.value === 'left' && canSwipeLeft) || 
+            (swipeDirection.value === 'right' && canSwipeRight)) {
+          // Stop tracking touch to prevent further updates
+          isBeingSwiped.value = false;
+          
+          // Auto-complete the swipe animation and navigate
+          messageContentRef.value?.classList.add('swipe-transition');
+          swipeProgress.value = swipeDirection.value === 'right' ? 100 : -100;
+          
+          // Navigate after a short delay to allow animation to start
+          setTimeout(() => {
+            const direction = swipeDirection.value === 'right' ? 'prev' : 'next';
+            navigateSibling(direction);
+            
+            // Reset after navigation
+            if (messageContentRef.value) {
+              messageContentRef.value.classList.remove('swipe-transition');
+            }
+            swipeProgress.value = 0;
+            swipeDirection.value = null;
+            showNextCard.value = false;
+            showPrevCard.value = false;
+            nextSiblingMessage.value = null;
+            prevSiblingMessage.value = null;
+          }, 300);
+        }
       }
     };
     
@@ -2080,5 +2165,61 @@ export default {
   overflow: hidden;
   word-break: break-word;
   text-overflow: ellipsis;
+}
+
+.preview-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--space-xs);
+}
+
+.preview-actions {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 8px;
+}
+
+.preview-reply-count {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.preview-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+
+.preview-button {
+  padding: 4px 2px;
+  border-radius: var(--radius-sm);
+  font-size: calc(var(--font-size-xs) - 1px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  height: 28px;
+}
+
+.preview-author-tag {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin-left: 4px;
+}
+
+.recipients-preview {
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-warning);
+  color: var(--color-text-inverse);
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
 }
 </style>
