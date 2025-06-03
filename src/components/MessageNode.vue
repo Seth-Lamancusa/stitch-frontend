@@ -8,6 +8,7 @@
       'shake-animation': isShaking
     }"
     :data-message-id="message.id"
+    :data-has-siblings="hasSiblings"
   >
     <!-- Add sibling navigator if message has a parent -->
     <sibling-navigator
@@ -330,8 +331,10 @@ export default {
     // Add new refs for swipe functionality
     const touchStartX = ref(0);
     const touchEndX = ref(0);
+    const touchStartY = ref(0); // Add to detect vertical scrolling
     const isShaking = ref(false);
     const messageContentRef = ref(null);
+    const isMobile = ref(false); // Add to detect mobile devices
     
     const openTitleDescriptionModal = () => {
       editableTitle.value = props.message.title || '';
@@ -608,6 +611,16 @@ export default {
       console.log(`[MessageNode] Sibling navigation: ${direction}, target: ${targetSiblingId}`);
     };
     
+    // Check if this message has siblings that can be navigated to
+    const hasSiblings = computed(() => {
+      if (!props.message.parent_id) return false;
+      
+      const parent = store.getters['messages/getMessage'](props.message.parent_id);
+      if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) return false;
+      
+      return parent.child_ids.length > 1;
+    });
+    
     // Determine if message has siblings for swipe navigation
     const canNavigatePrev = computed(() => {
       if (!props.message.parent_id) return false;
@@ -641,6 +654,9 @@ export default {
     
     // Method to navigate between siblings via swipe
     const navigateSibling = async (direction) => {
+      // Only allow swipe navigation on mobile and when siblings exist
+      if (!isMobile.value || !hasSiblings.value) return false;
+      
       if (!props.message.parent_id) return false;
       
       try {
@@ -682,13 +698,26 @@ export default {
     
     // Method to handle touch start
     const handleTouchStart = (e) => {
+      // Store both X and Y positions
       touchStartX.value = e.touches[0].clientX;
+      touchStartY.value = e.touches[0].clientY;
     };
     
     // Method to handle touch end
     const handleTouchEnd = (e) => {
+      // Only process swipe if there are siblings to navigate to
+      if (!hasSiblings.value) return;
+      
       touchEndX.value = e.changedTouches[0].clientX;
-      handleSwipe();
+      const touchEndY = e.changedTouches[0].clientY;
+      
+      // Calculate vertical movement
+      const verticalMovement = Math.abs(touchEndY - touchStartY.value);
+      
+      // Only process horizontal swipes with minimal vertical movement
+      if (verticalMovement < 50) {
+        handleSwipe();
+      }
     };
     
     // Process swipe gesture
@@ -886,6 +915,11 @@ export default {
       }
     };
     
+    // Check if device is mobile
+    const checkMobileDevice = () => {
+      isMobile.value = window.innerWidth <= 768;
+    };
+    
     // Add event listeners
     onMounted(() => {
       // Initialize formatters if not already done
@@ -894,7 +928,11 @@ export default {
       // Listen in the capture phase to get clicks before other handlers
       document.addEventListener('click', handleClickOutside, true);
       
-      // Add touch events for mobile swipe navigation
+      // Check if we're on mobile
+      checkMobileDevice();
+      window.addEventListener('resize', checkMobileDevice);
+      
+      // Add touch events for mobile swipe navigation - only if we have siblings
       if (messageContentRef.value) {
         messageContentRef.value.addEventListener('touchstart', handleTouchStart, { passive: true });
         messageContentRef.value.addEventListener('touchend', handleTouchEnd, { passive: true });
@@ -903,6 +941,7 @@ export default {
     
     onBeforeUnmount(() => {
       document.removeEventListener('click', handleClickOutside, true);
+      window.removeEventListener('resize', checkMobileDevice);
       
       // Clean up touch event listeners
       if (messageContentRef.value) {
@@ -956,7 +995,9 @@ export default {
       isReformatting,
       handleReformat,
       messageContentRef,
-      isShaking
+      isShaking,
+      hasSiblings,
+      isMobile
     };
   },
   
@@ -1643,21 +1684,13 @@ export default {
     touch-action: pan-y; /* Allow vertical scrolling but capture horizontal swipes */
   }
   
-  /* Add subtle visual indicator for swipeable messages */
-  .message-node:not(.list-view):has(> .sibling-navigator) .message-content::after {
-    content: '';
-    position: absolute;
-    bottom: 10px;
-    right: 10px;
-    width: 8px;
-    height: 8px;
-    background-color: var(--color-primary);
-    border-radius: 50%;
-    opacity: 0.5;
+  /* Add subtle visual indicator for swipeable messages - only when siblings exist */
+  .message-node:not(.list-view) .message-content::after {
+    content: none; /* Default to no indicator */
   }
   
-  /* Fallback for browsers that don't support :has() */
-  .message-node:not(.list-view) > .sibling-navigator ~ .message-content::after {
+  /* Use attribute selector for hasSiblings to ensure it works in all browsers */
+  .message-node:not(.list-view)[data-has-siblings="true"] .message-content::after {
     content: '';
     position: absolute;
     bottom: 10px;
