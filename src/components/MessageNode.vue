@@ -192,17 +192,6 @@
             Copy Text
           </button>
           
-          <!-- Hiiii Button -->
-          <button 
-            v-if="!inListView"
-            @click.stop="() => {}" 
-            class="hiiii-button"
-            title="Just says hiiii"
-          >
-            <span class="hiiii-icon">👋</span>
-            hiiii
-          </button>
-          
           <!-- Pin status indicator -->
           <div v-if="isPinned" class="pin-status-indicator">
             <span class="pin-icon">📌</span> Pinned
@@ -1517,7 +1506,7 @@ export default {
   100% { transform: rotate(360deg); }
 }
 
-.reply-button, .reformat-button, .text-button, .json-button, .hiiii-button {
+.reply-button, .reformat-button, .text-button, .json-button {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1531,7 +1520,7 @@ export default {
   color: var(--color-text-secondary);
 }
 
-.reply-button:hover, .reformat-button:hover:not(:disabled), .text-button:hover, .json-button:hover, .hiiii-button:hover {
+.reply-button:hover, .reformat-button:hover:not(:disabled), .text-button:hover, .json-button:hover {
   background-color: var(--color-surface-hover);
   border-color: var(--color-border-hover);
   color: var(--color-primary);
@@ -1560,11 +1549,6 @@ export default {
   border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
-}
-
-.hiiii-icon {
-  font-size: var(--font-size-sm);
-  line-height: 1;
 }
 
 @media (max-width: 768px) {
@@ -1600,7 +1584,7 @@ export default {
   /* Button container that holds all action buttons */
   .message-actions {
     display: grid;
-    grid-template-columns: repeat(4, 1fr); /* Changed from 3 to 4 to accommodate the new button */
+    grid-template-columns: repeat(3, 1fr);
     gap: 8px;
     align-items: start;  /* Align items to the top */
   }
@@ -1609,8 +1593,7 @@ export default {
   .reply-button,
   .reformat-button,
   .text-button,
-  .json-button,
-  .hiiii-button {
+  .json-button {
     width: 100%;
     padding: 4px 2px;  /* Reduced padding */
     border-radius: var(--radius-sm);
