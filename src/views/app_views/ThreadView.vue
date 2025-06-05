@@ -1266,6 +1266,23 @@ const findEndOfBranchMessage = () => {
   scroll-behavior: auto;
 }
 
+/* Media query for mobile responsiveness */
+@media (max-width: 768px) {
+  .messages-container {
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-bottom: 120px; /* More space for the reply box on mobile */
+  }
+  
+  .thread-header {
+    padding: var(--space-xs) var(--space-sm);
+  }
+  
+  .thread-title {
+    font-size: var(--font-size-md);
+  }
+}
+
 .auth-loading,
 .loading-indicator,
 .error-message,
@@ -1444,6 +1461,19 @@ const findEndOfBranchMessage = () => {
   right: 0;
   z-index: 10;
   padding: 0 40px; /* Add horizontal padding to match the design */
+}
+
+@media (max-width: 768px) {
+  .reply-box-container {
+    padding: 0 16px; /* Reduce padding on mobile */
+    bottom: 10px; /* Position slightly higher on mobile */
+    z-index: 10; /* Lower than the header controls (z-index 50) */
+  }
+  
+  /* Make the reply box take up more width on mobile */
+  .reply-box {
+    width: 100%;
+  }
 }
 </style> 
 

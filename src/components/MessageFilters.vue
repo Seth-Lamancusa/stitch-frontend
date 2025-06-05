@@ -1,208 +1,241 @@
 <template>
   <div class="message-filters" :class="{ 'loading': isLoadingMessages }">
-    <div class="filters-main">
-      <!-- Row 1: Author and Recipient filters -->
-      <div class="filter-row">
-        <!-- Author filter section -->
-        <div class="filter-section author-filter">
-          <div class="search-input-wrapper" :class="{ 'has-selection': selectedAuthors.length > 0 }">
-            <input 
-              v-model="authorSearchQuery" 
-              @input="searchAuthors"
-              @keydown.enter.prevent="selectFirstAuthorResult" 
-              @keydown.escape="clearAuthorSearch"
-              placeholder="Filter by authors..." 
-              class="filter-input"
-              :disabled="isLoadingMessages"
-            />
-            <span class="input-label">Authors</span>
-            <button 
-              v-if="selectedAuthors.length > 0" 
-              @click="clearAuthorFilter" 
-              class="clear-btn"
-              title="Clear author filter"
-              :disabled="isLoadingMessages"
-            >×</button>
-          </div>
-          
-          <!-- Selected authors display -->
-          <div v-if="selectedAuthors.length > 0" class="selected-authors">
-            <div 
-              v-for="author in selectedAuthors" 
-              :key="author.uid" 
-              class="author-tag"
-            >
-              {{ author.display_name || 'User' }} @{{ author.user_tag }}
-              <button 
-                @click="removeAuthor(author)" 
-                class="remove-author-btn"
-                title="Remove author"
-                :disabled="isLoadingMessages"
-              >×</button>
-            </div>
-          </div>
-          
-          <!-- Dropdown results -->
-          <div v-if="showAuthorResults && authorSearchResults.length > 0 && !isLoadingMessages" class="search-results">
-            <div 
-              v-for="user in authorSearchResults" 
-              :key="user.uid" 
-              @click="selectAuthorResult(user)"
-              class="search-result-item"
-            >
-              {{ user.display_name || 'User' }} @{{ user.user_tag }}
-            </div>
-          </div>
-        </div>
-
-        <!-- Recipient filter section -->
-        <div class="filter-section recipient-filter">
-          <div class="search-input-wrapper" :class="{ 'has-selection': selectedRecipients.length > 0 }">
-            <input 
-              v-model="recipientSearchQuery" 
-              @input="searchRecipients"
-              @keydown.enter.prevent="selectFirstRecipientResult" 
-              @keydown.escape="clearRecipientSearch"
-              placeholder="Filter by recipients..." 
-              class="filter-input"
-              :disabled="isLoadingMessages"
-            />
-            <span class="input-label">Recipients</span>
-            <button 
-              v-if="selectedRecipients.length > 0" 
-              @click="clearRecipientFilter" 
-              class="clear-btn"
-              title="Clear recipient filter"
-              :disabled="isLoadingMessages"
-            >×</button>
-          </div>
-          
-          <!-- Selected recipients display -->
-          <div v-if="selectedRecipients.length > 0" class="selected-recipients">
-            <div 
-              v-for="recipient in selectedRecipients" 
-              :key="recipient.uid" 
-              class="recipient-tag"
-            >
-              {{ recipient.display_name || 'User' }} @{{ recipient.user_tag }}
-              <button 
-                @click="removeRecipient(recipient)" 
-                class="remove-recipient-btn"
-                title="Remove recipient"
-                :disabled="isLoadingMessages"
-              >×</button>
-            </div>
-          </div>
-          
-          <!-- Dropdown results -->
-          <div v-if="showRecipientResults && recipientSearchResults.length > 0 && !isLoadingMessages" class="search-results">
-            <div 
-              v-for="user in recipientSearchResults" 
-              :key="user.uid" 
-              @click="selectRecipientResult(user)"
-              class="search-result-item"
-            >
-              {{ user.display_name || 'User' }} @{{ user.user_tag }}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Row 2: Date range filter -->
-      <div class="filter-row">
-        <div class="filter-section date-from-filter">
-          <div class="search-input-wrapper" :class="{ 'has-selection': localDateStart }">
-            <input 
-              type="datetime-local" 
-              v-model="localDateStart"
-              class="filter-input date-input"
-              :disabled="isLoadingMessages"
-            />
-            <span class="input-label">From</span>
-            <button 
-              v-if="localDateStart" 
-              @click="updateLocalDateRange('start', '')" 
-              class="clear-btn"
-              title="Clear from date"
-              :disabled="isLoadingMessages"
-            >×</button>
-          </div>
-        </div>
-
-        <div class="filter-section date-to-filter">
-          <div class="search-input-wrapper" :class="{ 'has-selection': localDateEnd }">
-            <input 
-              type="datetime-local" 
-              v-model="localDateEnd"
-              class="filter-input date-input"
-              :disabled="isLoadingMessages"
-            />
-            <span class="input-label">To</span>
-            <button 
-              v-if="localDateEnd" 
-              @click="updateLocalDateRange('end', '')" 
-              class="clear-btn"
-              title="Clear to date"
-              :disabled="isLoadingMessages"
-            >×</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Row 3: Sort order -->
-      <div class="filter-row">
-        <div class="filter-section sort-filter">
-          <div class="sort-order-toggle">
-            <label class="toggle-switch">
-              <input 
-                type="checkbox" 
-                v-model="isNewestFirst"
-                :disabled="isLoadingMessages"
-              >
-              <span class="toggle-slider"></span>
-            </label>
-            <span class="toggle-label">{{ isNewestFirst ? 'Newest First' : 'Oldest First' }}</span>
-          </div>
-        </div>
+    <!-- Preset Filter Tabs -->
+    <div class="preset-filters">
+      <div class="filter-tabs">
+        <button 
+          v-for="preset in presetFilters"
+          :key="preset.key"
+          @click="selectPreset(preset.key)"
+          :class="['filter-tab', { 'active': activePreset === preset.key }]"
+          :disabled="isLoadingMessages"
+        >
+          {{ preset.label }}
+        </button>
       </div>
     </div>
 
-    <!-- Visibility column -->
-    <div class="filters-visibility">
-      <div class="filter-section public-filter">
-        <div class="public-filter-selector">
-          <label class="filter-label">Visibility</label>
-          <div class="radio-group">
-            <label class="radio-option">
-              <input 
-                type="radio" 
-                value="all" 
-                v-model="isPublic"
-                @change="togglePublic"
-                :disabled="isLoadingMessages"
-              >
-              <span class="radio-label">All</span>
-            </label>
-            <label class="radio-option">
-              <input 
-                type="radio" 
-                value="public" 
-                v-model="isPublic"
-                @change="togglePublic"
-                :disabled="isLoadingMessages"
-              >
-              <span class="radio-label">Public</span>
-            </label>
-            <label class="radio-option">
-              <input 
-                type="radio" 
-                value="private" 
-                v-model="isPublic"
-                @change="togglePublic"
-                :disabled="isLoadingMessages"
-              >
-              <span class="radio-label">Private</span>
-            </label>
+    <!-- Advanced Filters Dropdown (Disabled) -->
+    <div class="advanced-filters">
+      <div class="advanced-dropdown-wrapper">
+        <button 
+          class="advanced-dropdown-button"
+          :disabled="true"
+          title="Advanced filters are in development"
+        >
+          Advanced Filters
+          <span class="dropdown-icon">▼</span>
+        </button>
+        <span class="development-label">(In Development)</span>
+      </div>
+      
+      <!-- Advanced filters content (hidden for now) -->
+      <div class="advanced-content" style="display: none;">
+        <div class="filters-main">
+          <!-- Row 1: Author and Recipient filters -->
+          <div class="filter-row">
+            <!-- Author filter section -->
+            <div class="filter-section author-filter">
+              <div class="search-input-wrapper" :class="{ 'has-selection': selectedAuthors.length > 0 }">
+                <input 
+                  v-model="authorSearchQuery" 
+                  @input="searchAuthors"
+                  @keydown.enter.prevent="selectFirstAuthorResult" 
+                  @keydown.escape="clearAuthorSearch"
+                  placeholder="Filter by authors..." 
+                  class="filter-input"
+                  :disabled="isLoadingMessages"
+                />
+                <span class="input-label">Authors</span>
+                <button 
+                  v-if="selectedAuthors.length > 0" 
+                  @click="clearAuthorFilter" 
+                  class="clear-btn"
+                  title="Clear author filter"
+                  :disabled="isLoadingMessages"
+                >×</button>
+              </div>
+              
+              <!-- Selected authors display -->
+              <div v-if="selectedAuthors.length > 0" class="selected-authors">
+                <div 
+                  v-for="author in selectedAuthors" 
+                  :key="author.uid" 
+                  class="author-tag"
+                >
+                  {{ author.display_name || 'User' }} @{{ author.user_tag }}
+                  <button 
+                    @click="removeAuthor(author)" 
+                    class="remove-author-btn"
+                    title="Remove author"
+                    :disabled="isLoadingMessages"
+                  >×</button>
+                </div>
+              </div>
+              
+              <!-- Dropdown results -->
+              <div v-if="showAuthorResults && authorSearchResults.length > 0 && !isLoadingMessages" class="search-results">
+                <div 
+                  v-for="user in authorSearchResults" 
+                  :key="user.uid" 
+                  @click="selectAuthorResult(user)"
+                  class="search-result-item"
+                >
+                  {{ user.display_name || 'User' }} @{{ user.user_tag }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Recipient filter section -->
+            <div class="filter-section recipient-filter">
+              <div class="search-input-wrapper" :class="{ 'has-selection': selectedRecipients.length > 0 }">
+                <input 
+                  v-model="recipientSearchQuery" 
+                  @input="searchRecipients"
+                  @keydown.enter.prevent="selectFirstRecipientResult" 
+                  @keydown.escape="clearRecipientSearch"
+                  placeholder="Filter by recipients..." 
+                  class="filter-input"
+                  :disabled="isLoadingMessages"
+                />
+                <span class="input-label">Recipients</span>
+                <button 
+                  v-if="selectedRecipients.length > 0" 
+                  @click="clearRecipientFilter" 
+                  class="clear-btn"
+                  title="Clear recipient filter"
+                  :disabled="isLoadingMessages"
+                >×</button>
+              </div>
+              
+              <!-- Selected recipients display -->
+              <div v-if="selectedRecipients.length > 0" class="selected-recipients">
+                <div 
+                  v-for="recipient in selectedRecipients" 
+                  :key="recipient.uid" 
+                  class="recipient-tag"
+                >
+                  {{ recipient.display_name || 'User' }} @{{ recipient.user_tag }}
+                  <button 
+                    @click="removeRecipient(recipient)" 
+                    class="remove-recipient-btn"
+                    title="Remove recipient"
+                    :disabled="isLoadingMessages"
+                  >×</button>
+                </div>
+              </div>
+              
+              <!-- Dropdown results -->
+              <div v-if="showRecipientResults && recipientSearchResults.length > 0 && !isLoadingMessages" class="search-results">
+                <div 
+                  v-for="user in recipientSearchResults" 
+                  :key="user.uid" 
+                  @click="selectRecipientResult(user)"
+                  class="search-result-item"
+                >
+                  {{ user.display_name || 'User' }} @{{ user.user_tag }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 2: Date range filter -->
+          <div class="filter-row">
+            <div class="filter-section date-from-filter">
+              <div class="search-input-wrapper" :class="{ 'has-selection': localDateStart }">
+                <input 
+                  type="datetime-local" 
+                  v-model="localDateStart"
+                  class="filter-input date-input"
+                  :disabled="isLoadingMessages"
+                />
+                <span class="input-label">From</span>
+                <button 
+                  v-if="localDateStart" 
+                  @click="updateLocalDateRange('start', '')" 
+                  class="clear-btn"
+                  title="Clear from date"
+                  :disabled="isLoadingMessages"
+                >×</button>
+              </div>
+            </div>
+
+            <div class="filter-section date-to-filter">
+              <div class="search-input-wrapper" :class="{ 'has-selection': localDateEnd }">
+                <input 
+                  type="datetime-local" 
+                  v-model="localDateEnd"
+                  class="filter-input date-input"
+                  :disabled="isLoadingMessages"
+                />
+                <span class="input-label">To</span>
+                <button 
+                  v-if="localDateEnd" 
+                  @click="updateLocalDateRange('end', '')" 
+                  class="clear-btn"
+                  title="Clear to date"
+                  :disabled="isLoadingMessages"
+                >×</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 3: Sort order -->
+          <div class="filter-row">
+            <div class="filter-section sort-filter">
+              <div class="sort-order-toggle">
+                <label class="toggle-switch">
+                  <input 
+                    type="checkbox" 
+                    v-model="isNewestFirst"
+                    :disabled="isLoadingMessages"
+                  >
+                  <span class="toggle-slider"></span>
+                </label>
+                <span class="toggle-label">{{ isNewestFirst ? 'Newest First' : 'Oldest First' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Visibility column -->
+        <div class="filters-visibility">
+          <div class="filter-section public-filter">
+            <div class="public-filter-selector">
+              <label class="filter-label">Visibility</label>
+              <div class="radio-group">
+                <label class="radio-option">
+                  <input 
+                    type="radio" 
+                    value="all" 
+                    v-model="isPublic"
+                    @change="togglePublic"
+                    :disabled="isLoadingMessages"
+                  >
+                  <span class="radio-label">All</span>
+                </label>
+                <label class="radio-option">
+                  <input 
+                    type="radio" 
+                    value="public" 
+                    v-model="isPublic"
+                    @change="togglePublic"
+                    :disabled="isLoadingMessages"
+                  >
+                  <span class="radio-label">Public</span>
+                </label>
+                <label class="radio-option">
+                  <input 
+                    type="radio" 
+                    value="private" 
+                    v-model="isPublic"
+                    @change="togglePublic"
+                    :disabled="isLoadingMessages"
+                  >
+                  <span class="radio-label">Private</span>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -216,7 +249,20 @@ import { useStore } from 'vuex';
 
 const store = useStore();
 
-// Author filter state
+// Preset filter options
+const presetFilters = [
+  { key: 'public', label: 'Public' },
+  { key: 'direct', label: 'Direct' },
+  { key: 'user-posts', label: 'User Posts' }
+];
+
+// Active preset tracking
+const activePreset = ref('public'); // Default to public
+
+// Get current user for direct/user-posts filters
+const currentUser = computed(() => store.getters['auth/user']);
+
+// Author filter state (for advanced filters)
 const authorSearchQuery = ref('');
 const authorSearchResults = ref([]);
 const showAuthorResults = ref(false);
@@ -225,7 +271,7 @@ const selectedAuthors = computed({
   set: (value) => store.dispatch('messages/setAuthors', value)
 });
 
-// Recipient filter state
+// Recipient filter state (for advanced filters)
 const recipientSearchQuery = ref('');
 const recipientSearchResults = ref([]);
 const showRecipientResults = ref(false);
@@ -234,19 +280,19 @@ const selectedRecipients = computed({
   set: (value) => store.dispatch('messages/setRecipients', value)
 });
 
-// Public filter state
+// Public filter state (for advanced filters)
 const isPublic = computed({
   get: () => store.getters['messages/getIsPublic'],
   set: (value) => store.dispatch('messages/setIsPublic', value)
 });
 
-// Date range state
+// Date range state (for advanced filters)
 const dateRange = computed({
   get: () => store.getters['messages/getDateRange'],
   set: (value) => store.dispatch('messages/setDateRange', value)
 });
 
-// Sort order state  
+// Sort order state (for advanced filters)
 const isNewestFirst = computed({
   get: () => store.getters['messages/getSortOrder'] === 'newest',
   set: async (value) => {
@@ -260,11 +306,10 @@ const isLoadingMessages = computed(() => {
   return store.getters['messages/isLoading']('fetchingMessages');
 });
 
-// Local date values for datetime-local inputs (converts from ISO to local format)
+// Local date values for datetime-local inputs (for advanced filters)
 const localDateStart = computed({
   get: () => {
     if (!dateRange.value.start) return '';
-    // Convert ISO string back to datetime-local format (YYYY-MM-DDTHH:mm)
     const date = new Date(dateRange.value.start);
     return date.toISOString().slice(0, 16);
   },
@@ -276,7 +321,6 @@ const localDateStart = computed({
 const localDateEnd = computed({
   get: () => {
     if (!dateRange.value.end) return '';
-    // Convert ISO string back to datetime-local format (YYYY-MM-DDTHH:mm)
     const date = new Date(dateRange.value.end);
     return date.toISOString().slice(0, 16);
   },
@@ -285,10 +329,52 @@ const localDateEnd = computed({
   }
 });
 
-// Computed property to check if date range is set
-const hasDateRange = computed(() => {
-  return dateRange.value.start || dateRange.value.end;
-});
+// Select preset filter
+const selectPreset = async (presetKey) => {
+  if (isLoadingMessages.value) return;
+  
+  console.log('[MessageFilters] Selecting preset:', presetKey);
+  activePreset.value = presetKey;
+  
+  // Clear all existing filters first
+  await store.dispatch('messages/setAuthors', []);
+  await store.dispatch('messages/setRecipients', []);
+  await store.dispatch('messages/setIsPublic', 'all');
+  await store.dispatch('messages/setDateRange', { start: null, end: null });
+  
+  // Apply preset-specific filters
+  switch (presetKey) {
+    case 'public':
+      console.log('[MessageFilters] Applying public preset');
+      await store.dispatch('messages/setIsPublic', 'public');
+      break;
+      
+    case 'direct':
+      console.log('[MessageFilters] Applying direct preset');
+      if (currentUser.value?.uid) {
+        await store.dispatch('messages/setRecipients', [{
+          uid: currentUser.value.uid,
+          display_name: currentUser.value.display_name,
+          user_tag: currentUser.value.user_tag
+        }]);
+      }
+      break;
+      
+    case 'user-posts':
+      console.log('[MessageFilters] Applying user-posts preset');
+      if (currentUser.value?.uid) {
+        await store.dispatch('messages/setAuthors', [{
+          uid: currentUser.value.uid,
+          display_name: currentUser.value.display_name,
+          user_tag: currentUser.value.user_tag
+        }]);
+      }
+      break;
+  }
+  
+  // Apply the filters
+  await applyFilters();
+};
 
 const applyFilters = async () => {
   console.log('[MessageFilters] Applying filters - clearing cache and fetching fresh data');
@@ -325,55 +411,7 @@ const applyFilters = async () => {
   }
 };
 
-// Simplified watchers - just apply filters on any change
-watch(() => selectedAuthors.value, async (newAuthors, oldAuthors) => {
-  console.log('[MessageFilters] Author filter changed:', {
-    old: oldAuthors?.map(a => a.display_name) || [],
-    new: newAuthors?.map(a => a.display_name) || []
-  });
-  await applyFilters();
-});
-
-watch(() => selectedRecipients.value, async (newRecipients, oldRecipients) => {
-  console.log('[MessageFilters] Recipient filter changed:', {
-    old: oldRecipients?.map(r => r.display_name) || [],
-    new: newRecipients?.map(r => r.display_name) || []
-  });
-  await applyFilters();
-});
-
-watch(() => isPublic.value, async (newValue, oldValue) => {
-  console.log('[MessageFilters] Public filter changed:', {
-    oldValue,
-    newValue,
-    filterChangeTriggered: oldValue !== newValue
-  });
-  if (oldValue !== newValue) {
-    console.log('[MessageFilters] Public filter actually changed, applying filters...');
-    await applyFilters();
-  } else {
-    console.log('[MessageFilters] Public filter unchanged, skipping apply');
-  }
-});
-
-watch(() => dateRange.value, async (newRange, oldRange) => {
-  console.log('[MessageFilters] Date range changed:', {
-    old: oldRange,
-    new: newRange
-  });
-  await applyFilters();
-}, { deep: true });
-
-// Watch sort order changes
-watch(() => isNewestFirst.value, async (newValue, oldValue) => {
-  console.log('[MessageFilters] Sort order changed:', {
-    oldValue: oldValue ? 'newest first' : 'oldest first',
-    newValue: newValue ? 'newest first' : 'oldest first'
-  });
-  await applyFilters();
-});
-
-// Author search functions
+// Advanced filter functions (kept for when advanced filters are enabled)
 let authorSearchTimeout = null;
 const searchAuthors = (event) => {
   clearTimeout(authorSearchTimeout);
@@ -432,7 +470,6 @@ const clearAuthorFilter = () => {
   clearAuthorSearch();
 };
 
-// Recipient search functions
 let recipientSearchTimeout = null;
 const searchRecipients = (event) => {
   clearTimeout(recipientSearchTimeout);
@@ -496,7 +533,6 @@ const togglePublic = async () => {
   await store.dispatch('messages/setIsPublic', isPublic.value);
 };
 
-// Function to update date range when local inputs change
 const updateLocalDateRange = (type, value) => {
   let startISO = dateRange.value.start;
   let endISO = dateRange.value.end;
@@ -513,8 +549,12 @@ const updateLocalDateRange = (type, value) => {
   });
 };
 
-// Close search results when clicking outside
-onMounted(() => {
+// Initialize with public preset on mount
+onMounted(async () => {
+  console.log('[MessageFilters] Component mounted, applying default public preset');
+  await selectPreset('public');
+  
+  // Close search results when clicking outside
   document.addEventListener('click', (event) => {
     const filterContainer = document.querySelector('.message-filters');
     if ((showAuthorResults.value || showRecipientResults.value) && 
@@ -530,6 +570,7 @@ onMounted(() => {
 <style scoped>
 .message-filters {
   display: flex;
+  flex-direction: column;
   gap: var(--space-md);
   padding: var(--space-sm);
   background: var(--color-surface);
@@ -539,6 +580,107 @@ onMounted(() => {
   margin: 0 auto;
 }
 
+/* Preset Filter Tabs */
+.preset-filters {
+  display: flex;
+  justify-content: center;
+}
+
+.filter-tabs {
+  display: flex;
+  gap: var(--space-xs);
+  background: var(--color-surface-light);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs);
+}
+
+.filter-tab {
+  padding: var(--space-sm) var(--space-md);
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  min-width: 80px;
+}
+
+.filter-tab:hover:not(:disabled) {
+  background: var(--color-hover-overlay);
+  color: var(--color-text);
+}
+
+.filter-tab.active {
+  background: var(--color-primary);
+  color: rgb(0, 0, 0);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.filter-tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Advanced Filters Dropdown */
+.advanced-filters {
+  display: flex;
+  justify-content: center;
+}
+
+.advanced-dropdown-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.advanced-dropdown-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-light);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: not-allowed;
+  font-size: var(--font-size-sm);
+  opacity: 0.5;
+}
+
+.dropdown-icon {
+  font-size: var(--font-size-xs);
+  transition: transform var(--transition-fast);
+}
+
+.development-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+/* Loading state */
+.message-filters.loading {
+  opacity: 0.6;
+  pointer-events: none;
+  position: relative;
+}
+
+.message-filters.loading::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(1px);
+  z-index: 5;
+  border-radius: var(--radius-md);
+}
+
+/* All the existing advanced filter styles (hidden but preserved) */
 .filters-main {
   flex: 1;
   display: flex;
@@ -664,7 +806,6 @@ onMounted(() => {
   background: var(--color-hover-overlay);
 }
 
-/* Selected authors and recipients styles */
 .selected-authors,
 .selected-recipients {
   display: flex;
@@ -703,7 +844,6 @@ onMounted(() => {
   transform: scale(1.1);
 }
 
-/* Toggle switch styles */
 .toggle-switch {
   position: relative;
   display: inline-block;
@@ -755,14 +895,12 @@ input:checked + .toggle-slider:before {
   min-width: 70px;
 }
 
-/* Date range filter styles */
 .date-input {
   color: var(--color-text);
   font-family: inherit;
   font-size: var(--font-size-sm);
 }
 
-/* Override default datetime-local styling */
 .date-input::-webkit-calendar-picker-indicator {
   filter: var(--calendar-icon-filter, invert(0.5));
   cursor: pointer;
@@ -774,20 +912,17 @@ input:checked + .toggle-slider:before {
   opacity: 1;
 }
 
-/* Ensure date inputs have consistent height with other inputs */
 input[type="datetime-local"].filter-input {
   height: 38px;
   padding-right: var(--space-xl);
 }
 
-/* Dark mode support for calendar icon */
 @media (prefers-color-scheme: dark) {
   .date-input::-webkit-calendar-picker-indicator {
     --calendar-icon-filter: invert(1);
   }
 }
 
-/* Sort order toggle styles */
 .sort-order-toggle {
   display: flex;
   align-items: center;
@@ -845,7 +980,6 @@ input[type="datetime-local"].filter-input {
   min-width: 85px;
 }
 
-/* Public filter styles */
 .public-filter-selector {
   display: flex;
   flex-direction: column;
@@ -892,27 +1026,6 @@ input[type="datetime-local"].filter-input {
   transition: color var(--transition-fast);
 }
 
-/* Loading state styles */
-.message-filters.loading {
-  opacity: 0.6;
-  pointer-events: none;
-  position: relative;
-}
-
-.message-filters.loading::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(1px);
-  z-index: 5;
-  border-radius: var(--radius-md);
-}
-
-/* Disabled input styles */
 .filter-input:disabled,
 .clear-btn:disabled,
 .remove-author-btn:disabled,
@@ -933,7 +1046,6 @@ input[type="datetime-local"].filter-input {
   color: var(--color-text-secondary);
 }
 
-/* Hide search results during loading */
 .message-filters.loading .search-results {
   display: none;
 }

@@ -742,7 +742,7 @@ export default {
         
         console.log(`[Store] Final API filters:`, apiFilters);
         
-        const response = await MessageService.getChronologicalMessages(10, cursor, apiFilters);
+        const response = await MessageService.getChronologicalMessages(5, cursor, apiFilters);
         const messages = response.messages || [];
         const exhausted = response.exhausted || false;
         const nextCursor = response.next_cursor;

@@ -142,7 +142,11 @@ export default {
       
       // Add filter parameters - multiple authors support
       if (filters.authors && filters.authors.length > 0) {
-        filters.authors.forEach(uid => params.append('author_uid', uid));
+        filters.authors.forEach(author => {
+          // Extract UID from author (handle both object and string formats)
+          const uid = typeof author === 'object' && author.uid ? author.uid : author;
+          params.append('author_uid', uid);
+        });
       }
       
       // Handle three-state public filter: 'public', 'private', 'all'
@@ -154,7 +158,11 @@ export default {
       // If 'all', don't add public parameter to get both public and private messages
       
       if (filters.recipients && filters.recipients.length > 0) {
-        filters.recipients.forEach(uid => params.append('recipients', uid));
+        filters.recipients.forEach(recipient => {
+          // Extract UID from recipient (handle both object and string formats)
+          const uid = typeof recipient === 'object' && recipient.uid ? recipient.uid : recipient;
+          params.append('recipients', uid);
+        });
       }
       
       // Add date filtering support
@@ -265,7 +273,7 @@ export default {
   // Get unread message count for the current user
   async getUnreadMessageCount() {
     const headers = await getAuthHeaders();
-    const response = await axios.get(`${apiBaseUrl}/tabs/unread-count`, { headers });
+    const response = await axios.get(`${apiBaseUrl}/messages/unread-count`, { headers });
     console.log('[DEBUG] MessageService - getUnreadMessageCount response:', response.data);
     return response;
   },

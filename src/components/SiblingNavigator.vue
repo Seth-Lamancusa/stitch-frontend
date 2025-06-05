@@ -140,6 +140,29 @@ const navigate = async (direction) => {
   transform: translateY(-50%);
 }
 
+/* Mobile styles for sibling navigator */
+@media (max-width: 768px) {
+  .sibling-navigator {
+    top: auto;
+    bottom: 10px;
+    transform: none;
+    height: 40px;
+  }
+  
+  .nav-button {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .left-triangle {
+    border-width: 6px 9px 6px 0;
+  }
+  
+  .right-triangle {
+    border-width: 6px 0 6px 9px;
+  }
+}
+
 .nav-button {
   position: absolute;
   top: 0;
