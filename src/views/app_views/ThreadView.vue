@@ -7,7 +7,7 @@
     
     <div v-else-if="isLoading || isInitialLoading || isLoadingFromUrl || isInitialContentLoading" class="loading-indicator">
       <div class="loading-spinner"></div>
-      <p>{{ isInitialContentLoading ? 'Loading thread content...' : 'Loading thread...' }}</p>
+      <span class="loading-text">{{ isInitialContentLoading ? 'Loading thread content...' : 'Loading thread...' }}</span>
     </div>
     
     <div v-else-if="error" class="error-message">
@@ -1271,11 +1271,13 @@ const findEndOfBranchMessage = () => {
 .error-message,
 .not-found {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   height: 200px;
   color: var(--color-text-secondary);
   text-align: center;
+  gap: var(--space-sm);
 }
 
 .delete-confirm-modal {
@@ -1400,7 +1402,6 @@ const findEndOfBranchMessage = () => {
 }
 
 .loading-text {
-  margin-top: 10px;
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
 }

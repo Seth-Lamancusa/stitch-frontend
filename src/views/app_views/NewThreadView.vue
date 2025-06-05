@@ -31,11 +31,11 @@
             <div class="import-instructions">
               <p>To import a ChatGPT conversation:</p>
               <ol>
-                <li>Copy your entire ChatGPT conversation (from web interface, mobile app, or chat export)</li>
+                <li>Copy your entire ChatGPT conversation (from web interface or mobile app)</li>
                 <li>Paste it in the text area below - no formatting needed</li>
                 <li>Click "Import Conversation"</li>
               </ol>
-              <p class="import-warning">⚠️ Paste the raw conversation without modifications for best results</p>
+              <p class="import-warning">Paste the raw conversation without modifications</p>
             </div>
             
             <textarea 
@@ -104,7 +104,7 @@
                 <li>Select the markdown file below</li>
                 <li>Click "Import Conversation"</li>
               </ol>
-              <p class="import-warning">⚠️ Only markdown (.md) files are supported</p>
+              <p class="import-warning">Only markdown (.md) files are supported</p>
             </div>
             
             <!-- Model Selection -->
@@ -178,6 +178,210 @@
             
             <button 
               @click="importCursor"
+              :disabled="!canImport || isImporting"
+              class="import-button"
+              :class="{ 'importing': isImporting }"
+            >
+              <span v-if="!isImporting">Import Conversation</span>
+              <span v-else>Importing...</span>
+            </button>
+          </div>
+          <div v-else-if="activeImportTab === 'claude'" class="import-panel">
+            <h3>Import from Claude</h3>
+            
+            <div class="import-instructions">
+              <p>To import a Claude conversation:</p>
+              <ol>
+                <li>Copy your entire Claude conversation (from web interface or mobile app)</li>
+                <li>Paste it in the text area below - no formatting needed</li>
+                <li>Click "Import Conversation"</li>
+              </ol>
+              <p class="import-warning">Paste the raw conversation without modifications</p>
+            </div>
+            
+            <textarea 
+              v-model="importText"
+              class="import-textarea"
+              placeholder="Paste your Claude conversation here..."
+              :disabled="isImporting"
+            />
+            
+            <!-- Content and preview container -->
+            <div v-if="parsedMessages.length > 0 || formatDetection.hint" class="import-content-container">
+              <!-- Preview section -->
+              <div v-if="parsedMessages.length > 0" class="import-preview">
+                <div class="preview-header">
+                  <h4>Preview ({{ parsedMessages.length }} messages)</h4>
+                  <!-- Format detection hint positioned next to preview title -->
+                  <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
+                    <span class="format-icon">{{ getFormatIcon() }}</span>
+                    <span class="format-hint">{{ formatDetection.hint }}</span>
+                  </div>
+                </div>
+                <div class="preview-messages">
+                  <div v-for="(msg, index) in parsedMessages.slice(0, 3)" :key="index" class="preview-message">
+                    <span class="preview-role">{{ msg.role === 'user' ? 'You' : 'Claude' }}:</span>
+                    <span class="preview-content">{{ truncateContent(msg.content) }}</span>
+                  </div>
+                  <div v-if="parsedMessages.length > 3" class="preview-more">
+                    ... and {{ parsedMessages.length - 3 }} more messages
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Format detection when no preview (standalone) -->
+              <div v-else-if="formatDetection.hint" class="format-detection standalone" :class="formatDetection.format">
+                <span class="format-icon">{{ getFormatIcon() }}</span>
+                <span class="format-hint">{{ formatDetection.hint }}</span>
+              </div>
+            </div>
+            
+            <!-- Validation errors -->
+            <div v-if="importErrors.length > 0" class="import-errors">
+              <p class="error-title">Please fix the following issues:</p>
+              <ul>
+                <li v-for="(error, index) in importErrors" :key="index">{{ error }}</li>
+              </ul>
+            </div>
+            
+            <button 
+              @click="importClaude"
+              :disabled="!canImport || isImporting"
+              class="import-button"
+              :class="{ 'importing': isImporting }"
+            >
+              <span v-if="!isImporting">Import Conversation</span>
+              <span v-else>Importing...</span>
+            </button>
+          </div>
+          <div v-else-if="activeImportTab === 'gemini'" class="import-panel">
+            <h3>Import from Gemini</h3>
+            
+                         <div class="import-instructions">
+               <p>To import a Gemini conversation:</p>
+               <ol>
+                 <li>Copy your entire Gemini conversation (from web interface or mobile app)</li>
+                 <li>Paste it in the text area below - no formatting needed</li>
+                 <li>Click "Import Conversation"</li>
+               </ol>
+               <p class="import-warning">Paste the raw conversation without modifications</p>
+             </div>
+            
+            <textarea 
+              v-model="importText"
+              class="import-textarea"
+              placeholder="Paste your Gemini conversation here..."
+              :disabled="isImporting"
+            />
+            
+            <!-- Content and preview container -->
+            <div v-if="parsedMessages.length > 0 || formatDetection.hint" class="import-content-container">
+              <!-- Preview section -->
+              <div v-if="parsedMessages.length > 0" class="import-preview">
+                <div class="preview-header">
+                  <h4>Preview ({{ parsedMessages.length }} messages)</h4>
+                  <!-- Format detection hint positioned next to preview title -->
+                  <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
+                    <span class="format-icon">{{ getFormatIcon() }}</span>
+                    <span class="format-hint">{{ formatDetection.hint }}</span>
+                  </div>
+                </div>
+                <div class="preview-messages">
+                  <div v-for="(msg, index) in parsedMessages.slice(0, 3)" :key="index" class="preview-message">
+                    <span class="preview-role">{{ msg.role === 'user' ? 'You' : 'Gemini' }}:</span>
+                    <span class="preview-content">{{ truncateContent(msg.content) }}</span>
+                  </div>
+                  <div v-if="parsedMessages.length > 3" class="preview-more">
+                    ... and {{ parsedMessages.length - 3 }} more messages
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Format detection when no preview (standalone) -->
+              <div v-else-if="formatDetection.hint" class="format-detection standalone" :class="formatDetection.format">
+                <span class="format-icon">{{ getFormatIcon() }}</span>
+                <span class="format-hint">{{ formatDetection.hint }}</span>
+              </div>
+            </div>
+            
+            <!-- Validation errors -->
+            <div v-if="importErrors.length > 0" class="import-errors">
+              <p class="error-title">Please fix the following issues:</p>
+              <ul>
+                <li v-for="(error, index) in importErrors" :key="index">{{ error }}</li>
+              </ul>
+            </div>
+            
+            <button 
+              @click="importGemini"
+              :disabled="!canImport || isImporting"
+              class="import-button"
+              :class="{ 'importing': isImporting }"
+            >
+              <span v-if="!isImporting">Import Conversation</span>
+              <span v-else>Importing...</span>
+            </button>
+          </div>
+          <div v-else-if="activeImportTab === 'grok'" class="import-panel">
+            <h3>Import from Grok</h3>
+            
+            <div class="import-instructions">
+              <p>To import a Grok conversation:</p>
+              <ol>
+                <li>Copy your entire Grok conversation (from web interface or mobile app)</li>
+                <li>Paste it in the text area below - no formatting needed</li>
+                <li>Click "Import Conversation"</li>
+              </ol>
+              <p class="import-warning">Paste the raw conversation without modifications</p>
+            </div>
+            
+            <textarea 
+              v-model="importText"
+              class="import-textarea"
+              placeholder="Paste your Grok conversation here..."
+              :disabled="isImporting"
+            />
+            
+            <!-- Content and preview container -->
+            <div v-if="parsedMessages.length > 0 || formatDetection.hint" class="import-content-container">
+              <!-- Preview section -->
+              <div v-if="parsedMessages.length > 0" class="import-preview">
+                <div class="preview-header">
+                  <h4>Preview ({{ parsedMessages.length }} messages)</h4>
+                  <!-- Format detection hint positioned next to preview title -->
+                  <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
+                    <span class="format-icon">{{ getFormatIcon() }}</span>
+                    <span class="format-hint">{{ formatDetection.hint }}</span>
+                  </div>
+                </div>
+                <div class="preview-messages">
+                  <div v-for="(msg, index) in parsedMessages.slice(0, 3)" :key="index" class="preview-message">
+                    <span class="preview-role">{{ msg.role === 'user' ? 'You' : 'Grok' }}:</span>
+                    <span class="preview-content">{{ truncateContent(msg.content) }}</span>
+                  </div>
+                  <div v-if="parsedMessages.length > 3" class="preview-more">
+                    ... and {{ parsedMessages.length - 3 }} more messages
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Format detection when no preview (standalone) -->
+              <div v-else-if="formatDetection.hint" class="format-detection standalone" :class="formatDetection.format">
+                <span class="format-icon">{{ getFormatIcon() }}</span>
+                <span class="format-hint">{{ formatDetection.hint }}</span>
+              </div>
+            </div>
+            
+            <!-- Validation errors -->
+            <div v-if="importErrors.length > 0" class="import-errors">
+              <p class="error-title">Please fix the following issues:</p>
+              <ul>
+                <li v-for="(error, index) in importErrors" :key="index">{{ error }}</li>
+              </ul>
+            </div>
+            
+            <button 
+              @click="importGrok"
               :disabled="!canImport || isImporting"
               class="import-button"
               :class="{ 'importing': isImporting }"
@@ -288,6 +492,9 @@ const getFormatIcon = () => {
     case 'explicit-markers':
     case 'cursor':
     case 'cursor-markdown':
+    case 'claude':
+    case 'gemini':
+    case 'grok':
       return '✅';
     case 'partial':
       return '⚠️';
@@ -339,17 +546,17 @@ const canImport = computed(() => {
            parsedMessages.value.length > 0 && 
            importErrors.value.length === 0;
   } else {
-    // For ChatGPT and others: need text input, parsed messages, and no errors
+    // For ChatGPT, Claude, Gemini, Grok and others: need text input, parsed messages, and no errors
     return importText.value.trim().length > 0 && 
            parsedMessages.value.length > 0 && 
            importErrors.value.length === 0;
   }
 });
 
-// Watch for changes in import text (ChatGPT only)
+// Watch for changes in import text (ChatGPT, Claude, Gemini, and Grok)
 watch(importText, (newText) => {
-  // Only process if we're on the ChatGPT tab
-  if (activeImportTab.value !== 'chatgpt') {
+  // Only process if we're on a text-based import tab
+  if (!['chatgpt', 'claude', 'gemini', 'grok'].includes(activeImportTab.value)) {
     return;
   }
   
@@ -357,8 +564,16 @@ watch(importText, (newText) => {
     // Detect format
     formatDetection.value = ImportService.detectConversationFormat(newText);
     
-    // Parse the ChatGPT conversation
-    parsedMessages.value = ImportService.parseChatGPTConversation(newText);
+    // Parse the conversation based on the active tab
+    if (activeImportTab.value === 'chatgpt') {
+      parsedMessages.value = ImportService.parseChatGPTConversation(newText);
+    } else if (activeImportTab.value === 'claude') {
+      parsedMessages.value = ImportService.parseClaudeConversation(newText);
+    } else if (activeImportTab.value === 'gemini') {
+      parsedMessages.value = ImportService.parseGeminiConversation(newText);
+    } else if (activeImportTab.value === 'grok') {
+      parsedMessages.value = ImportService.parseGrokConversation(newText);
+    }
     
     // Validate the parsed messages
     const validation = ImportService.validateMessages(parsedMessages.value);
@@ -640,6 +855,204 @@ const importCursor = async () => {
     importSuccess.value = false;
   }
 };
+
+const importClaude = async () => {
+  if (!canImport.value || isImporting.value) return;
+  
+  try {
+    isImporting.value = true;
+    isCreatingThread.value = true;
+    importSuccess.value = false;
+    
+    // Update loading messages for import
+    loadingMessage.value = `Importing ${parsedMessages.value.length} messages...`;
+    loadingSubmessage.value = 'Processing your Claude conversation';
+    
+    // Import the conversation
+    const result = await ImportService.importClaudeConversation(
+      parsedMessages.value,
+      null
+    );
+    
+    if (result.success && result.thread_id) {
+      // Show success animation
+      importSuccess.value = true;
+      loadingMessage.value = 'Import Successful!';
+      loadingSubmessage.value = 'Redirecting to your imported conversation...';
+      
+      // Wait a moment to show the success animation
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Navigate to the imported thread
+      router.replace({ path: `/messages/${result.thread_id}` });
+      
+      // Show success message
+      store.commit('ui/SET_SUCCESS', `Successfully imported ${result.message_count} messages`);
+    } else {
+      throw new Error('Import returned unexpected result');
+    }
+  } catch (error) {
+    console.error('Import failed:', error);
+    
+    // Show detailed error message based on error type
+    let errorMessage = 'Failed to import conversation';
+    
+    if (error.response?.status === 429) {
+      // Rate limit error
+      errorMessage = error.response.data?.detail || 'You have exceeded the import rate limit. Please try again later.';
+    } else if (error.response?.status === 403) {
+      // Permission error
+      errorMessage = 'You do not have permission to import conversations. Only whitelisted users and admins can import.';
+    } else if (error.response?.status === 400) {
+      // Validation error
+      errorMessage = error.response.data?.detail || 'Invalid conversation format.';
+    } else if (error.response?.data?.detail) {
+      // Other API errors
+      errorMessage = error.response.data.detail;
+    } else if (error.message) {
+      // JS errors
+      errorMessage = error.message;
+    }
+    
+    store.commit('ui/SET_ERROR', errorMessage);
+    
+    isImporting.value = false;
+    isCreatingThread.value = false;
+    importSuccess.value = false;
+  }
+};
+
+const importGemini = async () => {
+  if (!canImport.value || isImporting.value) return;
+  
+  try {
+    isImporting.value = true;
+    isCreatingThread.value = true;
+    importSuccess.value = false;
+    
+    // Update loading messages for import
+    loadingMessage.value = `Importing ${parsedMessages.value.length} messages...`;
+    loadingSubmessage.value = 'Processing your Gemini conversation';
+    
+    // Import the conversation
+    const result = await ImportService.importGeminiConversation(
+      parsedMessages.value,
+      null
+    );
+    
+    if (result.success && result.thread_id) {
+      // Show success animation
+      importSuccess.value = true;
+      loadingMessage.value = 'Import Successful!';
+      loadingSubmessage.value = 'Redirecting to your imported conversation...';
+      
+      // Wait a moment to show the success animation
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Navigate to the imported thread
+      router.replace({ path: `/messages/${result.thread_id}` });
+      
+      // Show success message
+      store.commit('ui/SET_SUCCESS', `Successfully imported ${result.message_count} messages`);
+    } else {
+      throw new Error('Import returned unexpected result');
+    }
+  } catch (error) {
+    console.error('Import failed:', error);
+    
+    // Show detailed error message based on error type
+    let errorMessage = 'Failed to import conversation';
+    
+    if (error.response?.status === 429) {
+      // Rate limit error
+      errorMessage = error.response.data?.detail || 'You have exceeded the import rate limit. Please try again later.';
+    } else if (error.response?.status === 403) {
+      // Permission error
+      errorMessage = 'You do not have permission to import conversations. Only whitelisted users and admins can import.';
+    } else if (error.response?.status === 400) {
+      // Validation error
+      errorMessage = error.response.data?.detail || 'Invalid conversation format.';
+    } else if (error.response?.data?.detail) {
+      // Other API errors
+      errorMessage = error.response.data.detail;
+    } else if (error.message) {
+      // JS errors
+      errorMessage = error.message;
+    }
+    
+    store.commit('ui/SET_ERROR', errorMessage);
+    
+    isImporting.value = false;
+    isCreatingThread.value = false;
+    importSuccess.value = false;
+  }
+};
+
+const importGrok = async () => {
+  if (!canImport.value || isImporting.value) return;
+  
+  try {
+    isImporting.value = true;
+    isCreatingThread.value = true;
+    importSuccess.value = false;
+    
+    // Update loading messages for import
+    loadingMessage.value = `Importing ${parsedMessages.value.length} messages...`;
+    loadingSubmessage.value = 'Processing your Grok conversation';
+    
+    // Import the conversation
+    const result = await ImportService.importGrokConversation(
+      parsedMessages.value,
+      null
+    );
+    
+    if (result.success && result.thread_id) {
+      // Show success animation
+      importSuccess.value = true;
+      loadingMessage.value = 'Import Successful!';
+      loadingSubmessage.value = 'Redirecting to your imported conversation...';
+      
+      // Wait a moment to show the success animation
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Navigate to the imported thread
+      router.replace({ path: `/messages/${result.thread_id}` });
+      
+      // Show success message
+      store.commit('ui/SET_SUCCESS', `Successfully imported ${result.message_count} messages`);
+    } else {
+      throw new Error('Import returned unexpected result');
+    }
+  } catch (error) {
+    console.error('Import failed:', error);
+    
+    // Show detailed error message based on error type
+    let errorMessage = 'Failed to import conversation';
+    
+    if (error.response?.status === 429) {
+      // Rate limit error
+      errorMessage = error.response.data?.detail || 'You have exceeded the import rate limit. Please try again later.';
+    } else if (error.response?.status === 403) {
+      // Permission error
+      errorMessage = 'You do not have permission to import conversations. Only whitelisted users and admins can import.';
+    } else if (error.response?.status === 400) {
+      // Validation error
+      errorMessage = error.response.data?.detail || 'Invalid conversation format.';
+    } else if (error.response?.data?.detail) {
+      // Other API errors
+      errorMessage = error.response.data.detail;
+    } else if (error.message) {
+      // JS errors
+      errorMessage = error.message;
+    }
+    
+    store.commit('ui/SET_ERROR', errorMessage);
+    
+    isImporting.value = false;
+    isCreatingThread.value = false;
+    importSuccess.value = false;
+  }
+};
 </script>
 
 <style scoped>
@@ -841,6 +1254,7 @@ const importCursor = async () => {
   background-color: rgba(255, 193, 7, 0.1);
   border: 1px solid rgba(255, 193, 7, 0.3);
   border-radius: var(--radius-xs);
+  text-align: center;
 }
 
 /* Import content container - simplified since we're not doing side-by-side anymore */
@@ -1342,7 +1756,7 @@ const importCursor = async () => {
   border-radius: var(--radius-sm);
   font-family: monospace;
   font-size: var(--font-size-sm);
-  resize: vertical;
+  resize: none;
   background-color: var(--color-surface);
   color: var(--color-text);
   margin-bottom: var(--space-md);

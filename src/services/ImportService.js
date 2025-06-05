@@ -454,6 +454,9 @@ class ImportService {
       'You:': 0,
       'ChatGPT:': 0,
       'Cursor:': 0,
+      'Claude:': 0,
+      'Gemini:': 0,
+      'Grok:': 0,
       'ChatGPT said:': 0,
       'User:': 0,
       'Assistant:': 0,
@@ -461,7 +464,10 @@ class ImportService {
       'AI:': 0,
       'Me:': 0,
       'Thought for': 0,
-      'markdown_headers': 0
+      'markdown_headers': 0,
+      'Edit': 0,  // Claude's Edit marker
+      'Sources': 0,  // Gemini's Sources marker
+      'web pages': 0  // Grok's metadata marker
     };
     
     lines.forEach(line => {
@@ -473,6 +479,21 @@ class ImportService {
           }
         } else if (pattern === 'Thought for') {
           if (/^Thought for .+$/i.test(trimmed)) {
+            patterns[pattern]++;
+          }
+        } else if (pattern === 'Edit') {
+          // Match "Edit" on its own line (Claude's response marker)
+          if (/^Edit\s*$/i.test(trimmed)) {
+            patterns[pattern]++;
+          }
+        } else if (pattern === 'Sources') {
+          // Match "Sources" on its own line (Gemini's sources marker)
+          if (/^Sources\s*$/i.test(trimmed)) {
+            patterns[pattern]++;
+          }
+        } else if (pattern === 'web pages') {
+          // Match "X web pages" pattern (Grok's metadata marker)
+          if (/\d+\s+web\s+pages?/i.test(trimmed)) {
             patterns[pattern]++;
           }
         } else if (pattern === 'markdown_headers') {
@@ -528,6 +549,65 @@ class ImportService {
       };
     }
     
+    if (patterns['You:'] > 0 && patterns['Claude:'] > 0) {
+      return {
+        format: 'claude',
+        confidence: 1.0,
+        hint: 'Ready to import!'
+      };
+    }
+    
+    if (patterns['You:'] > 0 && patterns['Gemini:'] > 0) {
+      return {
+        format: 'gemini',
+        confidence: 1.0,
+        hint: 'Ready to import!'
+      };
+    }
+    
+    if (patterns['You:'] > 0 && patterns['Grok:'] > 0) {
+      return {
+        format: 'grok',
+        confidence: 1.0,
+        hint: 'Ready to import!'
+      };
+    }
+    
+    if (patterns['Human:'] > 0 && (patterns['Assistant:'] > 0 || patterns['Claude:'] > 0)) {
+      return {
+        format: 'claude',
+        confidence: 1.0,
+        hint: 'Ready to import!'
+      };
+    }
+    
+    // Check for Claude "Edit" format
+    if (patterns['Edit'] > 0) {
+      return {
+        format: 'claude',
+        confidence: 1.0,
+        hint: 'Ready to import!'
+      };
+    }
+    
+    // Check for Gemini "Sources" format or content patterns
+    if (patterns['Sources'] > 0 || this.detectGeminiContent(text)) {
+      return {
+        format: 'gemini',
+        confidence: 0.8,
+        hint: 'Ready to import!'
+      };
+    }
+    
+    // Check for Grok "web pages" format or content patterns
+    if (patterns['web pages'] > 0 || this.detectGrokContent(text)) {
+      return {
+        format: 'grok',
+        confidence: 0.8,
+        hint: 'Ready to import!'
+      };
+    }
+    
     // Check for markdown conversation format
     if (patterns['markdown_headers'] > 1) {
       return {
@@ -561,6 +641,117 @@ class ImportService {
     };
   }
   
+  /**
+   * Import a Claude conversation
+   * @param {Array} messages - Array of message objects with role and content
+   * @param {String} title - Optional title for the imported thread
+   * @param {String} description - Optional description
+   * @returns {Promise} - API response with thread_id
+   */
+  async importClaudeConversation(messages, title = null, description = null) {
+    const headers = await getAuthHeaders();
+    
+    const importData = {
+      messages: messages,
+      title: title || 'Imported Claude Conversation',
+      description: description
+    };
+    
+    console.log('[ImportService] Importing Claude conversation:', {
+      messageCount: messages.length,
+      title: title,
+      hasDescription: !!description
+    });
+    
+    try {
+      const response = await axios.post(
+        `${apiBaseUrl}/messages/import/claude`,
+        importData,
+        { headers }
+      );
+      
+      console.log('[ImportService] Import successful:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('[ImportService] Import failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Import a Gemini conversation
+   * @param {Array} messages - Array of message objects with role and content
+   * @param {String} title - Optional title for the imported thread
+   * @param {String} description - Optional description
+   * @returns {Promise} - API response with thread_id
+   */
+  async importGeminiConversation(messages, title = null, description = null) {
+    const headers = await getAuthHeaders();
+    
+    const importData = {
+      messages: messages,
+      title: title || 'Imported Gemini Conversation',
+      description: description
+    };
+    
+    console.log('[ImportService] Importing Gemini conversation:', {
+      messageCount: messages.length,
+      title: title,
+      hasDescription: !!description
+    });
+    
+    try {
+      const response = await axios.post(
+        `${apiBaseUrl}/messages/import/gemini`,
+        importData,
+        { headers }
+      );
+      
+      console.log('[ImportService] Import successful:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('[ImportService] Import failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Import a Grok conversation
+   * @param {Array} messages - Array of message objects with role and content
+   * @param {String} title - Optional title for the imported thread
+   * @param {String} description - Optional description
+   * @returns {Promise} - API response with thread_id
+   */
+  async importGrokConversation(messages, title = null, description = null) {
+    const headers = await getAuthHeaders();
+    
+    const importData = {
+      messages: messages,
+      title: title || 'Imported Grok Conversation',
+      description: description
+    };
+    
+    console.log('[ImportService] Importing Grok conversation:', {
+      messageCount: messages.length,
+      title: title,
+      hasDescription: !!description
+    });
+    
+    try {
+      const response = await axios.post(
+        `${apiBaseUrl}/messages/import/grok`,
+        importData,
+        { headers }
+      );
+      
+      console.log('[ImportService] Import successful:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('[ImportService] Import failed:', error);
+      throw error;
+    }
+  }
+
   /**
    * Import a Cursor conversation
    * @param {Array} messages - Array of message objects with role and content
@@ -601,6 +792,1106 @@ class ImportService {
     }
   }
   
+  /**
+   * Parse Claude conversation text into message objects
+   * @param {String} text - The conversation text to parse
+   * @returns {Array} - Array of message objects
+   */
+  parseClaudeConversation(text) {
+    // Check for common Claude conversation patterns
+    
+    // Pattern 1: "Human:" and "Assistant:" markers (most common)
+    if (text.includes('Human:') || text.includes('Assistant:')) {
+      return this.parseClaudeStandardFormat(text);
+    }
+    
+    // Pattern 2: Try explicit "You:" and "Claude:" markers
+    if (text.includes('You:') && text.includes('Claude:')) {
+      return this.parseClaudeExplicitFormat(text);
+    }
+    
+    // Pattern 3: Use generic user/assistant parsing
+    if (text.includes('User:') || text.includes('Assistant:')) {
+      return this.parseStandardFormat(text);
+    }
+    
+    // Pattern 4: Simple conversation - split by paragraphs and detect roles
+    return this.parseClaudeSimpleFormat(text);
+  }
+
+  /**
+   * Parse Claude conversation with "Human:" and "Assistant:" markers
+   * @param {String} text - The conversation text to parse
+   * @returns {Array} - Array of message objects
+   */
+  parseClaudeStandardFormat(text) {
+    const messages = [];
+    const lines = text.split('\n');
+    let currentMessage = null;
+    
+    const humanPatterns = [
+      /^Human:\s*/i,
+      /^Human$/i
+    ];
+    
+    const assistantPatterns = [
+      /^Assistant:\s*/i,
+      /^Assistant$/i,
+      /^Claude:\s*/i,
+      /^Claude$/i
+    ];
+    
+    const cleanContent = (line, patterns) => {
+      for (const pattern of patterns) {
+        if (pattern.test(line)) {
+          return line.replace(pattern, '').trim();
+        }
+      }
+      return line.trim();
+    };
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmedLine = line.trim();
+      
+      // Skip empty lines between messages
+      if (!trimmedLine && !currentMessage) continue;
+      
+      // Check if this is a human/user message
+      const isHumanMessage = humanPatterns.some(pattern => pattern.test(trimmedLine));
+      if (isHumanMessage) {
+        // Save previous message if exists
+        if (currentMessage) {
+          currentMessage.content = currentMessage.content.trim();
+          if (currentMessage.content) {
+            messages.push(currentMessage);
+          }
+        }
+        
+        // Start new user message
+        currentMessage = {
+          role: 'user',
+          content: cleanContent(trimmedLine, humanPatterns)
+        };
+        continue;
+      }
+      
+      // Check if this is an assistant message
+      const isAssistantMessage = assistantPatterns.some(pattern => pattern.test(trimmedLine));
+      if (isAssistantMessage) {
+        // Save previous message if exists
+        if (currentMessage) {
+          currentMessage.content = currentMessage.content.trim();
+          if (currentMessage.content) {
+            messages.push(currentMessage);
+          }
+        }
+        
+        // Start new assistant message
+        currentMessage = {
+          role: 'assistant',
+          content: cleanContent(trimmedLine, assistantPatterns)
+        };
+        continue;
+      }
+      
+      // If we have a current message, add this line to its content
+      if (currentMessage) {
+        if (currentMessage.content) {
+          currentMessage.content += '\n' + line;
+        } else {
+          currentMessage.content = line;
+        }
+      } else if (trimmedLine) {
+        // If no current message but we have content, start a user message
+        currentMessage = {
+          role: 'user',
+          content: line
+        };
+      }
+    }
+    
+    // Don't forget the last message
+    if (currentMessage) {
+      currentMessage.content = currentMessage.content.trim();
+      if (currentMessage.content) {
+        messages.push(currentMessage);
+      }
+    }
+    
+    return messages;
+  }
+
+  /**
+   * Parse Claude conversation with explicit "You:" and "Claude:" markers
+   * @param {String} text - The conversation text to parse
+   * @returns {Array} - Array of message objects
+   */
+  parseClaudeExplicitFormat(text) {
+    const messages = [];
+    const lines = text.split('\n');
+    let currentMessage = null;
+    
+    const userPatterns = [
+      /^You:\s*/i,
+      /^You$/i
+    ];
+    
+    const claudePatterns = [
+      /^Claude:\s*/i,
+      /^Claude$/i
+    ];
+    
+    const cleanContent = (line, patterns) => {
+      for (const pattern of patterns) {
+        if (pattern.test(line)) {
+          return line.replace(pattern, '').trim();
+        }
+      }
+      return line.trim();
+    };
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmedLine = line.trim();
+      
+      // Skip empty lines between messages
+      if (!trimmedLine && !currentMessage) continue;
+      
+      // Check if this is a user message
+      const isUserMessage = userPatterns.some(pattern => pattern.test(trimmedLine));
+      if (isUserMessage) {
+        // Save previous message if exists
+        if (currentMessage) {
+          currentMessage.content = currentMessage.content.trim();
+          if (currentMessage.content) {
+            messages.push(currentMessage);
+          }
+        }
+        
+        // Start new user message
+        currentMessage = {
+          role: 'user',
+          content: cleanContent(trimmedLine, userPatterns)
+        };
+        continue;
+      }
+      
+      // Check if this is a Claude message
+      const isClaudeMessage = claudePatterns.some(pattern => pattern.test(trimmedLine));
+      if (isClaudeMessage) {
+        // Save previous message if exists
+        if (currentMessage) {
+          currentMessage.content = currentMessage.content.trim();
+          if (currentMessage.content) {
+            messages.push(currentMessage);
+          }
+        }
+        
+        // Start new assistant message
+        currentMessage = {
+          role: 'assistant',
+          content: cleanContent(trimmedLine, claudePatterns)
+        };
+        continue;
+      }
+      
+      // If we have a current message, add this line to its content
+      if (currentMessage) {
+        if (currentMessage.content) {
+          currentMessage.content += '\n' + line;
+        } else {
+          currentMessage.content = line;
+        }
+      } else if (trimmedLine) {
+        // If no current message but we have content, start a user message
+        currentMessage = {
+          role: 'user',
+          content: line
+        };
+      }
+    }
+    
+    // Don't forget the last message
+    if (currentMessage) {
+      currentMessage.content = currentMessage.content.trim();
+      if (currentMessage.content) {
+        messages.push(currentMessage);
+      }
+    }
+    
+    return messages;
+  }
+
+  /**
+   * Parse simple Claude conversation format using "Edit" markers
+   * @param {String} text - The conversation text to parse
+   * @returns {Array} - Array of message objects
+   */
+  parseClaudeSimpleFormat(text) {
+    const messages = [];
+    
+    // Check if text contains "Edit" markers (Claude's response indicator)
+    if (text.includes('\nEdit\n') || text.includes('Edit\n')) {
+      return this.parseClaudeEditFormat(text);
+    }
+    
+    // Fall back to content-based parsing for conversations without Edit markers
+    return this.parseClaudeContentBasedFormat(text);
+  }
+
+  /**
+   * Parse Claude conversation using "Edit" markers as role indicators
+   * @param {String} text - The conversation text to parse
+   * @returns {Array} - Array of message objects
+   */
+  parseClaudeEditFormat(text) {
+    const messages = [];
+    
+    // Split by "Edit" markers, but keep track of positions
+    const editMarkerRegex = /^Edit$/m;
+    const parts = text.split(editMarkerRegex);
+    
+    // The first part before any "Edit" marker is the initial user message
+    if (parts[0] && parts[0].trim()) {
+      messages.push({
+        role: 'user',
+        content: parts[0].trim()
+      });
+    }
+    
+    // Process remaining parts - they alternate between Claude responses and user messages
+    for (let i = 1; i < parts.length; i++) {
+      const part = parts[i].trim();
+      if (!part) continue;
+      
+      // Each part after "Edit" starts with a Claude response
+      // We need to check if there's a follow-up user question in the same part
+      
+      // Split by multiple newlines to find potential conversation breaks
+      const segments = part.split(/\n\s*\n\s*\n+/).filter(segment => segment.trim());
+      
+      if (segments.length === 1) {
+        // Only Claude response, no follow-up question
+        messages.push({
+          role: 'assistant',
+          content: segments[0].trim()
+        });
+      } else if (segments.length > 1) {
+        // Likely Claude response followed by user question(s)
+        // First segment is always Claude response
+        messages.push({
+          role: 'assistant',
+          content: segments[0].trim()
+        });
+        
+        // Check remaining segments for user questions
+        for (let j = 1; j < segments.length; j++) {
+          const segment = segments[j].trim();
+          if (!segment) continue;
+          
+          // This is likely a user question/follow-up
+          messages.push({
+            role: 'user',
+            content: segment
+          });
+        }
+      }
+    }
+    
+    return messages;
+  }
+
+  /**
+   * Parse Claude conversation without Edit markers (fallback method)
+   * @param {String} text - The conversation text to parse
+   * @returns {Array} - Array of message objects
+   */
+  parseClaudeContentBasedFormat(text) {
+    // Split by triple newlines first (stronger separator)
+    let blocks = text.split(/\n\s*\n\s*\n/).filter(block => block.trim());
+    
+    // If no triple newlines, try double newlines but be more selective
+    if (blocks.length <= 1) {
+      blocks = text.split(/\n\s*\n/).filter(block => block.trim());
+    }
+    
+    if (blocks.length === 0) {
+      return [];
+    }
+    
+    // If only one block, treat as user message
+    if (blocks.length === 1) {
+      return [{
+        role: 'user',
+        content: blocks[0].trim()
+      }];
+    }
+    
+    // For two blocks, check if first is a question and second is a long answer
+    if (blocks.length === 2) {
+      const firstBlock = blocks[0].trim();
+      const secondBlock = blocks[1].trim();
+      
+      // If first block is short and contains question words, and second is long
+      if (firstBlock.length < 200 && 
+          (firstBlock.includes('?') || 
+           /\b(tell me|what|how|where|when|why|can you|please)\b/i.test(firstBlock)) &&
+          secondBlock.length > firstBlock.length * 2) {
+        
+        return [
+          { role: 'user', content: firstBlock },
+          { role: 'assistant', content: secondBlock }
+        ];
+      }
+    }
+    
+    // For multiple blocks, use content-based role detection
+    const messages = [];
+    let currentRole = 'user'; // Start with user
+    let currentContent = '';
+    
+    for (let i = 0; i < blocks.length; i++) {
+      const content = blocks[i].trim();
+      if (!content) continue;
+      
+      const lowerContent = content.toLowerCase();
+      
+      // Strong indicators for assistant responses
+      const strongAssistantIndicators = [
+        'refers to the',
+        'key improvements',
+        'common issues',
+        'best regions',
+        'what to prioritize',
+        'geographic buying considerations',
+        'regions to approach cautiously',
+        'you\'ve asked',
+        'let me break this down',
+        'that\'s deeply personal'
+      ];
+      
+      // Strong indicators for user messages
+      const strongUserIndicators = [
+        '?',
+        'tell me about',
+        'where should i',
+        'how do i',
+        'can you help',
+        'please explain',
+        'what is the most important'
+      ];
+      
+      const hasStrongAssistant = strongAssistantIndicators.some(pattern => 
+        lowerContent.includes(pattern)
+      );
+      const hasStrongUser = strongUserIndicators.some(pattern => 
+        lowerContent.includes(pattern)
+      );
+      
+      // Determine if this should start a new message or continue current one
+      let shouldStartNew = false;
+      let newRole = currentRole;
+      
+      if (i === 0) {
+        // First block - determine initial role
+        newRole = hasStrongUser || (!hasStrongAssistant && content.length < 200) ? 'user' : 'assistant';
+        shouldStartNew = true;
+      } else if (hasStrongUser && currentRole !== 'user') {
+        // Strong user indicator and we're not already in user mode
+        newRole = 'user';
+        shouldStartNew = true;
+      } else if (hasStrongAssistant && currentRole !== 'assistant') {
+        // Strong assistant indicator and we're not already in assistant mode
+        newRole = 'assistant';
+        shouldStartNew = true;
+      } else if (currentRole === 'user' && content.length > 300 && !hasStrongUser) {
+        // Long content after user message, likely assistant response
+        newRole = 'assistant';
+        shouldStartNew = true;
+      } else {
+        // Continue current message
+        shouldStartNew = false;
+      }
+      
+      if (shouldStartNew && currentContent) {
+        // Save previous message
+        messages.push({
+          role: currentRole,
+          content: currentContent.trim()
+        });
+        currentContent = '';
+      }
+      
+      // Add content to current message
+      if (currentContent) {
+        currentContent += '\n\n' + content;
+      } else {
+        currentContent = content;
+      }
+      
+      if (shouldStartNew) {
+        currentRole = newRole;
+      }
+    }
+    
+    // Don't forget the last message
+    if (currentContent.trim()) {
+      messages.push({
+        role: currentRole,
+        content: currentContent.trim()
+      });
+    }
+    
+    return messages;
+  }
+
+  /**
+   * Parse Gemini conversation text into message objects
+   * @param {String} text - The conversation text to parse
+   * @returns {Array} - Array of message objects
+   */
+  parseGeminiConversation(text) {
+    // Check if this uses explicit "You:" / "Gemini:" format
+    if (text.includes('You:') && text.includes('Gemini:')) {
+      return this.parseGeminiExplicitFormat(text);
+    }
+    
+    // Check if this uses "User:" / "Assistant:" format
+    if (text.includes('User:') && text.includes('Assistant:')) {
+      return this.parseStandardFormat(text);
+    }
+    
+    // Otherwise use simple format parsing (most common for Gemini)
+    return this.parseGeminiSimpleFormat(text);
+  }
+
+  /**
+   * Parse Gemini conversation with explicit "You:" / "Gemini:" markers
+   * @param {String} text - The conversation text to parse
+   * @returns {Array} - Array of message objects
+   */
+  parseGeminiExplicitFormat(text) {
+    const messages = [];
+    const lines = text.split('\n');
+    
+    const cleanContent = (line, patterns) => {
+      let cleaned = line;
+      patterns.forEach(pattern => {
+        cleaned = cleaned.replace(new RegExp(`^${pattern}\\s*`, 'i'), '');
+      });
+      return cleaned.trim();
+    };
+    
+    let currentMessage = null;
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        if (currentMessage && currentMessage.content) {
+          currentMessage.content += '\n';
+        }
+        continue;
+      }
+      
+      // Check for role markers
+      if (/^You:\s*/i.test(trimmed)) {
+        // Save previous message
+        if (currentMessage && currentMessage.content.trim()) {
+          messages.push({
+            role: currentMessage.role,
+            content: currentMessage.content.trim()
+          });
+        }
+        
+        // Start new user message
+        currentMessage = {
+          role: 'user',
+          content: cleanContent(trimmed, ['You:'])
+        };
+      } else if (/^Gemini:\s*/i.test(trimmed)) {
+        // Save previous message
+        if (currentMessage && currentMessage.content.trim()) {
+          messages.push({
+            role: currentMessage.role,
+            content: currentMessage.content.trim()
+          });
+        }
+        
+        // Start new assistant message
+        currentMessage = {
+          role: 'assistant',
+          content: cleanContent(trimmed, ['Gemini:'])
+        };
+      } else if (currentMessage) {
+        // Continue current message
+        if (currentMessage.content) {
+          currentMessage.content += '\n' + trimmed;
+        } else {
+          currentMessage.content = trimmed;
+        }
+      } else {
+        // No current message, assume this is the start of a user message
+        currentMessage = {
+          role: 'user',
+          content: trimmed
+        };
+      }
+    }
+    
+    // Don't forget the last message
+    if (currentMessage && currentMessage.content.trim()) {
+      messages.push({
+        role: currentMessage.role,
+        content: currentMessage.content.trim()
+      });
+    }
+    
+    return messages;
+  }
+
+  /**
+   * Parse simple Gemini conversation format (no explicit markers)
+   * @param {String} text - The conversation text to parse
+   * @returns {Array} - Array of message objects
+   */
+  parseGeminiSimpleFormat(text) {
+    const messages = [];
+    
+    // Split by multiple newlines to get conversation blocks
+    let blocks = text.split(/\n\s*\n\s*\n+/).filter(block => block.trim());
+    
+    // If no triple newlines, try double newlines
+    if (blocks.length <= 1) {
+      blocks = text.split(/\n\s*\n/).filter(block => block.trim());
+    }
+    
+    if (blocks.length === 0) {
+      return [];
+    }
+    
+    // Post-process blocks to merge "Sources" sections with preceding assistant responses
+    const processedBlocks = [];
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i].trim();
+      
+      // Check if this block is just "Sources" or similar metadata
+      if (/^Sources\s*$/i.test(block) || 
+          /^Sources\s*\n*$/i.test(block) ||
+          block.toLowerCase() === 'sources') {
+        
+        // Merge with the previous block if it exists and looks like an assistant response
+        if (processedBlocks.length > 0) {
+          const prevBlock = processedBlocks[processedBlocks.length - 1];
+          // Only merge if previous block is long (likely assistant response)
+          if (prevBlock.length > 200) {
+            processedBlocks[processedBlocks.length - 1] = prevBlock + '\n\n' + block;
+            continue;
+          }
+        }
+      }
+      
+      processedBlocks.push(block);
+    }
+    
+    // If only one block, treat as user message
+    if (processedBlocks.length === 1) {
+      return [{
+        role: 'user',
+        content: processedBlocks[0].trim()
+      }];
+    }
+    
+    // For Gemini, conversations typically alternate: user question, Gemini response, user question, etc.
+    // Use content analysis to determine roles
+    let currentRole = 'user'; // Start with user
+    
+    for (let i = 0; i < processedBlocks.length; i++) {
+      const content = processedBlocks[i].trim();
+      if (!content) continue;
+      
+      const lowerContent = content.toLowerCase();
+      
+      // Strong indicators for Gemini responses (assistant)
+      const strongAssistantIndicators = [
+        'here\'s a breakdown',
+        'important note',
+        'estimated cost',
+        'description:',
+        'benefits:',
+        'why it\'s',
+        'sources',
+        'remember,',
+        'always get',
+        'good luck',
+        'you\'re hitting on',
+        'this is a popular',
+        'manufacturers like'
+      ];
+      
+      // Strong indicators for user messages
+      const strongUserIndicators = [
+        '?',
+        'tell me about',
+        'what about',
+        'how much',
+        'should i',
+        'can you',
+        'please',
+        'lets create',
+        'what mods'
+      ];
+      
+      const hasStrongAssistant = strongAssistantIndicators.some(pattern => 
+        lowerContent.includes(pattern)
+      );
+      const hasStrongUser = strongUserIndicators.some(pattern => 
+        lowerContent.includes(pattern)
+      );
+      
+      // Special case: if this block is very short and just says "sources", 
+      // it should have been merged already, but if not, skip it
+      if (/^sources\s*$/i.test(content) && content.length < 20) {
+        continue;
+      }
+      
+      // Determine role for this block
+      let blockRole = currentRole;
+      
+      if (i === 0) {
+        // First block - usually user question
+        blockRole = hasStrongUser || (!hasStrongAssistant && content.length < 300) ? 'user' : 'assistant';
+      } else {
+        // For subsequent blocks, use strong indicators or alternate pattern
+        if (hasStrongUser && !hasStrongAssistant) {
+          blockRole = 'user';
+        } else if (hasStrongAssistant && !hasStrongUser) {
+          blockRole = 'assistant';
+        } else if (currentRole === 'user' && content.length > 500) {
+          // Long content after user message, likely assistant response
+          blockRole = 'assistant';
+        } else if (currentRole === 'assistant' && content.length < 300 && content.includes('?')) {
+          // Short question after assistant response, likely user
+          blockRole = 'user';
+        } else {
+          // Default to alternating pattern
+          blockRole = currentRole === 'user' ? 'assistant' : 'user';
+        }
+      }
+      
+      // Check if we should merge this with the previous message of the same role
+      if (messages.length > 0 && messages[messages.length - 1].role === blockRole) {
+        // Merge with previous message of same role
+        messages[messages.length - 1].content += '\n\n' + content;
+      } else {
+        // Create new message
+        messages.push({
+          role: blockRole,
+          content: content
+        });
+      }
+      
+      currentRole = blockRole;
+    }
+    
+    return messages;
+  }
+
+  /**
+   * Parse Grok conversation text into message objects
+   * @param {String} text - The conversation text to parse
+   * @returns {Array} - Array of message objects
+   */
+  parseGrokConversation(text) {
+    // Check if this uses explicit "You:" / "Grok:" format
+    if (text.includes('You:') && text.includes('Grok:')) {
+      return this.parseGrokExplicitFormat(text);
+    }
+    
+    // Check if this uses "User:" / "Assistant:" format
+    if (text.includes('User:') && text.includes('Assistant:')) {
+      return this.parseStandardFormat(text);
+    }
+    
+    // Otherwise use simple format parsing (most common for Grok)
+    return this.parseGrokSimpleFormat(text);
+  }
+
+  /**
+   * Parse Grok conversation with explicit "You:" / "Grok:" markers
+   * @param {String} text - The conversation text to parse
+   * @returns {Array} - Array of message objects
+   */
+  parseGrokExplicitFormat(text) {
+    const messages = [];
+    const lines = text.split('\n');
+    
+    const cleanContent = (line, patterns) => {
+      let cleaned = line;
+      patterns.forEach(pattern => {
+        cleaned = cleaned.replace(new RegExp(`^${pattern}\\s*`, 'i'), '');
+      });
+      return cleaned.trim();
+    };
+    
+    let currentMessage = null;
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        if (currentMessage && currentMessage.content) {
+          currentMessage.content += '\n';
+        }
+        continue;
+      }
+      
+      // Check for role markers
+      if (/^You:\s*/i.test(trimmed)) {
+        // Save previous message
+        if (currentMessage && currentMessage.content.trim()) {
+          messages.push({
+            role: currentMessage.role,
+            content: currentMessage.content.trim()
+          });
+        }
+        
+        // Start new user message
+        currentMessage = {
+          role: 'user',
+          content: cleanContent(trimmed, ['You:'])
+        };
+      } else if (/^Grok:\s*/i.test(trimmed)) {
+        // Save previous message
+        if (currentMessage && currentMessage.content.trim()) {
+          messages.push({
+            role: currentMessage.role,
+            content: currentMessage.content.trim()
+          });
+        }
+        
+        // Start new assistant message
+        currentMessage = {
+          role: 'assistant',
+          content: cleanContent(trimmed, ['Grok:'])
+        };
+      } else if (currentMessage) {
+        // Continue current message
+        if (currentMessage.content) {
+          currentMessage.content += '\n' + trimmed;
+        } else {
+          currentMessage.content = trimmed;
+        }
+      } else {
+        // No current message, assume this is the start of a user message
+        currentMessage = {
+          role: 'user',
+          content: trimmed
+        };
+      }
+    }
+    
+    // Don't forget the last message
+    if (currentMessage && currentMessage.content.trim()) {
+      messages.push({
+        role: currentMessage.role,
+        content: currentMessage.content.trim()
+      });
+    }
+    
+    return messages;
+  }
+
+  /**
+   * Parse simple Grok conversation format (no explicit markers)
+   * @param {String} text - The conversation text to parse
+   * @returns {Array} - Array of message objects
+   */
+  parseGrokSimpleFormat(text) {
+    const messages = [];
+    
+    // First, try to split by multiple newlines to get conversation blocks
+    let blocks = text.split(/\n\s*\n\s*\n+/).filter(block => block.trim());
+    
+    // If no triple newlines, try double newlines
+    if (blocks.length <= 1) {
+      blocks = text.split(/\n\s*\n/).filter(block => block.trim());
+    }
+    
+    // If still only one block, try to split by looking for question patterns followed by long responses
+    if (blocks.length <= 1) {
+      blocks = this.splitGrokConversationByPattern(text);
+    }
+    
+    if (blocks.length === 0) {
+      return [];
+    }
+    
+    // Post-process blocks to merge metadata sections with preceding assistant responses
+    const processedBlocks = [];
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i].trim();
+      
+      // Check if this block is metadata (web pages count, timing info, etc.)
+      const isWebPagesMetadata = /^\d+\s+web\s+pages?\s*$/i.test(block);
+      const isTimingMetadata = /^\d+\.\d+s\s*$/i.test(block);
+      const isCombinedMetadata = /^\d+\s+web\s+pages?\s*\n*\d+\.\d+s\s*$/i.test(block);
+      
+      if (isWebPagesMetadata || isTimingMetadata || isCombinedMetadata) {
+        // Always merge metadata with the previous block if it exists
+        if (processedBlocks.length > 0) {
+          processedBlocks[processedBlocks.length - 1] = processedBlocks[processedBlocks.length - 1] + '\n\n' + block;
+          continue;
+        }
+      }
+      
+      processedBlocks.push(block);
+    }
+    
+    // If only one block, treat as user message
+    if (processedBlocks.length === 1) {
+      return [{
+        role: 'user',
+        content: processedBlocks[0].trim()
+      }];
+    }
+    
+    // For Grok, conversations typically alternate: user question, Grok response, user question, etc.
+    // Use content analysis to determine roles
+    let currentRole = 'user'; // Start with user
+    
+    for (let i = 0; i < processedBlocks.length; i++) {
+      const content = processedBlocks[i].trim();
+      if (!content) continue;
+      
+      const lowerContent = content.toLowerCase();
+      
+      // Strong indicators for Grok responses (assistant)
+      const strongAssistantIndicators = [
+        'deciding whether',
+        'overview of the',
+        'pros of choosing',
+        'cons and challenges',
+        'key considerations',
+        'recommendations',
+        'conclusion',
+        'wear characteristics:',
+        'lifespan:',
+        'failure cost:',
+        'mileage concern:',
+        'would you like me to search',
+        'alternatively, i can generate',
+        'data is drawn from'
+      ];
+      
+      // Strong indicators for user messages
+      const strongUserIndicators = [
+        '?',
+        'i want to get',
+        'help me decided',
+        'lets come up with',
+        'what should i',
+        'can you',
+        'please',
+        'how much',
+        'should i'
+      ];
+      
+      const hasStrongAssistant = strongAssistantIndicators.some(pattern => 
+        lowerContent.includes(pattern)
+      );
+      const hasStrongUser = strongUserIndicators.some(pattern => 
+        lowerContent.includes(pattern)
+      );
+      
+      // Special case: if this block is very short metadata, skip it
+      // This handles cases where metadata wasn't properly merged
+      if ((/^\d+\s+web\s+pages?\s*$/i.test(content) || 
+           /^\d+\.\d+s\s*$/i.test(content) ||
+           /^\d+\s+web\s+pages?\s*\n*\d+\.\d+s\s*$/i.test(content)) && 
+          content.length < 100) {
+        continue;
+      }
+      
+      // Determine role for this block
+      let blockRole = currentRole;
+      
+      if (i === 0) {
+        // First block - usually user question
+        blockRole = hasStrongUser || (!hasStrongAssistant && content.length < 300) ? 'user' : 'assistant';
+      } else {
+        // For subsequent blocks, use strong indicators or alternate pattern
+        if (hasStrongUser && !hasStrongAssistant) {
+          blockRole = 'user';
+        } else if (hasStrongAssistant && !hasStrongUser) {
+          blockRole = 'assistant';
+        } else if (currentRole === 'user' && content.length > 500) {
+          // Long content after user message, likely assistant response
+          blockRole = 'assistant';
+        } else if (currentRole === 'assistant' && content.length < 300 && content.includes('?')) {
+          // Short question after assistant response, likely user
+          blockRole = 'user';
+        } else {
+          // Default to alternating pattern
+          blockRole = currentRole === 'user' ? 'assistant' : 'user';
+        }
+      }
+      
+      // Check if we should merge this with the previous message of the same role
+      if (messages.length > 0 && messages[messages.length - 1].role === blockRole) {
+        // Merge with previous message of same role
+        messages[messages.length - 1].content += '\n\n' + content;
+      } else {
+        // Create new message
+        messages.push({
+          role: blockRole,
+          content: content
+        });
+      }
+      
+      currentRole = blockRole;
+    }
+    
+    return messages;
+  }
+
+  /**
+   * Split Grok conversation by pattern recognition when normal splitting fails
+   * @param {String} text - The conversation text to split
+   * @returns {Array} - Array of conversation blocks
+   */
+  splitGrokConversationByPattern(text) {
+    const blocks = [];
+    const lines = text.split('\n');
+    let currentBlock = '';
+    let inLongResponse = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmedLine = line.trim();
+      
+      // Skip metadata lines that should stay with the previous response
+      const isMetadata = /^\d+\s+web\s+pages?\s*$/i.test(trimmedLine) || 
+                        /^\d+\.\d+s\s*$/i.test(trimmedLine);
+      
+      // Check if this looks like the start of a new user question
+      // (short line with question words, after we've been in a long response)
+      if (inLongResponse && trimmedLine.length > 0 && trimmedLine.length < 200 && !isMetadata) {
+        const lowerLine = trimmedLine.toLowerCase();
+        const hasQuestionWords = /\b(lets?|what|how|where|when|why|can you|should i|help me|tell me)\b/i.test(lowerLine);
+        const hasQuestionMark = trimmedLine.includes('?');
+        
+        if (hasQuestionWords || hasQuestionMark) {
+          // This looks like a new user question - save the previous block
+          if (currentBlock.trim()) {
+            blocks.push(currentBlock.trim());
+          }
+          currentBlock = line;
+          inLongResponse = false;
+          continue;
+        }
+      }
+      
+      // Add line to current block
+      if (currentBlock) {
+        currentBlock += '\n' + line;
+      } else {
+        currentBlock = line;
+      }
+      
+      // Check if we're entering a long response (assistant message)
+      if (!inLongResponse && currentBlock.length > 500) {
+        const lowerContent = currentBlock.toLowerCase();
+        const hasAssistantIndicators = [
+          'deciding whether',
+          'overview of the',
+          'pros of choosing',
+          'cons and challenges',
+          'key considerations',
+          'recommendations'
+        ].some(pattern => lowerContent.includes(pattern));
+        
+        if (hasAssistantIndicators) {
+          inLongResponse = true;
+        }
+      }
+    }
+    
+    // Don't forget the last block
+    if (currentBlock.trim()) {
+      blocks.push(currentBlock.trim());
+    }
+    
+    return blocks.length > 1 ? blocks : [text];
+  }
+
+  /**
+   * Detect if text contains Gemini-specific content patterns
+   * @param {String} text - The text to analyze
+   * @returns {Boolean} - True if Gemini patterns are detected
+   */
+  detectGeminiContent(text) {
+    const lowerText = text.toLowerCase();
+    
+    // Gemini-specific patterns
+    const geminiPatterns = [
+      'here\'s a breakdown',
+      'important note on pricing',
+      'estimated cost:',
+      'description:',
+      'why it\'s important:',
+      'sources',
+      'remember, these are ballpark figures',
+      'always get specific quotes',
+      'good luck with your',
+      'you\'re hitting on a key',
+      'manufacturers like',
+      'benefits:'
+    ];
+    
+    // Count how many patterns match
+    const matchCount = geminiPatterns.filter(pattern => 
+      lowerText.includes(pattern)
+    ).length;
+    
+    // If we find multiple Gemini-specific patterns, it's likely Gemini
+    return matchCount >= 2;
+  }
+
+  /**
+   * Detect if text contains Grok-specific content patterns
+   * @param {String} text - The text to analyze
+   * @returns {Boolean} - True if Grok patterns are detected
+   */
+  detectGrokContent(text) {
+    const lowerText = text.toLowerCase();
+    
+    // Grok-specific patterns
+    const grokPatterns = [
+      'deciding whether',
+      'overview of the',
+      'pros of choosing',
+      'cons and challenges',
+      'key considerations',
+      'recommendations',
+      'wear characteristics:',
+      'lifespan:',
+      'failure cost:',
+      'mileage concern:',
+      'would you like me to search',
+      'alternatively, i can generate',
+      'data is drawn from',
+      'web pages'
+    ];
+    
+    // Count how many patterns match
+    const matchCount = grokPatterns.filter(pattern => 
+      lowerText.includes(pattern)
+    ).length;
+    
+    // If we find multiple Grok-specific patterns, it's likely Grok
+    return matchCount >= 2;
+  }
+
   /**
    * Parse Cursor conversation text into message objects
    * Enhanced for markdown file content

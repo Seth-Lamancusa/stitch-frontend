@@ -20,8 +20,8 @@
       <div class="message-header">
         <div class="author-section">
           <div class="author-info">
-            <span class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ authorDisplayName }}</span>
-            <span v-if="authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
+            <span v-if="!isImportedMessage" class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ authorDisplayName }}</span>
+            <span v-if="!isImportedMessage && authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
           </div>
           
           <!-- Public badge - shown for all public messages -->
@@ -487,6 +487,12 @@ export default {
     const authorDisplayName = computed(() => {
       return props.message.author_display_name || '';
     });
+
+    // Check if this is an imported message from an AI system
+    const isImportedMessage = computed(() => {
+      const systemUserTags = ['chatgpt', 'claude', 'gemini', 'grok'];
+      return systemUserTags.includes(props.message.author_user_tag);
+    });
     
     // Get author user tag
     const authorUserTag = computed(() => {
@@ -824,7 +830,8 @@ export default {
       toggleReadStatusOrDropdown,
       truncatedContent,
       isReformatting,
-      handleReformat
+      handleReformat,
+      isImportedMessage
     };
   },
   
