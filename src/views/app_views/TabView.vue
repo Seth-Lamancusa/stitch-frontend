@@ -5,11 +5,11 @@
     <!-- Custom content for cloud tab -->
     <template #content v-if="activeTab === 'cloud'">
       <div class="cloud-tab-container">
-        <!-- Pinned Messages at the top -->
-        <PinnedMessageList />
-        
-        <!-- Message Filters -->
+        <!-- Message Filters at the top -->
         <MessageFilters />
+        
+        <!-- Pinned Messages below filters -->
+        <PinnedMessageList />
         
         <!-- Regular Message List -->
         <MessageList :key="activeTab" />

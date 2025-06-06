@@ -1609,144 +1609,139 @@ class ImportService {
   parseGrokSimpleFormat(text) {
     const messages = [];
     
-    // First, try to split by multiple newlines to get conversation blocks
-    let blocks = text.split(/\n\s*\n\s*\n+/).filter(block => block.trim());
+    // Use a more direct approach for Grok conversations
+    // Split the text into paragraphs and then intelligently group them
+    const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
     
-    // If no triple newlines, try double newlines
-    if (blocks.length <= 1) {
-      blocks = text.split(/\n\s*\n/).filter(block => block.trim());
-    }
-    
-    // If still only one block, try to split by looking for question patterns followed by long responses
-    if (blocks.length <= 1) {
-      blocks = this.splitGrokConversationByPattern(text);
-    }
-    
-    if (blocks.length === 0) {
+    if (paragraphs.length === 0) {
       return [];
     }
     
-    // Post-process blocks to merge metadata sections with preceding assistant responses
-    const processedBlocks = [];
-    for (let i = 0; i < blocks.length; i++) {
-      const block = blocks[i].trim();
-      
-      // Check if this block is metadata (web pages count, timing info, etc.)
-      const isWebPagesMetadata = /^\d+\s+web\s+pages?\s*$/i.test(block);
-      const isTimingMetadata = /^\d+\.\d+s\s*$/i.test(block);
-      const isCombinedMetadata = /^\d+\s+web\s+pages?\s*\n*\d+\.\d+s\s*$/i.test(block);
-      
-      if (isWebPagesMetadata || isTimingMetadata || isCombinedMetadata) {
-        // Always merge metadata with the previous block if it exists
-        if (processedBlocks.length > 0) {
-          processedBlocks[processedBlocks.length - 1] = processedBlocks[processedBlocks.length - 1] + '\n\n' + block;
-          continue;
-        }
-      }
-      
-      processedBlocks.push(block);
-    }
-    
-    // If only one block, treat as user message
-    if (processedBlocks.length === 1) {
+    // If only one paragraph, treat as user message
+    if (paragraphs.length === 1) {
       return [{
         role: 'user',
-        content: processedBlocks[0].trim()
+        content: paragraphs[0].trim()
       }];
     }
     
-    // For Grok, conversations typically alternate: user question, Grok response, user question, etc.
-    // Use content analysis to determine roles
+    // Group paragraphs into conversation blocks
+    const conversationBlocks = [];
+    let currentBlock = '';
+    let isInLongResponse = false;
+    
+    for (let i = 0; i < paragraphs.length; i++) {
+      const paragraph = paragraphs[i].trim();
+      
+      // Skip empty paragraphs
+      if (!paragraph) continue;
+      
+             // Check if this paragraph looks like the start of a new user question
+       const isShortQuestion = paragraph.length < 300 && 
+         (/\b(i want|help me|lets?|what|how|where|when|why|can you|should i|tell me)\b/i.test(paragraph) || 
+          paragraph.includes('?')) &&
+         // Exclude paragraphs that start with markdown headers or bullet points
+         !paragraph.startsWith('**') && 
+         !paragraph.startsWith('- ') &&
+         !paragraph.startsWith('* ');
+      
+      // Check if this paragraph looks like metadata
+      const isMetadata = /^\d+\s+web\s+pages?\s*$/i.test(paragraph) || 
+                        /^\d+\.\d+s\s*$/i.test(paragraph);
+      
+      // If we're in a long response and encounter a short question, start new block
+      if (isInLongResponse && isShortQuestion && !isMetadata) {
+        // Save current block
+        if (currentBlock.trim()) {
+          conversationBlocks.push(currentBlock.trim());
+        }
+        currentBlock = paragraph;
+        isInLongResponse = false;
+      } else {
+        // Add to current block
+        if (currentBlock) {
+          currentBlock += '\n\n' + paragraph;
+        } else {
+          currentBlock = paragraph;
+        }
+        
+        // Check if we're now in a long response
+        if (!isInLongResponse && currentBlock.length > 500) {
+          const lowerContent = currentBlock.toLowerCase();
+          const hasGrokIndicators = [
+            'deciding whether',
+            'overview of the',
+            'pros of choosing',
+            'cons and challenges',
+            'key considerations',
+            'recommendations',
+            'conclusion'
+          ].some(pattern => lowerContent.includes(pattern));
+          
+          if (hasGrokIndicators) {
+            isInLongResponse = true;
+          }
+        }
+      }
+    }
+    
+    // Don't forget the last block
+    if (currentBlock.trim()) {
+      conversationBlocks.push(currentBlock.trim());
+    }
+    
+    // Now convert blocks to messages, alternating roles
     let currentRole = 'user'; // Start with user
     
-    for (let i = 0; i < processedBlocks.length; i++) {
-      const content = processedBlocks[i].trim();
+    for (let i = 0; i < conversationBlocks.length; i++) {
+      const content = conversationBlocks[i].trim();
       if (!content) continue;
       
       const lowerContent = content.toLowerCase();
       
-      // Strong indicators for Grok responses (assistant)
-      const strongAssistantIndicators = [
-        'deciding whether',
-        'overview of the',
-        'pros of choosing',
-        'cons and challenges',
-        'key considerations',
-        'recommendations',
-        'conclusion',
-        'wear characteristics:',
-        'lifespan:',
-        'failure cost:',
-        'mileage concern:',
-        'would you like me to search',
-        'alternatively, i can generate',
-        'data is drawn from'
-      ];
-      
-      // Strong indicators for user messages
-      const strongUserIndicators = [
-        '?',
-        'i want to get',
-        'help me decided',
-        'lets come up with',
-        'what should i',
-        'can you',
-        'please',
-        'how much',
-        'should i'
-      ];
-      
-      const hasStrongAssistant = strongAssistantIndicators.some(pattern => 
-        lowerContent.includes(pattern)
-      );
-      const hasStrongUser = strongUserIndicators.some(pattern => 
-        lowerContent.includes(pattern)
-      );
-      
-      // Special case: if this block is very short metadata, skip it
-      // This handles cases where metadata wasn't properly merged
-      if ((/^\d+\s+web\s+pages?\s*$/i.test(content) || 
-           /^\d+\.\d+s\s*$/i.test(content) ||
-           /^\d+\s+web\s+pages?\s*\n*\d+\.\d+s\s*$/i.test(content)) && 
-          content.length < 100) {
-        continue;
-      }
-      
-      // Determine role for this block
+      // Determine role based on content analysis
       let blockRole = currentRole;
       
       if (i === 0) {
-        // First block - usually user question
-        blockRole = hasStrongUser || (!hasStrongAssistant && content.length < 300) ? 'user' : 'assistant';
-      } else {
-        // For subsequent blocks, use strong indicators or alternate pattern
-        if (hasStrongUser && !hasStrongAssistant) {
-          blockRole = 'user';
-        } else if (hasStrongAssistant && !hasStrongUser) {
-          blockRole = 'assistant';
-        } else if (currentRole === 'user' && content.length > 500) {
-          // Long content after user message, likely assistant response
-          blockRole = 'assistant';
-        } else if (currentRole === 'assistant' && content.length < 300 && content.includes('?')) {
-          // Short question after assistant response, likely user
-          blockRole = 'user';
-        } else {
-          // Default to alternating pattern
-          blockRole = currentRole === 'user' ? 'assistant' : 'user';
-        }
-      }
+        // First block - check if it's a short question or long response
+        const isShortQuestion = content.length < 300 && 
+          (/\b(i want|help me|lets?|what|how|where|when|why|can you|should i|tell me)\b/i.test(lowerContent) || 
+           content.includes('?'));
+        blockRole = isShortQuestion ? 'user' : 'assistant';
+             } else {
+         // For subsequent blocks, use strong indicators
+         const hasUserIndicators = /\b(i want|help me|lets?|what|how|where|when|why|can you|should i|tell me)\b/i.test(lowerContent) || 
+                                  (content.includes('?') && content.length < 200);
+         const hasAssistantIndicators = [
+           'deciding whether',
+           'overview of the',
+           'pros of choosing',
+           'cons and challenges',
+           'key considerations',
+           'recommendations',
+           'here\'s a comprehensive',
+           'engine & drivetrain',
+           'maintenance records',
+           'known issues',
+           'inspection priorities',
+           'budget considerations'
+         ].some(pattern => lowerContent.includes(pattern));
+         
+         if (hasUserIndicators && !hasAssistantIndicators && content.length < 500) {
+           blockRole = 'user';
+         } else if (hasAssistantIndicators || content.length > 1000) {
+           blockRole = 'assistant';
+         } else {
+           // Default to alternating
+           blockRole = currentRole === 'user' ? 'assistant' : 'user';
+         }
+       }
       
-      // Check if we should merge this with the previous message of the same role
-      if (messages.length > 0 && messages[messages.length - 1].role === blockRole) {
-        // Merge with previous message of same role
-        messages[messages.length - 1].content += '\n\n' + content;
-      } else {
-        // Create new message
-        messages.push({
-          role: blockRole,
-          content: content
-        });
-      }
+      // Create message
+      messages.push({
+        role: blockRole,
+        content: content
+      });
       
       currentRole = blockRole;
     }
@@ -1760,68 +1755,9 @@ class ImportService {
    * @returns {Array} - Array of conversation blocks
    */
   splitGrokConversationByPattern(text) {
-    const blocks = [];
-    const lines = text.split('\n');
-    let currentBlock = '';
-    let inLongResponse = false;
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const trimmedLine = line.trim();
-      
-      // Skip metadata lines that should stay with the previous response
-      const isMetadata = /^\d+\s+web\s+pages?\s*$/i.test(trimmedLine) || 
-                        /^\d+\.\d+s\s*$/i.test(trimmedLine);
-      
-      // Check if this looks like the start of a new user question
-      // (short line with question words, after we've been in a long response)
-      if (inLongResponse && trimmedLine.length > 0 && trimmedLine.length < 200 && !isMetadata) {
-        const lowerLine = trimmedLine.toLowerCase();
-        const hasQuestionWords = /\b(lets?|what|how|where|when|why|can you|should i|help me|tell me)\b/i.test(lowerLine);
-        const hasQuestionMark = trimmedLine.includes('?');
-        
-        if (hasQuestionWords || hasQuestionMark) {
-          // This looks like a new user question - save the previous block
-          if (currentBlock.trim()) {
-            blocks.push(currentBlock.trim());
-          }
-          currentBlock = line;
-          inLongResponse = false;
-          continue;
-        }
-      }
-      
-      // Add line to current block
-      if (currentBlock) {
-        currentBlock += '\n' + line;
-      } else {
-        currentBlock = line;
-      }
-      
-      // Check if we're entering a long response (assistant message)
-      if (!inLongResponse && currentBlock.length > 500) {
-        const lowerContent = currentBlock.toLowerCase();
-        const hasAssistantIndicators = [
-          'deciding whether',
-          'overview of the',
-          'pros of choosing',
-          'cons and challenges',
-          'key considerations',
-          'recommendations'
-        ].some(pattern => lowerContent.includes(pattern));
-        
-        if (hasAssistantIndicators) {
-          inLongResponse = true;
-        }
-      }
-    }
-    
-    // Don't forget the last block
-    if (currentBlock.trim()) {
-      blocks.push(currentBlock.trim());
-    }
-    
-    return blocks.length > 1 ? blocks : [text];
+    // Simplified fallback method - just split by paragraphs
+    const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
+    return paragraphs.length > 1 ? paragraphs : [text];
   }
 
   /**
