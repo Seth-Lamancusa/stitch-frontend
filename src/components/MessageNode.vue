@@ -41,8 +41,8 @@
       <div class="message-header">
         <div class="author-section">
           <div class="author-info">
-            <span v-if="!isImportedMessage" class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ authorDisplayName }}</span>
-            <span v-if="!isImportedMessage && authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
+            <span class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ authorDisplayName }}</span>
+            <span v-if="authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
           </div>
           
           <!-- Public badge - shown for all public messages -->
@@ -548,12 +548,6 @@ export default {
           return true;
         }
         
-        // Last resort: check by email for backward compatibility
-        if (recipient.user_tag && currentUser.value.email && 
-            recipient.user_tag === currentUser.value.email) {
-          return true;
-        }
-        
         return false;
       });
     });
@@ -606,12 +600,6 @@ export default {
           return false;
         }
         
-        // Finally check by email for backward compatibility
-        if (recipient.user_tag && currentUser.value.email && 
-            recipient.user_tag === currentUser.value.email) {
-          return false;
-        }
-        
         return true;
       });
     });
@@ -621,12 +609,6 @@ export default {
       return props.message.author_display_name || '';
     });
 
-    // Check if this is an imported message from an AI system
-    const isImportedMessage = computed(() => {
-      const systemUserTags = ['chatgpt', 'claude', 'gemini', 'grok'];
-      return systemUserTags.includes(props.message.author_user_tag);
-    });
-    
     // Get author user tag
     const authorUserTag = computed(() => {
       return props.message.author_user_tag || null;
@@ -638,18 +620,8 @@ export default {
         return false;
       }
       
-      // Handle both old and new author formats
-      if (props.message.content_author === 'chatgpt' || props.message.content_author === 'chatgpt-system' || props.message.author_email === 'chatgpt') {
-        return false;
-      }
-      
-      // First check the UID
+      // Check the UID
       if (currentUser.value.uid === props.message.content_author) {
-        return true;
-      }
-      
-      // Then check the email (for backward compatibility)
-      if (props.message.author_email && currentUser.value.email === props.message.author_email) {
         return true;
       }
       
@@ -1065,12 +1037,7 @@ export default {
         return true;
       }
       
-      // Then check by email
-      if (props.message.author_email && currentUser.value.email === props.message.author_email) {
-        return true;
-      }
-      
-      // Finally check content_author for older messages
+      // Then check content_author for UID matching
       if (props.message.content_author === currentUser.value.uid) {
         return true;
       }
@@ -1091,12 +1058,6 @@ export default {
       // Check by user_tag
       if (recipient.user_tag && currentUser.value.user_tag && 
           recipient.user_tag === currentUser.value.user_tag) {
-        return true;
-      }
-      
-      // Check by email for backward compatibility
-      if (recipient.user_tag && currentUser.value.email && 
-          recipient.user_tag === currentUser.value.email) {
         return true;
       }
       
@@ -1415,7 +1376,6 @@ export default {
       truncatedContent,
       isReformatting,
       handleReformat,
-      isImportedMessage,
       messageContentRef,
       isShaking,
       hasSiblings,
