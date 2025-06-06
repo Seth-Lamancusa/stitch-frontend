@@ -291,29 +291,32 @@ const handleTextareaKeyDown = (event) => {
 };
 
 const autoResizeTextarea = () => {
-  const textarea = replyTextarea.value;
-  if (!textarea) return;
-  
-  // If content is empty, reset to initial height
-  if (!content.value.trim()) {
-    textarea.style.height = '40px';
-    return;
-  }
-  
-  // Only resize if we have line breaks or content exceeds current height
-  if (content.value.includes('\n')) {
-    // Reset height to auto to get new scrollHeight
-    textarea.style.height = 'auto';
+  if (replyTextarea.value) {
+    const ta = replyTextarea.value;
     
-    // Calculate new height (with minimum)
-    const newHeight = Math.max(40, textarea.scrollHeight);
-    textarea.style.height = `${newHeight}px`;
-  } else if (textarea.scrollHeight > textarea.clientHeight) {
-    // Content exceeds current height without line breaks
-    textarea.style.height = `${textarea.scrollHeight}px`;
-  } else if (textarea.style.height === '' || textarea.style.height === 'auto') {
-    // Set initial height if not set
-    textarea.style.height = '40px';
+    // Temporarily reset height to calculate the real scrollHeight
+    ta.style.height = 'auto';
+    
+    // Calculate line height
+    const style = window.getComputedStyle(ta);
+    const font = style.getPropertyValue('font');
+    const lineHeight = parseFloat(style.getPropertyValue('line-height')) || 
+                       (parseFloat(style.getPropertyValue('font-size')) * 1.5);
+                       
+    // Define max height in lines (e.g., 10 lines + padding)
+    const maxLines = 12; // Increased from 10 to 12
+    const paddingTop = parseFloat(style.getPropertyValue('padding-top'));
+    const paddingBottom = parseFloat(style.getPropertyValue('padding-bottom'));
+    const maxScrollHeight = (lineHeight * maxLines) + paddingTop + paddingBottom;
+
+    // Set height based on scroll height, but cap it at the max
+    if (ta.scrollHeight <= maxScrollHeight) {
+      ta.style.height = `${ta.scrollHeight}px`;
+      ta.style.overflowY = 'hidden'; // Hide scrollbar when not needed
+    } else {
+      ta.style.height = `${maxScrollHeight}px`;
+      ta.style.overflowY = 'auto'; // Show scrollbar when content exceeds max
+    }
   }
 };
 
@@ -893,6 +896,8 @@ defineExpose({
   color: var(--color-text);
   transition: all var(--transition-fast);
   overflow-y: auto; /* Show scrollbar if content exceeds max-height */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
 }
 
 .reply-input:focus:not(:disabled) {
@@ -929,7 +934,7 @@ defineExpose({
 }
 
 .send-button:disabled {
-  opacity: 0.5;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
@@ -1270,5 +1275,32 @@ defineExpose({
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* Make scrollbar invisible until in use */
+.reply-input::-webkit-scrollbar {
+  width: 8px;
+}
+
+.reply-input::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.reply-input::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+}
+
+.reply-input:hover::-webkit-scrollbar-thumb {
+  background: var(--color-border-dark);
+}
+
+.reply-input {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.reply-input:hover {
+  scrollbar-color: var(--color-border-dark) transparent;
 }
 </style> 

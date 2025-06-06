@@ -438,11 +438,21 @@ import { useRouter, useRoute } from 'vue-router';
 import ReplyBox from '../../components/ReplyBox.vue';
 import ImportService from '../../services/ImportService';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
+import { useBrowserCapabilities } from '../../composables/useBrowserCapabilities.js';
 
 // Setup store and routing
 const store = useStore();
 const router = useRouter();
 const route = useRoute();
+
+// Browser capabilities detection
+const { 
+  capabilities, 
+  isLowEnd, 
+  shouldUseReducedAnimations, 
+  getOptimalImageFormat,
+  getRecommendedQuality 
+} = useBrowserCapabilities();
 
 // Refs
 const messageList = ref(null);
@@ -625,6 +635,53 @@ onMounted(async () => {
       replyBox.value.focus();
     }
   });
+  
+  // Enhanced responsive detection using browser capabilities
+  const detectZoomAndResponsiveness = () => {
+    // This function is now simplified to only handle device/browser-specific capabilities,
+    // as layout responsiveness is now handled by more robust container queries in CSS.
+    const container = document.querySelector('.import-tabs-container');
+    if (!container) return;
+    
+    // Add performance classes for low-end devices
+    if (isLowEnd()) {
+      document.body.classList.add('low-end-device');
+    }
+    
+    // Add reduced motion class if needed
+    if (shouldUseReducedAnimations()) {
+      document.body.classList.add('reduced-animations');
+    }
+    
+    // Add high-contrast support
+    if (capabilities.prefersHighContrast) {
+      document.body.classList.add('high-contrast');
+    }
+    
+    // Add platform-specific classes
+    document.body.classList.add(`platform-${capabilities.platform.toLowerCase()}`);
+    document.body.classList.add(`browser-${capabilities.browserName.toLowerCase()}`);
+  };
+  
+  // Run detection on mount and resize
+  detectZoomAndResponsiveness();
+  window.addEventListener('resize', detectZoomAndResponsiveness);
+  
+  // Clean up listener on unmount
+  onBeforeUnmount(() => {
+    window.removeEventListener('resize', detectZoomAndResponsiveness);
+    
+    // Clean up all capability-based classes
+    document.body.classList.remove(
+      'low-end-device', 
+      'reduced-animations', 
+      'high-contrast'
+    );
+    
+    // Remove platform/browser classes
+    document.body.className = document.body.className.replace(/platform-\w+/g, '');
+    document.body.className = document.body.className.replace(/browser-\w+/g, '');
+  });
 });
 
 onBeforeUnmount(() => {
@@ -757,9 +814,20 @@ const importChatGPT = async () => {
     isCreatingThread.value = true;
     importSuccess.value = false;
     
-    // Update loading messages for import
-    loadingMessage.value = `Importing ${parsedMessages.value.length} messages...`;
-    loadingSubmessage.value = 'Processing your ChatGPT conversation';
+    // Update loading messages for import (adaptive based on device)
+    const messageCount = parsedMessages.value.length;
+    loadingMessage.value = `Importing ${messageCount} messages...`;
+    
+    // Adaptive loading message based on device capabilities
+    if (capabilities.isLowBandwidth) {
+      loadingSubmessage.value = 'Processing conversation (this may take longer on slow connections)';
+    } else if (isLowEnd()) {
+      loadingSubmessage.value = 'Processing your ChatGPT conversation (optimizing for your device)';
+    } else if (messageCount > 50) {
+      loadingSubmessage.value = 'Processing large conversation - this may take a moment';
+    } else {
+      loadingSubmessage.value = 'Processing your ChatGPT conversation';
+    }
     
     // Import the conversation
     const result = await ImportService.importChatGPTConversation(
@@ -1094,7 +1162,7 @@ const importGrok = async () => {
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  padding: var(--space-sm) var(--space-md);
+  padding: var(--space-sm) var(--space-sm); /* Reduced horizontal padding to make content area wider */
   border-bottom: 1px solid var(--color-border);
   background-color: var(--color-surface);
   z-index: 5;
@@ -1180,14 +1248,14 @@ const importGrok = async () => {
 .import-tabs-container {
   display: flex;
   margin: 30px auto;
-  max-width: 800px;
-  width: 90%;
+  max-width: 1230px; /* Increased width by 30px */
+  width: 95%;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   overflow: hidden;
-  min-height: 300px;
-  max-height: 70vh; /* Limit height on smaller screens */
+  height: 630px; /* Set fixed height to prevent resizing between tabs */
+  max-height: 90vh;
   background-color: var(--color-surface);
 }
 
@@ -1198,6 +1266,7 @@ const importGrok = async () => {
   min-width: 140px;
   border-right: 1px solid var(--color-border);
   background-color: var(--color-surface-light, #f8f8f8);
+  justify-content: center; /* Add this to center vertically */
 }
 
 .import-tab-button {
@@ -1210,6 +1279,9 @@ const importGrok = async () => {
   font-size: var(--font-size-md);
   transition: background-color var(--transition-fast);
   color: var(--color-text);
+  flex: 1; /* Add this to make buttons take equal space */
+  display: flex; /* Add this to enable vertical centering */
+  align-items: center; /* Add this to center text vertically */
 }
 
 .import-tab-button:hover {
@@ -1236,6 +1308,7 @@ const importGrok = async () => {
 .import-content {
   flex: 1;
   padding: var(--space-xl);
+  padding-bottom: calc(var(--space-xl) * 2); /* Extra bottom padding for import button breathing room */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1251,7 +1324,7 @@ const importGrok = async () => {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  padding: var(--space-sm) 0 var(--space-xl) 0; /* Add extra bottom padding for breathing room */
+  padding: var(--space-sm) 0; /* Add top/bottom padding by default */
 }
 
 .import-panel h3 {
@@ -1346,8 +1419,8 @@ const importGrok = async () => {
   background-color: var(--color-border-light);
 }
 
-/* Responsive styles for smaller screens */
-@media (max-width: 768px) {
+/* Zoom-friendly responsive styles using em units (better for accessibility) */
+@media (max-width: 48em), (max-width: 768px) {
   .messages-container {
     padding-left: 16px;
     padding-right: 16px;
@@ -1358,32 +1431,23 @@ const importGrok = async () => {
   .import-tabs-container {
     margin: 15px auto;
     width: 95%;
-    max-height: 80vh; /* More height available on mobile */
+    max-height: 85vh; /* Adjusted for mobile */
+    height: 530px; /* Adjusted for mobile */
     flex-direction: column; /* Stack vertically on mobile */
-    min-height: 400px; /* Ensure minimum usable height */
     position: relative; /* For scroll indicators */
   }
   
-  /* Hide tabs and show dropdown on mobile for better UX */
-  .import-tabs-sidebar {
-    display: none; /* Hide horizontal tabs on mobile */
-  }
-  
-  .mobile-service-selector {
-    display: block; /* Show dropdown on mobile */
-  }
-
-  
   .import-content {
-    padding: var(--space-sm); /* Increase padding on mobile */
+    padding: var(--space-sm);
+    padding-bottom: calc(var(--space-sm) * 3);
     overflow-y: auto;
     max-height: none;
   }
   
   .import-panel {
     width: 100%;
-    padding: var(--space-sm) 0; /* Add vertical padding to panels */
-    justify-content: flex-start; /* Ensure content starts at top */
+    padding: var(--space-sm) 0;
+    justify-content: flex-start;
   }
   
   .import-textarea {
@@ -1394,7 +1458,7 @@ const importGrok = async () => {
   .import-button {
     width: 100%;
     margin-top: var(--space-md);
-    margin-bottom: var(--space-sm); /* Add bottom margin for breathing room */
+    margin-bottom: var(--space-sm);
   }
 }
 
@@ -1525,6 +1589,8 @@ const importGrok = async () => {
   cursor: pointer;
   transition: all var(--transition-fast);
   min-width: 160px;
+  width: fit-content; /* Make button width fit its content */
+  align-self: center;   /* Center the button within its container */
 }
 
 .import-button:hover:not(:disabled) {
@@ -1710,6 +1776,159 @@ const importGrok = async () => {
 @keyframes import-spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* High zoom detection using font size scaling - updated for 175% */
+@media (min-resolution: 1.75dppx) and (max-width: 70em) {
+  .import-tabs-sidebar {
+    display: none;
+  }
+  
+  .mobile-service-selector {
+    display: block;
+  }
+  
+  .import-content {
+    padding: var(--space-lg);
+    padding-bottom: calc(var(--space-lg) * 2);
+  }
+}
+
+/* Alternative zoom detection for browsers without container query support */
+@supports not (container-type: inline-size) {
+  @media (max-width: 50em) {
+    .import-tabs-sidebar {
+      display: none;
+    }
+    
+    .mobile-service-selector {
+      display: block;
+    }
+  }
+}
+
+/* JavaScript-enhanced responsive behavior for cramped layouts (zoom, narrow windows) */
+.cramped-layout .import-tabs-sidebar {
+  display: none;
+}
+
+.cramped-layout .mobile-service-selector {
+  display: block;
+}
+
+.cramped-layout .import-content {
+  padding: var(--space-lg);
+  padding-bottom: calc(var(--space-lg) * 2);
+}
+
+.cramped-layout .import-button {
+  width: 100%;
+  min-height: 48px;
+  font-size: var(--font-size-lg);
+  padding: var(--space-md) var(--space-xl);
+}
+
+.cramped-layout .service-dropdown {
+  min-height: 48px;
+  font-size: var(--font-size-lg);
+}
+
+/* Add visual feedback for cramped/zoomed state */
+.cramped-layout .import-tabs-container {
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius-md);
+}
+
+.cramped-layout .mobile-service-selector {
+  background-color: rgba(var(--color-primary-rgb), 0.1);
+  border-bottom: 2px solid var(--color-primary);
+}
+
+/* Performance optimizations for low-end devices */
+.low-end-device .import-spinner {
+  animation-duration: 2s; /* Slower animation to reduce CPU usage */
+}
+
+.low-end-device .loading-overlay {
+  backdrop-filter: none; /* Remove expensive blur effect */
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+.low-end-device .import-tabs-container {
+  box-shadow: none; /* Remove expensive shadows */
+}
+
+/* Reduced animations for accessibility and performance */
+.reduced-animations * {
+  animation-duration: 0.01ms !important;
+  animation-delay: 0.01ms !important;
+  transition-duration: 0.01ms !important;
+  transition-delay: 0.01ms !important;
+}
+
+.reduced-animations .import-button:hover {
+  transform: none !important;
+}
+
+/* High contrast mode improvements */
+.high-contrast .import-tabs-container {
+  border: 3px solid var(--color-primary);
+}
+
+.high-contrast .import-tab-button.active {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.high-contrast .import-button {
+  border: 2px solid var(--color-primary);
+  font-weight: bold;
+}
+
+/* Platform-specific optimizations */
+.platform-ios .import-button,
+.platform-android .import-button {
+  min-height: 44px; /* Apple/Android touch target guidelines */
+  border-radius: 12px; /* More native feeling on mobile */
+}
+
+.platform-windows .import-tabs-sidebar {
+  scrollbar-width: thin; /* Better scrollbars on Windows */
+}
+
+/* Browser-specific optimizations */
+.browser-safari .import-textarea {
+  -webkit-appearance: none; /* Remove Safari's default styling */
+}
+
+.browser-firefox .import-tabs-container {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-primary) transparent;
+}
+
+/* Network-aware styling */
+.low-end-device .format-detection,
+.reduced-animations .format-detection {
+  transition: none;
+  animation: none;
+}
+
+/* Touch-friendly enhancements */
+@media (pointer: coarse) {
+  .import-tab-button {
+    min-height: 48px;
+    padding: var(--space-md);
+  }
+  
+  .service-dropdown {
+    min-height: 48px;
+    padding: var(--space-md);
+  }
+  
+  .import-button {
+    min-height: 48px;
+    padding: var(--space-md) var(--space-xl);
+  }
 }
 
 /* Dark theme overrides */
@@ -2013,8 +2232,8 @@ const importGrok = async () => {
   background-color: var(--color-border-light);
 }
 
-/* Additional responsive styles for smaller laptops and tablets */
-@media (max-width: 992px) {
+/* Zoom-responsive breakpoints for desktop accessibility */
+@media (max-width: 62em), (max-width: 992px) {
   .import-tabs-container {
     max-height: 65vh;
   }
@@ -2024,8 +2243,46 @@ const importGrok = async () => {
   }
 }
 
-/* Extra small screens */
-@media (max-width: 480px) {
+/* High zoom level or narrow desktop screens */
+@media (max-width: 60em) {
+  .import-tabs-container {
+    flex-direction: column;
+  }
+  
+  .import-tabs-sidebar {
+    width: 100%;
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    overflow-x: auto;
+    min-height: 60px;
+  }
+  
+  .import-tab-button {
+    min-width: 120px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
+
+/* Very high zoom or tablet-like desktop experience */
+@media (max-width: 52em) {
+  .import-tabs-sidebar {
+    display: none;
+  }
+  
+  .mobile-service-selector {
+    display: block;
+  }
+  
+  .import-content {
+    padding: var(--space-lg);
+    padding-bottom: calc(var(--space-lg) * 2);
+  }
+}
+
+/* Extra small screens or very high zoom levels */
+@media (max-width: 30em), (max-width: 480px) {
   .messages-container {
     padding-left: 8px;
     padding-right: 8px;
@@ -2036,12 +2293,13 @@ const importGrok = async () => {
   .import-tabs-container {
     margin: 8px auto;
     width: 98%;
-    max-height: 85vh; /* Even more height on very small screens */
-    min-height: 450px; /* Ensure enough space for all content */
+    max-height: 90vh; /* Adjusted for very small screens */
+    height: 480px; /* Adjusted for very small screens */
   }
   
   .import-content {
     padding: var(--space-sm); /* Keep adequate padding on small screens */
+    padding-bottom: calc(var(--space-sm) * 3); /* Extra bottom padding for import button breathing room on small screens */
   }
   
   .import-panel {
@@ -2065,6 +2323,93 @@ const importGrok = async () => {
   
   .file-upload-container {
     margin-bottom: var(--space-lg); /* More space around file upload */
+  }
+}
+
+/* Enhanced zoom accessibility - targets any screen where tabs become cramped */
+@media (max-width: 55em) {
+  .import-tab-button {
+    min-height: 48px; /* Larger touch targets for zoom */
+    font-size: var(--font-size-md); /* Ensure text stays readable */
+    padding: var(--space-sm) var(--space-md);
+  }
+  
+  .import-button {
+    min-height: 48px; /* Larger touch targets */
+    font-size: var(--font-size-lg); /* More readable when zoomed */
+    padding: var(--space-md) var(--space-xl);
+  }
+  
+  .service-dropdown {
+    min-height: 48px; /* Larger touch targets */
+    font-size: var(--font-size-lg); /* More readable when zoomed */
+    padding: var(--space-md) var(--space-lg);
+  }
+}
+
+/* Container-based responsive design for when import tabs get too cramped */
+.import-tabs-container {
+  container-type: inline-size;
+}
+
+@container (max-width: 600px) {
+  .import-tabs-sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+  
+  .import-tab-button {
+    flex-shrink: 0;
+    min-width: 100px;
+  }
+}
+
+@container (max-width: 500px) {
+  .import-tabs-sidebar {
+    display: none;
+  }
+  
+  .mobile-service-selector {
+    display: block;
+  }
+}
+
+/*
+  The following container queries create a two-stage responsive behavior
+  for the import tabs, making it robust at any zoom level or window size.
+*/
+
+/* Stage 1: (Medium size) - Switch to a horizontal, scrollable tab bar */
+@container (max-width: 700px) {
+  .import-tabs-container {
+    flex-direction: column;
+  }
+  .import-tabs-sidebar {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    justify-content: flex-start; /* Align tabs to the start */
+  }
+  
+  .import-tab-button {
+    white-space: nowrap;
+    flex-shrink: 0;
+    flex-grow: 0;
+  }
+}
+
+/* Stage 2: (Narrow size) - Switch to a dropdown menu */
+@container (max-width: 550px) {
+  .import-tabs-sidebar {
+    display: none;
+  }
+  
+  .mobile-service-selector {
+    display: block;
   }
 }
 </style> 

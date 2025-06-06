@@ -371,6 +371,7 @@ import FormattedContent from './FormattedContent/index.vue';
 import { initFormatters } from './FormattedContent/init';
 import { computed, ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
+import { memoize } from 'lodash-es';
 
 export default {
   name: 'MessageNode',
@@ -1161,15 +1162,18 @@ export default {
     const truncatedContent = computed(() => {
       if (!props.message.content) return '';
       
-      // Remove newlines and extra spaces
-      const contentWithoutNewlines = props.message.content.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
-      
-      // Truncate to 300 characters with ellipsis if needed
-      if (contentWithoutNewlines.length > 300) {
-        return contentWithoutNewlines.substring(0, 300) + '...';
-      }
-      
-      return contentWithoutNewlines;
+      // Memoize the truncation logic based on the content
+      return memoize((content) => {
+        // Remove newlines and extra spaces
+        const contentWithoutNewlines = content.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+        
+        // Truncate to 300 characters with ellipsis if needed
+        if (contentWithoutNewlines.length > 300) {
+          return contentWithoutNewlines.substring(0, 300) + '...';
+        }
+        
+        return contentWithoutNewlines;
+      })(props.message.content);
     });
     
     const handleReformat = async () => {
@@ -1406,6 +1410,7 @@ export default {
   margin-bottom: var(--space-xs);
   transition: all var(--transition-fast);
   position: relative;
+  contain: layout paint style;
 }
 
 /* Add styling for list view mode */
