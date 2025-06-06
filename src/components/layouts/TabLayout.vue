@@ -242,14 +242,15 @@ onMounted(async () => {
 }
 
 .app-header {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   padding: 0 var(--space-md);
   border-bottom: 1px solid var(--color-border);
   background-color: #000000;
-  min-height: 48px; /* Minimum height to ensure consistency */
-  max-height: 48px; /* Maximum height to prevent overflow */
+  min-height: 48px;
+  max-height: 48px;
 }
 
 .tab-navigation {
@@ -284,6 +285,10 @@ onMounted(async () => {
 }
 
 .user-controls {
+  position: absolute;
+  right: var(--space-md);
+  top: 0;
+  height: 100%;
   display: flex;
   align-items: center;
   gap: var(--space-sm);
