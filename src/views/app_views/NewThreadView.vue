@@ -24,24 +24,35 @@
           </button>
         </div>
         
+        <!-- Mobile-optimized service selector -->
+        <div class="mobile-service-selector">
+          <label class="service-selector-label">Import from:</label>
+          <select 
+            v-model="activeImportTab" 
+            class="service-dropdown"
+          >
+            <option 
+              v-for="tab in importTabs" 
+              :key="tab.id" 
+              :value="tab.id"
+            >
+              {{ tab.name }}
+            </option>
+          </select>
+        </div>
+        
         <div class="import-content">
           <div v-if="activeImportTab === 'chatgpt'" class="import-panel">
             <h3>Import from ChatGPT</h3>
             
-            <div class="import-instructions">
-              <p>To import a ChatGPT conversation:</p>
-              <ol>
-                <li>Copy your entire ChatGPT conversation (from web interface or mobile app)</li>
-                <li>Paste it in the text area below - no formatting needed</li>
-                <li>Click "Import Conversation"</li>
-              </ol>
-              <p class="import-warning">Paste the raw conversation without modifications</p>
-            </div>
-            
             <textarea 
               v-model="importText"
               class="import-textarea"
-              placeholder="Paste your ChatGPT conversation here..."
+              placeholder="To import a ChatGPT conversation:
+
+Copy your entire ChatGPT conversation
+Paste it in the text area below - no formatting needed
+Click &quot;Import Conversation&quot;"
               :disabled="isImporting"
             />
             
@@ -96,17 +107,6 @@
           <div v-else-if="activeImportTab === 'cursor'" class="import-panel">
             <h3>Import from Cursor</h3>
             
-            <div class="import-instructions">
-              <p>To import a Cursor conversation:</p>
-              <ol>
-                <li>Select which AI model was used in your Cursor conversation</li>
-                <li>Export your Cursor chat conversation as a markdown file</li>
-                <li>Select the markdown file below</li>
-                <li>Click "Import Conversation"</li>
-              </ol>
-              <p class="import-warning">Only markdown (.md) files are supported</p>
-            </div>
-            
             <!-- Model Selection -->
             <div class="model-selection-container">
               <label class="model-selection-label">AI Model Used:</label>
@@ -119,6 +119,22 @@
                 <option value="claude">Claude</option>
                 <option value="gemini">Gemini</option>
               </select>
+            </div>
+            
+            <textarea 
+              v-model="importText"
+              class="import-textarea"
+              placeholder="To import a Cursor conversation:
+
+Select which AI model was used in your Cursor conversation
+Export your Cursor chat conversation as a markdown file or copy text
+Select the markdown file below or paste text
+Click &quot;Import Conversation&quot;"
+              :disabled="isImporting"
+            />
+            
+            <div class="import-or-divider">
+              <span>OR</span>
             </div>
             
             <div class="file-upload-container">
@@ -189,20 +205,14 @@
           <div v-else-if="activeImportTab === 'claude'" class="import-panel">
             <h3>Import from Claude</h3>
             
-            <div class="import-instructions">
-              <p>To import a Claude conversation:</p>
-              <ol>
-                <li>Copy your entire Claude conversation (from web interface or mobile app)</li>
-                <li>Paste it in the text area below - no formatting needed</li>
-                <li>Click "Import Conversation"</li>
-              </ol>
-              <p class="import-warning">Paste the raw conversation without modifications</p>
-            </div>
-            
             <textarea 
               v-model="importText"
               class="import-textarea"
-              placeholder="Paste your Claude conversation here..."
+              placeholder="To import a Claude conversation:
+
+Copy your entire Claude conversation
+Paste it in the text area below - no formatting needed
+Click &quot;Import Conversation&quot;"
               :disabled="isImporting"
             />
             
@@ -257,20 +267,14 @@
           <div v-else-if="activeImportTab === 'gemini'" class="import-panel">
             <h3>Import from Gemini</h3>
             
-                         <div class="import-instructions">
-               <p>To import a Gemini conversation:</p>
-               <ol>
-                 <li>Copy your entire Gemini conversation (from web interface or mobile app)</li>
-                 <li>Paste it in the text area below - no formatting needed</li>
-                 <li>Click "Import Conversation"</li>
-               </ol>
-               <p class="import-warning">Paste the raw conversation without modifications</p>
-             </div>
-            
             <textarea 
               v-model="importText"
               class="import-textarea"
-              placeholder="Paste your Gemini conversation here..."
+              placeholder="To import a Gemini conversation:
+
+Copy your entire Gemini conversation
+Paste it in the text area below - no formatting needed
+Click &quot;Import Conversation&quot;"
               :disabled="isImporting"
             />
             
@@ -325,20 +329,14 @@
           <div v-else-if="activeImportTab === 'grok'" class="import-panel">
             <h3>Import from Grok</h3>
             
-            <div class="import-instructions">
-              <p>To import a Grok conversation:</p>
-              <ol>
-                <li>Copy your entire Grok conversation (from web interface or mobile app)</li>
-                <li>Paste it in the text area below - no formatting needed</li>
-                <li>Click "Import Conversation"</li>
-              </ol>
-              <p class="import-warning">Paste the raw conversation without modifications</p>
-            </div>
-            
             <textarea 
               v-model="importText"
               class="import-textarea"
-              placeholder="Paste your Grok conversation here..."
+              placeholder="To import a Grok conversation:
+
+Copy your entire Grok conversation
+Paste it in the text area below - no formatting needed
+Click &quot;Import Conversation&quot;"
               :disabled="isImporting"
             />
             
@@ -541,8 +539,9 @@ const isCreatingThread = ref(false);
 // Computed property for import button state
 const canImport = computed(() => {
   if (activeImportTab.value === 'cursor') {
-    // For Cursor: need file content, parsed messages, and no errors
-    return cursorFileContent.value.trim().length > 0 && 
+    // For Cursor: need either file content OR text input, parsed messages, and no errors
+    const hasContent = cursorFileContent.value.trim().length > 0 || importText.value.trim().length > 0;
+    return hasContent && 
            parsedMessages.value.length > 0 && 
            importErrors.value.length === 0;
   } else {
@@ -553,14 +552,36 @@ const canImport = computed(() => {
   }
 });
 
-// Watch for changes in import text (ChatGPT, Claude, Gemini, and Grok)
+// Watch for tab changes to clear inputs
+watch(activeImportTab, () => {
+  // Clear all input states when switching tabs
+  importText.value = '';
+  cursorFileName.value = '';
+  cursorFileContent.value = '';
+  parsedMessages.value = [];
+  importErrors.value = [];
+  formatDetection.value = { format: 'unknown', confidence: 0, hint: '' };
+  if (cursorFileInput.value) {
+    cursorFileInput.value.value = '';
+  }
+});
+
+// Watch for changes in import text (ChatGPT, Claude, Gemini, Grok, and Cursor)
 watch(importText, (newText) => {
   // Only process if we're on a text-based import tab
-  if (!['chatgpt', 'claude', 'gemini', 'grok'].includes(activeImportTab.value)) {
+  if (!['chatgpt', 'claude', 'gemini', 'grok', 'cursor'].includes(activeImportTab.value)) {
     return;
   }
   
   if (newText.trim()) {
+    // For Cursor: clear file input when text is entered
+    if (activeImportTab.value === 'cursor') {
+      cursorFileName.value = '';
+      cursorFileContent.value = '';
+      if (cursorFileInput.value) {
+        cursorFileInput.value.value = '';
+      }
+    }
     // Detect format
     formatDetection.value = ImportService.detectConversationFormat(newText);
     
@@ -573,6 +594,8 @@ watch(importText, (newText) => {
       parsedMessages.value = ImportService.parseGeminiConversation(newText);
     } else if (activeImportTab.value === 'grok') {
       parsedMessages.value = ImportService.parseGrokConversation(newText);
+    } else if (activeImportTab.value === 'cursor') {
+      parsedMessages.value = ImportService.parseCursorConversation(newText);
     }
     
     // Validate the parsed messages
@@ -663,6 +686,9 @@ const handleCursorFileUpload = async (event) => {
     formatDetection.value = { format: 'unknown', confidence: 0, hint: '' };
     return;
   }
+  
+  // Clear text input when file is selected
+  importText.value = '';
   
   // Check file type
   if (!file.name.toLowerCase().endsWith('.md') && !file.name.toLowerCase().endsWith('.markdown')) {
@@ -1102,6 +1128,9 @@ const importGrok = async () => {
   overflow-y: auto;
   justify-content: flex-start;
   margin-bottom: 130px;
+  /* Ensure proper scrolling behavior */
+  min-height: 0;
+  max-height: calc(100vh - 200px); /* Account for header and reply box */
 }
 
 .draft-hint {
@@ -1158,6 +1187,7 @@ const importGrok = async () => {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   overflow: hidden;
   min-height: 300px;
+  max-height: 70vh; /* Limit height on smaller screens */
   background-color: var(--color-surface);
 }
 
@@ -1209,17 +1239,25 @@ const importGrok = async () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .import-panel {
   text-align: center;
   width: 100%;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: var(--space-sm) 0 var(--space-xl) 0; /* Add extra bottom padding for breathing room */
 }
 
 .import-panel h3 {
   color: var(--color-primary);
   margin-bottom: var(--space-lg);
+  margin-top: var(--space-sm); /* Add top margin to prevent cutoff */
   font-size: var(--font-size-xl);
 }
 
@@ -1262,10 +1300,101 @@ const importGrok = async () => {
   margin-bottom: var(--space-md);
 }
 
-/* Stack vertically on smaller screens */
+/* Mobile-optimized service selector */
+.mobile-service-selector {
+  display: none; /* Hidden by default on desktop */
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-surface-light);
+}
+
+.service-selector-label {
+  display: block;
+  margin-bottom: var(--space-xs);
+  font-weight: 600;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+}
+
+.service-dropdown {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-md);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right var(--space-sm) center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: calc(var(--space-xl) + var(--space-sm));
+}
+
+.service-dropdown:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.2);
+}
+
+.service-dropdown:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: var(--color-border-light);
+}
+
+/* Responsive styles for smaller screens */
 @media (max-width: 768px) {
-  .import-content-container {
-    /* No special mobile styling needed anymore */
+  .messages-container {
+    padding-left: 16px;
+    padding-right: 16px;
+    margin-bottom: 60px; /* Further reduce bottom margin on mobile */
+    max-height: calc(100vh - 120px); /* More available height on mobile */
+  }
+  
+  .import-tabs-container {
+    margin: 15px auto;
+    width: 95%;
+    max-height: 80vh; /* More height available on mobile */
+    flex-direction: column; /* Stack vertically on mobile */
+    min-height: 400px; /* Ensure minimum usable height */
+    position: relative; /* For scroll indicators */
+  }
+  
+  /* Hide tabs and show dropdown on mobile for better UX */
+  .import-tabs-sidebar {
+    display: none; /* Hide horizontal tabs on mobile */
+  }
+  
+  .mobile-service-selector {
+    display: block; /* Show dropdown on mobile */
+  }
+
+  
+  .import-content {
+    padding: var(--space-sm); /* Increase padding on mobile */
+    overflow-y: auto;
+    max-height: none;
+  }
+  
+  .import-panel {
+    width: 100%;
+    padding: var(--space-sm) 0; /* Add vertical padding to panels */
+    justify-content: flex-start; /* Ensure content starts at top */
+  }
+  
+  .import-textarea {
+    min-height: 150px;
+    max-height: 250px;
+  }
+  
+  .import-button {
+    width: 100%;
+    margin-top: var(--space-md);
+    margin-bottom: var(--space-sm); /* Add bottom margin for breathing room */
   }
 }
 
@@ -1755,7 +1884,7 @@ const importGrok = async () => {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   font-family: monospace;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
   resize: none;
   background-color: var(--color-surface);
   color: var(--color-text);
@@ -1771,6 +1900,30 @@ const importGrok = async () => {
 .import-textarea:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* OR divider styles */
+.import-or-divider {
+  display: flex;
+  align-items: center;
+  margin: 0 0 var(--space-md) 0;
+  text-align: center;
+}
+
+.import-or-divider::before,
+.import-or-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.import-or-divider span {
+  padding: 0 var(--space-md);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  background-color: var(--color-surface);
 }
 
 /* File upload styles */
@@ -1840,6 +1993,12 @@ const importGrok = async () => {
   font-size: var(--font-size-sm);
   cursor: pointer;
   transition: border-color var(--transition-fast);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right var(--space-sm) center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: calc(var(--space-xl) + var(--space-sm));
 }
 
 .model-selection-dropdown:focus {
@@ -1852,5 +2011,60 @@ const importGrok = async () => {
   opacity: 0.6;
   cursor: not-allowed;
   background-color: var(--color-border-light);
+}
+
+/* Additional responsive styles for smaller laptops and tablets */
+@media (max-width: 992px) {
+  .import-tabs-container {
+    max-height: 65vh;
+  }
+  
+  .messages-container {
+    max-height: calc(100vh - 180px);
+  }
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+  .messages-container {
+    padding-left: 8px;
+    padding-right: 8px;
+    margin-bottom: 40px; /* Even less bottom margin for small screens */
+    max-height: calc(100vh - 100px); /* Maximum available height */
+  }
+  
+  .import-tabs-container {
+    margin: 8px auto;
+    width: 98%;
+    max-height: 85vh; /* Even more height on very small screens */
+    min-height: 450px; /* Ensure enough space for all content */
+  }
+  
+  .import-content {
+    padding: var(--space-sm); /* Keep adequate padding on small screens */
+  }
+  
+  .import-panel {
+    padding: var(--space-sm) 0; /* More padding on extra small screens */
+  }
+  
+  .import-panel h3 {
+    font-size: var(--font-size-lg);
+    margin-bottom: var(--space-md);
+    margin-top: 0; /* Ensure no extra top margin */
+  }
+  
+  .import-textarea {
+    min-height: 120px;
+    max-height: 200px;
+  }
+  
+  .model-selection-container {
+    margin-bottom: var(--space-lg); /* Ensure adequate spacing around model selector */
+  }
+  
+  .file-upload-container {
+    margin-bottom: var(--space-lg); /* More space around file upload */
+  }
 }
 </style> 

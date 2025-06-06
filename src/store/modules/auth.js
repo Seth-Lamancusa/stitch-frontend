@@ -109,6 +109,9 @@ export default {
                 commit('SET_AUTH_READY', true);
               }
               
+              // Check for pending notifications AFTER auth is complete
+              await dispatch('checkPendingNotifications');
+              
               resolve();
               // Keep listening for auth changes
             });
@@ -116,12 +119,41 @@ export default {
         } else {
           // No auth object - mark as ready and resolve
           commit('SET_AUTH_READY', true);
+          // Still check for notifications even if no auth
+          await dispatch('checkPendingNotifications');
         }
       } catch (error) {
         console.error('Failed to initialize auth:', error);
         // Even on error, make sure auth is eventually marked ready
         commit('SET_AUTH_READY', true);
+        // Still check for notifications on error
+        await dispatch('checkPendingNotifications');
       }
+    },
+    
+    async checkPendingNotifications({ dispatch }) {
+      // Small delay to ensure the notification system is ready
+      setTimeout(async () => {
+        const pendingNotification = localStorage.getItem('pending_notification');
+        if (pendingNotification) {
+          try {
+            const notification = JSON.parse(pendingNotification);
+            localStorage.removeItem('pending_notification');
+            
+            console.log('Showing pending notification:', notification);
+            
+            // Show the notification via the global notification system
+            if (notification.type === 'error') {
+              await dispatch('ui/setError', notification.message, { root: true });
+            } else if (notification.type === 'success') {
+              await dispatch('ui/setSuccess', notification.message, { root: true });
+            }
+          } catch (error) {
+            console.error('Error parsing pending notification:', error);
+            localStorage.removeItem('pending_notification'); // Clean up invalid data
+          }
+        }
+      }, 100); // 100ms delay to ensure UI is ready
     },
     
     // New action that combines all user data fetching in one place
@@ -130,15 +162,14 @@ export default {
         // Set auth to not ready during fetch
         commit('SET_AUTH_READY', false);
         
-        // Register user if needed (this will either create or fetch)
-        await dispatch('registerUser', userData);
-        
-        // Get complete profile from backend
+        // Try to get complete profile from backend
         await dispatch('fetchUserData', userData.uid);
       } catch (error) {
         console.error('Error fetching complete user data:', error);
+        // If there's an error, the fetchUserData action will handle auto-logout
+        // We don't need to set guest status here anymore
       } finally {
-        // Always mark auth as ready when complete
+        // Always mark auth as ready when complete (unless user was logged out)
         commit('SET_AUTH_READY', true);
       }
     },
@@ -325,17 +356,51 @@ export default {
           
           // Merge the backend user data with the Firebase user data
           const user = auth.currentUser;
-          commit('SET_USER', {
-            uid: user.uid,
-            email: user.email,
-            displayName: userData.display_name || user.displayName,
-            photoURL: user.photoURL,
-            user_tag: userData.user_tag || '',
-            status: userData.status
-          });
+          
+          if (userData === null) {
+            // User not in database - auto-logout instead of treating as guest
+            console.log('User not in database, forcing logout');
+            await this.dispatch('auth/forceLogoutWithMessage');
+            return;
+          } else if (!userData.status || !['whitelisted', 'admin'].includes(userData.status)) {
+            // User has invalid status - auto-logout
+            console.log('User has invalid status, forcing logout');
+            await this.dispatch('auth/forceLogoutWithMessage');
+            return;
+          } else {
+            // User exists in database with valid status - use their data
+            commit('SET_USER', {
+              uid: user.uid,
+              email: user.email,
+              displayName: userData.display_name || user.displayName,
+              photoURL: user.photoURL,
+              user_tag: userData.user_tag || '',
+              status: userData.status
+            });
+          }
+        } else if (response.status === 302) {
+          // Silent logout redirect - no error messages
+          const responseData = await response.json().catch(() => ({}));
+          if (responseData.detail && responseData.detail.includes('SILENT_LOGOUT')) {
+            console.log('Silent logout detected, clearing session');
+            // Clear session silently
+            commit('SET_USER', null);
+            commit('SET_AUTH_READY', true);
+            localStorage.removeItem('auth_token');
+            // Redirect to login page
+            this.$router?.push('/login');
+            return;
+          }
+        } else {
+          // For other errors (like 403), force logout
+          console.log('Backend returned error, forcing logout');
+          await this.dispatch('auth/forceLogoutWithMessage');
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
+        // For any fetch errors, force logout
+        console.log('Fetch error, forcing logout');
+        await this.dispatch('auth/forceLogoutWithMessage');
       }
     },
     
@@ -358,6 +423,44 @@ export default {
         console.error('Error validating user tag:', error);
         return false;
       }
+    },
+
+    async forceLogoutWithMessage({ commit }) {
+      try {
+        console.log('Force logout with unauthorized message');
+        
+        // Sign out from Firebase
+        const auth = getFirebaseAuth();
+        if (auth && auth.currentUser) {
+          await auth.signOut();
+        }
+        
+        // Clear user state
+        commit('SET_USER', null);
+        commit('SET_AUTH_READY', true);
+        localStorage.removeItem('auth_token');
+        
+        // Store the notification message in localStorage to survive the redirect
+        const notificationData = {
+          type: 'error',
+          message: 'Your account is not authorized. Please follow instructions below.',
+          timestamp: Date.now()
+        };
+        localStorage.setItem('pending_notification', JSON.stringify(notificationData));
+        console.log('Stored pending notification:', notificationData);
+        
+        // Redirect to the Request Whitelist page
+        if (window.location.pathname !== '/requests') {
+          console.log('Redirecting to /requests');
+          window.location.href = '/requests';
+        }
+      } catch (error) {
+        console.error('Error during force logout:', error);
+        // Even if logout fails, clear local state
+        commit('SET_USER', null);
+        commit('SET_AUTH_READY', true);
+        localStorage.removeItem('auth_token');
+      }
     }
   },
   
@@ -375,6 +478,12 @@ export default {
       return state.user && ['whitelisted', 'admin'].includes(state.user.status);
     },
     
+    // Check if user has any platform access (whitelisted or admin)
+    hasPlatformAccess: state => {
+      return state.user && ['whitelisted', 'admin'].includes(state.user.status);
+    },
+    
+    // Legacy getters for backward compatibility
     canInteract: state => {
       return state.user && ['whitelisted', 'admin'].includes(state.user.status);
     },

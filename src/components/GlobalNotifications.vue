@@ -58,7 +58,7 @@ const clearSuccess = () => {
 <style scoped>
 .global-notifications {
   position: fixed;
-  top: 20px;
+  top: 80px; /* Position below the navigation bar */
   right: 20px;
   z-index: 9999;
   display: flex;
@@ -135,6 +135,16 @@ const clearSuccess = () => {
 .notification-leave-to {
   transform: translateX(100%);
   opacity: 0;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .global-notifications {
+    top: 70px; /* Slightly less space on mobile */
+    right: 10px;
+    left: 10px;
+    max-width: none;
+  }
 }
 
 /* Dark mode support */

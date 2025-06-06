@@ -10,7 +10,7 @@ import HomeView from './views/info_views/HomeView.vue';
 import RoadmapView from './views/info_views/RoadmapView.vue';
 import TermsView from './views/info_views/TermsView.vue';
 import ArchitectureView from './views/info_views/ArchitectureView.vue';
-import FeaturedThreadsView from './views/info_views/FeaturedThreadsView.vue';
+import RequestAccessView from './views/info_views/RequestAccessView.vue';
 
 // Import tab view
 import TabView from './views/app_views/TabView.vue';
@@ -35,9 +35,9 @@ const routes = [
     meta: { requiresAuth: false }
   },
   {
-    path: '/featured',
-    name: 'featured',
-    component: FeaturedThreadsView,
+    path: '/requests',
+    name: 'requests',
+    component: RequestAccessView,
     meta: { requiresAuth: false }
   },
   {
@@ -112,12 +112,21 @@ const routes = [
     redirect: '/'
   },
   {
-    path: '/community',
-    redirect: '/featured'
-  },
-  {
     path: '/docs',
     redirect: '/architecture'
+  },
+  // Redirects for whitelist-related URLs
+  {
+    path: '/whitelist',
+    redirect: '/requests'
+  },
+  {
+    path: '/request',
+    redirect: '/requests'
+  },
+  {
+    path: '/request-access',
+    redirect: '/requests'
   },
   // Redirect from any path containing beta.html to home
   {

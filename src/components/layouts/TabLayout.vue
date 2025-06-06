@@ -36,14 +36,13 @@
               <span v-if="userTag" class="user-tag">@{{ userTag }}</span>
               <span class="edit-icon" title="Edit profile">✎</span>
             </div>
-            <span v-else class="username">Guest</span>
+            <!-- No username shown when logged out since there are no guests -->
             
             <!-- Auth status badges - only shown when auth is ready -->
             <template v-if="authReady">
               <span v-if="isAdmin" class="admin-badge" title="Admin">⛊</span>
               <span v-else-if="isWhitelisted" class="whitelist-badge" title="Whitelisted">✓</span>
-              <span v-else-if="user && !isWhitelisted" class="non-whitelist-badge" title="Not whitelisted">✗</span>
-              <span v-if="!user" class="guest-badge" title="Not logged in">?</span>
+              <!-- Users without valid roles are auto-logged out -->
             </template>
             
             <!-- Loading spinner when auth is not ready -->
@@ -117,7 +116,7 @@ const toYouBadgeLoading = computed(() => store.getters['ui/getToYouBadgeLoading'
 
 // User display properties
 const userDisplayName = computed(() => {
-  if (!user.value) return 'Guest';
+  if (!user.value) return '';
   return user.value.displayName || user.value.email || 'Unknown User';
 });
 
@@ -403,7 +402,7 @@ onMounted(async () => {
   }
 }
 
-.whitelist-badge, .admin-badge, .non-whitelist-badge, .guest-badge {
+.whitelist-badge, .admin-badge {
   display: inline-block;
   width: 18px;
   height: 18px;
@@ -421,16 +420,6 @@ onMounted(async () => {
 
 .admin-badge {
   background-color: var(--color-primary);
-  color: var(--color-text-inverse);
-}
-
-.non-whitelist-badge {
-  background-color: var(--color-warning);
-  color: var(--color-text-inverse);
-}
-
-.guest-badge {
-  background-color: var(--color-text-secondary);
   color: var(--color-text-inverse);
 }
 
