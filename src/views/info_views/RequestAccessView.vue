@@ -132,7 +132,7 @@ onMounted(() => {
   font-family: 'Inter Tight', sans-serif;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.95);
-  margin-bottom: 2.5rem;
+  margin-bottom: 2rem;
   font-size: 2rem;
   position: relative;
   display: inline-block;
@@ -153,33 +153,22 @@ onMounted(() => {
 .info-steps {
   display: grid;
   gap: 2rem;
-  margin: 3rem auto;
+  margin: 1.5rem auto 3rem;
   text-align: center;
   position: relative;
-  max-width: 600px;
+  max-width: 800px;
 }
 
-/* Vertical timeline */
+/* Remove the vertical timeline */
 .info-steps::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: linear-gradient(to bottom,
-    var(--primary-color) 0%,
-    var(--accent-color) 100%
-  );
-  opacity: 0.3;
-  transform: translateX(-50%);
+  display: none;
 }
 
 .step {
   background: rgba(30, 30, 30, 0.5);
   backdrop-filter: blur(6px);
   border-radius: var(--border-radius-md);
-  padding: 1.75rem;
+  padding: 2rem;
   border-left: 4px solid var(--primary-color);
   transition: all 0.3s ease;
   position: relative;
@@ -188,7 +177,8 @@ onMounted(() => {
   opacity: 1;
   text-align: center;
   margin: 0 auto;
-  max-width: 500px;
+  max-width: 700px;
+  width: 100%;
 }
 
 .step.animate-in {
@@ -230,8 +220,8 @@ onMounted(() => {
   font-family: 'Inter Tight', sans-serif;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.95);
-  margin-bottom: 0.75rem;
-  font-size: 1.3rem;
+  margin-bottom: 1rem;
+  font-size: 1.4rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -240,8 +230,8 @@ onMounted(() => {
 .step h3::before {
   content: '';
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   background: var(--primary-color);
   border-radius: 50%;
   margin-right: 0.75rem;
@@ -257,9 +247,11 @@ onMounted(() => {
 .step p {
   margin: 0;
   color: rgba(255, 255, 255, 0.85);
-  line-height: 1.55;
-  font-size: 1.05rem;
+  line-height: 1.6;
+  font-size: 1.1rem;
   text-align: center;
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 .contact-info {
