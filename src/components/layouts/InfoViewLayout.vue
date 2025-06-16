@@ -9,7 +9,7 @@
         <ul class="nav-links" :class="{ active: isMenuOpen }">
           <li><router-link to="/" :class="{ active: currentRoute === '/' }">Home</router-link></li>
           <li><router-link to="/architecture" :class="{ active: currentRoute === '/architecture' }">Architecture</router-link></li>
-          <li><router-link to="/featured" :class="{ active: currentRoute === '/featured' }">Featured Threads</router-link></li>
+          <li><router-link to="/requests" :class="{ active: currentRoute === '/requests' }">Request Whitelist</router-link></li>
           <li><router-link to="/roadmap" :class="{ active: currentRoute === '/roadmap' }">Roadmap</router-link></li>
           <li><router-link to="/terms" :class="{ active: currentRoute === '/terms' }">Terms & Conditions</router-link></li>
           <li><router-link to="/feed" class="login-btn">Go to Stitch</router-link></li>
@@ -21,6 +21,9 @@
         </div>
       </nav>
     </header>
+
+    <!-- Global Notifications -->
+    <GlobalNotifications />
 
     <!-- Page Hero Section with dynamic title and subtitle -->
     <section class="page-hero" :class="heroClass">
@@ -61,6 +64,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute } from 'vue-router';
+import GlobalNotifications from '../GlobalNotifications.vue';
 
 // Props for customization
 const props = defineProps({

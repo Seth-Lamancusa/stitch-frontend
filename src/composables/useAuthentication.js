@@ -39,7 +39,7 @@ export function useAuthentication() {
 
   /**
    * Signs out the current user
-   * On success, clears store and stays on the current page
+   * On success, clears store and refreshes the page
    */
   const logout = async () => {
     try {
@@ -49,7 +49,8 @@ export function useAuthentication() {
       // Let the store handle clearing user state
       store.dispatch('auth/setUser', null);
       
-      // No redirect - stay on the current page
+      // Force page refresh to ensure clean state
+      window.location.reload();
     } catch (e) {
       error.value = e.message;
     }

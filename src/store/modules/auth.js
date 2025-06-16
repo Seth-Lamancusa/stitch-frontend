@@ -63,14 +63,27 @@ export default {
         if (response.ok) {
           const userData = await response.json();
           // Set complete user data
-          commit('SET_USER', {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: userData.display_name || firebaseUser.displayName,
-            photoURL: firebaseUser.photoURL,
-            user_tag: userData.user_tag || '',
-            status: userData.status
-          });
+          
+          if (userData === null) {
+            // User not in database - auto-logout instead of treating as guest
+            console.log('User not in database, forcing logout');
+            await this.dispatch('auth/forceLogoutWithMessage');
+            return;
+          } else if (!userData.status || !['whitelisted', 'admin'].includes(userData.status)) {
+            // User has invalid status - auto-logout
+            console.log('User has invalid status, forcing logout');
+            await this.dispatch('auth/forceLogoutWithMessage');
+            return;
+          } else {
+            // User exists in database with valid status - use their data
+            commit('SET_USER', {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: userData.display_name || firebaseUser.displayName,
+              photoURL: firebaseUser.photoURL,
+              user_tag: userData.user_tag || '',
+              status: userData.status
+            });
           
           // Initialize WebSocket connection for authenticated user
           try {
@@ -88,6 +101,24 @@ export default {
           
           // Clean up WebSocket connection
           WebSocketService.cleanup();
+          }
+        } else if (response.status === 302) {
+          // Silent logout redirect - no error messages
+          const responseData = await response.json().catch(() => ({}));
+          if (responseData.detail && responseData.detail.includes('SILENT_LOGOUT')) {
+            console.log('Silent logout detected, clearing session');
+            // Clear session silently
+            commit('SET_USER', null);
+            commit('SET_AUTH_READY', true);
+            localStorage.removeItem('auth_token');
+            // Redirect to login page
+            this.$router?.push('/login');
+            return;
+          }
+        } else {
+          // For other errors (like 403), force logout
+          console.log('Backend returned error, forcing logout');
+          await this.dispatch('auth/forceLogoutWithMessage');
         }
       } catch (error) {
         console.error('User validation failed:', error);
@@ -110,13 +141,8 @@ export default {
         await auth.signOut();
         commit('SET_USER', null);
       } catch (error) {
-        console.error('Sign out failed:', error);
-      }
-    },
-
-    async searchUsers({ state }, query) {
-      if (!state.user) {
-        throw new Error('User not authenticated');
+        console.error('[Frontend] Error searching users:', error);
+        return [];
       }
 
       try {
@@ -134,8 +160,46 @@ export default {
         const data = await response.json();
         return data.users || [];
       } catch (error) {
-        console.error('Error searching users:', error);
-        throw error;
+        console.error('Error validating user tag:', error);
+        return false;
+      }
+    },
+
+    async forceLogoutWithMessage({ commit }) {
+      try {
+        console.log('Force logout with unauthorized message');
+        
+        // Sign out from Firebase
+        const auth = getFirebaseAuth();
+        if (auth && auth.currentUser) {
+          await auth.signOut();
+        }
+        
+        // Clear user state
+        commit('SET_USER', null);
+        commit('SET_AUTH_READY', true);
+        localStorage.removeItem('auth_token');
+        
+        // Store the notification message in localStorage to survive the redirect
+        const notificationData = {
+          type: 'error',
+          message: 'Your account is not authorized. Please follow instructions below.',
+          timestamp: Date.now()
+        };
+        localStorage.setItem('pending_notification', JSON.stringify(notificationData));
+        console.log('Stored pending notification:', notificationData);
+        
+        // Redirect to the Request Whitelist page
+        if (window.location.pathname !== '/requests') {
+          console.log('Redirecting to /requests');
+          window.location.href = '/requests';
+        }
+      } catch (error) {
+        console.error('Error during force logout:', error);
+        // Even if logout fails, clear local state
+        commit('SET_USER', null);
+        commit('SET_AUTH_READY', true);
+        localStorage.removeItem('auth_token');
       }
     }
   },
@@ -146,6 +210,12 @@ export default {
     authReady: state => state.authReady,
     isAdmin: state => state.user?.status === 'admin',
     isWhitelisted: state => state.user && ['whitelisted', 'admin'].includes(state.user.status),
+    // Check if user has any platform access (whitelisted or admin)
+    hasPlatformAccess: state => {
+      return state.user && ['whitelisted', 'admin'].includes(state.user.status);
+    },
+    
+    // Legacy getters for backward compatibility
     canInteract: state => state.user && ['whitelisted', 'admin'].includes(state.user.status)
   }
 }

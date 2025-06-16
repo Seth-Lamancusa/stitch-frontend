@@ -827,7 +827,7 @@ defineExpose({
 }
 
 .send-button:disabled {
-  opacity: 0.5;
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
@@ -1161,5 +1161,32 @@ defineExpose({
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* Make scrollbar invisible until in use */
+.reply-input::-webkit-scrollbar {
+  width: 8px;
+}
+
+.reply-input::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.reply-input::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+}
+
+.reply-input:hover::-webkit-scrollbar-thumb {
+  background: var(--color-border-dark);
+}
+
+.reply-input {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.reply-input:hover {
+  scrollbar-color: var(--color-border-dark) transparent;
 }
 </style> 
