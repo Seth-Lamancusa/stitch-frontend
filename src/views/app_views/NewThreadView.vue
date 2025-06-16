@@ -24,7 +24,7 @@
           </button>
         </div>
         
-        <!-- Mobile-optimized service selector -->
+        Mobile-optimized service selector
         <div class="mobile-service-selector">
           <label class="service-selector-label">Import from:</label>
           <select 
