@@ -65,10 +65,9 @@
               
               <!-- Recipients dropdown hitbox (text area) -->
               <button 
-                @click.stop="toggleRecipientsDropdown('to-you')" 
+                @click.stop="toggleRecipientsDropdown" 
                 class="recipients-text-button"
                 :title="'Click to see all recipients'"
-                ref="toYouButton"
               >
                 <!-- If only the user is recipient -->
                 <span v-if="recipientsExcludingUser.length === 0">
@@ -80,22 +79,44 @@
                 </span>
               </button>
             </div>
+            
+            <!-- Recipients dropdown for to-you badge -->
+            <div v-if="showRecipientsDropdown" class="recipients-dropdown" @click.stop>
+              <div class="dropdown-header">
+                Recipients
+                <button @click.stop="showRecipientsDropdown = false" class="close-dropdown">×</button>
+              </div>
+              <ul class="recipients-list">
+                <li 
+                  v-if="typeof message.recipients === 'object' && message.recipients !== null"
+                  v-for="(recipient, index) in message.recipients" 
+                  :key="recipient.uid || index" 
+                  class="recipient-item"
+                >
+                  <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
+                  <span class="recipient-tag">@{{ recipient.user_tag }}</span>
+                </li>
+                <li v-else-if="typeof message.recipients === 'string'" class="no-recipients">
+                  {{ message.recipients }}
+                </li>
+                <li v-else class="no-recipients">
+                  No specific recipients
+                </li>
+              </ul>
+            </div>
           </div>
           
           <!-- Recipients badge (for authors) -->
           <div v-if="isUserAuthor && hasRecipients" class="recipients-dropdown-container author-container">
             <button 
-              @click.stop="toggleRecipientsDropdown('author')" 
+              @click.stop="toggleRecipientsDropdown" 
               class="recipients-toggle author-toggle"
-              ref="authorButton"
             >
               Recipients {{ typeof message.recipients === 'object' ? `(${message.recipients.length})` : '' }}
             </button>
-          </div>
-          
-          <!-- Unified Recipients dropdown -->
-          <div v-if="showRecipientsDropdown" class="recipients-dropdown-overlay" @click="showRecipientsDropdown = false">
-            <div class="recipients-dropdown" :style="dropdownPositionStyle" @click.stop>
+            
+            <!-- Recipients dropdown for author badge -->
+            <div v-if="showRecipientsDropdown" class="recipients-dropdown" @click.stop>
               <div class="dropdown-header">
                 Recipients
                 <button @click.stop="showRecipientsDropdown = false" class="close-dropdown">×</button>
@@ -422,10 +443,6 @@ export default {
     const currentUser = computed(() => store.getters['auth/user']);
     const isAdmin = computed(() => store.getters['auth/isAdmin']);
     const showRecipientsDropdown = ref(false);
-    const lastClickedBadge = ref(null);
-    const toYouButton = ref(null);
-    const authorButton = ref(null);
-    const dropdownPositionStyle = ref({});
     
     // Title/Description Modal
     const showTitleDescModal = ref(false);
@@ -658,33 +675,25 @@ export default {
       return props.message.recipients && props.message.recipients.length > 0;
     });
     
-    // Toggle recipients dropdown with positioning
-    const toggleRecipientsDropdown = (badgeType) => {
-      lastClickedBadge.value = badgeType;
-      
-      // Toggle the dropdown visibility
+    // Toggle recipients dropdown
+    const toggleRecipientsDropdown = () => {
       showRecipientsDropdown.value = !showRecipientsDropdown.value;
-      
-      // If opening the dropdown, position it correctly
-      if (showRecipientsDropdown.value) {
-        nextTick(() => {
-          const targetButton = badgeType === 'to-you' ? toYouButton.value : authorButton.value;
-          if (targetButton) {
-            const rect = targetButton.getBoundingClientRect();
-            dropdownPositionStyle.value = {
-              position: 'fixed',
-              top: `${rect.bottom + 2}px`,
-              left: `${rect.left}px`,
-            };
-          }
-        });
-      }
     };
     
-    // Update the click handler to be more global
+    // Click outside handler to close dropdown
     const handleClickOutside = (event) => {
-      // Simply close the dropdown no matter where clicked
-      if (showRecipientsDropdown.value) {
+      // Check if click is inside any recipients dropdown container
+      const dropdownContainers = document.querySelectorAll('.recipients-dropdown-container');
+      let clickedInside = false;
+      
+      for (const container of dropdownContainers) {
+        if (container.contains(event.target)) {
+          clickedInside = true;
+          break;
+        }
+      }
+      
+      if (!clickedInside && showRecipientsDropdown.value) {
         showRecipientsDropdown.value = false;
       }
     };
@@ -1278,8 +1287,8 @@ export default {
       // Initialize formatters if not already done
       initFormatters();
       
-      // Listen in the capture phase to get clicks before other handlers
-      document.addEventListener('click', handleClickOutside, true);
+      // Listen for clicks to handle dropdown closing
+      document.addEventListener('click', handleClickOutside);
       
       // Check if we're on mobile
       checkMobileDevice();
@@ -1294,7 +1303,7 @@ export default {
     });
     
     onBeforeUnmount(() => {
-      document.removeEventListener('click', handleClickOutside, true);
+      document.removeEventListener('click', handleClickOutside);
       window.removeEventListener('resize', checkMobileDevice);
       
       // Clean up touch event listeners
@@ -1344,9 +1353,6 @@ export default {
       handleSiblingNavigation,
       isCurrentUser,
       isCurrentUserRecipient,
-      toYouButton,
-      authorButton,
-      dropdownPositionStyle,
       saveMessage,
       saveError,
       titleInput,
@@ -1389,7 +1395,7 @@ export default {
   margin-bottom: var(--space-xs);
   transition: all var(--transition-fast);
   position: relative;
-  contain: layout paint style;
+  contain: layout style;
 }
 
 /* Add styling for list view mode */
@@ -1605,31 +1611,22 @@ export default {
   position: relative;
 }
 
-.recipients-dropdown-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: var(--z-index-dropdown);
-}
-
 .recipients-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  z-index: var(--z-index-dropdown);
+  z-index: var(--z-index-dropdown, 1000);
   min-width: 180px;
   max-width: 250px;
+  margin-top: 2px;
 }
 
 .author-container {
   position: relative;
-}
-
-.author-dropdown {
-  position: absolute;
 }
 
 .dropdown-header {

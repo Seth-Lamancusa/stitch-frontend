@@ -69,7 +69,8 @@ export default {
         author_display_name: message.author_display_name,
         author_user_tag: message.author_user_tag,
         content_author: message.content_author,
-        parent_id: message.parent_id
+        parent_id: message.parent_id,
+        child_ids: message.child_ids
       });
       
       // Ensure child_ids is always an array
@@ -703,7 +704,7 @@ export default {
           user: rootState.auth.user.email
         });
         
-        const response = await UserService.fetchUserMessages(20, page);
+        const response = await UserService.fetchUserMessages(10, page);
         const rawMessages = response.data?.messages || response.messages || [];
         const exhausted = response.data?.exhausted || response.exhausted || false;
         const currentPage = response.data?.page || page;

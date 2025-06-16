@@ -81,7 +81,7 @@ export default {
    * @param {Number} page - Page number (1-based)
    * @returns {Promise<Object>} - Response with messages and pagination info
    */
-  async fetchUserMessages(limit = 20, page = 1) {
+  async fetchUserMessages(limit = 10, page = 1) {
     try {
       const token = await getFirebaseToken();
       

@@ -51,14 +51,14 @@ export default {
       }
     },
 
-         async validateUser({ commit }, firebaseUser) {
-       try {
-         const token = await firebaseUser.getIdToken();
-         const response = await fetch('/api/users/me', {
-           headers: {
-             'Authorization': `Bearer ${token}`
-           }
-         });
+    async validateUser({ commit }, firebaseUser) {
+      try {
+        const token = await firebaseUser.getIdToken();
+        const response = await fetch('/api/users/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
 
         if (response.ok) {
           const userData = await response.json();
@@ -85,22 +85,13 @@ export default {
               status: userData.status
             });
           
-          // Initialize WebSocket connection for authenticated user
-          try {
-            console.log('Initializing WebSocket connection for authenticated user');
-            await WebSocketService.initialize();
-          } catch (error) {
-            console.error('Failed to initialize WebSocket connection:', error);
-          }
-        } else {
-          // User not authorized - sign them out
-          console.log('User not authorized, signing out');
-          const auth = getFirebaseAuth();
-          await auth.signOut();
-          commit('SET_USER', null);
-          
-          // Clean up WebSocket connection
-          WebSocketService.cleanup();
+            // Initialize WebSocket connection for authenticated user
+            try {
+              console.log('Initializing WebSocket connection for authenticated user');
+              await WebSocketService.initialize();
+            } catch (error) {
+              console.error('Failed to initialize WebSocket connection:', error);
+            }
           }
         } else if (response.status === 302) {
           // Silent logout redirect - no error messages
@@ -141,10 +132,11 @@ export default {
         await auth.signOut();
         commit('SET_USER', null);
       } catch (error) {
-        console.error('[Frontend] Error searching users:', error);
-        return [];
+        console.error('Error signing out:', error);
       }
+    },
 
+    async searchUsers({ }, query) {
       try {
         const token = await getFirebaseAuth().currentUser.getIdToken();
         const response = await fetch(`/api/users/search?query=${encodeURIComponent(query)}&limit=10`, {
@@ -159,6 +151,27 @@ export default {
 
         const data = await response.json();
         return data.users || [];
+      } catch (error) {
+        console.error('Error searching users:', error);
+        return [];
+      }
+    },
+
+    async validateUserTag({ }, userTag) {
+      try {
+        const token = await getFirebaseAuth().currentUser.getIdToken();
+        const response = await fetch(`/api/users/validate-tag?tag=${encodeURIComponent(userTag)}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          return false;
+        }
+
+        const data = await response.json();
+        return data.valid || false;
       } catch (error) {
         console.error('Error validating user tag:', error);
         return false;
