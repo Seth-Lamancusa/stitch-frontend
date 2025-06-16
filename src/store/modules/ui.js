@@ -4,6 +4,7 @@ export default {
   state: {
     error: null,
     success: null,
+    messageNotification: null,
     showDeleteConfirm: false,
     messageToDelete: null,
     tempThread: null
@@ -17,6 +18,10 @@ export default {
     
     SET_SUCCESS(state, message) {
       state.success = message;
+    },
+    
+    SET_MESSAGE_NOTIFICATION(state, notification) {
+      state.messageNotification = notification;
     },
     
     SET_DELETE_CONFIRM(state, { show, message }) {
@@ -55,6 +60,14 @@ export default {
     
     setSuccess({ commit }, message) {
       commit('SET_SUCCESS', message);
+    },
+    
+    setMessageNotification({ commit }, notification) {
+      commit('SET_MESSAGE_NOTIFICATION', notification);
+    },
+    
+    clearMessageNotification({ commit }) {
+      commit('SET_MESSAGE_NOTIFICATION', null);
     },
     
     showDeleteConfirm({ commit }, message) {
@@ -113,6 +126,7 @@ export default {
   getters: {
     error: state => state.error,
     success: state => state.success,
+    messageNotification: state => state.messageNotification,
     showDeleteConfirm: state => state.showDeleteConfirm,
     messageToDelete: state => state.messageToDelete,
     tempThread: state => state.tempThread,

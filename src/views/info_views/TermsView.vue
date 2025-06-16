@@ -16,7 +16,7 @@
           <div class="coming-soon-icon">📄</div>
           <h2>Terms & Conditions Coming Soon</h2>
           <p>Our legal team is finalizing our terms and conditions. The complete document will be available here soon.</p>
-          <router-link to="/cloud" class="btn primary-btn">Go to Stitch App</router-link>
+          <router-link to="/inbox" class="btn primary-btn">Go to Stitch App</router-link>
         </div>
       </div>
     </section>

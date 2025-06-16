@@ -11,7 +11,7 @@
     <!-- Empty messages container with just a hint -->
     <div class="messages-container" ref="messageList">
       
-      <!-- New tabbed import interface -->
+      <!-- New tabbed import interface
       <div class="import-tabs-container">
         <div class="import-tabs-sidebar">
           <button 
@@ -45,13 +45,10 @@
               :disabled="isImporting"
             />
             
-            <!-- Content and preview container -->
             <div v-if="parsedMessages.length > 0 || formatDetection.hint" class="import-content-container">
-              <!-- Preview section -->
               <div v-if="parsedMessages.length > 0" class="import-preview">
                 <div class="preview-header">
                   <h4>Preview ({{ parsedMessages.length }} messages)</h4>
-                  <!-- Format detection hint positioned next to preview title -->
                   <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
                     <span class="format-icon">{{ getFormatIcon() }}</span>
                     <span class="format-hint">{{ formatDetection.hint }}</span>
@@ -68,14 +65,12 @@
                 </div>
               </div>
               
-              <!-- Format detection when no preview (standalone) -->
               <div v-else-if="formatDetection.hint" class="format-detection standalone" :class="formatDetection.format">
                 <span class="format-icon">{{ getFormatIcon() }}</span>
                 <span class="format-hint">{{ formatDetection.hint }}</span>
               </div>
             </div>
             
-            <!-- Validation errors -->
             <div v-if="importErrors.length > 0" class="import-errors">
               <p class="error-title">Please fix the following issues:</p>
               <ul>
@@ -107,7 +102,7 @@
               <p class="import-warning">Only markdown (.md) files are supported</p>
             </div>
             
-            <!-- Model Selection -->
+            Model Selection
             <div class="model-selection-container">
               <label class="model-selection-label">AI Model Used:</label>
               <select 
@@ -138,13 +133,13 @@
               </label>
             </div>
             
-            <!-- Content and preview container -->
+            Content and preview container
             <div v-if="parsedMessages.length > 0 || formatDetection.hint" class="import-content-container">
-              <!-- Preview section -->
+              Preview section
               <div v-if="parsedMessages.length > 0" class="import-preview">
                 <div class="preview-header">
                   <h4>Preview ({{ parsedMessages.length }} messages)</h4>
-                  <!-- Format detection hint positioned next to preview title -->
+                  Format detection hint positioned next to preview title
                   <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
                     <span class="format-icon">{{ getFormatIcon() }}</span>
                     <span class="format-hint">{{ formatDetection.hint }}</span>
@@ -161,14 +156,14 @@
                 </div>
               </div>
               
-              <!-- Format detection when no preview (standalone) -->
+              Format detection when no preview (standalone)
               <div v-else-if="formatDetection.hint" class="format-detection standalone" :class="formatDetection.format">
                 <span class="format-icon">{{ getFormatIcon() }}</span>
                 <span class="format-hint">{{ formatDetection.hint }}</span>
               </div>
             </div>
             
-            <!-- Validation errors -->
+            Validation errors
             <div v-if="importErrors.length > 0" class="import-errors">
               <p class="error-title">Please fix the following issues:</p>
               <ul>
@@ -206,13 +201,13 @@
               :disabled="isImporting"
             />
             
-            <!-- Content and preview container -->
+            Content and preview container
             <div v-if="parsedMessages.length > 0 || formatDetection.hint" class="import-content-container">
-              <!-- Preview section -->
+              Preview section
               <div v-if="parsedMessages.length > 0" class="import-preview">
                 <div class="preview-header">
                   <h4>Preview ({{ parsedMessages.length }} messages)</h4>
-                  <!-- Format detection hint positioned next to preview title -->
+                  Format detection hint positioned next to preview title
                   <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
                     <span class="format-icon">{{ getFormatIcon() }}</span>
                     <span class="format-hint">{{ formatDetection.hint }}</span>
@@ -229,14 +224,14 @@
                 </div>
               </div>
               
-              <!-- Format detection when no preview (standalone) -->
+              Format detection when no preview (standalone)
               <div v-else-if="formatDetection.hint" class="format-detection standalone" :class="formatDetection.format">
                 <span class="format-icon">{{ getFormatIcon() }}</span>
                 <span class="format-hint">{{ formatDetection.hint }}</span>
               </div>
             </div>
             
-            <!-- Validation errors -->
+            Validation errors
             <div v-if="importErrors.length > 0" class="import-errors">
               <p class="error-title">Please fix the following issues:</p>
               <ul>
@@ -274,13 +269,13 @@
               :disabled="isImporting"
             />
             
-            <!-- Content and preview container -->
+            Content and preview container
             <div v-if="parsedMessages.length > 0 || formatDetection.hint" class="import-content-container">
-              <!-- Preview section -->
+              Preview section
               <div v-if="parsedMessages.length > 0" class="import-preview">
                 <div class="preview-header">
                   <h4>Preview ({{ parsedMessages.length }} messages)</h4>
-                  <!-- Format detection hint positioned next to preview title -->
+                  Format
                   <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
                     <span class="format-icon">{{ getFormatIcon() }}</span>
                     <span class="format-hint">{{ formatDetection.hint }}</span>
@@ -297,14 +292,14 @@
                 </div>
               </div>
               
-              <!-- Format detection when no preview (standalone) -->
+              Format detection when no preview (standalone)
               <div v-else-if="formatDetection.hint" class="format-detection standalone" :class="formatDetection.format">
                 <span class="format-icon">{{ getFormatIcon() }}</span>
                 <span class="format-hint">{{ formatDetection.hint }}</span>
               </div>
             </div>
             
-            <!-- Validation errors -->
+            Validation errors
             <div v-if="importErrors.length > 0" class="import-errors">
               <p class="error-title">Please fix the following issues:</p>
               <ul>
@@ -342,13 +337,13 @@
               :disabled="isImporting"
             />
             
-            <!-- Content and preview container -->
+            Content and preview container
             <div v-if="parsedMessages.length > 0 || formatDetection.hint" class="import-content-container">
-              <!-- Preview section -->
+              Preview section
               <div v-if="parsedMessages.length > 0" class="import-preview">
                 <div class="preview-header">
                   <h4>Preview ({{ parsedMessages.length }} messages)</h4>
-                  <!-- Format detection hint positioned next to preview title -->
+                  Format detection hint positioned next to preview title
                   <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
                     <span class="format-icon">{{ getFormatIcon() }}</span>
                     <span class="format-hint">{{ formatDetection.hint }}</span>
@@ -365,14 +360,14 @@
                 </div>
               </div>
               
-              <!-- Format detection when no preview (standalone) -->
+              Format detection when no preview (standalone)
               <div v-else-if="formatDetection.hint" class="format-detection standalone" :class="formatDetection.format">
                 <span class="format-icon">{{ getFormatIcon() }}</span>
                 <span class="format-hint">{{ formatDetection.hint }}</span>
               </div>
             </div>
             
-            <!-- Validation errors -->
+            Validation errors
             <div v-if="importErrors.length > 0" class="import-errors">
               <p class="error-title">Please fix the following issues:</p>
               <ul>
@@ -395,7 +390,7 @@
             <p class="under-development">This feature is under development</p>
           </div>
         </div>
-      </div>
+      </div> -->
     </div>
     
     <!-- Reply box component -->
@@ -631,7 +626,7 @@ const handleSendSuccess = async (newMessage) => {
     loadingSubmessage.value = 'This will only take a moment';
     
     // Redirect to the new thread
-    router.replace({ path: `/messages/${newMessage.id}` });
+    router.replace({ path: `/${newMessage.id}` });
   } catch (error) {
     console.error('Error handling message success:', error);
     store.commit('ui/SET_ERROR', 'Failed to complete thread creation.');
@@ -751,7 +746,7 @@ const importChatGPT = async () => {
       await new Promise(resolve => setTimeout(resolve, 1500));
       
       // Navigate to the imported thread
-      router.replace({ path: `/messages/${result.thread_id}` });
+      router.replace({ path: `/${result.thread_id}` });
       
       // Show success message
       store.commit('ui/SET_SUCCESS', `Successfully imported ${result.message_count} messages`);
@@ -818,7 +813,7 @@ const importCursor = async () => {
       await new Promise(resolve => setTimeout(resolve, 1500));
       
       // Navigate to the imported thread
-      router.replace({ path: `/messages/${result.thread_id}` });
+      router.replace({ path: `/${result.thread_id}` });
       
       // Show success message
       store.commit('ui/SET_SUCCESS', `Successfully imported ${result.message_count} messages`);
@@ -884,7 +879,7 @@ const importClaude = async () => {
       await new Promise(resolve => setTimeout(resolve, 1500));
       
       // Navigate to the imported thread
-      router.replace({ path: `/messages/${result.thread_id}` });
+      router.replace({ path: `/${result.thread_id}` });
       
       // Show success message
       store.commit('ui/SET_SUCCESS', `Successfully imported ${result.message_count} messages`);
@@ -950,7 +945,7 @@ const importGemini = async () => {
       await new Promise(resolve => setTimeout(resolve, 1500));
       
       // Navigate to the imported thread
-      router.replace({ path: `/messages/${result.thread_id}` });
+      router.replace({ path: `/${result.thread_id}` });
       
       // Show success message
       store.commit('ui/SET_SUCCESS', `Successfully imported ${result.message_count} messages`);
@@ -1016,7 +1011,7 @@ const importGrok = async () => {
       await new Promise(resolve => setTimeout(resolve, 1500));
       
       // Navigate to the imported thread
-      router.replace({ path: `/messages/${result.thread_id}` });
+      router.replace({ path: `/${result.thread_id}` });
       
       // Show success message
       store.commit('ui/SET_SUCCESS', `Successfully imported ${result.message_count} messages`);

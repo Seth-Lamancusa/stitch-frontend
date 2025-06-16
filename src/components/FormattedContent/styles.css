@@ -81,6 +81,15 @@ blockquote {
   font-style: italic;
 }
 
+/* ===== Horizontal Rules ===== */
+hr {
+  border: none;
+  height: 1px;
+  background-color: var(--color-border);
+  margin: var(--space-xl) 0;
+  opacity: 0.6;
+}
+
 /* ===== LaTeX ===== */
 .katex-display {
   margin: var(--space-md) 0;

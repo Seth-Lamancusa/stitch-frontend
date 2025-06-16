@@ -3,7 +3,6 @@
     class="message-node" 
     :class="{ 
       'selected': isSelected, 
-      'pinned': isPinned,
       'list-view': inListView,
       'shake-animation': isShaking,
       'being-swiped': isBeingSwiped
@@ -52,25 +51,35 @@
           
           <!-- To You badge (for recipients) with read/unread circle indicator -->
           <div v-if="isUserRecipient" class="recipients-dropdown-container">
-            <button 
-              @click.stop="toggleReadStatusOrDropdown($event)" 
-              class="recipients-toggle to-you"
-              :class="{ 'loading': isTogglingReadStatus }"
-              :title="message.is_read === false ? 'Click to mark as read (Shift+click to see all recipients)' : 'Click to mark as unread (Shift+click to see all recipients)'"
-              :disabled="isTogglingReadStatus"
-              ref="toYouButton"
-            >
-              <span v-if="isTogglingReadStatus" class="loading-indicator"></span>
-              <span v-else class="read-status-indicator" :class="{ 'unread': message.is_read === false }"></span>
-              <!-- If only the user is recipient -->
-              <span v-if="recipientsExcludingUser.length === 0">
-                To You
-              </span>
-              <!-- If there are other recipients -->
-              <span v-else>
-                To You and {{ recipientsExcludingUser.length }} other{{ recipientsExcludingUser.length > 1 ? 's' : '' }}
-              </span>
-            </button>
+            <div class="recipients-toggle to-you" :class="{ 'loading': isTogglingReadStatus }">
+              <!-- Read status toggle hitbox (red dot area) -->
+              <button 
+                @click.stop="toggleReadStatus" 
+                class="read-status-button"
+                :title="isMessageUnread ? 'Click to mark as read' : 'Click to mark as unread'"
+                :disabled="isTogglingReadStatus"
+              >
+                <span v-if="isTogglingReadStatus" class="loading-indicator"></span>
+                <span v-else class="read-status-indicator" :class="{ 'unread': isMessageUnread }"></span>
+              </button>
+              
+              <!-- Recipients dropdown hitbox (text area) -->
+              <button 
+                @click.stop="toggleRecipientsDropdown('to-you')" 
+                class="recipients-text-button"
+                :title="'Click to see all recipients'"
+                ref="toYouButton"
+              >
+                <!-- If only the user is recipient -->
+                <span v-if="recipientsExcludingUser.length === 0">
+                  To You
+                </span>
+                <!-- If there are other recipients -->
+                <span v-else>
+                  To You and {{ recipientsExcludingUser.length }} other{{ recipientsExcludingUser.length > 1 ? 's' : '' }}
+                </span>
+              </button>
+            </div>
           </div>
           
           <!-- Recipients badge (for authors) -->
@@ -118,18 +127,6 @@
               class="title-icon"
               title="Edit title and description"
             >T</span>
-            
-            <button 
-              @click.stop="togglePinStatus" 
-              class="pin-button"
-              :class="{ 'loading': isPinning }"
-              :title="isPinned ? 'Unpin this message' : 'Pin this message'"
-              :disabled="isPinning"
-            >
-              <span v-if="isPinning" class="pin-loading-indicator"></span>
-              <span v-else class="pin-icon">📌</span>
-              {{ isPinned ? 'Unpin' : 'Pin' }}
-            </button>
             
             <button 
               @click.stop="$emit('delete', message)" 
@@ -195,10 +192,13 @@
             v-if="isAdmin"
             @click.stop="copyMessageJson" 
             class="json-button"
+            :class="{ 'copied': isJsonCopied }"
             title="Copy message JSON to clipboard"
           >
-            <span class="json-icon">{ }</span>
-            Copy JSON
+            <span v-if="isJsonCopied" class="copied-icon">✓</span>
+            <span v-else class="json-icon">{ }</span>
+            <span v-if="isJsonCopied">Copied!</span>
+            <span v-else>Copy JSON</span>
           </button>
           
           <!-- Copy Text Button -->
@@ -206,16 +206,15 @@
             v-if="!inListView"
             @click.stop="copyMessageText" 
             class="text-button"
+            :class="{ 'copied': isTextCopied }"
             title="Copy message text with metadata to clipboard"
           >
-            <span class="text-icon">📝</span>
-            Copy Text
+            <span v-if="isTextCopied" class="copied-icon">✓</span>
+            <span v-else class="text-icon">📝</span>
+            <span v-if="isTextCopied">Copied!</span>
+            <span v-else>Copy Text</span>
           </button>
           
-          <!-- Pin status indicator -->
-          <div v-if="isPinned" class="pin-status-indicator">
-            <span class="pin-icon">📌</span> Pinned
-          </div>
         </div>
       </div>
     </div>
@@ -441,6 +440,10 @@ export default {
     
     const isReformatting = ref(false);
     
+    // Add refs for copy button states
+    const isJsonCopied = ref(false);
+    const isTextCopied = ref(false);
+    
     // Add new refs for swipe functionality
     const touchStartX = ref(0);
     const touchEndX = ref(0);
@@ -552,29 +555,10 @@ export default {
       });
     });
     
-    // Check if message is pinned
-    const isPinned = computed(() => {
-      return props.message.is_pinned === 1 || props.message.is_pinned === true;
+    // Check if message is unread (treating null and false as unread)
+    const isMessageUnread = computed(() => {
+      return store.getters['messages/isMessageUnread'](props.message.id);
     });
-    
-    const isPinning = ref(false);
-    
-    // Toggle pin status
-    const togglePinStatus = async () => {
-      try {
-        isPinning.value = true;
-        
-        if (isPinned.value) {
-          await store.dispatch('messages/unpinMessage', props.message.id);
-        } else {
-          await store.dispatch('messages/pinMessage', props.message.id);
-        }
-      } catch (error) {
-        console.error('Error toggling pin status:', error);
-      } finally {
-        isPinning.value = false;
-      }
-    };
     
     // Get recipients excluding the current user
     const recipientsExcludingUser = computed(() => {
@@ -1069,10 +1053,13 @@ export default {
       
       isTogglingReadStatus.value = true;
       try {
-        if (props.message.is_read) {
-          await store.dispatch('messages/markMessageAsUnread', props.message.id);
-        } else {
+        // Explicitly call mark as read or mark as unread based on current state
+        if (isMessageUnread.value) {
+          // Message is unread, mark it as read
           await store.dispatch('messages/markMessageAsRead', props.message.id);
+        } else {
+          // Message is read, mark it as unread
+          await store.dispatch('messages/markMessageAsUnread', props.message.id);
         }
       } catch (error) {
         console.error('Error toggling read status:', error);
@@ -1088,16 +1075,17 @@ export default {
         const messageJson = JSON.stringify(props.message, null, 2);
         navigator.clipboard.writeText(messageJson)
           .then(() => {
-            // Show a brief feedback message
-            alert('Message JSON copied to clipboard');
+            // Show flash effect
+            isJsonCopied.value = true;
+            setTimeout(() => {
+              isJsonCopied.value = false;
+            }, 1500);
           })
           .catch(err => {
             console.error('Failed to copy JSON: ', err);
-            alert('Failed to copy JSON to clipboard');
           });
       } catch (error) {
         console.error('Error copying message JSON:', error);
-        alert('Error preparing message JSON');
       }
     };
     
@@ -1134,29 +1122,21 @@ export default {
         
         navigator.clipboard.writeText(fullText)
           .then(() => {
-            // Show a brief feedback message
-            alert('Message text copied to clipboard');
+            // Show flash effect
+            isTextCopied.value = true;
+            setTimeout(() => {
+              isTextCopied.value = false;
+            }, 1500);
           })
           .catch(err => {
             console.error('Failed to copy text: ', err);
-            alert('Failed to copy text to clipboard');
           });
       } catch (error) {
         console.error('Error copying message text:', error);
-        alert('Error preparing message text');
       }
     };
     
-    const toggleReadStatusOrDropdown = (event) => {
-      // Check if clicked on the badge element vs the dropdown arrow
-      if (event.shiftKey || event.ctrlKey) {
-        // If shift or ctrl was held, always open the dropdown
-        toggleRecipientsDropdown('to-you');
-      } else {
-        // Otherwise toggle read status
-        toggleReadStatus();
-      }
-    };
+
     
     const truncatedContent = computed(() => {
       if (!props.message.content) return '';
@@ -1340,8 +1320,7 @@ export default {
       isUserAuthor,
       isPublic,
       isAdmin,
-      isPinned,
-      togglePinStatus,
+      isMessageUnread,
       showTitleDescModal,
       editableTitle,
       editableDescription,
@@ -1358,7 +1337,6 @@ export default {
       authorDisplayName,
       authorUserTag,
       isUserAuthorOfContent,
-      isPinning,
       handleSiblingNavigation,
       isCurrentUser,
       isCurrentUserRecipient,
@@ -1372,7 +1350,6 @@ export default {
       toggleReadStatus,
       copyMessageJson,
       copyMessageText,
-      toggleReadStatusOrDropdown,
       truncatedContent,
       isReformatting,
       handleReformat,
@@ -1389,7 +1366,9 @@ export default {
       showPrevCard,
       nextSiblingMessage,
       prevSiblingMessage,
-      siblingCount
+      siblingCount,
+      isJsonCopied,
+      isTextCopied
     };
   },
   
@@ -1423,6 +1402,7 @@ export default {
   margin-left: 0 !important;
   margin-right: 0 !important;
   max-width: 100% !important;
+  z-index: 1;
 }
 
 .message-node.list-view:hover {
@@ -1449,7 +1429,7 @@ export default {
 .message-content {
   background-color: var(--color-surface);
   border-radius: var(--radius-md);
-  padding: var(--space-md);
+  padding: var(--space-lg) var(--space-xl);
   border: 1px solid var(--color-border);
   width: 100%;
   position: relative;
@@ -1459,10 +1439,6 @@ export default {
 .message-node.selected .message-content {
   border: 2px solid var(--color-primary);
   background-color: var(--color-primary-light);
-}
-
-.message-node.pinned .message-content {
-  border-color: var(--color-primary-light);
 }
 
 .message-header {
@@ -1546,8 +1522,55 @@ export default {
   transition: all var(--transition-fast);
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding-left: 8px;
+  gap: 0;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+
+/* Read status button - left side of the badge */
+.read-status-button {
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  border-radius: var(--radius-pill) 0 0 var(--radius-pill);
+  min-width: 24px;
+  height: 22px;
+}
+
+.read-status-button:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.read-status-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+/* Recipients text button - right side of the badge */
+.recipients-text-button {
+  background: none;
+  border: none;
+  padding: 2px 8px 2px 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+  flex: 1;
+  height: 22px;
+  color: inherit;
+  font-size: inherit;
+}
+
+.recipients-text-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 /* Read status indicator - circle that shows if message is read/unread */
@@ -1626,8 +1649,29 @@ export default {
   list-style: none;
   padding: 4px 0;
   margin: 0;
-  max-height: 180px;
+  max-height: 100px;
   overflow-y: auto;
+  scrollbar-width: thin; /* For Firefox */
+  scrollbar-color: var(--color-border) transparent; /* For Firefox */
+  z-index: 1000;
+}
+
+/* Webkit scrollbar styles */
+.recipients-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.recipients-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.recipients-list::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: 3px;
+}
+
+.recipients-list::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-border-hover);
 }
 
 .recipient-item {
@@ -1662,7 +1706,7 @@ export default {
   gap: 6px;
 }
 
-.pin-button, .delete-button, .title-button {
+.delete-button, .title-button {
   font-size: var(--font-size-xs);
   padding: 2px 8px;
   border-radius: var(--radius-sm);
@@ -1676,7 +1720,7 @@ export default {
   transition: all var(--transition-fast);
 }
 
-.pin-button:hover, .delete-button:hover, .title-button:hover {
+.delete-button:hover, .title-button:hover {
   background-color: var(--color-hover-overlay);
 }
 
@@ -1706,10 +1750,6 @@ export default {
 
 .delete-button:hover {
   background-color: #fff0f0;
-}
-
-.pin-icon {
-  font-size: 0.9em;
 }
 
 .message-timestamp {
@@ -1744,14 +1784,6 @@ export default {
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
-}
-
-.pin-status-indicator {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--color-primary);
-  font-weight: 500;
 }
 
 /* Modal styles */
@@ -1867,22 +1899,6 @@ export default {
   cursor: not-allowed;
 }
 
-.pin-loading-indicator {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border: 2px solid rgba(0, 0, 0, 0.1);
-  border-top-color: var(--primary-color, #007bff);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-right: 4px;
-}
-
-.pin-button.loading {
-  opacity: 0.7;
-  cursor: wait;
-}
-
 .save-status {
   margin-top: 12px;
   padding: 8px;
@@ -1915,8 +1931,21 @@ export default {
   border-color: var(--color-border-hover);
 }
 
+.json-button.copied, .text-button.copied {
+  background-color: var(--color-success);
+  border-color: var(--color-success);
+  color: var(--color-text-inverse);
+  transform: scale(1.05);
+}
+
 .json-icon, .text-icon {
   font-size: var(--font-size-sm);
+  line-height: 1;
+}
+
+.copied-icon {
+  font-size: var(--font-size-sm);
+  font-weight: bold;
   line-height: 1;
 }
 

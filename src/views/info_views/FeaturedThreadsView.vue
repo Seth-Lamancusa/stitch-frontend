@@ -16,7 +16,7 @@
           <div class="coming-soon-icon">💬</div>
           <h2>Featured Threads Coming Soon</h2>
           <p>We're curating the best conversations from our community. Check back soon to explore featured discussions.</p>
-          <router-link to="/cloud" class="btn primary-btn">Go to Stitch App</router-link>
+          <router-link to="/inbox" class="btn primary-btn">Go to Stitch App</router-link>
         </div>
       </div>
     </section>
@@ -180,7 +180,7 @@
         <div class="cta-content">
           <h2>Ready to join the conversation?</h2>
           <p>Create your own threads or participate in existing discussions on the Stitch platform.</p>
-          <router-link to="/cloud" class="btn primary-btn">Go to Stitch</router-link>
+          <router-link to="/inbox" class="btn primary-btn">Go to Stitch</router-link>
         </div>
       </section>
     </div>

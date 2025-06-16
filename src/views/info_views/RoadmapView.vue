@@ -16,7 +16,7 @@
           <div class="coming-soon-icon">🗺️</div>
           <h2>Roadmap Coming Soon</h2>
           <p>Our detailed product and technology roadmap is being finalized and will be published here soon.</p>
-          <router-link to="/cloud" class="btn primary-btn">Go to Stitch App</router-link>
+          <router-link to="/inbox" class="btn primary-btn">Go to Stitch App</router-link>
         </div>
       </div>
     </section>

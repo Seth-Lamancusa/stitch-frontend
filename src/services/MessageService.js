@@ -22,32 +22,13 @@ const getAuthHeaders = async () => {
 };
 
 export default {
-  // Fetch a single message
-  async getMessage(id) {
-    const headers = await getAuthHeaders();
-    const response = await axios.get(`${apiBaseUrl}/messages/${id}`, { headers });
-    console.log(`[DEBUG] MessageService - getMessage(${id}) response:`, response.data);
-    return response;
-  },
-  
-  // Get multiple messages by ID in a single request
-  async getMessagesBatch(ids) {
-    if (!ids || ids.length === 0) return { data: [] };
-    
-    const headers = await getAuthHeaders();
-    const response = await axios.post(`${apiBaseUrl}/messages/batch`, ids, { headers });
-    console.log('[DEBUG] MessageService - getMessagesBatch response:', 
-      response.data.length > 0 ? 
-      {count: response.data.length, firstMessage: response.data[0]} : 
-      {count: 0});
-    return response;
-  },
-  
-  // Get count of replies for a message
-  async getReplyCount(id) {
-    const headers = await getAuthHeaders();
-    return axios.get(`${apiBaseUrl}/messages/count/${id}`, { headers });
-  },
+  // Fetch a single message - DEPRECATED: Use loadMessageRadius instead
+  // async getMessage(id) {
+  //   const headers = await getAuthHeaders();
+  //   const response = await axios.get(`${apiBaseUrl}/messages/${id}`, { headers });
+  //   console.log(`[DEBUG] MessageService - getMessage(${id}) response:`, response.data);
+  //   return response;
+  // },
   
   // Send a message or reply
   async sendReply(parentId, content, isPrivate = false, recipients = [], content_author = null) {
@@ -109,103 +90,6 @@ export default {
     }
   },
   
-  // Get recommended messages for feed
-  async getRecommendedMessages(limit = 100) {
-    // Make sure we don't exceed the server limit of 5000
-    const safeLimit = Math.min(limit, 5000);
-    const headers = await getAuthHeaders();
-    const response = await axios.get(`${apiBaseUrl}/messages/recommended?limit=${safeLimit}`, { headers });
-    console.log('[DEBUG] MessageService - getRecommendedMessages response:', 
-      response.data.length > 0 ? 
-      {count: response.data.length, firstMessage: response.data[0]} : 
-      {count: 0});
-    return response;
-  },
-  
-  // Get chronological messages (for cloud tab main list)
-  async getChronologicalMessages(limit = 10, cursor = null, filters = {}) {
-    try {
-      console.log('[MessageService] getChronologicalMessages called with:', {
-        limit,
-        cursor,
-        filters: {
-          ...filters,
-          authorsCount: filters.authors?.length || 0,
-          recipientsCount: filters.recipients?.length || 0
-        }
-      });
-      
-      const headers = await getAuthHeaders();
-      const params = new URLSearchParams();
-      if (cursor) params.append('cursor', cursor);
-      if (limit) params.append('limit', limit);
-      
-      // Add filter parameters - multiple authors support
-      if (filters.authors && filters.authors.length > 0) {
-        filters.authors.forEach(author => {
-          // Extract UID from author (handle both object and string formats)
-          const uid = typeof author === 'object' && author.uid ? author.uid : author;
-          params.append('author_uid', uid);
-        });
-      }
-      
-      // Handle three-state public filter: 'public', 'private', 'all'
-      if (filters.isPublic === 'public') {
-        params.append('public', 'true');
-      } else if (filters.isPublic === 'private') {
-        params.append('public', 'false');
-      }
-      // If 'all', don't add public parameter to get both public and private messages
-      
-      if (filters.recipients && filters.recipients.length > 0) {
-        filters.recipients.forEach(recipient => {
-          // Extract UID from recipient (handle both object and string formats)
-          const uid = typeof recipient === 'object' && recipient.uid ? recipient.uid : recipient;
-          params.append('recipients', uid);
-        });
-      }
-      
-      // Add date filtering support
-      if (filters.dateRange) {
-        if (filters.dateRange.start) {
-          params.append('date_start', filters.dateRange.start);
-        }
-        if (filters.dateRange.end) {
-          params.append('date_end', filters.dateRange.end);
-        }
-      }
-
-      // Add sort order parameter (simplified)
-      if (filters.sortOrder) {
-        params.append('sort_order', filters.sortOrder);
-      }
-
-      const finalUrl = `${apiBaseUrl}/messages/chronological?${params.toString()}`;
-      console.log('[MessageService] Making API request to:', finalUrl);
-      console.log('[MessageService] Request params string:', params.toString());
-      
-      const response = await axios.get(finalUrl, { headers });
-      
-      console.log('[MessageService] API response received:', {
-        status: response.status,
-        dataType: typeof response.data,
-        messagesCount: response.data?.messages?.length || 0,
-        exhausted: response.data?.exhausted,
-        nextCursor: response.data?.next_cursor
-      });
-      
-      return response.data;
-    } catch (error) {
-      console.error('[MessageService] Error fetching chronological messages:', {
-        message: error.message,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data
-      });
-      throw error;
-    }
-  },
-  
   // Delete a message and all its descendants
   async deleteMessage(id) {
     const headers = await getAuthHeaders();
@@ -248,6 +132,17 @@ export default {
     console.log(`[DEBUG] MessageService - loadBranchDown(${messageId}, depth=${depth}) response:`, 
       response.data.length > 0 ? 
       {count: response.data.length, firstMessage: response.data[0]} : 
+      {count: 0});
+    return response;
+  },
+  
+  // Load messages within a radius of a target message (both parents and children)
+  async loadMessageRadius(messageId, radius = 5) {
+    const headers = await getAuthHeaders();
+    const response = await axios.get(`${apiBaseUrl}/messages/radius/${messageId}?radius=${radius}`, { headers });
+    console.log(`[DEBUG] MessageService - loadMessageRadius(${messageId}, radius=${radius}) response:`, 
+      response.data.length > 0 ? 
+      {count: response.data.length, messageIds: response.data.map(m => m.id)} : 
       {count: 0});
     return response;
   },

@@ -1,7 +1,6 @@
 import { getFirebaseAuth, initializeFirebase } from '../../firebase.js'
-import WhitelistService from '../../services/WhitelistService'
-import UserService from '../../services/UserService'
-import { updateProfile as firebaseUpdateProfile, onAuthStateChanged } from 'firebase/auth'
+import { onAuthStateChanged } from 'firebase/auth'
+import WebSocketService from '../../services/WebSocketService'
 
 export default {
   namespaced: true,
@@ -14,349 +13,129 @@ export default {
   
   mutations: {
     SET_USER(state, user) {
-      // If user is null, clear the state
-      if (!user) {
-        state.user = null;
-        state.isAuthenticated = false;
-        // Don't change other state props here - they should be explicitly set
-        return;
-      }
-      
-      // Always ensure these fields are defined with proper fallbacks
-      state.user = {
-        uid: user.uid,
-        email: user.email || '',
-        displayName: user.displayName || '',
-        user_tag: user.user_tag || '',
-        photoURL: user.photoURL || null,
-        // Only set status if explicitly provided, otherwise keep existing value
-        status: user.status !== undefined ? user.status : (state.user ? state.user.status : null)
-      };
-      
+      state.user = user;
       state.isAuthenticated = !!user;
     },
-    
-    SET_AUTH_READY(state, status) {
-      state.authReady = status;
-    },
-    
-    UPDATE_USER_PROFILE(state, { displayName, user_tag }) {
-      if (state.user) {
-        state.user = {
-          ...state.user,
-          displayName: displayName || state.user.displayName,
-          user_tag: user_tag || state.user.user_tag
-        };
-      }
+    SET_AUTH_READY(state, ready) {
+      state.authReady = ready;
     }
   },
   
   actions: {
-    // Centralized auth initialization - only called once from main.js or App.vue
     async initAuth({ commit, dispatch }) {
       try {
-        // Start with auth not ready
-        commit('SET_AUTH_READY', false);
-        
         await initializeFirebase();
         const auth = getFirebaseAuth();
         
-        if (auth) {
-          return new Promise((resolve) => {
-            // Set a timeout to prevent infinite loading if auth state never resolves
-            const authTimeout = setTimeout(() => {
-              console.warn("Auth state didn't resolve in time, forcing auth ready state");
-              commit('SET_AUTH_READY', true);
-              resolve();
-            }, 5000);
-            
-            const unsubscribe = auth.onAuthStateChanged(async (userData) => {
-              clearTimeout(authTimeout);
+        return new Promise((resolve) => {
+          onAuthStateChanged(auth, async (firebaseUser) => {
+            if (firebaseUser) {
+              // User signed in - validate with backend
+              await dispatch('validateUser', firebaseUser);
+            } else {
+              // No user - clear state
+              commit('SET_USER', null);
               
-              // Reset to not ready while we fetch user data
-              commit('SET_AUTH_READY', false);
-              
-              if (userData) {
-                // Set basic user data immediately
-                commit('SET_USER', {
-                  uid: userData.uid,
-                  email: userData.email,
-                  displayName: userData.displayName,
-                  photoURL: userData.photoURL
-                });
-                
-                // Get and store the auth token in localStorage
-                try {
-                  const token = await userData.getIdToken();
-                  console.log('Got Firebase auth token, storing in localStorage');
-                  localStorage.setItem('auth_token', token);
-                } catch (tokenError) {
-                  console.error('Error getting Firebase auth token:', tokenError);
-                }
-                
-                // Fetch complete user data in one go
-                if (userData.email) {
-                  await dispatch('fetchCompleteUserData', userData);
-                } else {
-                  // If no email but signed in somehow, mark as ready
-                  commit('SET_AUTH_READY', true);
-                }
-              } else {
-                // No user - just clear everything
-                commit('SET_USER', null);
-                // Clear the auth token when the user signs out
-                localStorage.removeItem('auth_token');
-                commit('SET_AUTH_READY', true);
-              }
-              
-              resolve();
-              // Keep listening for auth changes
-            });
+              // Clean up WebSocket connection when user signs out
+              WebSocketService.cleanup();
+            }
+            // Mark auth as ready after initial check
+            commit('SET_AUTH_READY', true);
+            resolve();
           });
+        });
+      } catch (error) {
+        console.error('Auth initialization failed:', error);
+        commit('SET_USER', null);
+        commit('SET_AUTH_READY', true);
+      }
+    },
+
+         async validateUser({ commit }, firebaseUser) {
+       try {
+         const token = await firebaseUser.getIdToken();
+         const response = await fetch('/api/users/me', {
+           headers: {
+             'Authorization': `Bearer ${token}`
+           }
+         });
+
+        if (response.ok) {
+          const userData = await response.json();
+          // Set complete user data
+          commit('SET_USER', {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: userData.display_name || firebaseUser.displayName,
+            photoURL: firebaseUser.photoURL,
+            user_tag: userData.user_tag || '',
+            status: userData.status
+          });
+          
+          // Initialize WebSocket connection for authenticated user
+          try {
+            console.log('Initializing WebSocket connection for authenticated user');
+            await WebSocketService.initialize();
+          } catch (error) {
+            console.error('Failed to initialize WebSocket connection:', error);
+          }
         } else {
-          // No auth object - mark as ready and resolve
-          commit('SET_AUTH_READY', true);
+          // User not authorized - sign them out
+          console.log('User not authorized, signing out');
+          const auth = getFirebaseAuth();
+          await auth.signOut();
+          commit('SET_USER', null);
+          
+          // Clean up WebSocket connection
+          WebSocketService.cleanup();
         }
       } catch (error) {
-        console.error('Failed to initialize auth:', error);
-        // Even on error, make sure auth is eventually marked ready
-        commit('SET_AUTH_READY', true);
-      }
-    },
-    
-    // New action that combines all user data fetching in one place
-    async fetchCompleteUserData({ commit, dispatch }, userData) {
-      try {
-        // Set auth to not ready during fetch
-        commit('SET_AUTH_READY', false);
-        
-        // Register user if needed (this will either create or fetch)
-        await dispatch('registerUser', userData);
-        
-        // Get complete profile from backend
-        await dispatch('fetchUserData', userData.uid);
-      } catch (error) {
-        console.error('Error fetching complete user data:', error);
-      } finally {
-        // Always mark auth as ready when complete
-        commit('SET_AUTH_READY', true);
-      }
-    },
-    
-    async registerUser({ commit }, userData) {
-      try {
-        console.log('Registering user in auth store:', userData.email);
-        const result = await UserService.registerUser(userData);
-        console.log('User registration result:', result);
-        return result;
-      } catch (error) {
-        console.error('Error registering user in auth store:', error);
-        throw error;
-      }
-    },
-    
-    setUser({ commit, dispatch }, userData) {
-      // When logging out or setting null user
-      if (!userData) {
-        // First set auth to loading state to prevent showing wrong status
-        commit('SET_AUTH_READY', false);
-        
-        // Then clear user and status flags
+        console.error('User validation failed:', error);
+        // On error, sign out to be safe
+        const auth = getFirebaseAuth();
+        await auth.signOut();
         commit('SET_USER', null);
         
-        // Clear auth token from localStorage
-        localStorage.removeItem('auth_token');
+        // Clean up WebSocket connection on error
+        WebSocketService.cleanup();
+      }
+    },
+
+    async signOut({ commit }) {
+      try {
+        // Clean up WebSocket connection before signing out
+        WebSocketService.cleanup();
         
-        // Finally mark auth as ready
-        commit('SET_AUTH_READY', true);
-        return;
-      }
-      
-      // Signing in - ensure we have a consistent user object
-      const userWithDefaults = {
-        uid: userData.uid,
-        email: userData.email || '',
-        displayName: userData.displayName || '',
-        photoURL: userData.photoURL || null,
-        user_tag: userData.user_tag || '',
-        // Don't set a default status here - let the backend determine it
-        status: userData.status
-      };
-      
-      // Set the basic user data
-      commit('SET_USER', userWithDefaults);
-      
-      // Get and store the user's auth token
-      if (userData.getIdToken) {
-        userData.getIdToken().then(token => {
-          console.log('Setting auth token in localStorage during setUser');
-          localStorage.setItem('auth_token', token);
-        }).catch(err => {
-          console.error('Error getting token during setUser:', err);
-        });
-      }
-      
-      // Only fetch complete data if we have an email
-      if (userData.email) {
-        // Fetch complete data rather than just checking status
-        dispatch('fetchCompleteUserData', userData);
-      } else {
-        // If no email, ensure auth is marked as ready
-        commit('SET_AUTH_READY', true);
-      }
-    },
-    
-    // Keep these for compatibility, but they're now mainly used internally
-    async checkWhitelistStatus({ commit }, email) {
-      try {
-        const isWhitelisted = await WhitelistService.checkWhitelistStatus(email);
-        return isWhitelisted;
-      } catch (error) {
-        console.error('Error checking whitelist status:', error);
-        return false;
-      }
-    },
-    
-    async checkAdminStatus({ commit }, email) {
-      try {
-        const isAdmin = await WhitelistService.checkAdminStatus(email);
-        return isAdmin;
-      } catch (error) {
-        console.error('Error checking admin status:', error);
-        return false;
-      }
-    },
-    
-    // Rest of the actions remain the same
-    async updateProfile({ commit, state, dispatch }, { displayName, user_tag }) {
-      try {
         const auth = getFirebaseAuth();
-        const currentUser = auth.currentUser;
-        
-        if (!currentUser) {
-          throw new Error('No user is signed in');
-        }
-        
-        // Update Firebase profile (displayName only - Firebase doesn't have username)
-        await firebaseUpdateProfile(currentUser, {
-          displayName: displayName || state.user.displayName
-        });
-        
-        // Update the user profile in the backend
-        try {
-          const token = await currentUser.getIdToken();
-          const response = await fetch('/api/user/profile', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ 
-              display_name: displayName,
-              user_tag: user_tag 
-            })
-          });
-          
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            console.error('Error updating user profile in backend:', errorData);
-            
-            // If there's a username conflict, we should throw a specific error
-            if (response.status === 400 && errorData.detail && errorData.detail.includes('already taken')) {
-              throw new Error('Username is already taken by another user');
-            }
-            
-            throw new Error(errorData.detail || 'Failed to update profile');
-          }
-          
-          // Get the updated profile from the backend to ensure sync
-          const updatedProfile = await response.json();
-          
-          // Update local state with the profile information returned from the backend
-          if (updatedProfile && updatedProfile.profile) {
-            const profile = updatedProfile.profile;
-            
-            // Update our local state with values from the backend
-            commit('UPDATE_USER_PROFILE', { 
-              displayName: profile.display_name, 
-              user_tag: profile.user_tag 
-            });
-          } else {
-            // If backend didn't return the profile, update with our values
-            commit('UPDATE_USER_PROFILE', { displayName, user_tag });
-          }
-          
-          // Fetch user data
-          dispatch('fetchUserData', currentUser.uid);
-          
-          return updatedProfile;
-        } catch (apiError) {
-          console.error('API error updating user profile:', apiError);
-          throw apiError; // Re-throw to handle in the component
-        }
+        await auth.signOut();
+        commit('SET_USER', null);
       } catch (error) {
-        console.error('Error updating profile:', error);
-        throw error;
+        console.error('Sign out failed:', error);
       }
     },
-    
-    async fetchUserData({ commit }, uid) {
-      if (!uid) return;
-      
+
+    async searchUsers({ state }, query) {
+      if (!state.user) {
+        throw new Error('User not authenticated');
+      }
+
       try {
-        const auth = getFirebaseAuth();
-        const token = await auth.currentUser?.getIdToken();
-        
-        if (!token) {
-          console.warn('No token available for fetching user data');
-          return;
-        }
-        
-        // Fetch the user's data from your backend
-        const response = await fetch('/api/user/me', {
+        const token = await getFirebaseAuth().currentUser.getIdToken();
+        const response = await fetch(`/api/users/search?query=${encodeURIComponent(query)}&limit=10`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         });
-        
-        if (response.ok) {
-          const userData = await response.json();
-          console.log('Fetched user data from backend:', userData);
-          
-          // Merge the backend user data with the Firebase user data
-          const user = auth.currentUser;
-          commit('SET_USER', {
-            uid: user.uid,
-            email: user.email,
-            displayName: userData.display_name || user.displayName,
-            photoURL: user.photoURL,
-            user_tag: userData.user_tag || '',
-            status: userData.status
-          });
+
+        if (!response.ok) {
+          throw new Error(`Search failed: ${response.statusText}`);
         }
+
+        const data = await response.json();
+        return data.users || [];
       } catch (error) {
-        console.error('Error fetching user data:', error);
-      }
-    },
-    
-    async searchUsers({ commit }, query) {
-      try {
-        console.log('[Frontend] Searching for users with query:', query);
-        const results = await UserService.searchUsers(query);
-        console.log('[Frontend] Search results:', results);
-        return results;
-      } catch (error) {
-        console.error('[Frontend] Error searching users:', error);
-        return [];
-      }
-    },
-    
-    async validateUserTag({ commit }, tag) {
-      try {
-        return await UserService.validateUserTag(tag);
-      } catch (error) {
-        console.error('Error validating user tag:', error);
-        return false;
+        console.error('Error searching users:', error);
+        throw error;
       }
     }
   },
@@ -365,34 +144,8 @@ export default {
     user: state => state.user,
     isAuthenticated: state => state.isAuthenticated,
     authReady: state => state.authReady,
-    
-    // Permission-based getters using status directly
-    isAdmin: state => {
-      return state.user && state.user.status === 'admin';
-    },
-    
-    isWhitelisted: state => {
-      return state.user && ['whitelisted', 'admin'].includes(state.user.status);
-    },
-    
-    canInteract: state => {
-      return state.user && ['whitelisted', 'admin'].includes(state.user.status);
-    },
-    
-    canCreateMessages: state => {
-      return state.user && ['whitelisted', 'admin'].includes(state.user.status);
-    },
-    
-    canModerateContent: state => {
-      return state.user && state.user.status === 'admin';
-    },
-    
-    canManageUsers: state => {
-      return state.user && state.user.status === 'admin';
-    },
-    
-    userStatus: state => {
-      return state.user ? state.user.status : null;
-    }
+    isAdmin: state => state.user?.status === 'admin',
+    isWhitelisted: state => state.user && ['whitelisted', 'admin'].includes(state.user.status),
+    canInteract: state => state.user && ['whitelisted', 'admin'].includes(state.user.status)
   }
 }

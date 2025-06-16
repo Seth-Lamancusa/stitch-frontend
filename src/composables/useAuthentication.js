@@ -31,9 +31,6 @@ export function useAuthentication() {
       const auth = getFirebaseAuth();
       const result = await signInWithPopup(auth, provider);
       
-      // Let the store handle all auth state management
-      store.dispatch('auth/setUser', result.user);
-      
       router.push('/chat');
     } catch (e) {
       error.value = e.message;

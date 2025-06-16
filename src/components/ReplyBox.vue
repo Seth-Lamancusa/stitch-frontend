@@ -105,10 +105,6 @@
             </div>
           </div>
           
-          <div class="recipients-hint">
-            Use user tags to add recipients.
-          </div>
-          
           <div class="recipients-list">
             <div 
               v-if="typeof recipients === 'object' && recipients !== null"
@@ -294,27 +290,9 @@ const autoResizeTextarea = () => {
   const textarea = replyTextarea.value;
   if (!textarea) return;
   
-  // If content is empty, reset to initial height
-  if (!content.value.trim()) {
-    textarea.style.height = '40px';
-    return;
-  }
-  
-  // Only resize if we have line breaks or content exceeds current height
-  if (content.value.includes('\n')) {
-    // Reset height to auto to get new scrollHeight
-    textarea.style.height = 'auto';
-    
-    // Calculate new height (with minimum)
-    const newHeight = Math.max(40, textarea.scrollHeight);
-    textarea.style.height = `${newHeight}px`;
-  } else if (textarea.scrollHeight > textarea.clientHeight) {
-    // Content exceeds current height without line breaks
-    textarea.style.height = `${textarea.scrollHeight}px`;
-  } else if (textarea.style.height === '' || textarea.style.height === 'auto') {
-    // Set initial height if not set
-    textarea.style.height = '40px';
-  }
+  // Reset to auto to get the natural height, then set to scrollHeight
+  textarea.style.height = 'auto';
+  textarea.style.height = Math.min(Math.max(textarea.scrollHeight, 40), 150) + 'px';
 };
 
 const sendReply = async () => {
@@ -482,15 +460,8 @@ const searchUsers = (event) => {
         showSearchResults.value = results.length > 0;
       }
       
-      // Update validation state
-      if (results && results.length > 0) {
-        // Consider it valid if we have any results and query is at least 1 char
-        isTagValid.value = results.length > 0 && query.length >= 1;
-      } else {
-        // Explicit validation if no results from search
-        const isValid = await store.dispatch('auth/validateUserTag', query);
-        isTagValid.value = isValid;
-      }
+      // Update validation state based on search results
+      isTagValid.value = results && results.length > 0;
       
       isSearching.value = false;
     } catch (error) {
@@ -539,45 +510,14 @@ const addRecipient = async () => {
   
   if (!tag) return;
   
-  // If search results exist, use the first one
+  // Only allow adding recipients from search results
   if (searchResults.value.length > 0) {
     selectSearchResult(searchResults.value[0]);
     return;
   }
   
-  // Otherwise validate the tag
-  isSearching.value = true;
-  const isValid = await store.dispatch('auth/validateUserTag', tag);
-  isSearching.value = false;
-  
-  if (isValid) {
-    // Try to get full user details
-    const results = await store.dispatch('auth/searchUsers', tag);
-    const matchingUser = results?.find(u => u.user_tag === tag);
-    
-    if (matchingUser) {
-      // Use the full user object
-      store.dispatch('navigation/addRecipient', {
-        uid: matchingUser.uid,
-        display_name: matchingUser.display_name,
-        user_tag: matchingUser.user_tag
-      });
-    } else {
-      // Fallback: Use basic object with tag
-      store.dispatch('navigation/addRecipient', {
-        uid: tag, // Temporary - will be resolved on server
-        display_name: tag,
-        user_tag: tag
-      });
-    }
-    
-    newRecipient.value = '';
-    isTagValid.value = null;
-    searchResults.value = [];
-    showSearchResults.value = false;
-  } else {
-    isTagValid.value = false;
-  }
+  // If no search results, show that the tag is invalid
+  isTagValid.value = false;
 };
 
 const removeRecipient = (index) => {
@@ -629,39 +569,6 @@ const getAuthorDisplayName = (message) => {
     return message.author_display_name;
   }
   
-  // Second priority (ChatGPT special case fallback)
-  // Only use hardcoded name if nothing is available from database
-  if (message.content_author === 'chatgpt' || 
-      message.content_author === 'chatgpt-system' || 
-      message.author_email === 'chatgpt') {
-    return 'ChatGPT';
-  }
-  
-  // Third priority: if current user is the author, use display name from auth state
-  if (currentUser && (
-      message.content_author === currentUser.uid || 
-      message.author_email === currentUser.email
-    )) {
-    if (currentUser.displayName) {
-      return currentUser.displayName;
-    }
-  }
-  
-  // Fourth priority: legacy email display
-  if (message.author_email_display) {
-    return message.author_email_display;
-  }
-  
-  // Fifth priority: use user tag if no display name is available
-  if (message.author_user_tag) {
-    return message.author_user_tag;
-  }
-  
-  // For backward compatibility, if the content_author looks like an email
-  if (typeof message.content_author === 'string' && message.content_author.includes('@')) {
-    return message.content_author;
-  }
-  
   // Last resort: use content_author (may be a UUID now)
   return message.content_author || "Unknown User";
 };
@@ -674,24 +581,6 @@ const getAuthorUserTag = (message) => {
   if (message.author_user_tag) {
     // This will handle ChatGPT and all users with proper database records
     return message.author_user_tag;
-  }
-  
-  // Second priority: ChatGPT special case fallback
-  // Skip returning any tag for ChatGPT if no tag in database
-  if (message.content_author === 'chatgpt' || 
-      message.content_author === 'chatgpt-system' || 
-      message.author_email === 'chatgpt') {
-    return null;
-  }
-  
-  // Third priority: current user's tag from auth state (if they're the author)
-  if (currentUser && (
-      message.content_author === currentUser.uid || 
-      message.author_email === currentUser.email
-    )) {
-    if (currentUser.user_tag) {
-      return currentUser.user_tag;
-    }
   }
   
   // Default: no valid tag found
@@ -763,12 +652,24 @@ onMounted(() => {
   document.addEventListener('click', handleClickOutsideSearch);
   document.addEventListener('click', handleClickOutside);
   console.log("ReplyBox mounted, canInteract:", props.canInteract);
+  
+  // Initialize textarea sizing
+  nextTick(() => {
+    autoResizeTextarea();
+  });
 });
 
 // Watch for changes to canInteract
 watch(() => props.canInteract, (newValue, oldValue) => {
   console.log("ReplyBox canInteract changed:", oldValue, "->", newValue);
 }, { immediate: true });
+
+// Watch content changes to ensure textarea resizes properly
+watch(content, () => {
+  nextTick(() => {
+    autoResizeTextarea();
+  });
+});
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutsideSearch);
@@ -800,9 +701,7 @@ defineExpose({
   clear: () => {
     content.value = '';
     nextTick(() => {
-      if (replyTextarea.value) {
-        replyTextarea.value.style.height = '40px';
-      }
+      autoResizeTextarea();
     });
   }
 });
@@ -879,20 +778,19 @@ defineExpose({
 /* Reply input styles */
 .reply-input {
   flex: 1;
-  min-height: 40px; /* Single line height */
-  height: 40px; /* Start with single line */
-  max-height: 150px; /* Maximum height before scrolling */
-  padding: 10px 14px;
+  min-height: 30px; /* Single line height */
+  height: 30px; /* Start with single line */
+  padding: 6px 10px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md); /* Less rounded corners */
-  resize: none; /* Disable manual resizing since we're doing it programmatically */
+  border-radius: var(--radius-md);
+  resize: none;
   margin-bottom: 0;
   font-family: inherit;
-  font-size: var(--font-size-md); /* Better for mobile */
+  font-size: var(--font-size-md);
   background-color: var(--color-surface);
   color: var(--color-text);
-  transition: all var(--transition-fast);
-  overflow-y: auto; /* Show scrollbar if content exceeds max-height */
+  transition: height var(--transition-fast);
+  overflow-y: auto; /* Let browser handle scrollbars naturally */
 }
 
 .reply-input:focus:not(:disabled) {
@@ -1011,13 +909,6 @@ defineExpose({
 .modal-description {
   margin-bottom: var(--space-md);
   color: var(--color-text);
-}
-
-.recipients-hint {
-  margin-top: 10px;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  font-style: italic;
 }
 
 .input-wrapper {

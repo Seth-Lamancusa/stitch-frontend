@@ -21,18 +21,33 @@
         <button class="notification-close" @click.stop="clearSuccess">×</button>
       </div>
     </transition>
+    
+    <!-- Message Notification -->
+    <transition name="notification">
+      <div v-if="messageNotification" class="notification message-notification" @click="handleMessageClick">
+        <div class="notification-icon">💬</div>
+        <div class="notification-content">
+          <div class="notification-title">{{ messageNotification.title }}</div>
+          <div class="notification-message">{{ messageNotification.message }}</div>
+        </div>
+        <button class="notification-close" @click.stop="clearMessageNotification">×</button>
+      </div>
+    </transition>
   </div>
 </template>
 
 <script setup>
 import { computed, watch } from 'vue';
 import { useStore } from 'vuex';
+import { useRouter } from 'vue-router';
 
 const store = useStore();
+const router = useRouter();
 
-// Get error and success from store
+// Get notifications from store
 const error = computed(() => store.getters['ui/error']);
 const success = computed(() => store.getters['ui/success']);
+const messageNotification = computed(() => store.getters['ui/messageNotification']);
 
 // Auto-clear success messages after 8 seconds
 watch(success, (newSuccess) => {
@@ -40,6 +55,15 @@ watch(success, (newSuccess) => {
     setTimeout(() => {
       store.commit('ui/SET_SUCCESS', null);
     }, 8000);
+  }
+});
+
+// Auto-clear message notifications after 10 seconds
+watch(messageNotification, (newNotification) => {
+  if (newNotification) {
+    setTimeout(() => {
+      store.dispatch('ui/clearMessageNotification');
+    }, 3000);
   }
 });
 
@@ -52,6 +76,29 @@ const clearError = () => {
 
 const clearSuccess = () => {
   store.commit('ui/SET_SUCCESS', null);
+};
+
+const clearMessageNotification = () => {
+  store.dispatch('ui/clearMessageNotification');
+};
+
+// Handle clicking on message notification - navigate to the message
+const handleMessageClick = () => {
+  if (messageNotification.value && messageNotification.value.messageData) {
+    const messageData = messageNotification.value.messageData;
+    
+    // Clear the notification first
+    clearMessageNotification();
+    
+    // Navigate to the message
+    if (messageData.parent_id) {
+      // If it's a reply, navigate to the parent thread
+      router.push(`/messages/${messageData.parent_id}`);
+    } else {
+      // If it's a top-level message, navigate to it directly
+      router.push(`/messages/${messageData.id}`);
+    }
+  }
 };
 </script>
 
@@ -91,6 +138,12 @@ const clearSuccess = () => {
   border-left-color: var(--color-success, #16a34a);
 }
 
+.message-notification {
+  background-color: var(--color-message-background, #f8fafc);
+  color: var(--color-message-text, #374151);
+  border-left-color: var(--color-primary, #3b82f6);
+}
+
 .notification-icon {
   font-size: 20px;
   flex-shrink: 0;
@@ -98,6 +151,12 @@ const clearSuccess = () => {
 
 .notification-content {
   flex: 1;
+}
+
+.notification-title {
+  font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: 4px;
 }
 
 .notification-message {
@@ -147,6 +206,11 @@ const clearSuccess = () => {
   .success-notification {
     background-color: var(--color-success-background, #14532d);
     color: var(--color-success-text, #86efac);
+  }
+  
+  .message-notification {
+    background-color: var(--color-message-background, #1f2937);
+    color: var(--color-message-text, #f3f4f6);
   }
 }
 </style> 

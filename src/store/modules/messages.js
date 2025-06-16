@@ -1,4 +1,5 @@
 import MessageService from '../../services/MessageService'
+import UserService from '../../services/UserService'
 import WebSocketService from '../../services/WebSocketService'
 
 // Add a flag to track if initial fetch has been done
@@ -25,6 +26,16 @@ function isDescendantOf(state, messageId, ancestorId) {
   }
   
   return false;
+}
+
+// Helper function to check if a message is unread (treats null and false as unread)
+function isMessageUnread(message) {
+  return message && (message.is_read === false || message.is_read === null);
+}
+
+// Helper function to check if a message is read (only true is considered read)
+function isMessageRead(message) {
+  return message && message.is_read === true;
 }
 
 export default {
@@ -57,7 +68,8 @@ export default {
         id: message.id,
         author_display_name: message.author_display_name,
         author_user_tag: message.author_user_tag,
-        content_author: message.content_author
+        content_author: message.content_author,
+        parent_id: message.parent_id
       });
       
       // Ensure child_ids is always an array
@@ -85,14 +97,14 @@ export default {
           child_ids: mergedChildIds // Use combined child_ids
         };
         
-        // Default branch_child to first child if there are children and no previous selection
+        // Default branch_child to last child if there are children and no previous selection (most recent)
         const hasChildren = mergedChildIds.length > 0;
         if (hasChildren && currentBranchChild === undefined) {
-          mergedMessage.branch_child = mergedChildIds[0];
+          mergedMessage.branch_child = mergedChildIds[mergedChildIds.length - 1];
         } else if (hasChildren) {
           // Keep existing selection if it's still valid
           const isBranchChildValid = mergedChildIds.includes(currentBranchChild);
-          mergedMessage.branch_child = isBranchChildValid ? currentBranchChild : mergedChildIds[0];
+          mergedMessage.branch_child = isBranchChildValid ? currentBranchChild : mergedChildIds[mergedChildIds.length - 1];
         } else {
           mergedMessage.branch_child = null;
         }
@@ -101,10 +113,10 @@ export default {
         state.messages[message.id] = mergedMessage;
       } else {
         // New message, not in store yet
-        // Default branch_child to first child if there are children
+        // Default branch_child to last child if there are children (most recent)
         const hasChildren = message.child_ids && message.child_ids.length > 0;
         if (hasChildren) {
-          message.branch_child = message.child_ids[0];
+          message.branch_child = message.child_ids[message.child_ids.length - 1];
         } else {
           message.branch_child = null;
         }
@@ -296,12 +308,6 @@ export default {
       state.loadingStates[key] = isLoading;
     },
 
-    REFRESH_DIRECT_MESSAGES(state) {
-      // This is a trigger mutation that doesn't actually modify state
-      // It will be observed by components to know when to refresh their view
-      state.directMessagesLastUpdated = Date.now();
-    },
-
     // Consolidated filter mutations
     SET_FILTERS(state, filters) {
       state.filters = {
@@ -343,29 +349,6 @@ export default {
       return typeof id === 'string' && id.toString().startsWith('temp-');
     },
     
-    // Simplified message loading - single message only
-    async loadMessage({ commit, state }, messageId) {
-      // Return cached message if available
-      if (state.messages[messageId]) {
-        return state.messages[messageId];
-      }
-      
-      try {
-        const response = await MessageService.getMessage(messageId);
-        const message = response.data;
-        
-        if (message) {
-          commit('SET_MESSAGE', message);
-          return message;
-        } else {
-          return null;
-        }
-      } catch (error) {
-        console.error(`Error loading message ${messageId}:`, error);
-        return null;
-      }
-    },
-    
     // NEW ACTION: Prepare branch path by setting branch_child relationships
     // This should be called before using getVisibleBranchMessages
     prepareBranchPath({ commit, state }, threadRootId) {
@@ -373,8 +356,6 @@ export default {
         console.log(`[prepareBranchPath] ⚠️ Cannot prepare path: message ${threadRootId} not found`);
         return false;
       }
-      
-      console.log(`[prepareBranchPath] 🌳 PREPARE_PATH starting for message ID: ${threadRootId}, called by:`, new Error().stack);
       
       // STEP 1: First trace UPWARD to find the highest ancestor in the store
       let startingMessage = state.messages[threadRootId];
@@ -504,24 +485,10 @@ export default {
           // Add messages to store
           commit('SET_MESSAGES', messages);
           
-          // Add first message in each level to branch path
-          // First message is guaranteed to be the start message
-          dispatch('setBranchPath', messages[0].id);
-          
-          // For each subsequent message, if it's a direct child of a previous message
-          // in the branch path, add it to the branch path as well
-          for (let i = 1; i < messages.length; i++) {
-            const message = messages[i];
-            const parent = message.parent_id ? state.messages[message.parent_id] : null;
-            
-            if (parent && parent.in_branch_path) {
-              // Only add first child of each parent to branch path
-              const siblings = messages.filter(m => m.parent_id === parent.id);
-              if (siblings.length > 0 && siblings[0].id === message.id) {
-                dispatch('setBranchPath', message.id);
-              }
-            }
-          }
+          // Use prepareBranchPath to establish the branch path
+          // Since we're loading from a visible message, the upward path is already correct
+          // This will only set branch_child for newly loaded messages going downward
+          dispatch('prepareBranchPath', messageId);
           
           console.log(`[DEBUG] Loaded ${messages.length} messages in child branch for ${messageId}`);
         }
@@ -677,11 +644,11 @@ export default {
           // Get updated parent after REMOVE_MESSAGE_CASCADE might have modified it
           const updatedParent = state.messages[parentId];
           
-          // If parent has remaining children, set the first one as branch_child
+          // If parent has remaining children, set the last one as branch_child (most recent)
           if (updatedParent && updatedParent.child_ids && updatedParent.child_ids.length > 0) {
             commit('SET_BRANCH_CHILD', { 
               messageId: parentId, 
-              childId: updatedParent.child_ids[0] 
+              childId: updatedParent.child_ids[updatedParent.child_ids.length - 1] 
             });
             
             // Prepare branch path with the new branch_child
@@ -716,42 +683,47 @@ export default {
       }
     },
     
-    // Fetch chronological messages (for cloud tab main list)
-    async fetchChronologicalMessages({ commit, state, rootState }, { cursor = null, filters = {} } = {}) {
+    // Fetch chronological messages (for inbox tab main list)
+    async fetchUserMessages({ commit, state, rootState }, { page = 1 } = {}) {
       try {
+        // Check if user is authenticated first
+        if (!rootState.auth?.user) {
+          console.log('[Store] fetchUserMessages called but no user authenticated, skipping');
+          return {
+            messages: [],
+            exhausted: true
+          };
+        }
+
         // Set loading state
         commit('SET_LOADING', { key: 'fetchingMessages', isLoading: true });
         
-        console.log(`[Store] fetchChronologicalMessages called with:`, {
-          cursor,
-          filtersParam: filters,
-          stateFilters: state.filters,
-          currentMessagesCount: Object.keys(state.messages).length
+        console.log(`[Store] fetchUserMessages called with:`, {
+          page,
+          user: rootState.auth.user.email
         });
         
-        // Build filters object using simplified filter structure
-        const apiFilters = {
-          authors: state.filters.authors,
-          recipients: state.filters.recipients,
-          isPublic: state.filters.isPublic,
-          dateRange: state.filters.dateRange,
-          sortOrder: state.filters.sortOrder,
-          // Include any additional filters passed in
-          ...filters
-        };
+        const response = await UserService.fetchUserMessages(20, page);
+        const rawMessages = response.data?.messages || response.messages || [];
+        const exhausted = response.data?.exhausted || response.exhausted || false;
+        const currentPage = response.data?.page || page;
         
-        console.log(`[Store] Final API filters:`, apiFilters);
-        
-        const response = await MessageService.getChronologicalMessages(5, cursor, apiFilters);
-        const messages = response.messages || [];
-        const exhausted = response.exhausted || false;
-        const nextCursor = response.next_cursor;
+        // Transform messages from ArangoDB format to expected format
+        const messages = rawMessages.map(message => {
+          // If message already has id, use it; otherwise use _key
+          if (!message.id && message._key) {
+            message.id = message._key;
+          }
+          return message;
+        });
         
         console.log(`[Store] API response:`, {
+          rawMessagesCount: rawMessages.length,
           messagesCount: messages.length,
           exhausted,
-          nextCursor,
-          firstMessageId: messages[0]?.id || 'none'
+          currentPage,
+          firstMessageId: messages[0]?.id || 'none',
+          firstRawMessage: rawMessages[0] ? { _key: rawMessages[0]._key, _id: rawMessages[0]._id, id: rawMessages[0].id } : 'none'
         });
         
         // Commit all messages to store
@@ -763,19 +735,17 @@ export default {
           console.log(`[Store] No messages to commit`);
         }
         
-        // Return the response data with exhausted flag and next cursor
+        // Return the response data with exhausted flag
         return {
           messages,
-          exhausted,
-          nextCursor
+          exhausted
         };
       } catch (error) {
-        console.error('[Store] Error in fetchChronologicalMessages:', error);
-        commit('ui/SET_ERROR', error.message || 'Failed to load chronological messages', { root: true });
+        console.error('[Store] Error in fetchUserMessages:', error);
+        commit('ui/SET_ERROR', error.message || 'Failed to load user messages', { root: true });
         return {
           messages: [],
-          exhausted: true,
-          nextCursor: null
+          exhausted: true
         };
       } finally {
         // Always clear loading state
@@ -870,7 +840,7 @@ export default {
       try {
         // Check if message is currently unread before making API call
         const message = state.messages[messageId];
-        const wasUnread = message && message.is_read === false;
+        const wasUnread = isMessageUnread(message);
         
         console.log(`[Store] Message ${messageId} check:`, {
           exists: !!message,
@@ -880,9 +850,9 @@ export default {
         });
         
         if (wasUnread) {
-          console.log(`[Store] Calling API to mark message ${messageId} as read`);
-          await MessageService.markMessageAsRead(messageId);
-          console.log(`[Store] API call successful, updating store`);
+          console.log(`[Store] Calling UserService to mark message ${messageId} as read`);
+          await UserService.markMessageAsRead(messageId);
+          console.log(`[Store] UserService call successful, updating store`);
           commit('UPDATE_MESSAGE_READ_STATUS', { messageId, isRead: true });
           
           // If the message was previously unread, decrement the unread count
@@ -903,9 +873,10 @@ export default {
       try {
         // Check if message is currently read before making API call
         const message = state.messages[messageId];
-        const wasRead = message && message.is_read !== false;
+        const wasRead = isMessageRead(message);
         
-        await MessageService.markMessageAsUnread(messageId);
+        console.log(`[Store] Calling UserService to mark message ${messageId} as unread`);
+        await UserService.markMessageAsUnread(messageId);
         commit('UPDATE_MESSAGE_READ_STATUS', { messageId, isRead: false });
         
         // If the message was previously read, increment the unread count
@@ -947,10 +918,10 @@ export default {
       const currentIndex = message.child_ids.indexOf(currentChildId);
       
       if (currentIndex === -1) {
-        // If no valid current child, default to first
+        // If no valid current child, default to last (most recent)
         commit('SET_BRANCH_CHILD', { 
           messageId: messageId, 
-          childId: message.child_ids[0] 
+          childId: message.child_ids[message.child_ids.length - 1] 
         });
         return true;
       }
@@ -1048,7 +1019,7 @@ export default {
           return 0;
         }
         
-        const response = await MessageService.getUnreadMessageCount();
+        const response = await UserService.getUnreadMessageCount();
         const count = response.data.count || 0;
         
         commit('SET_UNREAD_MESSAGE_COUNT', count);
@@ -1057,21 +1028,6 @@ export default {
         console.error('Error fetching unread message count:', error);
         return 0;
       }
-    },
-
-    // New action to initialize unread message count at app startup
-    async initializeUnreadCount({ dispatch, rootState }) {
-      // Skip if already fetched or user not logged in
-      if (initialUnreadCountFetched || !rootState.auth?.user) {
-        return;
-      }
-      
-      // Set flag to prevent duplicate fetches
-      initialUnreadCountFetched = true;
-      
-      // Fetch the count
-      await dispatch('fetchUnreadMessageCount');
-      console.log('Initialized unread message count');
     },
 
     // Consolidated filter actions
@@ -1105,6 +1061,26 @@ export default {
     // setPublicFilter
     // setSelectedRecipients
     // setSelectedAuthor
+
+    async loadMessageRadius({ commit }, { messageId, radius }) {
+      try {
+        const response = await MessageService.loadMessageRadius(messageId, radius);
+        
+        // Commit all loaded messages to the store
+        if (response.data && response.data.length > 0) {
+          response.data.forEach(message => {
+            commit('SET_MESSAGE', message);
+          });
+        }
+        
+        return response.data;
+      } catch (error) {
+        console.error('Error loading message radius:', error);
+        throw error;
+      }
+    },
+
+
   },
   
   getters: {
@@ -1126,8 +1102,21 @@ export default {
       return message.parent_id || null;
     },
     
-    getLoadedMessages: state => {
-      return Object.values(state.messages);
+    getLoadedMessages: (state) => {
+      const messages = Object.values(state.messages);
+      // Sort messages by timestamp with newest first by default
+      return messages.sort((a, b) => {
+        const dateA = new Date(a.timestamp);
+        const dateB = new Date(b.timestamp);
+        
+        // Use the sort order from filters, defaulting to 'newest'
+        const sortOrder = state.filters.sortOrder || 'newest';
+        if (sortOrder === 'newest') {
+          return dateB - dateA; // Newest first
+        } else {
+          return dateA - dateB; // Oldest first
+        }
+      });
     },
     
     // Get all messages in the branch path
@@ -1296,7 +1285,18 @@ export default {
     getRecipients: state => state.filters.recipients,
     getIsPublic: state => state.filters.isPublic,
     getDateRange: state => state.filters.dateRange,
-    getSortOrder: state => state.filters.sortOrder
+    getSortOrder: state => state.filters.sortOrder,
+    
+    // Read status getters using helper functions
+    isMessageUnread: state => messageId => {
+      const message = state.messages[messageId];
+      return isMessageUnread(message);
+    },
+    
+    isMessageRead: state => messageId => {
+      const message = state.messages[messageId];
+      return isMessageRead(message);
+    }
   }
 }
 

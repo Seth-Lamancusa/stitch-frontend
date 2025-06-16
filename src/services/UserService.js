@@ -10,40 +10,6 @@ const apiClient = axios.create({
 });
 
 export default {
-  /**
-   * Register a new user or update existing user in the backend database
-   * @param {Object} userData - User data from Firebase
-   * @returns {Promise<Object>} - The created/updated user
-   */
-  async registerUser(userData) {
-    console.log('Registering user in database:', userData.email);
-    
-    try {
-      // Get Firebase token
-      const token = await getFirebaseToken();
-      
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
-      
-      // Call the user registration endpoint with properly named fields
-      const response = await apiClient.post('/user/register', {
-        uid: userData.uid,
-        email: userData.email,
-        display_name: userData.displayName
-      }, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      console.log('User registration response:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('Error registering user:', error);
-      throw error;
-    }
-  },
   
   /**
    * Search for users by tag or display name
@@ -60,8 +26,8 @@ export default {
         throw new Error('No authentication token available');
       }
       
-      console.log('[Service] Making API request to:', '/user/search');
-      const response = await apiClient.get('/user/search', {
+      console.log('[Service] Making API request to:', '/users/search');
+      const response = await apiClient.get('/users/search', {
         params: { query, limit },
         headers: {
           'Authorization': `Bearer ${token}`
@@ -95,7 +61,7 @@ export default {
         throw new Error('No authentication token available');
       }
       
-      const response = await apiClient.get('/user/validate-tag', {
+      const response = await apiClient.get('/users/validate-tag', {
         params: { tag },
         headers: {
           'Authorization': `Bearer ${token}`
@@ -107,5 +73,158 @@ export default {
       console.error('Error validating user tag:', error);
       return false;
     }
-  }
+  },
+
+  /**
+   * Get messages for the current user with page-based pagination
+   * @param {Number} limit - Number of messages to return
+   * @param {Number} page - Page number (1-based)
+   * @returns {Promise<Object>} - Response with messages and pagination info
+   */
+  async fetchUserMessages(limit = 20, page = 1) {
+    try {
+      const token = await getFirebaseToken();
+      
+      if (!token) {
+        throw new Error('No authentication token available');
+      }
+      
+      // Build query parameters
+      const params = { limit, page };
+      
+      const response = await apiClient.get('/users/messages', {
+        params,
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      console.log('[DEBUG] UserService - fetchUserMessages response:', {
+        messagesCount: response.data?.messages?.length || 0,
+        exhausted: response.data?.exhausted,
+        page: response.data?.page
+      });
+      
+      return response;
+    } catch (error) {
+      console.error('Error fetching user messages:', error);
+      throw error;
+    }
+  },
+
+    /**
+   * Check if a user is whitelisted
+   * @param {string} email - User's email
+   */
+    checkWhitelistStatus(email) {
+      console.log(`Checking whitelist status for email: ${email}`);
+      return apiClient.get(`/users/whitelist-status?email=${encodeURIComponent(email)}`)
+        .then(response => {
+          console.log(`Whitelist status response:`, response.data);
+          return response.data.whitelisted;
+        })
+        .catch(error => {
+          console.error('Error checking whitelist status:', error);
+          throw error;
+        });
+    },
+    
+    /**
+     * Check if a user is an admin
+     * @param {string} email - User's email
+     */
+    checkAdminStatus(email) {
+      console.log(`Checking admin status for email: ${email}`);
+      return apiClient.get(`/users/admin-status?email=${encodeURIComponent(email)}`)
+        .then(response => {
+          console.log(`Admin status response:`, response.data);
+          return response.data.isAdmin;
+        })
+        .catch(error => {
+          console.error('Error checking admin status:', error);
+          throw error;
+        });
+    },
+
+    /**
+     * Get the count of unread messages for the current user
+     * @returns {Promise<Object>} - Response with unread count
+     */
+    async getUnreadMessageCount() {
+      try {
+        const token = await getFirebaseToken();
+        
+        if (!token) {
+          throw new Error('No authentication token available');
+        }
+        
+        const response = await apiClient.get('/users/unread-count', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        console.log('[DEBUG] UserService - getUnreadMessageCount response:', response.data);
+        return response;
+      } catch (error) {
+        console.error('Error getting unread message count:', error);
+        throw error;
+      }
+    },
+
+    /**
+     * Mark a message as read for the current user
+     * @param {String} messageId - The message ID to mark as read
+     * @returns {Promise<Object>} - Response with success status
+     */
+    async markMessageAsRead(messageId) {
+      try {
+        console.log('[UserService] Marking message as read:', messageId);
+        const token = await getFirebaseToken();
+        
+        if (!token) {
+          throw new Error('No authentication token available');
+        }
+        
+        const response = await apiClient.post(`/users/messages/${messageId}/mark-read`, {}, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        console.log('[UserService] Mark as read response:', response.data);
+        return response;
+      } catch (error) {
+        console.error('Error marking message as read:', error);
+        throw error;
+      }
+    },
+
+    /**
+     * Mark a message as unread for the current user
+     * @param {String} messageId - The message ID to mark as unread
+     * @returns {Promise<Object>} - Response with success status
+     */
+    async markMessageAsUnread(messageId) {
+      try {
+        console.log('[UserService] Marking message as unread:', messageId);
+        const token = await getFirebaseToken();
+        
+        if (!token) {
+          throw new Error('No authentication token available');
+        }
+        
+        const response = await apiClient.post(`/users/messages/${messageId}/mark-unread`, {}, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        console.log('[UserService] Mark as unread response:', response.data);
+        return response;
+      } catch (error) {
+        console.error('Error marking message as unread:', error);
+        throw error;
+      }
+    }
 }; 

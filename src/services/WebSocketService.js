@@ -24,15 +24,45 @@ const WebSocketService = {
   },
   
   /**
+   * Get a fresh authentication token from Firebase
+   * @returns {Promise<string|null>} Fresh token or null if not available
+   */
+  async getFreshAuthToken() {
+    try {
+      // Try to get fresh token from Firebase auth
+      const { getFirebaseAuth } = await import('../firebase.js');
+      const auth = getFirebaseAuth();
+      const currentUser = auth.currentUser;
+      
+      if (currentUser) {
+        this.log('Getting fresh token from Firebase');
+        const token = await currentUser.getIdToken(true); // Force refresh
+        
+        // Update localStorage with fresh token
+        localStorage.setItem('auth_token', token);
+        this.log('Fresh token obtained and stored');
+        
+        return token;
+      } else {
+        this.log('No current Firebase user available');
+        return null;
+      }
+    } catch (error) {
+      console.error('[WebSocket] Error getting fresh token:', error);
+      this.log(`Error getting fresh token: ${error.message}`);
+      return null;
+    }
+  },
+  
+  /**
    * Initialize global WebSocket connection for the authenticated user
    * Should be called when the application starts and when auth state changes
    */
   async initialize() {
     // Get current auth state
     const user = store.getters['auth/user'];
-    const authToken = localStorage.getItem('auth_token');
     
-    this.log(`Initialize called - User: ${user ? user.uid : 'none'}, Token: ${authToken ? 'present' : 'missing'}`);
+    this.log(`Initialize called - User: ${user ? user.uid : 'none'}`);
     
     // Clean up existing connection if any
     this.cleanup();
@@ -41,14 +71,24 @@ const WebSocketService = {
     this.connectionAttempts = 0;
     
     // Only connect if user is authenticated
-    if (user && authToken) {
+    if (user) {
       this.log(`Initializing global connection for user ${user.uid}`);
       
-      // Register message handler for store updates
-      this.log('Registering message handler');
-      this.unsubscribeFunction = this.handleNewMessage(this.handleIncomingMessage.bind(this));
-      
       try {
+        // Get fresh token from Firebase instead of localStorage
+        const authToken = await this.getFreshAuthToken();
+        
+        if (!authToken) {
+          this.log('Failed to get fresh auth token');
+          return;
+        }
+        
+        this.log('Got fresh auth token');
+        
+        // Register message handler for store updates
+        this.log('Registering message handler');
+        this.unsubscribeFunction = this.handleNewMessage(this.handleIncomingMessage.bind(this));
+        
         // Connect to WebSocket server
         this.log(`Connecting to WebSocket server for user ${user.uid}`);
         await this.connectUser(authToken);
@@ -60,12 +100,7 @@ const WebSocketService = {
         this.cleanup();
       }
     } else {
-      if (!user) {
-        this.log('No authenticated user, skipping initialization');
-      }
-      if (!authToken) {
-        this.log('No auth token available, skipping initialization');
-      }
+      this.log('No authenticated user, skipping initialization');
     }
   },
   
@@ -104,42 +139,61 @@ const WebSocketService = {
       return;
     }
     
-    // Add tab markers to the message if not present
-    if (!messageData.for_tabs || !Array.isArray(messageData.for_tabs)) {
-      messageData.for_tabs = [];
-    }
-    
-    // Check if this is a direct message to the current user
-    const user = store.getters['auth/user'];
-    let isDirectMessage = false;
-    
-    if (user && messageData.recipients && Array.isArray(messageData.recipients)) {
-      // If message is directed to the current user and not public, mark for Direct tab
-      const isToCurrentUser = messageData.recipients.some(r => 
-        (r.uid && r.uid === user.uid) || 
-        (r.user_tag && r.user_tag === user.user_tag)
-      );
-      
-      const isFromCurrentUser = messageData.content_author === user.uid || 
-                               messageData.author_user_tag === user.user_tag;
-      
-      const isPrivateMessage = messageData.public === false;
-      
-      // Add to Direct tab if:
-      // 1. Message is private, AND
-      // 2. Either sent to current user or from current user
-      if (isPrivateMessage && (isToCurrentUser || isFromCurrentUser)) {
-        isDirectMessage = true;
-        if (!messageData.for_tabs.includes('private')) {
-          this.log(`Adding 'private' tab marker to message ${messageData.id}`);
-          messageData.for_tabs.push('private');
-        }
-      }
-    }
-    
     // Add to the store
     this.log(`Adding message ${messageData.id} to store`);
     store.commit('messages/SET_MESSAGE', messageData);
+    
+    // Get current user for notification logic
+    const user = store.getters['auth/user'];
+    let isFromCurrentUser = false;
+    let isToCurrentUser = false;
+    
+    if (user) {
+      // Check if message is from current user
+      isFromCurrentUser = messageData.content_author === user.uid || 
+                         messageData.author_user_tag === user.user_tag;
+      
+      // Check if message is to current user
+      isToCurrentUser = messageData.recipients && 
+                       messageData.recipients.some(r => 
+                         (r.uid && r.uid === user.uid) || 
+                         (r.user_tag && r.user_tag === user.user_tag));
+    }
+    
+    // Trigger notification for messages to current user (but not from current user)
+    if (isToCurrentUser && !isFromCurrentUser) {
+      // Check if user is currently viewing this thread/message
+      const currentRoute = store.getters['navigation/currentRoute'] || window.location.pathname;
+      const isViewingThisThread = currentRoute.includes('/messages/') && 
+                                 (currentRoute.includes(messageData.id) || 
+                                  (messageData.parent_id && currentRoute.includes(messageData.parent_id)));
+      
+      // Only show notification if not currently viewing this thread
+      if (!isViewingThisThread) {
+        const authorName = messageData.author_display_name || 
+                          messageData.author_user_tag || 
+                          'Someone';
+        
+        const contentPreview = messageData.content ? 
+          (messageData.content.length > 60 ? 
+            messageData.content.substring(0, 60) + '...' : 
+            messageData.content) : 
+          'New message';
+        
+        const notificationData = {
+          id: messageData.id,
+          title: `New message from ${authorName}`,
+          message: contentPreview,
+          messageData: messageData,
+          timestamp: new Date().toISOString()
+        };
+        
+        this.log(`Triggering notification for message from ${authorName}`);
+        store.dispatch('ui/setMessageNotification', notificationData);
+      } else {
+        this.log(`Skipping notification - user is viewing this thread`);
+      }
+    }
     
     // Get the parent message if it exists
     const parentId = messageData.parent_id;
@@ -173,21 +227,8 @@ const WebSocketService = {
       
       // Log message details for debugging
       if (user) {
-        const isToCurrentUser = messageData.recipients && 
-                               messageData.recipients.some(r => 
-                                 (r.uid && r.uid === user.uid) || 
-                                 (r.user_tag && r.user_tag === user.user_tag));
-        
-        const isFromCurrentUser = messageData.content_author === user.uid || 
-                                 messageData.author_user_tag === user.user_tag;
-        
         this.log(`Message to current user: ${isToCurrentUser}, from current user: ${isFromCurrentUser}`);
       }
-    }
-    
-    // Refresh direct messages if this is a direct message
-    if (isDirectMessage) {
-      store.commit('messages/REFRESH_DIRECT_MESSAGES');
     }
   },
 
@@ -340,14 +381,18 @@ const WebSocketService = {
           const backoffTime = Math.min(1000 * Math.pow(2, this.connectionAttempts - 1), 10000);
           this.log(`Reconnecting in ${backoffTime}ms`);
           
-          setTimeout(() => {
-            if (this.authToken) {
-              this.log(`Attempting reconnection with token ${this.authToken.substring(0, 10)}...`);
-              this.connectUser(this.authToken).catch(err => {
-                this.log(`Reconnection attempt failed: ${err.message}`);
-              });
-            } else {
-              this.log(`Cannot reconnect: no auth token available`);
+          setTimeout(async () => {
+            try {
+              // Get fresh token for reconnection
+              const freshToken = await this.getFreshAuthToken();
+              if (freshToken) {
+                this.log(`Attempting reconnection with fresh token`);
+                await this.connectUser(freshToken);
+              } else {
+                this.log(`Cannot reconnect: failed to get fresh token`);
+              }
+            } catch (err) {
+              this.log(`Reconnection attempt failed: ${err.message}`);
             }
           }, backoffTime);
         }

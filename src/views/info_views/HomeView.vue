@@ -15,7 +15,7 @@
           <div class="coming-soon-icon">🏗️</div>
           <h2>Website Under Construction</h2>
           <p>We're building something amazing. Our full website will be available soon.</p>
-          <router-link to="/cloud" class="btn primary-btn">Go to Stitch App</router-link>
+          <router-link to="/inbox" class="btn primary-btn">Go to Stitch App</router-link>
         </div>
       </div>
     </section>

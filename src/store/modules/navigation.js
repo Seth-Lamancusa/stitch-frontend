@@ -5,7 +5,7 @@ export default {
     replyingToMessageId: null,
     isLoadingReplyMessage: false,
     isReplying: false,
-    previousRoute: '/cloud', // Default to cloud as fallback
+    previousRoute: '/inbox', // Default to inbox as fallback
     replySettings: {
       isPublic: true,
       recipients: []  // Will now store objects with {uid, display_name, user_tag} instead of strings
