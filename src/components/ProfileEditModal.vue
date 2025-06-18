@@ -141,7 +141,7 @@ const updateProfile = async () => {
     noChangesMessage.value = '';
     
     await store.dispatch('auth/updateProfile', {
-      displayName: displayName.value.trim() || undefined,
+      display_name: displayName.value.trim() || undefined,
       user_tag: tag.value.trim() || undefined
     });
     

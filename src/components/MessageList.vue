@@ -327,7 +327,7 @@ watch(() => store.getters['messages/getLoadedMessages'].length, (newLength, oldL
     <div v-if="shouldShowLoginMessage" class="login-message">
       <div class="login-content">
         <h3>Welcome to Stitch</h3>
-        <p>Please log in to view and participate in conversations (join waitlist).</p>
+        <p>Log in to view and participate in conversations, <router-link to="/requests">join the waitlist</router-link>, or navigate to a public message by url.</p>
       </div>
     </div>
 
@@ -337,7 +337,7 @@ watch(() => store.getters['messages/getLoadedMessages'].length, (newLength, oldL
       <p class="empty-subtitle">Start a conversation by creating a new message!</p>
     </div>
     
-    <div class="info-box">
+    <div v-if="user" class="info-box">
       <div class="info-content">
         <p class="info-text">Welcome to Stitch! Messages may be public or private, and may have any number of direct recipients, even if public. Below is the last in each thread in which you are either a direct recipient or added one.</p>
         <p class="info-text">There are three badge types: orange, blue, and green. Orange  indicates direct recipients for messages you sent. Blue indicates the number of other direct recipients for messages you received, along with a manual read/unread indicator. Green badges indicate the word "public".</p>

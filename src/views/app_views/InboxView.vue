@@ -2,7 +2,9 @@
   <div class="inbox-view">
     <div class="app-header">
       <div class="branding">
-        <span class="logo-text">Stitch</span>
+        <router-link to="/" class="logo-link">
+          <span class="logo-text">Stitch</span>
+        </router-link>
       </div>
       <div class="user-controls">
         <div class="user-info">
@@ -132,6 +134,14 @@ const closeProfileModal = () => {
 .branding {
   display: flex;
   align-items: center;
+}
+
+.logo-link {
+  text-decoration: none;
+}
+
+.logo-link:hover .logo-text {
+  opacity: 0.9;
 }
 
 .logo-text {

@@ -6,7 +6,7 @@
     :showBetaBanner="true"
     betaBannerIcon="📝"
     betaBannerTitle="A Legal Landscape"
-    betaBannerText="Our legal system finds itself at the intersection of a sudden political upheaval and a technological revolution that demands active engagement with intellectual property law."
+    betaBannerText="Our legal system finds itself at the intersection of a sudden political upheaval and a technological revolution."
     footerTagline="Building the multiplayer AI chat platform for seamless human-AI collaboration"
   >
     <!-- Coming Soon Section - Will replace with actual content later -->

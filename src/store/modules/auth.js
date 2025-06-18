@@ -178,6 +178,42 @@ export default {
       }
     },
 
+    async updateProfile({ commit }, profileData) {
+      try {
+        const token = await getFirebaseAuth().currentUser.getIdToken();
+        const response = await fetch('/api/users/profile', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(profileData)
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Failed to update profile');
+        }
+
+        const result = await response.json();
+        
+        // Update the user in the store with the new profile data
+        const currentUser = this.state.auth.user;
+        if (currentUser && result.profile) {
+          commit('SET_USER', {
+            ...currentUser,
+            displayName: result.profile.display_name,
+            user_tag: result.profile.user_tag
+          });
+        }
+
+        return result;
+      } catch (error) {
+        console.error('Error updating profile:', error);
+        throw error;
+      }
+    },
+
     async forceLogoutWithMessage({ commit }) {
       try {
         console.log('Force logout with unauthorized message');
@@ -203,9 +239,9 @@ export default {
         console.log('Stored pending notification:', notificationData);
         
         // Redirect to the Request Whitelist page
-        if (window.location.pathname !== '/requests') {
-          console.log('Redirecting to /requests');
-          window.location.href = '/requests';
+        if (window.location.pathname !== '/inbox') {
+          console.log('Redirecting to /inbox');
+          window.location.href = '/inbox';
         }
       } catch (error) {
         console.error('Error during force logout:', error);

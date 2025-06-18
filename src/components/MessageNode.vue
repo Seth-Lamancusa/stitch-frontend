@@ -1765,11 +1765,17 @@ export default {
   white-space: normal;
   word-wrap: break-word;
   width: 100%;
+  color: #ffffff; /* Force white text color */
+}
+
+.message-content p {
+  color: #ffffff; /* Force white text color */
 }
 
 /* Add larger font size when not in list view */
 .message-node .plaintext-content {
   font-size: 1.1rem;
+  color: #ffffff; /* Force white text color in list view */
 }
 
 .message-footer {

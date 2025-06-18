@@ -4,15 +4,15 @@
     <header>
       <nav class="main-nav">
         <div class="logo">
-          <h1>Stitch</h1>
+          <router-link to="/inbox" class="logo-link">
+            <h1>Stitch</h1>
+          </router-link>
         </div>
         <ul class="nav-links" :class="{ active: isMenuOpen }">
           <li><router-link to="/" :class="{ active: currentRoute === '/' }">Home</router-link></li>
           <li><router-link to="/architecture" :class="{ active: currentRoute === '/architecture' }">Architecture</router-link></li>
           <li><router-link to="/requests" :class="{ active: currentRoute === '/requests' }">Request Whitelist</router-link></li>
-          <li><router-link to="/roadmap" :class="{ active: currentRoute === '/roadmap' }">Roadmap</router-link></li>
-          <li><router-link to="/terms" :class="{ active: currentRoute === '/terms' }">Terms & Conditions</router-link></li>
-          <li><router-link to="/feed" class="login-btn">Go to Stitch</router-link></li>
+          <li><router-link to="/inbox" class="login-btn">Go to Stitch</router-link></li>
         </ul>
         <div class="hamburger" @click="toggleMenu" :class="{ active: isMenuOpen }">
           <span></span>

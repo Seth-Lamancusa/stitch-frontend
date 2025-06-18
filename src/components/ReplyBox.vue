@@ -118,7 +118,6 @@
               </div>
               <div class="recipient-actions">
                 <button 
-                  v-if="!isAuthorRecipient(recipient)"
                   @click="() => removeRecipient(index)" 
                   class="remove-recipient-btn"
                 >×</button>

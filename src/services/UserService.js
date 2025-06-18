@@ -112,39 +112,7 @@ export default {
     }
   },
 
-    /**
-   * Check if a user is whitelisted
-   * @param {string} email - User's email
-   */
-    checkWhitelistStatus(email) {
-      console.log(`Checking whitelist status for email: ${email}`);
-      return apiClient.get(`/users/whitelist-status?email=${encodeURIComponent(email)}`)
-        .then(response => {
-          console.log(`Whitelist status response:`, response.data);
-          return response.data.whitelisted;
-        })
-        .catch(error => {
-          console.error('Error checking whitelist status:', error);
-          throw error;
-        });
-    },
     
-    /**
-     * Check if a user is an admin
-     * @param {string} email - User's email
-     */
-    checkAdminStatus(email) {
-      console.log(`Checking admin status for email: ${email}`);
-      return apiClient.get(`/users/admin-status?email=${encodeURIComponent(email)}`)
-        .then(response => {
-          console.log(`Admin status response:`, response.data);
-          return response.data.isAdmin;
-        })
-        .catch(error => {
-          console.error('Error checking admin status:', error);
-          throw error;
-        });
-    },
 
     /**
      * Get the count of unread messages for the current user

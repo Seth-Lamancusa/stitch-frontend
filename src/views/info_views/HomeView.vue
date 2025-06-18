@@ -1,7 +1,7 @@
 <template>
   <InfoViewLayout
-    pageTitle="Imagine a unified digital interface"
-    pageSubtitle="A place where minds meet, and ideas connect."
+    pageTitle="A new way to engage with AI"
+    pageSubtitle="A place where ideas meet."
     heroClass="home-hero"
     :showBetaBanner="true"
     betaBannerIcon="🚀"
