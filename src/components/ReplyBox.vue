@@ -258,11 +258,11 @@ const toggleVisibility = () => {
   // Toggle to opposite
   store.dispatch('navigation/updateReplyVisibility', !currentState);
   
-  // Only sync with message being replied to if we're not in a temporary thread
-  if (!props.isTemporaryThread) {
-    // Force sync settings after toggle
-    store.dispatch('navigation/syncReplySettings');
-  }
+  // Remove the forced sync - we only want to sync when initially setting up the reply
+  // if (!props.isTemporaryThread) {
+  //   // Force sync settings after toggle
+  //   store.dispatch('navigation/syncReplySettings');
+  // }
 };
 
 const ensureReplyingActive = () => {
