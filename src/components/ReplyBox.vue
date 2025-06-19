@@ -20,6 +20,14 @@
           >
             Recipients ({{ recipients.length }})
           </button>
+          
+          <button 
+            class="chatbots-toggle" 
+            @click="toggleChatbotSelector"
+            :disabled="!canInteract"
+          >
+            Add bots
+          </button>
         </div>
       </div>
       
@@ -139,6 +147,47 @@
         </div>
       </div>
     </div>
+
+    <!-- Chatbots modal -->
+    <div v-if="showChatbotSelector" class="modal-overlay" @click.self="showChatbotSelector = false">
+      <div class="chatbot-modal">
+        <div class="modal-header">
+          <h3>Add Chatbots</h3>
+          <button class="close-button" @click="showChatbotSelector = false">×</button>
+        </div>
+        
+        <div class="modal-content">
+          <p class="modal-description">Select chatbots to add to your conversation</p>
+          
+          <div class="chatbots-list">
+            <div 
+              v-for="chatbot in availableChatbots" 
+              :key="chatbot.uid" 
+              class="chatbot-item"
+              @click="toggleChatbot(chatbot)"
+            >
+              <div class="chatbot-content">
+                <div class="chatbot-info">
+                  <span class="chatbot-name">{{ chatbot.display_name }}</span>
+                  <span class="chatbot-tag">@{{ chatbot.user_tag }}</span>
+                </div>
+                <div class="chatbot-toggle">
+                  <input 
+                    type="checkbox" 
+                    :checked="isChatbotSelected(chatbot)"
+                    @click.stop="toggleChatbot(chatbot)"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button @click="closeChatbotSelector" class="done-button">Done</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -192,6 +241,37 @@ const isSearching = ref(false);
 const hasSearched = ref(false);
 const showSearchResults = ref(false);
 const recipientInput = ref(null);
+
+// Chatbot selector state
+const showChatbotSelector = ref(false);
+
+// Hardcoded chatbot data (from backend config.py)
+const availableChatbots = ref([
+  {
+    uid: "chatgpt-system",
+    display_name: "GP",
+    user_tag: "chatgpt",
+    email: "chatgpt@system.ai"
+  },
+  {
+    uid: "claude-system",
+    display_name: "Claude",
+    user_tag: "claude",
+    email: "claude@system.ai"
+  },
+  {
+    uid: "gemini-system",
+    display_name: "Gemini",
+    user_tag: "gemini",
+    email: "gemini@system.ai"
+  },
+  {
+    uid: "grok-system",
+    display_name: "Grok",
+    user_tag: "grok",
+    email: "grok@system.ai"
+  }
+]);
 
 // Computed properties from store
 const user = computed(() => store.getters['auth/user']);
@@ -611,7 +691,54 @@ const toggleRecipientSelector = () => {
   }
 };
 
-// Add this new method to handle modal closing
+// Chatbot selector methods
+const toggleChatbotSelector = () => {
+  // If opening the selector, block immediate closing
+  if (!showChatbotSelector.value) {
+    canCloseReplyBox.value = false;
+  }
+  
+  showChatbotSelector.value = !showChatbotSelector.value;
+};
+
+const closeChatbotSelector = (event) => {
+  // Stop event propagation to prevent the document click event
+  if (event) {
+    event.stopPropagation();
+  }
+  
+  // Close the modal
+  showChatbotSelector.value = false;
+  
+  // Set a short timeout to prevent immediate closing of reply box
+  setTimeout(() => {
+    canCloseReplyBox.value = true;
+  }, 100);
+};
+
+const isChatbotSelected = (chatbot) => {
+  return recipients.value.some(recipient => recipient.uid === chatbot.uid);
+};
+
+const toggleChatbot = (chatbot) => {
+  if (isChatbotSelected(chatbot)) {
+    // Remove chatbot from recipients
+    const index = recipients.value.findIndex(recipient => recipient.uid === chatbot.uid);
+    if (index !== -1) {
+      store.dispatch('navigation/removeRecipient', index);
+    }
+  } else {
+    // Add chatbot to recipients
+    store.dispatch('navigation/addRecipient', {
+      uid: chatbot.uid,
+      display_name: chatbot.display_name,
+      user_tag: chatbot.user_tag,
+      email: chatbot.email
+    });
+  }
+};
+
+// Add this method back for the recipient modal
 const closeRecipientSelector = (event) => {
   // Stop event propagation to prevent the document click event
   if (event) {
@@ -629,8 +756,8 @@ const closeRecipientSelector = (event) => {
 
 // Update handleClickOutside to use canCloseReplyBox
 const handleClickOutside = (event) => {
-  // If the recipient selector is open or we can't close the reply box, return
-  if (showRecipientSelector.value || !canCloseReplyBox.value) {
+  // If any selector is open or we can't close the reply box, return
+  if (showRecipientSelector.value || showChatbotSelector.value || !canCloseReplyBox.value) {
     return;
   }
   
@@ -770,6 +897,28 @@ defineExpose({
 }
 
 .recipients-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chatbots-toggle {
+  padding: 6px 12px;
+  background-color: var(--color-secondary-light, var(--color-primary-light));
+  border: 1px solid var(--color-secondary, var(--color-primary));
+  color: var(--color-secondary, var(--color-primary));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  transition: background-color var(--transition-fast);
+}
+
+.chatbots-toggle:hover:not(:disabled) {
+  background-color: var(--color-secondary-light, var(--color-primary-light));
+  filter: brightness(95%);
+}
+
+.chatbots-toggle:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -1187,5 +1336,77 @@ defineExpose({
 
 .reply-input:hover {
   scrollbar-color: var(--color-border-dark) transparent;
+}
+
+/* Chatbot modal styles */
+.chatbot-modal {
+  position: relative;
+  max-width: 400px;
+  width: 95%;
+  background-color: var(--color-surface);
+  padding: var(--space-lg);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  z-index: 1001;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.chatbots-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.chatbot-item {
+  padding: var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  background-color: var(--color-surface);
+}
+
+.chatbot-item:hover {
+  background-color: var(--color-primary-light);
+  border-color: var(--color-primary);
+}
+
+.chatbot-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chatbot-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chatbot-name {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.chatbot-tag {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.chatbot-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.chatbot-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
 }
 </style> 
