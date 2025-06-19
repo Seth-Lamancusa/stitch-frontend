@@ -58,6 +58,9 @@ const canInteract = computed(() => store.getters['auth/canInteract']);
 const firebaseReady = ref(false);
 const replyCounts = ref({}); // Track reply counts by thread ID
 
+// Add new ref for info box collapsed state
+const isInfoBoxCollapsed = ref(localStorage.getItem('infoBoxCollapsed') === 'true');
+
 // Get display version of author for a message
 function getAuthorDisplay(message) {
   return message.author_display_name || '';
@@ -288,6 +291,12 @@ watch(() => store.getters['messages/getLoadedMessages'].length, (newLength, oldL
     currentPage.value = 1;
   }
 });
+
+// Add function to toggle info box
+const toggleInfoBox = () => {
+  isInfoBoxCollapsed.value = !isInfoBoxCollapsed.value;
+  localStorage.setItem('infoBoxCollapsed', isInfoBoxCollapsed.value);
+};
 </script>
 
 <template>
@@ -337,8 +346,14 @@ watch(() => store.getters['messages/getLoadedMessages'].length, (newLength, oldL
       <p class="empty-subtitle">Start a conversation by creating a new message!</p>
     </div>
     
-    <div v-if="user" class="info-box">
-      <div class="info-content">
+    <div v-if="user" class="info-box" :class="{ 'collapsed': isInfoBoxCollapsed }">
+      <div class="info-header">
+        <button class="toggle-button" @click.stop="toggleInfoBox">
+          {{ isInfoBoxCollapsed ? 'Show Info' : 'Hide Info' }}
+          <span class="toggle-icon">{{ isInfoBoxCollapsed ? '▼' : '▲' }}</span>
+        </button>
+      </div>
+      <div class="info-content" :class="{ 'hidden': isInfoBoxCollapsed }">
         <p class="info-text">Welcome to Stitch! Messages may be public or private, and may have any number of direct recipients, even if public. Below is the last in each thread in which you are either a direct recipient or added one.</p>
         <p class="info-text">There are three badge types: orange, blue, and green. Orange  indicates direct recipients for messages you sent. Blue indicates the number of other direct recipients for messages you received, along with a manual read/unread indicator. Green badges indicate the word "public".</p>
         <p class="info-text">You may click on a message to view it in full, along with its ancestors, descendants, and retroactively linked messages (coming soon).</p>
@@ -763,14 +778,64 @@ watch(() => store.getters['messages/getLoadedMessages'].length, (newLength, oldL
   width: 70%;
   border-radius: var(--radius-md, 8px);
   display: flex;
+  flex-direction: column;
+  transition: all 0.3s ease;
+}
+
+.info-box.collapsed {
+  padding: 4px 16px;
+  margin: 8px auto;
+  margin-top: 16px;
+}
+
+.info-header {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.info-box.collapsed .info-header {
+  margin-bottom: 0;
+}
+
+.toggle-button {
+  background: transparent;
+  border: none;
+  color: var(--color-text);
+  cursor: pointer;
+  display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 4px;
+  padding: 2px 6px;
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-sm);
+  transition: background-color 0.2s ease;
+  opacity: 0.7;
+}
+
+.toggle-button:hover {
+  background-color: var(--color-hover-overlay);
+  opacity: 1;
+}
+
+.toggle-icon {
+  font-size: 8px;
+  line-height: 1;
 }
 
 .info-content {
-  display: block;
-  max-width: 800px;
-  width: 100%;
+  max-height: 1000px;
+  opacity: 1;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.info-content.hidden {
+  max-height: 0;
+  opacity: 0;
+  margin: 0;
+  padding: 0;
 }
 
 .info-text {
