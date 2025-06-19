@@ -354,8 +354,8 @@ const toggleInfoBox = () => {
         </button>
       </div>
       <div class="info-content" :class="{ 'hidden': isInfoBoxCollapsed }">
-        <p class="info-text">Welcome to Stitch! Messages may be public or private, and may have any number of direct recipients, even if public. Below is the last in each thread in which you are either a direct recipient or added one.</p>
-        <p class="info-text">There are three badge types: orange, blue, and green. Orange  indicates direct recipients for messages you sent. Blue indicates the number of other direct recipients for messages you received, along with a manual read/unread indicator. Green badges indicate the word "public".</p>
+        <p class="info-text">Welcome to Stitch! Messages may be public or private, and may have any number of direct recipients, even if public. Below is the last in each thread in which you are author or direct recipient.</p>
+        <p class="info-text">There are three badge types: orange, blue, and green. Orange indicates direct recipients for messages you sent. Blue indicates the number of other direct recipients for messages you received, along with a manual read/unread indicator. Green badges indicate "public".</p>
         <p class="info-text">You may click on a message to view it in full, along with its ancestors, descendants, and retroactively linked messages (coming soon).</p>
       </div>
     </div>
