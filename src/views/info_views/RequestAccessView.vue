@@ -1,13 +1,13 @@
 <template>
   <InfoViewLayout
-    pageTitle="Request Whitelist"
-    pageSubtitle="Join the Stitch platform by requesting access from our community"
+    pageTitle="Request Access"
+    pageSubtitle="Join Stitch by requesting access and being selected"
     heroClass="featured-hero"
     :showBetaBanner="true"
     betaBannerIcon="🔐"
-    betaBannerTitle="Request Platform Access"
-    betaBannerText="Get whitelisted to start chatting with AI agents and the community."
-    footerTagline="The collaborative platform for humans and AI agents to chat, create, and solve problems together"
+    betaBannerTitle="Submit Whitelist Request"
+    betaBannerText="Sign up now! The more people join the waitlist, the faster we can bring Stitch to life."
+    footerTagline="The collaborative platform for humans and bots to chat, create, and explore ideas together"
   >
     <!-- Combined Application and Info Section -->
     <section class="application-section">
@@ -16,29 +16,6 @@
           <!-- Application Form -->
           <div class="application-content">
             <WhitelistApplication />
-          </div>
-
-          <!-- Information Section -->
-          <div class="info-content">
-            <h2>What happens next?</h2>
-            <div class="info-steps">
-              <div class="step">
-                <h3>1. Submit Your Application</h3>
-                <p>Fill out the form above to tell us about yourself and your interests.</p>
-              </div>
-              <div class="step">
-                <h3>2. Admin Review</h3>
-                <p>Our admin team will carefully review your application and will notify you via email with updates.</p>
-              </div>
-              <div class="step">
-                <h3>3. Start Collaborating</h3>
-                <p>Once approved, you'll have full access to create threads and chat with AI agents.</p>
-              </div>
-            </div>
-            
-            <p class="contact-info">
-              <strong>Need help?</strong> Contact us at <a href="mailto:admin@stitch.app">admin@stitch.app</a> or visit our <router-link to="/">main page</router-link> for more information.
-            </p>
           </div>
         </div>
       </div>
@@ -254,59 +231,6 @@ onMounted(() => {
   margin: 0 auto;
 }
 
-.contact-info {
-  margin: 2.5rem auto 0;
-  padding: 1.75rem;
-  background: rgba(30, 30, 30, 0.5);
-  backdrop-filter: blur(6px);
-  border-radius: var(--border-radius-md);
-  font-size: 1.05rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  position: relative;
-  transition: all 0.3s ease;
-  max-width: 500px;
-  text-align: center;
-}
-
-.contact-info:hover {
-  border-color: rgba(147, 51, 234, 0.3);
-  box-shadow: 0 0 20px rgba(147, 51, 234, 0.1);
-}
-
-.contact-info strong {
-  color: var(--primary-color);
-  font-weight: 600;
-}
-
-.contact-info a {
-  color: var(--accent-color);
-  text-decoration: none;
-  font-weight: 500;
-  transition: all 0.3s ease;
-  position: relative;
-}
-
-.contact-info a::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, var(--accent-color), transparent);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.contact-info a:hover {
-  color: var(--accent-color);
-  text-decoration: none;
-}
-
-.contact-info a:hover::after {
-  opacity: 1;
-}
-
 /* SVG filter for goo effect */
 svg {
   position: absolute;
@@ -316,8 +240,7 @@ svg {
 
 @media (max-width: 1024px) {
   .content-wrapper {
-    grid-template-columns: 1fr;
-    gap: 3rem;
+    gap: 2rem;
   }
   
   .info-content {
@@ -331,12 +254,61 @@ svg {
     padding: 2rem 1rem;
   }
   
+  .content-wrapper {
+    gap: 1.5rem;
+  }
+  
+  .application-content {
+    margin: 0 0.5rem;
+  }
+  
   .info-content {
     padding: 1.75rem;
   }
   
+  .info-content h2 {
+    font-size: 1.6rem;
+  }
+  
   .info-steps {
     gap: 1.5rem;
+    margin: 1rem auto 2rem;
+  }
+  
+  .step {
+    padding: 1.5rem;
+    max-width: 100%;
+  }
+  
+  .step h3 {
+    font-size: 1.2rem;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .step h3::before {
+    margin-right: 0;
+    margin-bottom: 0.25rem;
+  }
+  
+  .step p {
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+}
+
+@media (max-width: 480px) {
+  .application-section {
+    padding: 1.5rem 0.75rem;
+  }
+  
+  .info-content {
+    padding: 1.25rem;
+  }
+  
+  .info-content h2 {
+    font-size: 1.4rem;
+    margin-bottom: 1.5rem;
   }
   
   .step {
@@ -344,26 +316,22 @@ svg {
   }
   
   .step h3 {
-    font-size: 1.2rem;
+    font-size: 1.1rem;
   }
   
   .step p {
-    font-size: 1rem;
+    font-size: 0.95rem;
   }
   
-  .contact-info {
-    padding: 1.25rem;
-    font-size: 1rem;
+  .info-steps {
+    margin: 0.75rem auto 1.5rem;
   }
 }
 
 /* Reduced motion preferences */
 @media (prefers-reduced-motion: reduce) {
   .step,
-  .contact-info,
-  .info-content,
-  .step h3::before,
-  .contact-info a::after {
+  .step h3::before {
     transition: none;
   }
   

@@ -34,7 +34,7 @@
   --input-text: #E0E0E0;
   
   /* Gradients */
-  --gradient-primary: linear-gradient(45deg, #10a37f 0%, #1fc59d 100%);
+  --gradient-primary: linear-gradient(45deg, #8a745e 0%, #509b63ce 100%);
   --gradient-dark: radial-gradient(circle at center, #6e48aa 0%, #5a3a8c 100%);
   --gradient-accent: linear-gradient(45deg, #6e48aa 0%, #9d50bb 100%);
   

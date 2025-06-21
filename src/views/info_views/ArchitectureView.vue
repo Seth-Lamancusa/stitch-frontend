@@ -6,10 +6,31 @@
     :showBetaBanner="true"
     betaBannerIcon="🏗️"
     betaBannerTitle="Recursive conversational backbone"
-    betaBannerText="The app functions as a window into a structure where a message may have a number of children, and a parent."
+    betaBannerText="The app functions as a window into a simple mathematical structure."
     footerTagline="Built on a priciple of openness"
   >
-    <!-- Coming Soon Section - Will replace with actual content later -->
+    <section class="architecture-main">
+      <div class="container">
+        <div class="architecture-main-content">
+          <div class="architecture-columns">
+            <div class="architecture-1">
+              <h1>The structure</h1>
+              <p>Each message starts as a node in a tree, with >=0 children, and >=0<=1 parent. Additionally, each message can be linked to >=0 other messages after being posted. The entire Stitch database is a set of these digraphs.</p>
+            </div>
+            <div class="architecture-2">
+              <h1>The app</h1>
+              <p>The app is a simple web interface that allows you to create, delete, and link messages. You can specify if you'd like the message to be public and a number of direct recipients to recieve the message in their inbox.</p>
+            </div>
+            <div class="architecture-3">
+              <h1>The source</h1>
+              <p>We will eventually open source the frontend, as well as publish API docs for programmatically interacting with the backend, so that developers can build their own apps on top of Stitch or their own chatbots to interact with it.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Coming Soon Section - Will replace with actual content later
     <section class="coming-soon-section">
       <div class="container">
         <div class="coming-soon-content">
@@ -19,7 +40,7 @@
           <router-link to="/inbox" class="btn primary-btn">Go to Stitch App</router-link>
         </div>
       </div>
-    </section>
+    </section> -->
     
     <!-- Technical Details Layout - Hidden until content is ready -->
     <div class="tech-details-layout" style="display: none;">
@@ -179,6 +200,25 @@ onBeforeUnmount(() => {
   background: var(--architecture-hero-bg);
 }
 
+.architecture-main {
+  padding: 0 0;
+  background: var(--background-dark);
+}
+
+.architecture-main-content {
+  max-width: 1200px;
+  margin: 82px 0 76px 0;
+}
+
+.architecture-columns {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+  text-align: center;
+}
+
+
+
 /* Coming Soon Styles */
 .coming-soon-section {
   padding: 5rem 2rem;
@@ -309,6 +349,69 @@ onBeforeUnmount(() => {
     top: 0;
     margin-bottom: 2rem;
     margin-right: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .architecture-main {
+    padding: 2rem 0;
+  }
+  
+  .architecture-columns {
+    grid-template-columns: 1fr !important;
+    gap: 2rem;
+    padding: 0 1rem;
+  }
+  
+  .architecture-columns h1 {
+    font-size: 1.3rem;
+  }
+  
+  .architecture-columns p {
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+  
+  .coming-soon-section {
+    padding: 3rem 1rem;
+  }
+  
+  .coming-soon-content {
+    padding: 2rem 1.5rem;
+  }
+  
+  .tech-details-layout {
+    padding: 0 1rem;
+  }
+  
+  .section-nav {
+    padding: 1.5rem;
+  }
+  
+  .tech-card {
+    padding: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .architecture-columns {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .architecture-columns h1 {
+    font-size: 1.2rem;
+  }
+  
+  .architecture-columns p {
+    font-size: 0.9rem;
+  }
+  
+  .coming-soon-content h2 {
+    font-size: 1.8rem;
+  }
+  
+  .coming-soon-icon {
+    font-size: 3rem;
   }
 }
 </style> 

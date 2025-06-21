@@ -477,4 +477,80 @@ onBeforeUnmount(() => {
     margin-right: 0;
   }
 }
+
+@media (max-width: 768px) {
+  .coming-soon-section {
+    padding: 3rem 1rem;
+  }
+  
+  .coming-soon-content {
+    padding: 2rem 1.5rem;
+  }
+  
+  .coming-soon-content h2 {
+    font-size: 2rem;
+  }
+  
+  .coming-soon-icon {
+    font-size: 3rem;
+  }
+  
+  .legal-details-layout {
+    padding: 0 1rem;
+  }
+  
+  .section-nav {
+    padding: 1.5rem;
+  }
+  
+  .section-nav h3 {
+    font-size: 1.1rem;
+  }
+  
+  .legal-card {
+    padding: 1.5rem;
+  }
+  
+  .legal-card h3 {
+    font-size: 1.4rem;
+  }
+  
+  .legal-section h2 {
+    font-size: 1.5rem;
+  }
+  
+  .terms-highlight {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .coming-soon-content h2 {
+    font-size: 1.8rem;
+  }
+  
+  .coming-soon-content p {
+    font-size: 1rem;
+  }
+  
+  .legal-card {
+    padding: 1rem;
+  }
+  
+  .legal-card h3 {
+    font-size: 1.2rem;
+  }
+  
+  .legal-section h2 {
+    font-size: 1.3rem;
+  }
+  
+  .section-nav {
+    padding: 1rem;
+  }
+  
+  .section-nav ul li a {
+    font-size: 0.9rem;
+  }
+}
 </style> 

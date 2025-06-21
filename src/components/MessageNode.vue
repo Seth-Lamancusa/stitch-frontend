@@ -1157,8 +1157,8 @@ export default {
         const contentWithoutNewlines = content.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
         
         // Truncate to 300 characters with ellipsis if needed
-        if (contentWithoutNewlines.length > 300) {
-          return contentWithoutNewlines.substring(0, 300) + '...';
+        if (contentWithoutNewlines.length > 200) {
+          return contentWithoutNewlines.substring(0, 200) + '...';
         }
         
         return contentWithoutNewlines;

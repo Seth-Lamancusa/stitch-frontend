@@ -77,57 +77,33 @@ const submitted = ref(false);
 
 const steps = ref([
   {
-    question: "Passion Map",
-    context: "List up to 12 interests—academic, creative, athletic, obscure, anything. Rank them 'expert / intermediate / curious'. Why does the mix make you a unique contributor?",
-    placeholder: "Share your diverse interests and expertise levels...",
+    question: "Who are you?",
+    context: "Tell us about yourself. What do you identify with? What makes you unique?",
+    placeholder: "Name, experiences, interests, accomplishments, beliefs, etc. What makes you you?",
     answer: "",
     maxLength: 1000,
     optional: true
   },
   {
-    question: "Signature Craft",
-    context: "Show a non-academic skill you've honed and the hardest technical obstacle you conquered.",
-    placeholder: "Describe your journey in mastering this skill...",
-    answer: "",
-    maxLength: 500,
-    optional: true
-  },
-  {
-    question: "Formative Story",
-    context: "Pick a story (myth, novel, film, personal anecdote) that rewired your worldview and explain it for a 12-year-old.",
-    placeholder: "Share the story that changed your perspective...",
+    question: "What do you do?",
+    context: "What is your occuptaion? You a student? What else do you do?",
+    placeholder: "For fun, for work, for play, for learning, for living, etc. What's your lifestyle, in practice?",
     answer: "",
     maxLength: 1000,
     optional: true
   },
   {
-    question: "Catalyst Thesis",
-    context: "Name one change the world must make in the next decade and defend why you can accelerate it.",
-    placeholder: "Share your vision for change and your unique ability to drive it forward...",
+    question: "Connections",
+    context: "What people or communities do you have connections with?",
+    placeholder: "Academics, artists, creators, entrepreneurs, politicians, athletes, your buddies from high school, etc.",
     answer: "",
     maxLength: 1000,
-    optional: false
+    optional: true
   },
   {
-    question: "Teaching Under Pressure",
-    context: "Describe a high-stakes moment when you taught or mentored. What unlocked the breakthrough?",
-    placeholder: "Tell us about a pivotal teaching or mentoring experience...",
-    answer: "",
-    maxLength: 1000,
-    optional: false
-  },
-  {
-    question: "Bridge-Building Blueprint",
-    context: "Choose two communities or disciplines that rarely meet. Design a concrete activity you'll host on our platform to make their first collaboration irresistible.",
-    placeholder: "Outline your plan for bringing different communities together...",
-    answer: "",
-    maxLength: 1000,
-    optional: false
-  },
-  {
-    question: "Time & Commitment Signal",
-    context: "How many hours per month can you realistically devote, and what objective metric should we use to judge your impact?",
-    placeholder: "Be specific about your time commitment and how we should measure success...",
+    question: "Contact Info",
+    context: "How can we reach you?",
+    placeholder: "Email, phone number, GPS coordinates for a carrier pigeon, etc.",
     answer: "",
     maxLength: 500,
     optional: false

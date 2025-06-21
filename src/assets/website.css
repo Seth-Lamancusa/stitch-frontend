@@ -202,7 +202,7 @@ header {
 
 /* Hero Section */
 .hero, .page-hero {
-  height: 80vh;
+  height: 60vh;
   max-height: 650px;
   display: flex;
   align-items: center;
@@ -214,7 +214,7 @@ header {
 }
 
 .page-hero {
-  height: 50vh;
+  height: 40vh;
   max-height: 400px;
 }
 
@@ -430,15 +430,17 @@ footer {
 
 .footer-content {
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
   max-width: 1200px;
   margin: 0 auto;
-  flex-wrap: wrap;
+  text-align: center;
 }
 
 .footer-logo {
   max-width: 600px;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
   text-align: center;
 }
 
@@ -449,6 +451,27 @@ footer {
   background: var(--gradient-primary);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+.footer-logo p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+}
+
+.contact-info {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+}
+
+.contact-info a {
+  color: var(--primary-color);
+  transition: opacity 0.2s ease;
+}
+
+.contact-info a:hover {
+  opacity: 0.8;
 }
 
 .footer-links {
@@ -691,6 +714,20 @@ footer {
     font-size: 2.5rem;
   }
   
+  .page-hero {
+    height: 35vh;
+    max-height: 300px;
+    padding: 1rem;
+  }
+  
+  .hero-content {
+    padding: 0 1rem;
+  }
+  
+  .hero-content p {
+    font-size: 1rem;
+  }
+  
   .hamburger {
     display: flex;
   }
@@ -701,15 +738,23 @@ footer {
     right: -100%;
     flex-direction: column;
     width: 80%;
-    height: calc(100% - 60px);
-    background-color: var(--background-dark);
+    height: calc(100vh - 333px);
+    background-color: rgba(18, 18, 18, 0.98);
+    backdrop-filter: blur(10px);
+    border-left: 1px solid var(--border-color);
     padding: 2rem;
     transition: var(--transition);
     gap: 1.5rem;
+    z-index: 999;
+    overflow-y: auto;
   }
   
   .nav-links.active {
     right: 0;
+  }
+  
+  .main-nav {
+    padding: 1rem;
   }
   
   .hero-image {
@@ -718,22 +763,109 @@ footer {
   
   .footer-content {
     flex-direction: column;
-    gap: 2rem;
+    gap: 1rem;
+    padding: 0 1rem;
   }
   
   .footer-logo {
     text-align: center;
   }
   
+  .footer-logo h2 {
+    font-size: 1.5rem;
+  }
+  
   .tech-links {
     flex-direction: column;
     align-items: center;
+  }
+  
+  .container {
+    padding: 0 1rem;
+  }
+  
+  /* Beta banner mobile styles */
+  .banner-content {
+    flex-direction: column;
+    text-align: center;
+    gap: 1rem;
+    padding: 0 1rem;
+  }
+  
+  .banner-icon {
+    font-size: 2rem;
+  }
+  
+  /* Architecture columns mobile */
+  .architecture-columns {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .architecture-main-content {
+    margin: 2rem 0;
+    padding: 0 1rem;
+  }
+  
+  /* Home content columns mobile */
+  .content-columns {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  
+  .home-main-content {
+    margin: 2rem 0;
+    padding: 0 1rem;
+  }
+  
+  .branching-graph {
+    margin-bottom: 2rem;
+  }
+  
+  /* Coming soon sections mobile */
+  .coming-soon-section {
+    padding: 3rem 1rem;
+  }
+  
+  .coming-soon-content {
+    padding: 2rem 1rem;
+  }
+  
+  .coming-soon-content h2 {
+    font-size: 2rem;
+  }
+  
+  .coming-soon-icon {
+    font-size: 3rem;
+  }
+  
+  /* General card styling for mobile */
+  .tech-card,
+  .legal-card {
+    padding: 1.5rem;
+    margin: 0 1rem 1.5rem;
+  }
+  
+  /* Navigation improvements */
+  .nav-links li .login-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
   }
 }
 
 @media (max-width: 480px) {
   .hero-content h1 {
     font-size: 2rem;
+    line-height: 1.2;
+  }
+  
+  .page-hero {
+    height: 30vh;
+    max-height: 250px;
+  }
+  
+  .hero-content p {
+    font-size: 0.9rem;
   }
   
   .hero-buttons {
@@ -743,5 +875,54 @@ footer {
   
   .cta h2 {
     font-size: 2rem;
+  }
+  
+  .footer-logo h2 {
+    font-size: 1.3rem;
+  }
+  
+  .footer-logo p {
+    font-size: 0.85rem;
+  }
+  
+  .contact-info {
+    font-size: 0.8rem;
+  }
+  
+  .banner-text h3 {
+    font-size: 1.1rem;
+  }
+  
+  .banner-text p {
+    font-size: 0.85rem;
+  }
+  
+  .coming-soon-content h2 {
+    font-size: 1.8rem;
+  }
+  
+  .coming-soon-content p {
+    font-size: 1rem;
+  }
+  
+  .content-columns h2 {
+    font-size: 1.3rem;
+  }
+  
+  .content-columns p {
+    font-size: 0.9rem;
+  }
+  
+  .nav-links {
+    width: 90%;
+    padding: 1.5rem;
+  }
+  
+  .main-nav {
+    padding: 0.75rem;
+  }
+  
+  .logo-text {
+    font-size: 1.3rem;
   }
 } 

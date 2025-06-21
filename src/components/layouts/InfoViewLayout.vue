@@ -5,13 +5,13 @@
       <nav class="main-nav">
         <div class="logo">
           <router-link to="/inbox" class="logo-link">
-            <h1>Stitch</h1>
+            <span class="logo-text">Stitch</span>
           </router-link>
         </div>
         <ul class="nav-links" :class="{ active: isMenuOpen }">
           <li><router-link to="/" :class="{ active: currentRoute === '/' }">Home</router-link></li>
           <li><router-link to="/architecture" :class="{ active: currentRoute === '/architecture' }">Architecture</router-link></li>
-          <li><router-link to="/requests" :class="{ active: currentRoute === '/requests' }">Request Whitelist</router-link></li>
+          <li><router-link to="/requests" :class="{ active: currentRoute === '/requests' }">Request Access</router-link></li>
           <li><router-link to="/inbox" class="login-btn">Go to Stitch</router-link></li>
         </ul>
         <div class="hamburger" @click="toggleMenu" :class="{ active: isMenuOpen }">
@@ -40,7 +40,7 @@
           <div class="banner-icon">{{ betaBannerIcon || '🚀' }}</div>
           <div class="banner-text">
             <h3>{{ betaBannerTitle || 'Beta Phase: Now Live' }}</h3>
-            <p>{{ betaBannerText || 'We\'re currently in beta, focusing on perfecting the platform experience.' }}</p>
+            <p v-html="betaBannerText || 'We\'re currently in beta, focusing on perfecting the platform experience.'"></p>
           </div>
         </div>
       </div>
@@ -55,6 +55,9 @@
         <div class="footer-logo">
           <h2>Stitch</h2>
           <p>{{ footerTagline || 'The collaborative platform for humans and AI agents' }}</p>
+          <div class="contact-info">
+            <p>Contact us at <a href="mailto:business@stitch.fyi">business@stitch.fyi</a></p>
+          </div>
         </div>
       </div>
     </footer>
@@ -152,6 +155,43 @@ onBeforeUnmount(() => {
 
 <style>
 @import '../../assets/website.css';
+
+/* Logo styling to match InboxView */
+.logo-link {
+  text-decoration: none;
+}
+
+.logo-link:hover .logo-text {
+  opacity: 0.9;
+}
+
+.logo-text {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: var(--color-primary, #4f8cff);
+  letter-spacing: 1px;
+}
+
+/* Contact info styling */
+.contact-info {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 1rem;
+}
+
+.contact-info a {
+  color: var(--color-primary, #4f8cff);
+  transition: opacity 0.2s ease;
+}
+
+.contact-info a:hover {
+  opacity: 0.8;
+}
+
+/* Hero paragraph style */
+.page-hero .hero-content p {
+  margin-bottom: 0;
+}
 
 /* Override the default body styles for this component */
 .website-container {
