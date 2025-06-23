@@ -5,7 +5,8 @@
       'selected': isSelected, 
       'list-view': inListView,
       'shake-animation': isShaking,
-      'being-swiped': isBeingSwiped
+      'being-swiped': isBeingSwiped,
+      'compact': compact
     }"
     :data-message-id="message.id"
     :data-has-siblings="hasSiblings"
@@ -36,7 +37,7 @@
       ></div>
     </div>
     
-    <div class="message-content" ref="messageContentRef" :style="swipeStyle">
+    <div class="message-content" ref="messageContentRef" :style="swipeStyle" @click="handleMessageClick">
       <div class="message-header">
         <div class="author-section">
           <div class="author-info">
@@ -168,12 +169,24 @@
             Delete
           </button>
         </div>
-        <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
+        
+        <!-- Right section: checkbox + timestamp -->
+        <div class="header-right">
+          <input 
+            v-if="selectable"
+            type="checkbox"
+            :checked="selected"
+            @change="handleSelectionToggle"
+            @click.stop
+            class="selection-checkbox"
+          />
+          <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
+        </div>
       </div>
       
       <!-- Message body -->
       <div class="message-body">
-        <formatted-content v-if="!inListView" :content="message.content" />
+        <formatted-content v-if="displayMode === 'full'" :content="message.content" />
         <div v-else class="plaintext-content">{{ truncatedContent }}</div>
       </div>
       
@@ -236,6 +249,31 @@
             <span v-else>Copy Text</span>
           </button>
           
+          <!-- Save/Bookmark Button -->
+          <button 
+            v-if="!inListView"
+            @click.stop="toggleSaveMessage" 
+            class="save-button"
+            :class="{ 'saved': isMessageSaved }"
+            :disabled="isSavingMessage"
+            :title="isMessageSaved ? 'Remove bookmark' : 'Bookmark this message'"
+          >
+            <span v-if="isSavingMessage" class="loading-indicator"></span>
+            <span v-else class="bookmark-icon">🔖</span>
+            <span>{{ isMessageSaved ? 'Saved' : 'Save' }}</span>
+          </button>
+          
+          <!-- Links Button -->
+          <button 
+            v-if="!inListView"
+            @click.stop="openLinksModal" 
+            class="links-button"
+            title="View links in this message"
+          >
+            <span class="links-icon">🔗</span>
+            Links
+          </button>
+          
         </div>
       </div>
     </div>
@@ -281,6 +319,7 @@
               <button class="preview-button">Reply</button>
               <button class="preview-button">Reformat</button>
               <button class="preview-button">Copy Text</button>
+              <button class="preview-button">Save</button>
             </div>
           </div>
         </div>
@@ -328,6 +367,7 @@
               <button class="preview-button">Reply</button>
               <button class="preview-button">Reformat</button>
               <button class="preview-button">Copy Text</button>
+              <button class="preview-button">Save</button>
             </div>
           </div>
         </div>
@@ -389,9 +429,11 @@ import AdaptiveMarker from './AdaptiveMarker.vue';
 import SiblingNavigator from './SiblingNavigator.vue';
 import FormattedContent from './FormattedContent/index.vue';
 import { initFormatters } from './FormattedContent/init';
-import { computed, ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { useStore } from 'vuex';
 import { memoize } from 'lodash-es';
+import MessageService from '../services/MessageService.js';
+import UserService from '../services/UserService.js';
 
 export default {
   name: 'MessageNode',
@@ -407,6 +449,28 @@ export default {
       type: Object,
       required: true
     },
+    // Display format - preview (truncated) or full content
+    displayMode: {
+      type: String,
+      default: 'full',
+      validator: value => ['preview', 'full'].includes(value)
+    },
+    // Interaction mode - if true, clicking selects instead of navigating
+    selectable: {
+      type: Boolean,
+      default: false
+    },
+    // Current selection state (when selectable=true)
+    selected: {
+      type: Boolean,
+      default: false
+    },
+    // Visual sizing - affects font size and spacing
+    compact: {
+      type: Boolean,
+      default: false
+    },
+    // Legacy props for compatibility
     isSelected: {
       type: Boolean,
       default: false
@@ -438,7 +502,7 @@ export default {
     }
   },
   
-  setup(props) {
+  setup(props, { emit }) {
     const store = useStore();
     const currentUser = computed(() => store.getters['auth/user']);
     const isAdmin = computed(() => store.getters['auth/isAdmin']);
@@ -461,6 +525,38 @@ export default {
     // Add refs for copy button states
     const isJsonCopied = ref(false);
     const isTextCopied = ref(false);
+    
+    // Add refs for save button state
+    const isMessageSaved = ref(false);
+    const isSavingMessage = ref(false);
+    
+    // Message click handler - handles selection vs navigation
+    const handleMessageClick = () => {
+      if (props.selectable) {
+        // Selection mode - emit selection toggle
+        emit('selectionToggled', props.message.id);
+      } else if (props.displayMode === 'preview') {
+        // Preview mode without selection - emit navigation
+        emit('navigate', props.message.id);
+      }
+      // Full mode without selection - do nothing (already on thread)
+    };
+    
+    // Handle checkbox selection changes
+    const handleSelectionToggle = (event) => {
+      emit('selectionToggled', props.message.id);
+    };
+    
+    // Initialize save state from message data
+    const initializeSaveState = () => {
+      // Set initial state based on message.is_saved
+      isMessageSaved.value = props.message.is_saved === true;
+    };
+    
+    // Watch for changes in message prop to update save state
+    watch(() => props.message.is_saved, (newValue) => {
+      isMessageSaved.value = newValue === true;
+    }, { immediate: true });
     
     // Add new refs for swipe functionality
     const touchStartX = ref(0);
@@ -502,6 +598,11 @@ export default {
       // Clear any status message
       saveMessage.value = '';
       saveError.value = false;
+    };
+    
+    const openLinksModal = () => {
+      // Emit event to parent to handle the modal
+      emit('showLinks', props.message);
     };
     
     const saveTitleAndDescription = async () => {
@@ -1104,31 +1205,12 @@ export default {
       try {
         const message = props.message;
         
-        // Handle recipients field based on its type
-        let recipientsText = 'Recipients: None';
-        if (message.recipients) {
-          if (typeof message.recipients === 'string') {
-            recipientsText = `Recipients: ${message.recipients}`;
-          } else if (Array.isArray(message.recipients) && message.recipients.length > 0) {
-            recipientsText = `Recipients: ${message.recipients.map(r => r.display_name || r.user_tag).join(', ')}`;
-          }
-        }
+        // Create header line with display name, user tag, and timestamp
+        const userTag = message.author_user_tag ? `(@${message.author_user_tag})` : '';
+        const header = `${message.author_display_name || 'Unknown'} ${userTag}, ${new Date(message.timestamp).toLocaleString()}`;
         
-        // Create a metadata header with important fields
-        const metadata = [
-          '[METADATA HEADER]',
-          `ID: ${message.id || 'N/A'}`,
-          `Author: ${message.author_display_name || 'Unknown'} ${message.author_user_tag ? `(@${message.author_user_tag})` : ''}`,
-          `Timestamp: ${new Date(message.timestamp).toLocaleString()}`,
-          `Visibility: ${message.public ? 'Public' : 'Private'}`,
-          recipientsText,
-          message.title ? `Title: ${message.title}` : '',
-          message.description ? `Description: ${message.description}` : '',
-          '[/METADATA HEADER]\n\n'
-        ].filter(Boolean).join('\n');
-
-        // Combine metadata with the actual message content
-        const fullText = `${metadata}${message.content || ''}`;
+        // Combine header with the message content
+        const fullText = `${header}\n${message.content || ''}`;
         
         navigator.clipboard.writeText(fullText)
           .then(() => {
@@ -1175,6 +1257,25 @@ export default {
         console.error('Error reformatting message:', error);
       } finally {
         isReformatting.value = false;
+      }
+    };
+    
+    const toggleSaveMessage = async () => {
+      if (isSavingMessage.value) return;
+      
+      isSavingMessage.value = true;
+      try {
+        if (isMessageSaved.value) {
+          await UserService.unsaveMessage(props.message.id);
+          isMessageSaved.value = false;
+        } else {
+          await UserService.saveMessage(props.message.id);
+          isMessageSaved.value = true;
+        }
+      } catch (error) {
+        console.error('Error toggling save status:', error);
+      } finally {
+        isSavingMessage.value = false;
       }
     };
     
@@ -1287,6 +1388,9 @@ export default {
       // Initialize formatters if not already done
       initFormatters();
       
+      // Initialize save state from message data
+      initializeSaveState();
+      
       // Listen for clicks to handle dropdown closing
       document.addEventListener('click', handleClickOutside);
       
@@ -1378,7 +1482,13 @@ export default {
       prevSiblingMessage,
       siblingCount,
       isJsonCopied,
-      isTextCopied
+      isTextCopied,
+      isMessageSaved,
+      isSavingMessage,
+      toggleSaveMessage,
+      openLinksModal,
+      handleMessageClick,
+      handleSelectionToggle
     };
   },
   
@@ -1456,6 +1566,20 @@ export default {
   display: flex;
   justify-content: space-between;
   margin-bottom: var(--space-xs);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.selection-checkbox {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-primary);
+  flex-shrink: 0;
 }
 
 .author-section {
@@ -1778,6 +1902,48 @@ export default {
   color: #ffffff; /* Force white text color in list view */
 }
 
+/* Compact mode - smaller font sizes and spacing */
+.message-node.compact .message-content {
+  padding: var(--space-md) var(--space-lg);
+}
+
+.message-node.compact .plaintext-content {
+  font-size: 0.9rem;
+}
+
+.message-node.compact .message-author {
+  font-size: var(--font-size-sm);
+}
+
+.message-node.compact .author-user-tag {
+  font-size: calc(var(--font-size-xs) - 1px);
+}
+
+.message-node.compact .message-timestamp {
+  font-size: calc(var(--font-size-xs) - 1px);
+}
+
+.message-node.compact .visibility-indicator,
+.message-node.compact .recipients-toggle {
+  font-size: calc(var(--font-size-xs) - 1px);
+  padding: 1px 5px;
+  height: 20px;
+}
+
+.message-node.compact .message-actions {
+  gap: 12px;
+}
+
+.message-node.compact .reply-button,
+.message-node.compact .reformat-button,
+.message-node.compact .text-button,
+.message-node.compact .json-button,
+.message-node.compact .save-button,
+.message-node.compact .links-button {
+  font-size: calc(var(--font-size-xs) - 1px);
+  padding: 4px 6px;
+}
+
 .message-footer {
   display: flex;
   justify-content: space-between;
@@ -2023,6 +2189,84 @@ export default {
   animation: spin 1s linear infinite;
 }
 
+.save-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  padding: 5px 8px;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--color-text-secondary);
+}
+
+.save-button:hover:not(:disabled) {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+}
+
+.save-button.saved {
+  background-color: #6a5942;
+  border-color: black;
+  color: var(--color-text-inverse);
+  transform: scale(1.05);
+}
+
+.save-button.saved:hover {
+  background-color: #6a5942;
+  border-color: rgb(180, 180, 180);
+  color: var(--color-text-inverse);
+  transform: scale(1.05);
+}
+
+.save-button.loading {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.save-button .loading-indicator {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.bookmark-icon {
+  font-size: var(--font-size-sm);
+  line-height: 1;
+}
+
+.links-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  padding: 5px 8px;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--color-text-secondary);
+}
+
+.links-button:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+  color: var(--color-primary);
+}
+
+.links-icon {
+  font-size: var(--font-size-sm);
+  line-height: 1;
+}
+
 @media (max-width: 768px) {
   .message-node {
     width: 100%;
@@ -2062,7 +2306,7 @@ export default {
   /* Button container that holds all action buttons */
   .message-actions {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 8px;
     align-items: start;  /* Align items to the top */
   }
@@ -2071,7 +2315,8 @@ export default {
   .reply-button,
   .reformat-button,
   .text-button,
-  .json-button {
+  .json-button,
+  .save-button {
     width: 100%;
     padding: 4px 2px;  /* Reduced padding */
     border-radius: var(--radius-sm);
@@ -2205,7 +2450,7 @@ export default {
 
 .preview-buttons {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   width: 100%;
 }

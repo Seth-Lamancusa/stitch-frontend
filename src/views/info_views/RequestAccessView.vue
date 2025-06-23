@@ -1,6 +1,6 @@
 <template>
   <InfoViewLayout
-    pageTitle="Request Access"
+    pageTitle="Join Waitlist"
     pageSubtitle="Join Stitch by requesting access and being selected"
     heroClass="featured-hero"
     :showBetaBanner="true"

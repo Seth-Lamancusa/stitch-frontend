@@ -5,13 +5,76 @@ import { useRouter, useRoute } from 'vue-router';
 import { initializeFirebase } from '../firebase';
 import MessageNode from './MessageNode.vue';
 import MessageService from '../services/MessageService';
+import AdminService from '../services/AdminService';
+
+// Props to support different modes and configurations
+const props = defineProps({
+  mode: {
+    type: String,
+    required: true,
+    validator: (val) => ['inbox', 'all', 'sent', 'saved', 'incoming-links', 'outgoing-links'].includes(val)
+  },
+  // Custom messages to display instead of fetching from store
+  customMessages: {
+    type: Array,
+    default: null
+  },
+  // Hide header controls (new message button)
+  hideHeader: {
+    type: Boolean,
+    default: false
+  },
+  // Hide info box
+  hideInfoBox: {
+    type: Boolean,
+    default: false
+  },
+  // Use compact message display
+  compact: {
+    type: Boolean,
+    default: false
+  },
+  // Hide loading indicators
+  hideLoading: {
+    type: Boolean,
+    default: false
+  },
+  // Source message ID for link-based modes
+  sourceMessageId: {
+    type: String,
+    default: null
+  },
+  // Enable selection mode for messages
+  selectable: {
+    type: Boolean,
+    default: false
+  },
+  // Show all links
+  showAllLinks: {
+    type: Boolean,
+    default: false
+  }
+});
 
 const store = useStore();
 const router = useRouter();
 const route = useRoute();
 
+// Define emits
+const emit = defineEmits(['messageClicked', 'selectionChanged']);
+
 const isAllLoaded = ref(false);
-const currentPage = ref(1);
+const currentSkip = ref(0);
+const pageSize = ref(20);
+
+// Local state for non-store modes (like saved mode)
+const localMessages = ref([]);
+
+// Selection state management
+const selectedMessageIds = ref(new Set());
+
+// Link deletion loading state
+const deletingLinkId = ref(null);
 
 // Store loading state - single source of truth
 const isLoading = computed(() => {
@@ -30,8 +93,22 @@ const activeTab = computed(() => {
 });
 
 const threads = computed(() => {
-  const allMessages = store.getters['messages/getLoadedMessages'] || [];
+  // Use custom messages if provided
+  if (props.customMessages && props.mode === 'custom') {
+    return props.customMessages;
+  }
   
+  // Use local state for saved and link modes (to avoid polluting global store)
+  if (props.mode === 'saved' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
+    console.log(`[MessageList] threads computed for ${props.mode}:`, {
+      localMessagesLength: localMessages.value.length,
+      localMessages: localMessages.value
+    });
+    return localMessages.value;
+  }
+  
+  // Use store for inbox/admin modes
+  const allMessages = store.getters['messages/getLoadedMessages'] || [];
   return allMessages;
 });
 
@@ -45,9 +122,31 @@ const shouldShowEmptyState = computed(() => {
   return !isLoading.value && isAllLoaded.value && threads.value.length === 0;
 });
 
-// Show login message when no user is logged in
+// Contextual empty state message based on mode
+const emptyStateMessage = computed(() => {
+  switch (props.mode) {
+    case 'inbox':
+      return 'No messages in your inbox.';
+    case 'admin':
+      return 'No messages found.';
+    case 'saved':
+      return 'No saved messages found.';
+    case 'incoming-links':
+      return 'No incoming links found.';
+    case 'outgoing-links':
+      return 'No outgoing links found.';
+    case 'sent':
+      return 'No sent messages found.';
+    case 'all':
+      return 'No messages found.';
+    default:
+      return 'No messages found.';
+  }
+});
+
+// Show login message when no user is logged in (only for inbox mode)
 const shouldShowLoginMessage = computed(() => {
-  return !user.value;
+  return props.mode === 'inbox' && !user.value;
 });
 
 const error = computed(() => store.getters['ui/error']);
@@ -60,6 +159,17 @@ const replyCounts = ref({}); // Track reply counts by thread ID
 
 // Add new ref for info box collapsed state
 const isInfoBoxCollapsed = ref(localStorage.getItem('infoBoxCollapsed') === 'true');
+
+// Link mode detection
+const isLinkMode = computed(() => {
+  return props.mode === 'incoming-links' || props.mode === 'outgoing-links';
+});
+
+const linkType = computed(() => {
+  if (props.mode === 'incoming-links') return 'incoming';
+  if (props.mode === 'outgoing-links') return 'outgoing';
+  return null;
+});
 
 // Get display version of author for a message
 function getAuthorDisplay(message) {
@@ -78,9 +188,24 @@ function getReplyCount(message) {
 
 // Navigate to thread view when a thread is clicked
 const viewMessage = (messageId) => {
-  // Store current route before navigation
-  store.dispatch('navigation/setPreviousRoute', route.path);
+  // If in selectable mode, handle as selection instead of navigation
+  if (props.selectable) {
+    handleMessageSelection(messageId);
+    return;
+  }
   
+  // For link modes, emit event to close modal before navigation
+  // Don't set previous route for link navigation to preserve original route
+  if (props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
+    console.log(`[MessageList] Navigation from link mode (${props.mode}) - NOT setting previous route to preserve original`);
+    emit('messageClicked', messageId);
+    router.push({ path: `/${messageId}` });
+    return;
+  }
+  
+  // Store current route before navigation (only for non-link modes)
+  console.log(`[MessageList] Navigation from mode "${props.mode}" - setting previous route to: "${route.path}"`);
+  store.dispatch('navigation/setPreviousRoute', route.path);
   router.push({ path: `/${messageId}` });
 };
 
@@ -94,6 +219,7 @@ const confirmDeleteMessage = (message) => {
 // Create a new message thread
 const createNewThread = () => {
   // Store current route before navigation
+  console.log(`[MessageList] Creating new thread - setting previous route to: "${route.path}"`);
   store.dispatch('navigation/setPreviousRoute', route.path);
   
   // Simply navigate to the new thread route
@@ -180,28 +306,69 @@ function getThreadMessages(threadId) {
   return threadMessages;
 }
 
-// Simple load messages function
+// Abstract fetch function - delegates to store based on mode
 const loadMessages = async () => {
-  // Stop if no user, already loading, or all done
-  if (!user.value || isLoading.value || isAllLoaded.value) {
+  // Skip loading if already loading or all loaded
+  if (isLoading.value || isAllLoaded.value) {
+    return;
+  }
+  
+  // Skip for inbox mode if no user
+  if (props.mode === 'inbox' && !user.value) {
     return;
   }
   
   try {
-    const response = await store.dispatch('messages/fetchUserMessages', {
-      page: currentPage.value
+    let response;
+    
+    // Build fetch parameters based on mode
+    const fetchParams = {
+      skip: currentSkip.value,
+      limit: pageSize.value
+    };
+    
+    // Add mode-specific parameters
+    if (props.sourceMessageId) {
+      fetchParams.sourceMessageId = props.sourceMessageId;
+    }
+    
+    // Add showAllLinks parameter for link modes
+    if (props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
+      fetchParams.showAllLinks = props.showAllLinks;
+    }
+    
+    // Delegate to store based on mode
+    response = await store.dispatch('messages/fetchMessages', {
+      mode: props.mode,
+      ...fetchParams
     });
     
     if (response) {
-      // Update states based on response
+      console.log(`[MessageList] loadMessages response for ${props.mode}:`, response);
+      
+      // Handle response based on mode
+      if (props.mode === 'saved' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
+        // For saved and link modes, use local state
+        if (currentSkip.value === 0) {
+          // First load - replace local messages
+          console.log(`[MessageList] Setting localMessages to:`, response.messages || []);
+          localMessages.value = response.messages || [];
+        } else {
+          // Subsequent loads - append to local messages
+          localMessages.value = [...localMessages.value, ...(response.messages || [])];
+        }
+        console.log(`[MessageList] localMessages after update:`, localMessages.value);
+      }
+      // Store modes (inbox/admin) are handled by the store action itself
+      
+      // Update pagination state
       isAllLoaded.value = response.exhausted || false;
-      // Only increment page if we got results and there are more
-      if (!response.exhausted && response.messages.length > 0) {
-        currentPage.value += 1;
+      if (!response.exhausted && response.messages && response.messages.length > 0) {
+        currentSkip.value += response.messages.length;
       }
     }
   } catch (error) {
-    console.error('Error loading messages:', error);
+    console.error(`Error loading ${props.mode} messages:`, error);
   }
 };
 
@@ -214,23 +381,29 @@ onMounted(async () => {
     console.error("Firebase initialization failed:", error);
   }
 
-  // Only start loading if user is authenticated
-  if (user.value) {
+  // Start loading based on mode
+  if (props.mode === 'admin') {
+    // Admin mode - load immediately (auth checked server-side)
+    loadMessages();
+  } else if (user.value) {
+    // Inbox mode - only start loading if user is authenticated
     loadMessages();
   }
 });
 
-// Watch for user changes to start loading when they log in
+// Watch for user changes to start loading when they log in (inbox mode only)
 watch(user, (newUser, oldUser) => {
-  if (newUser && !oldUser) {
-    // User just logged in, start loading messages
-    console.log('User logged in, starting to load messages');
-    loadMessages();
-  } else if (!newUser && oldUser) {
-    // User logged out, reset state
-    console.log('User logged out, resetting message list state');
-    isAllLoaded.value = false;
-    currentPage.value = 1;
+  if (props.mode === 'inbox') {
+    if (newUser && !oldUser) {
+      // User just logged in, start loading messages
+      console.log('User logged in, starting to load messages');
+      loadMessages();
+    } else if (!newUser && oldUser) {
+      // User logged out, reset state
+      console.log('User logged out, resetting message list state');
+      isAllLoaded.value = false;
+      currentSkip.value = 0;
+    }
   }
 });
 
@@ -288,14 +461,96 @@ watch(() => store.getters['messages/getLoadedMessages'].length, (newLength, oldL
   // If messages were cleared, reset loading states
   if (oldLength > 0 && newLength === 0) {
     isAllLoaded.value = false;
-    currentPage.value = 1;
+    currentSkip.value = 0;
   }
 });
+
+// Handle message selection changes
+const handleMessageSelection = (messageId) => {
+  if (selectedMessageIds.value.has(messageId)) {
+    selectedMessageIds.value.delete(messageId);
+  } else {
+    selectedMessageIds.value.add(messageId);
+  }
+  // Emit to parent for operations
+  emit('selectionChanged', Array.from(selectedMessageIds.value));
+};
+
+// Reset local state when mode or sourceMessageId changes
+watch([() => props.mode, () => props.sourceMessageId, () => props.showAllLinks], () => {
+  if (props.mode === 'saved' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
+    console.log(`[MessageList] Mode/source/showAllLinks changed to ${props.mode}/${props.sourceMessageId}/${props.showAllLinks}, resetting local state`);
+    localMessages.value = [];
+    selectedMessageIds.value.clear();
+    isAllLoaded.value = false;
+    currentSkip.value = 0;
+    // Trigger reload
+    nextTick(() => {
+      loadMessages();
+    });
+  }
+}, { immediate: true });
 
 // Add function to toggle info box
 const toggleInfoBox = () => {
   isInfoBoxCollapsed.value = !isInfoBoxCollapsed.value;
   localStorage.setItem('infoBoxCollapsed', isInfoBoxCollapsed.value);
+};
+
+// Handle link deletion
+const handleLinkDelete = async (linkData) => {
+  try {
+    console.log('[MessageList] Handling link delete:', linkData);
+    
+    // Set loading state for this specific message
+    deletingLinkId.value = linkData.messageId;
+    
+    // Determine the correct messageIdFrom and messageIdTo based on link type
+    let messageIdFrom, messageIdTo;
+    
+    if (linkData.linkType === 'incoming') {
+      // For incoming links: the message in the list links TO the source message
+      messageIdFrom = linkData.messageId;
+      messageIdTo = linkData.sourceMessageId;
+    } else if (linkData.linkType === 'outgoing') {
+      // For outgoing links: the source message links TO the message in the list
+      messageIdFrom = linkData.sourceMessageId;
+      messageIdTo = linkData.messageId;
+    } else {
+      console.error('[MessageList] Invalid link type:', linkData.linkType);
+      return;
+    }
+    
+    // Call the store action to delete the link
+    const success = await store.dispatch('messages/deleteLink', {
+      messageIdFrom,
+      messageIdTo,
+      linkType: linkData.linkType,
+      sourceMessageId: linkData.sourceMessageId
+    });
+    
+    if (success) {
+      console.log('[MessageList] Link deleted successfully, refreshing list');
+      
+      // Refresh the message list to reflect the deletion
+      // Reset pagination and reload from the beginning
+      isAllLoaded.value = false;
+      currentSkip.value = 0;
+      localMessages.value = [];
+      
+      // Reload the messages
+      await loadMessages();
+    } else {
+      console.error('[MessageList] Failed to delete link');
+      // Could show a toast notification here
+    }
+  } catch (error) {
+    console.error('[MessageList] Error deleting link:', error);
+    // Could show an error toast notification here
+  } finally {
+    // Clear loading state
+    deletingLinkId.value = null;
+  }
 };
 </script>
 
@@ -309,7 +564,8 @@ const toggleInfoBox = () => {
         isAllLoaded: {{ isAllLoaded }}<br>
         shouldShowLoadingIndicator: {{ shouldShowLoadingIndicator }}<br>
         threads.length: {{ threads.length }}<br>
-        currentPage: {{ currentPage }}<br>
+        localMessages.length: {{ localMessages.length }}<br>
+        currentSkip: {{ currentSkip }}<br>
         activeTab: {{ activeTab }}<br>
         shouldShowEmptyState: {{ shouldShowEmptyState }}<br>
         shouldShowLoginMessage: {{ shouldShowLoginMessage }}<br>
@@ -320,7 +576,7 @@ const toggleInfoBox = () => {
     </div> -->
 
     <!-- Message list header -->
-    <div class="message-list-header">
+    <div v-if="!hideHeader" class="message-list-header">
       <div class="header-controls">
         <button 
           class="new-message-btn"
@@ -336,17 +592,11 @@ const toggleInfoBox = () => {
     <div v-if="shouldShowLoginMessage" class="login-message">
       <div class="login-content">
         <h3>Welcome to Stitch</h3>
-        <p>Log in to view and participate in conversations, <router-link to="/requests">join the waitlist</router-link>, or navigate to a public message by url.</p>
+        <p>Log in to recieve direct messages and participate in conversations, or view free public messages by url.</p>
       </div>
     </div>
-
-    <!-- Empty state - only shown when logged in but no messages -->
-    <div v-else-if="shouldShowEmptyState" class="empty-state">
-      <p>No messages found.</p>
-      <p class="empty-subtitle">Start a conversation by creating a new message!</p>
-    </div>
     
-    <div v-if="user" class="info-box" :class="{ 'collapsed': isInfoBoxCollapsed }">
+    <div v-if="user && mode !== 'admin' && !hideInfoBox" class="info-box" :class="{ 'collapsed': isInfoBoxCollapsed }">
       <div class="info-header">
         <button class="toggle-button" @click.stop="toggleInfoBox">
           {{ isInfoBoxCollapsed ? 'Show Info' : 'Hide Info' }}
@@ -360,6 +610,11 @@ const toggleInfoBox = () => {
       </div>
     </div>
 
+    <!-- Empty state - only shown when logged in but no messages -->
+    <div v-if="shouldShowEmptyState" class="empty-state">
+      <p>{{ emptyStateMessage }}</p>
+    </div>
+
     <!-- Messages container -->
     <div class="messages-container">
       <!-- Messages list - now using MessageNode component -->
@@ -367,10 +622,31 @@ const toggleInfoBox = () => {
         v-for="thread in threads" 
         :key="thread.id" 
         class="message-list-item"
-        @click="viewMessage(thread.id)"
+        :class="{ 'selectable': selectable, 'link-mode': isLinkMode }"
       >
+        <!-- Link delete button - positioned outside MessageNode -->
+        <button 
+          v-if="isLinkMode"
+          @click.stop="handleLinkDelete({
+            messageId: thread.id,
+            linkType: linkType,
+            sourceMessageId: sourceMessageId
+          })"
+          class="link-delete-button"
+          :class="{ 'loading': deletingLinkId === thread.id }"
+          :disabled="deletingLinkId === thread.id"
+          :title="deletingLinkId === thread.id ? 'Deleting...' : `Remove ${linkType} link`"
+        >
+          <div v-if="deletingLinkId === thread.id" class="delete-spinner"></div>
+          <span v-else class="delete-icon">🗑️</span>
+        </button>
+        
         <MessageNode
           :message="thread"
+          :displayMode="'preview'"
+          :selectable="selectable"
+          :selected="selectedMessageIds.has(thread.id)"
+          :compact="compact"
           :is-selected="false"
           :indent-level="0"
           :loaded-replies="getReplyCount(thread)"
@@ -379,12 +655,14 @@ const toggleInfoBox = () => {
           :inListView="true"
           :threadMessages="getThreadMessages(thread.id)"
           @delete="confirmDeleteMessage"
+          @navigate="viewMessage"
+          @selectionToggled="handleMessageSelection"
         />
       </div>
       
       <!-- Loading indicator - only show for authenticated users -->
       <div 
-        v-if="shouldShowLoadingIndicator && user" 
+        v-if="shouldShowLoadingIndicator && user && !hideLoading" 
         ref="loadingIndicatorRef"
         class="loading-indicator" 
         :class="{ 'full-height': threads.length === 0, 'loading': isLoading }"
@@ -404,7 +682,7 @@ const toggleInfoBox = () => {
       </div>
       
       <!-- End of results message when all messages are loaded -->
-      <div v-if="!isLoading && isAllLoaded && threads.length > 0" class="end-of-results">
+      <div v-if="!isLoading && isAllLoaded && threads.length > 0 && !hideLoading" class="end-of-results">
         <p>No more messages to load</p>
       </div>
     </div>
@@ -516,8 +794,77 @@ const toggleInfoBox = () => {
   transition: transform var(--transition-fast), opacity var(--transition-fast);
 }
 
+.message-list-item.selectable {
+  cursor: default;
+}
+
 .message-list-item:hover {
   opacity: 0.95;
+}
+
+/* Link mode styling - make it a horizontal row */
+.message-list-item.link-mode {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-sm);
+}
+
+.link-delete-button {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  background: #c03753;
+  color: var(--color-text-inverse);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  align-self: flex-start;
+  margin-top: 8px; /* Align with message content */
+}
+
+.link-delete-button:hover {
+  background: var(--color-error);
+  filter: brightness(90%);
+  transform: scale(1.05);
+}
+
+.link-delete-button.loading {
+  background: #c03753;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.link-delete-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.delete-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid var(--color-text-inverse);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.link-delete-button .delete-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Ensure MessageNode takes remaining space in link mode */
+.message-list-item.link-mode .message-node {
+  flex: 1;
 }
 
 .loading-indicator {
@@ -783,9 +1130,12 @@ const toggleInfoBox = () => {
 }
 
 .info-box.collapsed {
-  padding: 4px 16px;
+  padding: 4px 8px;
   margin: 8px auto;
   margin-top: 16px;
+  width: 100px;
+  min-width: unset;
+  max-width: unset;
 }
 
 .info-header {
@@ -797,6 +1147,7 @@ const toggleInfoBox = () => {
 
 .info-box.collapsed .info-header {
   margin-bottom: 0;
+  width: auto;
 }
 
 .toggle-button {
@@ -812,6 +1163,7 @@ const toggleInfoBox = () => {
   border-radius: var(--radius-sm);
   transition: background-color 0.2s ease;
   opacity: 0.7;
+  white-space: nowrap;
 }
 
 .toggle-button:hover {

@@ -684,6 +684,115 @@ export default {
       }
     },
     
+    // Universal fetch action that routes to appropriate service based on mode
+    async fetchMessages({ commit, state, rootState }, { mode, skip = 0, limit = 20, sourceMessageId = null, showAllLinks = false }) {
+      try {
+        // Check auth for modes that require it
+        if ((mode === 'inbox') && !rootState.auth?.user) {
+          console.log('[Store] fetchMessages called but no user authenticated for inbox mode, skipping');
+          return { messages: [], exhausted: true };
+        }
+
+        // Set loading state
+        commit('SET_LOADING', { key: 'fetchingMessages', isLoading: true });
+        
+        console.log(`[Store] fetchMessages called with:`, {
+          mode, skip, limit, sourceMessageId, showAllLinks,
+          user: rootState.auth?.user?.email || 'unauthenticated'
+        });
+        
+        let response;
+        
+        // Route to appropriate service based on mode
+        switch(mode) {
+          case 'inbox':
+            response = await UserService.fetchUserMessages(limit, skip);
+            break;
+          case 'admin':
+            // Import AdminService when needed
+            const AdminService = (await import('../../services/AdminService')).default;
+            const adminResponse = await AdminService.getMessages({ skip, limit });
+            if (adminResponse.success) {
+              response = {
+                messages: adminResponse.messages,
+                exhausted: adminResponse.messages.length < limit
+              };
+            } else {
+              throw new Error(adminResponse.error || 'Failed to load admin messages');
+            }
+            break;
+          case 'incoming-links':
+            if (!sourceMessageId) throw new Error('sourceMessageId required for incoming-links mode');
+            response = await UserService.getUserIncomingLinks(sourceMessageId, skip, limit, showAllLinks);
+            break;
+          case 'outgoing-links':
+            if (!sourceMessageId) throw new Error('sourceMessageId required for outgoing-links mode');
+            response = await UserService.getUserOutgoingLinks(sourceMessageId, skip, limit, showAllLinks);
+            break;
+          case 'saved':
+            response = await UserService.getSavedMessages(skip, limit);
+            break;
+          case 'custom':
+            // Custom mode doesn't fetch - just return empty
+            return { messages: [], exhausted: true };
+          default:
+            throw new Error(`Unknown fetch mode: ${mode}`);
+        }
+
+        console.log('messages from fetchMessages', response.messages);
+        
+        const rawMessages = response.messages || response.data?.messages || response.data || response || [];
+        const exhausted = response.exhausted || response.data?.exhausted || false;
+        
+        // Ensure rawMessages is always an array
+        const messagesArray = Array.isArray(rawMessages) ? rawMessages : [];
+        
+        // Transform messages from ArangoDB format to expected format
+        const messages = messagesArray.map(message => {
+          if (!message.id && message._key) {
+            message.id = message._key;
+          }
+          return message;
+        });
+        
+        console.log(`[Store] ${mode} API response:`, {
+          rawResponse: response,
+          rawMessages: rawMessages,
+          rawMessagesType: typeof rawMessages,
+          rawMessagesIsArray: Array.isArray(rawMessages),
+          messagesArrayCount: messagesArray.length,
+          messagesCount: messages.length,
+          exhausted,
+          firstMessageId: messages[0]?.id || 'none'
+        });
+        
+        // For modes other than inbox, don't automatically commit to store
+        // (they might want to handle messages differently)
+        if (mode === 'inbox' || mode === 'admin') {
+          if (messages.length > 0) {
+            if (skip === 0) {
+              // First page - replace messages
+              await this.dispatch('messages/clearCache');
+              commit('SET_MESSAGES', messages);
+            } else {
+              // Subsequent pages - append messages
+              commit('SET_MESSAGES', messages);
+            }
+            console.log(`[Store] Store now has ${Object.keys(state.messages).length} total messages`);
+          }
+        }
+        
+        return { messages, exhausted };
+        
+      } catch (error) {
+        console.error(`[Store] Error in fetchMessages (${mode}):`, error);
+        commit('ui/SET_ERROR', error.message || `Failed to load ${mode} messages`, { root: true });
+        return { messages: [], exhausted: true };
+      } finally {
+        commit('SET_LOADING', { key: 'fetchingMessages', isLoading: false });
+      }
+    },
+    
     // Fetch chronological messages (for inbox tab main list)
     async fetchUserMessages({ commit, state, rootState }, { page = 1 } = {}) {
       try {
@@ -705,12 +814,15 @@ export default {
         });
         
         const response = await UserService.fetchUserMessages(10, page);
-        const rawMessages = response.data?.messages || response.messages || [];
-        const exhausted = response.data?.exhausted || response.exhausted || false;
+        const rawMessages = response.messages || response.data?.messages || response.data || response || [];
+        const exhausted = response.exhausted || response.data?.exhausted || false;
         const currentPage = response.data?.page || page;
         
+        // Ensure rawMessages is always an array
+        const messagesArray = Array.isArray(rawMessages) ? rawMessages : [];
+        
         // Transform messages from ArangoDB format to expected format
-        const messages = rawMessages.map(message => {
+        const messages = messagesArray.map(message => {
           // If message already has id, use it; otherwise use _key
           if (!message.id && message._key) {
             message.id = message._key;
@@ -719,12 +831,12 @@ export default {
         });
         
         console.log(`[Store] API response:`, {
-          rawMessagesCount: rawMessages.length,
+          rawMessagesCount: messagesArray.length,
           messagesCount: messages.length,
           exhausted,
           currentPage,
           firstMessageId: messages[0]?.id || 'none',
-          firstRawMessage: rawMessages[0] ? { _key: rawMessages[0]._key, _id: rawMessages[0]._id, id: rawMessages[0].id } : 'none'
+          firstRawMessage: messagesArray[0] ? { _key: messagesArray[0]._key, _id: messagesArray[0]._id, id: messagesArray[0].id } : 'none'
         });
         
         // Commit all messages to store
@@ -1081,6 +1193,50 @@ export default {
       }
     },
 
+    async deleteLink({ commit, dispatch }, { messageIdFrom, messageIdTo, linkType, sourceMessageId }) {
+      try {
+        console.log('[Store] Deleting link:', { messageIdFrom, messageIdTo, linkType, sourceMessageId });
+        
+        // Call the service to delete the link
+        const success = await UserService.deleteLink(messageIdFrom, messageIdTo);
+        
+        if (success) {
+          console.log('[Store] Link deleted successfully');
+          
+          // Refresh the appropriate link list
+          // We'll need to refresh the messages for the LinksModal
+          // This will be handled by the component watching for changes
+          
+          return true;
+        } else {
+          console.error('[Store] Failed to delete link');
+          return false;
+        }
+      } catch (error) {
+        console.error('[Store] Error deleting link:', error);
+        throw error;
+      }
+    },
+
+    async createLink({ commit, dispatch }, { messageIdFrom, messageIdTo }) {
+      try {
+        console.log('[Store] Creating link:', { messageIdFrom, messageIdTo });
+        
+        // Call the service to create the link
+        const success = await UserService.createLink(messageIdFrom, messageIdTo);
+        
+        if (success) {
+          console.log('[Store] Link created successfully');
+          return true;
+        } else {
+          console.error('[Store] Failed to create link');
+          return false;
+        }
+      } catch (error) {
+        console.error('[Store] Error creating link:', error);
+        throw error;
+      }
+    }
 
   },
   

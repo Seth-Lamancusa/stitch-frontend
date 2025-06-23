@@ -177,5 +177,7 @@ export default {
   async reformatMessage(messageId) {
     const headers = await getAuthHeaders();
     return axios.post(`${apiBaseUrl}/messages/${messageId}/reformat`, {}, { headers });
-  }
+  },
+
+
 };

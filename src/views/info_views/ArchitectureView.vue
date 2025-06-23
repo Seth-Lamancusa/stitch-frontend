@@ -15,7 +15,7 @@
           <div class="architecture-columns">
             <div class="architecture-1">
               <h1>The structure</h1>
-              <p>Each message starts as a node in a tree, with >=0 children, and >=0<=1 parent. Additionally, each message can be linked to >=0 other messages after being posted. The entire Stitch database is a set of these digraphs.</p>
+              <p>Each message starts as a node in a tree. Additionally, each message can be linked to other messages after being posted. The entire Stitch database is a set of these digraphs.</p>
             </div>
             <div class="architecture-2">
               <h1>The app</h1>
@@ -23,7 +23,7 @@
             </div>
             <div class="architecture-3">
               <h1>The source</h1>
-              <p>We will eventually open source the frontend, as well as publish API docs for programmatically interacting with the backend, so that developers can build their own apps on top of Stitch or their own chatbots to interact with it.</p>
+              <p>We will open source the frontend, as well as publish API docs for programmatically interacting with the backend, so that developers can build their own apps on top of Stitch or their own chatbots to interact with it.</p>
             </div>
           </div>
         </div>

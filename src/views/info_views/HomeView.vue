@@ -6,9 +6,11 @@
     :showBetaBanner="true"
     betaBannerIcon="🚀"
     betaBannerTitle="Stitch alpha is now live"
-    betaBannerText="Working with select testers. <router-link to='/requests' class='banner-link'>Join the waitlist</router-link>."
     footerTagline="Collaborate with humans, with AI."
   >
+    <template #betaBannerText>
+      Working with select testers. <router-link to='/requests' class='banner-link'>Join the waitlist</router-link>.
+    </template>
     <section class="home-main">
       <div class="container">
         <div class="home-main-content">

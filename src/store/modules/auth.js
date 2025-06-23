@@ -8,7 +8,8 @@ export default {
   state: {
     user: null,
     isAuthenticated: false,
-    authReady: false
+    authReady: false,
+    wasRejectedForWhitelist: false
   },
   
   mutations: {
@@ -18,6 +19,9 @@ export default {
     },
     SET_AUTH_READY(state, ready) {
       state.authReady = ready;
+    },
+    SET_REJECTED_FOR_WHITELIST(state, rejected) {
+      state.wasRejectedForWhitelist = rejected;
     }
   },
   
@@ -84,6 +88,9 @@ export default {
               user_tag: userData.user_tag || '',
               status: userData.status
             });
+            
+            // Clear rejection state on successful login
+            commit('SET_REJECTED_FOR_WHITELIST', false);
           
             // Initialize WebSocket connection for authenticated user
             try {
@@ -224,9 +231,10 @@ export default {
           await auth.signOut();
         }
         
-        // Clear user state
+        // Clear user state and mark as rejected for whitelist
         commit('SET_USER', null);
         commit('SET_AUTH_READY', true);
+        commit('SET_REJECTED_FOR_WHITELIST', true);
         localStorage.removeItem('auth_token');
         
         // Store the notification message in localStorage to survive the redirect
@@ -248,6 +256,7 @@ export default {
         // Even if logout fails, clear local state
         commit('SET_USER', null);
         commit('SET_AUTH_READY', true);
+        commit('SET_REJECTED_FOR_WHITELIST', true);
         localStorage.removeItem('auth_token');
       }
     }
@@ -257,6 +266,7 @@ export default {
     user: state => state.user,
     isAuthenticated: state => state.isAuthenticated,
     authReady: state => state.authReady,
+    wasRejectedForWhitelist: state => state.wasRejectedForWhitelist,
     isAdmin: state => state.user?.status === 'admin',
     isWhitelisted: state => state.user && ['whitelisted', 'admin'].includes(state.user.status),
     // Check if user has any platform access (whitelisted or admin)

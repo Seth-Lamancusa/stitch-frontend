@@ -1,0 +1,381 @@
+<template>
+  <AppViewLayout>
+    <!-- Admin Access Denied Notice -->
+    <div v-if="!isAdmin && authReady" class="access-denied-notice">
+      <div class="denial-content">
+        <div class="denial-icon">🚫</div>
+        <h3>Access Denied</h3>
+        <p>You need administrator privileges to access this page.</p>
+        <router-link to="/inbox" class="back-link">← Back to Inbox</router-link>
+      </div>
+    </div>
+
+    <!-- Loading State -->
+    <div v-else-if="!authReady" class="loading-container">
+      <div class="loading-spinner"></div>
+      <p>Checking admin privileges...</p>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div v-else class="admin-dashboard">
+      <div class="admin-header">
+        <h1>Admin Dashboard</h1>
+        <p class="admin-subtitle">Manage users, content, and system settings</p>
+      </div>
+
+      <div class="admin-grid">
+        <!-- User Management Card -->
+        <div class="admin-card">
+          <div class="card-header">
+            <h3>👥 User Management</h3>
+            <span v-if="stats" class="card-badge">{{ stats.total_users }} users</span>
+          </div>
+          <div class="card-content">
+            <p>Manage user accounts, permissions, and whitelist status</p>
+            <div class="card-actions">
+              <router-link to="/admin/users" class="admin-btn primary">
+                Manage Users
+              </router-link>
+            </div>
+          </div>
+        </div>
+
+        <!-- Message Management Card -->
+        <div class="admin-card">
+          <div class="card-header">
+            <h3>💬 Message Management</h3>
+            <span v-if="stats" class="card-badge">{{ stats.total_messages }} messages</span>
+          </div>
+          <div class="card-content">
+            <p>Monitor, moderate, and manage platform messages</p>
+            <div class="card-actions">
+              <router-link to="/admin/messages" class="admin-btn primary">
+                Manage Messages
+              </router-link>
+            </div>
+          </div>
+        </div>
+
+        <!-- System Settings Card
+        <div class="admin-card">
+          <div class="card-header">
+            <h3>⚙️ System Settings</h3>
+          </div>
+          <div class="card-content">
+            <p>Configure platform settings and system parameters</p>
+            <div class="card-actions">
+              <button class="admin-btn primary" @click="openSystemSettings">
+                System Settings
+              </button>
+            </div>
+          </div>
+        </div> -->
+
+        <!-- Analytics Card
+        <div class="admin-card">
+          <div class="card-header">
+            <h3>📊 Analytics</h3>
+          </div>
+          <div class="card-content">
+            <p>View platform usage statistics and performance metrics</p>
+            <div class="card-actions">
+              <button class="admin-btn primary" @click="openAnalytics">
+                View Analytics
+              </button>
+            </div>
+          </div>
+        </div> -->
+      </div>
+
+      <!-- Quick Actions
+      <div class="quick-actions">
+        <h3>Quick Actions</h3>
+        <div class="action-buttons">
+          <button class="admin-btn secondary" @click="exportData">
+            📥 Export Data
+          </button>
+          <button class="admin-btn secondary" @click="viewLogs">
+            📄 View Logs
+          </button>
+          <button class="admin-btn secondary" @click="systemHealthCheck">
+            🏥 System Health
+          </button>
+        </div>
+      </div> -->
+    </div>
+  </AppViewLayout>
+</template>
+
+<script setup>
+import { computed, ref, onMounted } from 'vue';
+import { useStore } from 'vuex';
+import { useRouter } from 'vue-router';
+import AppViewLayout from '../../components/layouts/AppViewLayout.vue';
+import AdminService from '../../services/AdminService';
+
+const store = useStore();
+const router = useRouter();
+
+// Authentication state
+const user = computed(() => store.getters['auth/user']);
+const isAdmin = computed(() => store.getters['auth/isAdmin']);
+const authReady = computed(() => store.getters['auth/authReady']);
+
+// Stats data
+const stats = ref(null);
+
+// Redirect non-admin users after auth is ready
+onMounted(() => {
+  // Watch for auth state changes and redirect if not admin
+  store.watch(
+    () => store.getters['auth/authReady'],
+    (ready) => {
+      if (ready && !store.getters['auth/isAdmin']) {
+        router.push('/inbox');
+      }
+    }
+  );
+
+  // If already ready and not admin, redirect immediately
+  if (authReady.value && !isAdmin.value) {
+    router.push('/inbox');
+  }
+
+  // TODO: Fetch actual admin dashboard data
+  loadDashboardData();
+});
+
+const loadDashboardData = async () => {
+  try {
+    const response = await AdminService.getStats();
+    if (response.success) {
+      stats.value = response.stats;
+    }
+  } catch (error) {
+    console.error('Error loading dashboard data:', error);
+  }
+};
+
+// Placeholder functions for future features
+const openSystemSettings = () => {
+  console.log('Opening system settings...');
+  // TODO: Implement system settings functionality
+};
+
+const openAnalytics = () => {
+  console.log('Opening analytics...');
+  // TODO: Implement analytics functionality
+};
+
+const exportData = () => {
+  console.log('Exporting data...');
+  // TODO: Implement data export functionality
+};
+
+const viewLogs = () => {
+  console.log('Viewing logs...');
+  // TODO: Implement log viewing functionality
+};
+
+const systemHealthCheck = () => {
+  console.log('Running system health check...');
+  // TODO: Implement system health check functionality
+};
+</script>
+
+<style scoped>
+.access-denied-notice {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 60vh;
+  padding: var(--space-lg, 24px);
+}
+
+.denial-content {
+  text-align: center;
+  background: var(--color-surface, #222);
+  border: 1px solid var(--color-border, #eee);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-xl, 32px);
+  max-width: 400px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.denial-icon {
+  font-size: 3rem;
+  margin-bottom: var(--space-md, 16px);
+}
+
+.denial-content h3 {
+  margin: 0 0 var(--space-sm, 12px) 0;
+  color: var(--color-text, #fff);
+  font-size: var(--font-size-lg, 1.25rem);
+}
+
+.denial-content p {
+  margin: 0 0 var(--space-lg, 24px) 0;
+  color: var(--color-text-secondary, #aaa);
+  line-height: 1.5;
+}
+
+.back-link {
+  display: inline-block;
+  padding: var(--space-sm, 12px) var(--space-md, 16px);
+  background-color: var(--color-primary, #4f8cff);
+  color: var(--color-text-inverse, #fff);
+  text-decoration: none;
+  border-radius: var(--radius-sm, 4px);
+  font-weight: 500;
+  transition: background-color var(--transition-fast, 0.2s);
+}
+
+.back-link:hover {
+  background-color: var(--color-primary-dark, #357ae8);
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  min-height: 60vh;
+  gap: var(--space-md, 16px);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--color-border, #eee);
+  border-top-color: var(--color-primary, #4f8cff);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.admin-dashboard {
+  padding: var(--space-lg, 24px);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.admin-header {
+  margin-bottom: var(--space-xl, 32px);
+  text-align: center;
+}
+
+.admin-header h1 {
+  margin: 0 0 var(--space-sm, 12px) 0;
+  color: var(--color-text, #fff);
+  font-size: var(--font-size-xl, 2rem);
+}
+
+.admin-subtitle {
+  margin: 0;
+  color: var(--color-text-secondary, #aaa);
+  font-size: var(--font-size-md, 1rem);
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-lg, 24px);
+  margin-bottom: var(--space-xl, 32px);
+}
+
+.admin-card {
+  background: var(--color-surface, #222);
+  border: 1px solid var(--color-border, #eee);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-lg, 24px);
+  transition: transform var(--transition-fast, 0.2s);
+}
+
+.admin-card:hover {
+  transform: translateY(-2px);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md, 16px);
+}
+
+.card-header h3 {
+  margin: 0;
+  color: var(--color-text, #fff);
+  font-size: var(--font-size-lg, 1.25rem);
+}
+
+.card-badge {
+  background: var(--color-primary, #4f8cff);
+  color: var(--color-text-inverse, #fff);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm, 4px);
+  font-size: var(--font-size-xs, 0.75rem);
+  font-weight: 600;
+}
+
+.card-content p {
+  margin: 0 0 var(--space-md, 16px) 0;
+  color: var(--color-text-secondary, #aaa);
+  line-height: 1.5;
+}
+
+.card-actions {
+  display: flex;
+  gap: var(--space-sm, 12px);
+}
+
+.admin-btn {
+  padding: var(--space-sm, 12px) var(--space-md, 16px);
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.2s);
+  font-size: var(--font-size-sm, 0.9rem);
+}
+
+.admin-btn.primary {
+  background-color: var(--color-primary, #4f8cff);
+  color: var(--color-text-inverse, #fff);
+}
+
+.admin-btn.primary:hover {
+  background-color: var(--color-primary-dark, #357ae8);
+}
+
+.admin-btn.secondary {
+  background-color: transparent;
+  color: var(--color-text, #fff);
+  border: 1px solid var(--color-border, #eee);
+}
+
+.admin-btn.secondary:hover {
+  background-color: var(--color-hover-overlay, #333);
+}
+
+.quick-actions {
+  background: var(--color-surface, #222);
+  border: 1px solid var(--color-border, #eee);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-lg, 24px);
+}
+
+.quick-actions h3 {
+  margin: 0 0 var(--space-md, 16px) 0;
+  color: var(--color-text, #fff);
+}
+
+.action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm, 12px);
+}
+</style>

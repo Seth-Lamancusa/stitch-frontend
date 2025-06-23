@@ -3,6 +3,9 @@ import { createRouter, createWebHistory } from 'vue-router';
 // Import components
 import ThreadView from './views/app_views/ThreadView.vue';
 import InboxView from './views/app_views/InboxView.vue';
+import AdminView from './views/app_views/AdminView.vue';
+import UserManagementView from './views/app_views/UserManagementView.vue';
+import MessageManagementView from './views/app_views/MessageManagementView.vue';
 import NewThreadView from './views/app_views/NewThreadView.vue';
 import HomeView from './views/info_views/HomeView.vue';
 import ArchitectureView from './views/info_views/ArchitectureView.vue';
@@ -30,6 +33,21 @@ const routes = [
     path: '/inbox',
     name: 'inbox',
     component: InboxView
+  },
+  {
+    path: '/admin',
+    name: 'admin',
+    component: AdminView
+  },
+  {
+    path: '/admin/users',
+    name: 'admin-users',
+    component: UserManagementView
+  },
+  {
+    path: '/admin/messages',
+    name: 'admin-messages', 
+    component: MessageManagementView
   },
   {
     path: '/new-thread',

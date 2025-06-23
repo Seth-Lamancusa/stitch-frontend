@@ -47,6 +47,9 @@
             v-if="(message.id === replyingToMessageId && !isReplyMessageLoading || 
                     message.id !== replyingToMessageId)"
             :message="message"
+            :displayMode="'full'"
+            :selectable="false"
+            :selected="false"
             :is-selected="message.id === replyingToMessageId"
             :indent-level="0"
             :loaded-replies="getLoadedRepliesCount(message.id)"
@@ -55,6 +58,7 @@
             @click="handleMessageClick(message.id)"
             @reply="setReplyingTo(message.id)"
             @delete="confirmDeleteMessage"
+            @showLinks="handleShowLinks"
           />
           
           <!-- Loading indicator for message being replied to -->
@@ -112,6 +116,13 @@
         </div>
       </div>
     </div>
+
+    <!-- Links Modal -->
+    <LinksModal
+      :is-open="showLinksModal"
+      :message="linksModalMessage"
+      @close="closeLinksModal"
+    />
   </div>
 </template>
 
@@ -123,6 +134,7 @@ import MessageNode from '../../components/MessageNode.vue';
 import AdaptiveMarker from '../../components/AdaptiveMarker.vue';
 import ReplyBox from '../../components/ReplyBox.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
+import LinksModal from '../../components/LinksModal.vue';
 import MessageService from '../../services/MessageService';
 import WebSocketService from '../../services/WebSocketService';
 
@@ -135,6 +147,10 @@ const router = useRouter();
 const messageList = ref(null);
 let unsubscribeMessages = null;
 const isDeleting = ref(false);
+
+// Links modal state
+const showLinksModal = ref(false);
+const linksModalMessage = ref(null);
 
 // Consolidated loading state - single source of truth
 const isLoadingThread = ref(false); // Main loading state for all thread operations
@@ -458,8 +474,10 @@ const backToList = async () => {
   // Get the previous route
   const prevRoute = store.getters['navigation/previousRoute'];
   
+  console.log(`[ThreadView] Back button clicked - previous route: "${prevRoute}", using: "${prevRoute || '/inbox'}"`);
+  
   // Navigate back to the previous route - keep cache for faster return
-      router.push(prevRoute || '/inbox'); // Fallback to inbox if no previous route
+  router.push(prevRoute || '/inbox'); // Fallback to inbox if no previous route
 };
 
 const loadInitialContent = async (targetMessageId) => {
@@ -700,6 +718,16 @@ const confirmDeleteMessage = (message) => {
   store.dispatch('ui/showDeleteConfirm', message);
 };
 
+const handleShowLinks = (message) => {
+  linksModalMessage.value = message;
+  showLinksModal.value = true;
+};
+
+const closeLinksModal = () => {
+  showLinksModal.value = false;
+  linksModalMessage.value = null;
+};
+
 const deleteMessage = async () => {
   if (!messageToDelete.value || isDeleting.value) return;
   
@@ -714,6 +742,8 @@ const deleteMessage = async () => {
     // Get the previous route to return to
     const prevRoute = store.getters['navigation/previousRoute'];
     const defaultRoute = '/inbox'; // Default to inbox if no previous route
+    
+    console.log(`[ThreadView] Delete navigation - previous route: "${prevRoute}", using: "${prevRoute || defaultRoute}"`);
     
     // Always redirect out after deletion
     router.push(prevRoute || defaultRoute);
@@ -734,6 +764,9 @@ const deleteMessage = async () => {
       // Navigate back since the current thread no longer exists
       const prevRoute = store.getters['navigation/previousRoute'];
       const defaultRoute = '/feed';
+      
+      console.log(`[ThreadView] Error navigation - previous route: "${prevRoute}", using: "${prevRoute || defaultRoute}"`);
+      
       router.push(prevRoute || defaultRoute);
     } else if (error.response?.status === 403) {
       errorMessage = 'You do not have permission to delete this message';

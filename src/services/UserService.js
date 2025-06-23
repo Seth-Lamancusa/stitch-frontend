@@ -76,12 +76,12 @@ export default {
   },
 
   /**
-   * Get messages for the current user with page-based pagination
+   * Get messages for the current user with skip-based pagination
    * @param {Number} limit - Number of messages to return
-   * @param {Number} page - Page number (1-based)
+   * @param {Number} skip - Number of messages to skip (for pagination)
    * @returns {Promise<Object>} - Response with messages and pagination info
    */
-  async fetchUserMessages(limit = 10, page = 1) {
+  async fetchUserMessages(limit = 20, skip = 0) {
     try {
       const token = await getFirebaseToken();
       
@@ -89,8 +89,8 @@ export default {
         throw new Error('No authentication token available');
       }
       
-      // Build query parameters
-      const params = { limit, page };
+      // Build query parameters with skip-based pagination
+      const params = { limit, skip };
       
       const response = await apiClient.get('/users/messages', {
         params,
@@ -102,7 +102,9 @@ export default {
       console.log('[DEBUG] UserService - fetchUserMessages response:', {
         messagesCount: response.data?.messages?.length || 0,
         exhausted: response.data?.exhausted,
-        page: response.data?.page
+        page: response.data?.page,
+        skip,
+        limit
       });
       
       return response;
@@ -112,7 +114,110 @@ export default {
     }
   },
 
-    
+  /**
+   * Get incoming links for a message
+   * @param {String} messageId - The message ID
+   * @param {Number} skip - Number of results to skip
+   * @param {Number} limit - Number of results to return
+   * @param {Boolean} showAllLinks - Whether to show all links or just user's links
+   * @returns {Promise<Object>} - Response with incoming links
+   */
+  async getUserIncomingLinks(messageId, skip = 0, limit = 20, showAllLinks = false) {
+    try {
+      const token = await getFirebaseToken();
+      
+      if (!token) {
+        throw new Error('No authentication token available');
+      }
+      
+      const response = await apiClient.get(`/users/messages/${messageId}/user-incoming-links`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        params: {
+          skip,
+          limit,
+          show_all_links: showAllLinks
+        }
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error getting user incoming links:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get outgoing links for a message
+   * @param {String} messageId - The message ID
+   * @param {Number} skip - Number of results to skip
+   * @param {Number} limit - Number of results to return
+   * @param {Boolean} showAllLinks - Whether to show all links or just user's links
+   * @returns {Promise<Object>} - Response with outgoing links
+   */
+  async getUserOutgoingLinks(messageId, skip = 0, limit = 20, showAllLinks = false) {
+    try {
+      const token = await getFirebaseToken();
+      
+      if (!token) {
+        throw new Error('No authentication token available');
+      }
+      
+      const response = await apiClient.get(`/users/messages/${messageId}/user-outgoing-links`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        params: {
+          skip,
+          limit,
+          show_all_links: showAllLinks
+        }
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error getting user outgoing links:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get saved messages for the current user
+   * @param {Number} skip - Number of messages to skip
+   * @param {Number} limit - Number of messages to return
+   * @returns {Promise<Object>} - Response with saved messages
+   */
+  async getSavedMessages(skip = 0, limit = 20) {
+    try {
+      const token = await getFirebaseToken();
+      
+      if (!token) {
+        throw new Error('No authentication token available');
+      }
+      
+      const response = await apiClient.get('/users/saved-messages', {
+        params: { skip, limit },
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      console.log('[DEBUG] UserService - getSavedMessages response:', {
+        fullResponse: response.data,
+        messagesCount: response.data?.messages?.length || 0,
+        exhausted: response.data?.exhausted,
+        skip,
+        limit
+      });
+      
+      // Return the response as-is since backend already returns the correct format
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching saved messages:', error);
+      throw error;
+    }
+  },
 
     /**
      * Get the count of unread messages for the current user
@@ -192,6 +297,142 @@ export default {
         return response;
       } catch (error) {
         console.error('Error marking message as unread:', error);
+        throw error;
+      }
+    },
+
+    /**
+     * Save a message (bookmark it) for the current user
+     * @param {String} messageId - The message ID to save
+     * @returns {Promise<Object>} - Response with success status
+     */
+    async saveMessage(messageId) {
+      try {
+        console.log('[UserService] Saving message:', messageId);
+        const token = await getFirebaseToken();
+        
+        if (!token) {
+          throw new Error('No authentication token available');
+        }
+        
+        const response = await apiClient.post(`/users/messages/${messageId}/save`, {}, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        console.log('[UserService] Save message response:', response.data);
+        return response;
+      } catch (error) {
+        console.error('Error saving message:', error);
+        throw error;
+      }
+    },
+
+    /**
+     * Unsave a message (remove bookmark) for the current user
+     * @param {String} messageId - The message ID to unsave
+     * @returns {Promise<Object>} - Response with success status
+     */
+    async unsaveMessage(messageId) {
+      try {
+        console.log('[UserService] Unsaving message:', messageId);
+        const token = await getFirebaseToken();
+        
+        if (!token) {
+          throw new Error('No authentication token available');
+        }
+        
+        const response = await apiClient.delete(`/users/messages/${messageId}/save`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        console.log('[UserService] Unsave message response:', response.data);
+        return response;
+      } catch (error) {
+        console.error('Error unsaving message:', error);
+        throw error;
+      }
+    },
+
+    /**
+     * Get the count of saved messages for the current user
+     * @returns {Promise<Object>} - Response with count
+     */
+    async getSavedMessagesCount() {
+      try {
+        const token = await getFirebaseToken();
+        
+        if (!token) {
+          throw new Error('No authentication token available');
+        }
+        
+        const response = await apiClient.get('/users/saved-count', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        console.log('[DEBUG] UserService - getSavedMessagesCount response:', response.data);
+        return response;
+      } catch (error) {
+        console.error('Error getting saved messages count:', error);
+        throw error;
+      }
+    },
+
+    /**
+     * Delete a link between two messages
+     * @param {String} messageIdFrom - The source message ID
+     * @param {String} messageIdTo - The target message ID
+     * @returns {Promise<Boolean>} - Success status
+     */
+    async deleteLink(messageIdFrom, messageIdTo) {
+      try {
+        const token = await getFirebaseToken();
+        
+        if (!token) {
+          throw new Error('No authentication token available');
+        }
+        
+        const response = await apiClient.delete(`/users/messages/${messageIdFrom}/links/${messageIdTo}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        return response.data?.success || false;
+      } catch (error) {
+        console.error('Error deleting link:', error);
+        throw error;
+      }
+    },
+
+    /**
+     * Create a link between two messages
+     * @param {String} messageIdFrom - The source message ID
+     * @param {String} messageIdTo - The target message ID
+     * @returns {Promise<Boolean>} - Success status
+     */
+    async createLink(messageIdFrom, messageIdTo) {
+      try {
+        const token = await getFirebaseToken();
+        
+        if (!token) {
+          throw new Error('No authentication token available');
+        }
+        
+        const response = await apiClient.post(`/users/messages/${messageIdFrom}/links/${messageIdTo}`, {}, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        return response.data?.success || false;
+      } catch (error) {
+        console.error('Error creating link:', error);
         throw error;
       }
     }

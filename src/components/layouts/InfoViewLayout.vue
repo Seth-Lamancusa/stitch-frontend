@@ -11,7 +11,7 @@
         <ul class="nav-links" :class="{ active: isMenuOpen }">
           <li><router-link to="/" :class="{ active: currentRoute === '/' }">Home</router-link></li>
           <li><router-link to="/architecture" :class="{ active: currentRoute === '/architecture' }">Architecture</router-link></li>
-          <li><router-link to="/requests" :class="{ active: currentRoute === '/requests' }">Request Access</router-link></li>
+          <li><router-link to="/requests" :class="{ active: currentRoute === '/requests' }">Join Waitlist</router-link></li>
           <li><router-link to="/inbox" class="login-btn">Go to Stitch</router-link></li>
         </ul>
         <div class="hamburger" @click="toggleMenu" :class="{ active: isMenuOpen }">
@@ -40,7 +40,11 @@
           <div class="banner-icon">{{ betaBannerIcon || '🚀' }}</div>
           <div class="banner-text">
             <h3>{{ betaBannerTitle || 'Beta Phase: Now Live' }}</h3>
-            <p v-html="betaBannerText || 'We\'re currently in beta, focusing on perfecting the platform experience.'"></p>
+            <p>
+              <slot name="betaBannerText">
+                {{ betaBannerText || 'We\'re currently in beta, focusing on perfecting the platform experience.' }}
+              </slot>
+            </p>
           </div>
         </div>
       </div>

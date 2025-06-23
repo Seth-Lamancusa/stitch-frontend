@@ -33,6 +33,7 @@ export default {
     },
     
     SET_PREVIOUS_ROUTE(state, route) {
+      console.log(`[Navigation Store] SET_PREVIOUS_ROUTE mutation - storing: "${route}"`);
       state.previousRoute = route;
     },
     
@@ -128,6 +129,7 @@ export default {
     },
     
     setPreviousRoute({ commit }, route) {
+      console.log(`[Navigation Store] Setting previous route to: "${route}"`);
       commit('SET_PREVIOUS_ROUTE', route);
     },
     
@@ -214,6 +216,9 @@ export default {
     
     isReplyMessageLoading: state => state.isLoadingReplyMessage,
     
-    previousRoute: state => state.previousRoute
+    previousRoute: state => {
+      console.log(`[Navigation Store] Getting previous route: "${state.previousRoute}"`);
+      return state.previousRoute;
+    }
   }
 }
