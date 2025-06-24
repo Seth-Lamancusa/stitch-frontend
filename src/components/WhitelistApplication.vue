@@ -71,7 +71,6 @@
 
 <script setup>
 import { ref, computed } from 'vue';
-import { SHEETS_CONFIG } from '../config/sheets.js';
 
 const currentStep = ref(1);
 const submitted = ref(false);
@@ -146,52 +145,11 @@ const prevStep = () => {
   }
 };
 
-const submitApplication = async () => {
+const submitApplication = () => {
   if (isFormValid.value) {
-    try {
-      await submitToGoogleSheets();
-      submitted.value = true;
-    } catch (error) {
-      console.error('Error submitting application:', error);
-      // You might want to show an error message to the user here
-      alert('There was an error submitting your application. Please try again.');
-    }
+    // Handle form submission
+    submitted.value = true;
   }
-};
-
-const submitToGoogleSheets = async () => {
-  // Get configuration from config file
-  const { API_KEY, SPREADSHEET_ID, SHEET_NAME } = SHEETS_CONFIG;
-  
-  // Prepare the data row
-  const timestamp = new Date().toISOString();
-  const rowData = [
-    timestamp,
-    steps.value[0].answer || '', // Who are you?
-    steps.value[1].answer || '', // What do you do?
-    steps.value[2].answer || '', // Connections
-    steps.value[3].answer || ''  // Contact Info
-  ];
-  
-  // Google Sheets API endpoint
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_NAME}:append?valueInputOption=RAW&key=${API_KEY}`;
-  
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      values: [rowData]
-    })
-  });
-  
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
-  
-  const result = await response.json();
-  console.log('Successfully submitted to Google Sheets:', result);
 };
 
 const handleFocus = (event) => {
