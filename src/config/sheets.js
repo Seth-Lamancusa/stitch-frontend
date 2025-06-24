@@ -10,7 +10,7 @@ export const SHEETS_CONFIG = {
   SPREADSHEET_ID: '1xuD-xY_fqRvTM7rndyy7uzpZJpMJIA4HnRm1O6yY_cc',
   
   // The name of the sheet tab where applications will be stored
-  SHEET_NAME: 'Waitlist'
+  SHEET_NAME: 'Sheet1'
 };
 
 // Column headers for the Google Sheet (for reference)
