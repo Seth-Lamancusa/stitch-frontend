@@ -1,11 +1,42 @@
 <template>
   <div class="app-layout">
     <div class="app-header">
-      <div class="branding">
-        <router-link to="/" class="logo-link">
-          <span class="logo-text">Stitch</span>
-        </router-link>
+      <div class="header-left">
+        <div class="branding">
+          <router-link to="/" class="logo-link">
+            <span class="logo-text">Stitch</span>
+          </router-link>
+        </div>
+        
+        <!-- Navigation Tabs -->
+        <div class="navigation-tabs" v-if="user">
+          <router-link 
+            to="/public" 
+            class="nav-tab"
+            :class="{ 'active': activeTab === 'public' }"
+            @click="handleTabClick('public')"
+          >
+            Public
+          </router-link>
+          <router-link 
+            to="/saved" 
+            class="nav-tab"
+            :class="{ 'active': activeTab === 'saved' }"
+            @click="handleTabClick('saved')"
+          >
+            Saved
+          </router-link>
+          <router-link 
+            to="/inbox" 
+            class="nav-tab"
+            :class="{ 'active': activeTab === 'inbox' }"
+            @click="handleTabClick('inbox')"
+          >
+            Inbox
+          </router-link>
+        </div>
       </div>
+      
       <div class="user-controls">
         <div class="user-info">
           <div class="username-container" @click="openProfileModal" v-if="user">
@@ -64,6 +95,7 @@ const user = computed(() => store.getters['auth/user']);
 const isWhitelisted = computed(() => store.getters['auth/isWhitelisted']);
 const isAdmin = computed(() => store.getters['auth/isAdmin']);
 const authReady = computed(() => store.getters['auth/authReady']);
+const activeTab = computed(() => store.getters['navigation/activeTab']);
 const isLoggingIn = ref(false);
 const isProfileModalOpen = ref(false);
 
@@ -102,6 +134,10 @@ const openProfileModal = () => {
 const closeProfileModal = () => {
   isProfileModalOpen.value = false;
 };
+
+const handleTabClick = (tab) => {
+  store.dispatch('navigation/setActiveTab', tab);
+};
 </script>
 
 <style scoped>
@@ -120,6 +156,17 @@ const closeProfileModal = () => {
   height: 56px;
   border-bottom: 1px solid var(--color-border, #eee);
   background: #000;
+  position: fixed;
+  top: 0;
+  width: 100%;
+  z-index: 100;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg, 24px);
 }
 
 .branding {
@@ -140,6 +187,29 @@ const closeProfileModal = () => {
   font-weight: bold;
   color: var(--color-primary, #4f8cff);
   letter-spacing: 1px;
+}
+
+.navigation-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm, 12px);
+}
+
+.nav-tab {
+  text-decoration: none;
+  color: var(--color-text-secondary, #aaa);
+  padding: var(--space-xs, 6px) var(--space-sm, 12px);
+  border-radius: var(--radius-sm, 4px);
+  transition: background-color var(--transition-fast, 0.2s);
+}
+
+.nav-tab:hover {
+  background-color: var(--color-hover-overlay, #222);
+}
+
+.nav-tab.active {
+  background-color: var(--color-primary, #4f8cff);
+  color: var(--color-text-inverse, #fff);
 }
 
 .user-controls {

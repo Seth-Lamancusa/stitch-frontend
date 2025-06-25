@@ -105,6 +105,9 @@ const navigate = async (direction) => {
   if (isLoading.value) return;
   
   try {
+    // Clear any active reply box when navigating between siblings
+    store.dispatch('navigation/clearReplyingTo');
+    
     // Call the central store action for sibling navigation
     const success = await store.dispatch('messages/navigateToSibling', {
       messageId: props.parentId,

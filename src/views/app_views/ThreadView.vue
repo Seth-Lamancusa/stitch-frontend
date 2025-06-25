@@ -42,7 +42,6 @@
       
         <!-- Thread messages - showing single branch -->
         <template v-for="(message, index) in displayedMessages" :key="message.id">
-          <!-- Skip system messages in temporary threads -->
           <message-node
             v-if="(message.id === replyingToMessageId && !isReplyMessageLoading || 
                     message.id !== replyingToMessageId)"

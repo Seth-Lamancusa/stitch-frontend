@@ -404,7 +404,7 @@ Click &quot;Import Conversation&quot;"
     
     <!-- Reply box component -->
     <reply-box
-      :is-temporary-thread="true"
+      :is-new-thread="true"
       :can-interact="canInteract"
       ref="replyBox"
       @send-success="handleSendSuccess"

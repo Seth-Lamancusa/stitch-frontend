@@ -179,5 +179,16 @@ export default {
     return axios.post(`${apiBaseUrl}/messages/${messageId}/reformat`, {}, { headers });
   },
 
+  // Get public messages with pagination
+  async getPublicMessages(skip = 0, limit = 20) {
+    const headers = await getAuthHeaders();
+    return axios.get(`${apiBaseUrl}/messages/public?skip=${skip}&limit=${limit}`, { headers });
+  },
+
+  // Get all saved messages with pagination  
+  async getAllSavedMessages(skip = 0, limit = 20) {
+    const headers = await getAuthHeaders();
+    return axios.get(`${apiBaseUrl}/messages/saved?skip=${skip}&limit=${limit}`, { headers });
+  },
 
 };

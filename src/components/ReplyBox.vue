@@ -1,6 +1,6 @@
 <template>
   <div class="reply-box-wrapper">
-    <div v-if="isReplying || isTemporaryThread" class="reply-container">
+    <div v-if="isReplying || isNewThread" class="reply-container">
       <div class="reply-form">
         <div class="reply-settings">
           <label class="visibility-toggle">
@@ -208,7 +208,7 @@ const props = defineProps({
     type: Boolean,
     default: true
   },
-  isTemporaryThread: {
+  isNewThread: {
     type: Boolean,
     default: false
   },
@@ -294,8 +294,8 @@ const canSendReply = computed(() => {
 
 // Generate placeholder text
 const placeholderText = computed(() => {
-  // First priority: check if we're in a temporary thread
-  if (props.isTemporaryThread) {
+  // First priority: check if we're creating a new thread
+  if (props.isNewThread) {
     return "Type your message to create a new thread (no parent message)...";
   }
   
@@ -339,7 +339,7 @@ const toggleVisibility = () => {
   store.dispatch('navigation/updateReplyVisibility', !currentState);
   
   // Remove the forced sync - we only want to sync when initially setting up the reply
-  // if (!props.isTemporaryThread) {
+  // if (!props.isNewThread) {
   //   // Force sync settings after toggle
   //   store.dispatch('navigation/syncReplySettings');
   // }
@@ -415,7 +415,7 @@ const sendReply = async () => {
     
     // Only emit send-success for new threads
     // WebSockets will handle updates for replies to existing messages
-    if (props.isTemporaryThread) {
+    if (props.isNewThread) {
       emit('send-success', newMessage);
     } else if (newMessage && props.targetId) {
       // For replies to existing messages, manually add to UI
@@ -468,7 +468,7 @@ const sendReply = async () => {
           
           // 6. Only hide the reply box after ensuring all UI updates are processed
           // This prevents prematurely closing the reply box before the UI updates
-          if (!props.isTemporaryThread) {
+          if (!props.isNewThread) {
             console.log('[ReplyBox] Hiding reply box after successful send');
             setTimeout(() => {
               store.dispatch('navigation/clearReplyingTo');
@@ -477,7 +477,7 @@ const sendReply = async () => {
         }, 100);
       } else {
         // Only hide the reply box if we didn't find the parent message
-        if (!props.isTemporaryThread) {
+        if (!props.isNewThread) {
           console.log('[ReplyBox] Hiding reply box after successful send (no parent found)');
           store.dispatch('navigation/clearReplyingTo');
         }

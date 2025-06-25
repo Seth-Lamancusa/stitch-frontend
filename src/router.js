@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router';
 
 // Import components
 import ThreadView from './views/app_views/ThreadView.vue';
-import InboxView from './views/app_views/InboxView.vue';
 import AdminView from './views/app_views/AdminView.vue';
 import UserManagementView from './views/app_views/UserManagementView.vue';
 import MessageManagementView from './views/app_views/MessageManagementView.vue';
@@ -11,6 +10,7 @@ import HomeView from './views/info_views/HomeView.vue';
 import ArchitectureView from './views/info_views/ArchitectureView.vue';
 import RequestAccessView from './views/info_views/RequestAccessView.vue';
 import TermsView from './views/info_views/TermsView.vue';
+import MessageListView from './views/app_views/MessageListView.vue';
 
 const routes = [
   {
@@ -32,7 +32,20 @@ const routes = [
   {
     path: '/inbox',
     name: 'inbox',
-    component: InboxView
+    component: MessageListView,
+    props: { mode: 'inbox' }
+  },
+  {
+    path: '/public',
+    name: 'public',
+    component: MessageListView,
+    props: { mode: 'public' }
+  },
+  {
+    path: '/saved',
+    name: 'saved', 
+    component: MessageListView,
+    props: { mode: 'saved' }
   },
   {
     path: '/admin',

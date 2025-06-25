@@ -13,10 +13,10 @@ import navigation from './modules/navigation'
  */
 const store = createStore({
   modules: {
-    messages,
     auth,
-    ui,
-    navigation
+    messages,
+    navigation,
+    ui
   }
 })
 

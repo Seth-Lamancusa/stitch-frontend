@@ -10,27 +10,54 @@
       </div>
     </div>
     
-    <MessageList mode="inbox" />
+    <MessageList :mode="mode" />
   </AppViewLayout>
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, watch } from 'vue';
 import { useStore } from 'vuex';
+import { useRoute } from 'vue-router';
 import AppViewLayout from '../../components/layouts/AppViewLayout.vue';
 import MessageList from '../../components/MessageList.vue';
 
-const store = useStore();
+// Accept mode prop from router
+const props = defineProps({
+  mode: {
+    type: String,
+    default: 'public'
+  }
+});
 
-// Clear messages store on mount
+const store = useStore();
+const route = useRoute();
+
+// Clear messages store on mount and when mode changes
 onMounted(async () => {
   try {
     await store.dispatch('messages/clearCache');
-    console.log('[InboxView] Messages store cleared on mount');
+    console.log(`[MessageListView] Messages store cleared on mount for mode: ${props.mode}`);
   } catch (error) {
-    console.error('[InboxView] Error clearing messages store:', error);
+    console.error('[MessageListView] Error clearing messages store:', error);
   }
+  
+  // Set active tab based on route
+  updateActiveTab();
 });
+
+// Watch for route changes to update active tab
+watch(() => route.path, () => {
+  updateActiveTab();
+});
+
+const updateActiveTab = () => {
+  let tab = 'inbox';
+  if (route.path === '/public') tab = 'public';
+  else if (route.path === '/saved') tab = 'saved';
+  else if (route.path === '/inbox') tab = 'inbox';
+  
+  store.dispatch('navigation/setActiveTab', tab);
+};
 
 const user = computed(() => store.getters['auth/user']);
 

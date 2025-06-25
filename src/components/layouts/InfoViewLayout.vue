@@ -4,7 +4,7 @@
     <header>
       <nav class="main-nav">
         <div class="logo">
-          <router-link to="/inbox" class="logo-link">
+          <router-link to="/public" class="logo-link">
             <span class="logo-text">Stitch</span>
           </router-link>
         </div>
@@ -12,7 +12,7 @@
           <li><router-link to="/" :class="{ active: currentRoute === '/' }">Home</router-link></li>
           <li><router-link to="/architecture" :class="{ active: currentRoute === '/architecture' }">Architecture</router-link></li>
           <li><router-link to="/requests" :class="{ active: currentRoute === '/requests' }">Join Waitlist</router-link></li>
-          <li><router-link to="/inbox" class="login-btn">Go to Stitch</router-link></li>
+          <li><router-link to="/public" class="login-btn">Go to Stitch</router-link></li>
         </ul>
         <div class="hamburger" @click="toggleMenu" :class="{ active: isMenuOpen }">
           <span></span>
@@ -160,7 +160,7 @@ onBeforeUnmount(() => {
 <style>
 @import '../../assets/website.css';
 
-/* Logo styling to match InboxView */
+/* Logo styling to match MessageListView */
 .logo-link {
   text-decoration: none;
 }

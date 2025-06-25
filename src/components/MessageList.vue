@@ -12,7 +12,7 @@ const props = defineProps({
   mode: {
     type: String,
     required: true,
-    validator: (val) => ['inbox', 'all', 'sent', 'saved', 'incoming-links', 'outgoing-links'].includes(val)
+    validator: (val) => ['inbox', 'public', 'saved', 'all', 'sent', 'incoming-links', 'outgoing-links'].includes(val)
   },
   // Custom messages to display instead of fetching from store
   customMessages: {
@@ -76,8 +76,17 @@ const selectedMessageIds = ref(new Set());
 // Link deletion loading state
 const deletingLinkId = ref(null);
 
-// Store loading state - single source of truth
+// Request management for race condition prevention
+const currentRequestId = ref(0);
+const localLoadingState = ref(false);
+
+// Store loading state - single source of truth for store-based modes only
 const isLoading = computed(() => {
+  // For local modes (saved, public, links), use local loading state
+  if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
+    return localLoadingState.value;
+  }
+  // For store modes (inbox, admin), use store loading state
   return store.getters['messages/isLoading']('fetchingMessages');
 });
 
@@ -99,7 +108,7 @@ const threads = computed(() => {
   }
   
   // Use local state for saved and link modes (to avoid polluting global store)
-  if (props.mode === 'saved' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
+  if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
     console.log(`[MessageList] threads computed for ${props.mode}:`, {
       localMessagesLength: localMessages.value.length,
       localMessages: localMessages.value
@@ -139,6 +148,8 @@ const emptyStateMessage = computed(() => {
       return 'No sent messages found.';
     case 'all':
       return 'No messages found.';
+    case 'public':
+      return 'No public messages found.';
     default:
       return 'No messages found.';
   }
@@ -146,7 +157,7 @@ const emptyStateMessage = computed(() => {
 
 // Show login message when no user is logged in (only for inbox mode)
 const shouldShowLoginMessage = computed(() => {
-  return props.mode === 'inbox' && !user.value;
+  return (props.mode === 'inbox' || props.mode === 'saved') && !user.value;
 });
 
 const error = computed(() => store.getters['ui/error']);
@@ -310,13 +321,36 @@ function getThreadMessages(threadId) {
 const loadMessages = async () => {
   // Skip loading if already loading or all loaded
   if (isLoading.value || isAllLoaded.value) {
+    console.log(`[MessageList] Skipping load - already loading: ${isLoading.value}, all loaded: ${isAllLoaded.value}`);
     return;
   }
   
   // Skip for inbox mode if no user
   if (props.mode === 'inbox' && !user.value) {
+    console.log('[MessageList] Skipping load for inbox - no user logged in');
     return;
   }
+  
+  // Skip for saved mode if no user (requires authentication)
+  if (props.mode === 'saved' && !user.value) {
+    console.log('[MessageList] Skipping load for saved - no user logged in');
+    return;
+  }
+  
+  // Generate a unique request ID to prevent race conditions
+  const requestId = ++currentRequestId.value;
+  console.log(`[MessageList] Starting request ${requestId} for mode: ${props.mode}`, {
+    skip: currentSkip.value,
+    limit: pageSize.value,
+    sourceMessageId: props.sourceMessageId,
+    showAllLinks: props.showAllLinks
+  });
+  
+  // Set loading state based on mode
+  if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
+    localLoadingState.value = true;
+  }
+  // Store modes handle their own loading state in the store
   
   try {
     let response;
@@ -343,21 +377,32 @@ const loadMessages = async () => {
       ...fetchParams
     });
     
+    // Check if this request is still current (not superseded by a newer request)
+    if (requestId !== currentRequestId.value) {
+      console.log(`[MessageList] Request ${requestId} superseded by ${currentRequestId.value}, ignoring response`);
+      return;
+    }
+    
     if (response) {
-      console.log(`[MessageList] loadMessages response for ${props.mode}:`, response);
+      console.log(`[MessageList] Request ${requestId} response for ${props.mode}:`, {
+        messageCount: response.messages?.length || 0,
+        exhausted: response.exhausted,
+        currentSkip: currentSkip.value
+      });
       
       // Handle response based on mode
-      if (props.mode === 'saved' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
-        // For saved and link modes, use local state
+      if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
+        // For saved, public, and link modes, use local state
         if (currentSkip.value === 0) {
           // First load - replace local messages
-          console.log(`[MessageList] Setting localMessages to:`, response.messages || []);
+          console.log(`[MessageList] Request ${requestId} first load - replacing local messages:`, response.messages?.length || 0);
           localMessages.value = response.messages || [];
         } else {
           // Subsequent loads - append to local messages
+          console.log(`[MessageList] Request ${requestId} appending to local messages:`, response.messages?.length || 0);
           localMessages.value = [...localMessages.value, ...(response.messages || [])];
         }
-        console.log(`[MessageList] localMessages after update:`, localMessages.value);
+        console.log(`[MessageList] Request ${requestId} local messages after update: ${localMessages.value.length}`);
       }
       // Store modes (inbox/admin) are handled by the store action itself
       
@@ -366,9 +411,30 @@ const loadMessages = async () => {
       if (!response.exhausted && response.messages && response.messages.length > 0) {
         currentSkip.value += response.messages.length;
       }
+      
+      console.log(`[MessageList] Request ${requestId} complete - new state:`, {
+        isAllLoaded: isAllLoaded.value,
+        currentSkip: currentSkip.value,
+        totalMessages: localMessages.value.length || store.getters['messages/getLoadedMessages'].length
+      });
     }
   } catch (error) {
-    console.error(`Error loading ${props.mode} messages:`, error);
+    // Check if this request is still current before handling error
+    if (requestId !== currentRequestId.value) {
+      console.log(`[MessageList] Request ${requestId} superseded during error, ignoring`);
+      return;
+    }
+    console.error(`[MessageList] Request ${requestId} error loading ${props.mode} messages:`, error);
+  } finally {
+    // Only clear loading state if this is still the current request
+    if (requestId === currentRequestId.value) {
+      if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
+        localLoadingState.value = false;
+      }
+      console.log(`[MessageList] Request ${requestId} loading state cleared`);
+    } else {
+      console.log(`[MessageList] Request ${requestId} was superseded, not clearing loading state`);
+    }
   }
 };
 
@@ -393,7 +459,7 @@ onMounted(async () => {
 
 // Watch for user changes to start loading when they log in (inbox mode only)
 watch(user, (newUser, oldUser) => {
-  if (props.mode === 'inbox') {
+  if (props.mode === 'inbox' || props.mode === 'saved') {
     if (newUser && !oldUser) {
       // User just logged in, start loading messages
       console.log('User logged in, starting to load messages');
@@ -409,7 +475,10 @@ watch(user, (newUser, oldUser) => {
 
 // Clean up observers
 onUnmounted(() => {
-  // No cleanup needed
+  // Cancel any pending requests to prevent memory leaks
+  currentRequestId.value++;
+  localLoadingState.value = false;
+  console.log('[MessageList] Component unmounted, canceling pending requests');
 });
 
 // Add computed properties for delete confirmation modal
@@ -458,12 +527,74 @@ const deleteMessage = async () => {
 
 // Reset state when cache is cleared
 watch(() => store.getters['messages/getLoadedMessages'].length, (newLength, oldLength) => {
+  console.log(`[MessageList] Message cache length changed: ${oldLength} -> ${newLength}`);
   // If messages were cleared, reset loading states
   if (oldLength > 0 && newLength === 0) {
+    console.log('[MessageList] Cache was cleared, resetting loading states');
+    
+    // Cancel any pending requests
+    currentRequestId.value++;
+    localLoadingState.value = false;
+    
     isAllLoaded.value = false;
     currentSkip.value = 0;
+    
+    // For store-based modes (inbox, admin), trigger reload after cache clear
+    if (props.mode === 'inbox' || props.mode === 'admin') {
+      console.log(`[MessageList] Cache cleared for store-based mode "${props.mode}", triggering reload`);
+      nextTick(() => {
+        loadMessages();
+      });
+    }
   }
 });
+
+// Reset local state when mode or sourceMessageId changes
+watch([() => props.mode, () => props.sourceMessageId, () => props.showAllLinks], () => {
+  console.log(`[MessageList] Mode/source/showAllLinks changed - mode: "${props.mode}"`);
+  
+  // Cancel any pending requests immediately
+  currentRequestId.value++;
+  localLoadingState.value = false;
+  
+  if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
+    console.log(`[MessageList] Local state mode "${props.mode}", resetting local state`);
+    console.log(`[MessageList] Current local state:`, {
+      localMessagesCount: localMessages.value.length,
+      selectedMessageIds: selectedMessageIds.value.size,
+      isAllLoaded: isAllLoaded.value,
+      currentSkip: currentSkip.value
+    });
+    
+    localMessages.value = [];
+    selectedMessageIds.value.clear();
+    isAllLoaded.value = false;
+    currentSkip.value = 0;
+    
+    // Trigger reload
+    console.log('[MessageList] Triggering message reload after local mode change');
+    nextTick(() => {
+      loadMessages();
+    });
+  } else if (props.mode === 'inbox' || props.mode === 'admin') {
+    console.log(`[MessageList] Store-based mode "${props.mode}", resetting pagination state`);
+    // For store-based modes, just reset pagination (messages handled by store)
+    isAllLoaded.value = false;
+    currentSkip.value = 0;
+    selectedMessageIds.value.clear();
+    
+    // Only trigger reload if we don't have messages (cache might already be populated)
+    const currentMessages = store.getters['messages/getLoadedMessages'] || [];
+    if (currentMessages.length === 0) {
+      console.log('[MessageList] No messages in store, triggering reload for store-based mode');
+      nextTick(() => {
+        loadMessages();
+      });
+    } else {
+      console.log(`[MessageList] Store already has ${currentMessages.length} messages, skipping reload`);
+    }
+  }
+}, { immediate: true });
 
 // Handle message selection changes
 const handleMessageSelection = (messageId) => {
@@ -475,21 +606,6 @@ const handleMessageSelection = (messageId) => {
   // Emit to parent for operations
   emit('selectionChanged', Array.from(selectedMessageIds.value));
 };
-
-// Reset local state when mode or sourceMessageId changes
-watch([() => props.mode, () => props.sourceMessageId, () => props.showAllLinks], () => {
-  if (props.mode === 'saved' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
-    console.log(`[MessageList] Mode/source/showAllLinks changed to ${props.mode}/${props.sourceMessageId}/${props.showAllLinks}, resetting local state`);
-    localMessages.value = [];
-    selectedMessageIds.value.clear();
-    isAllLoaded.value = false;
-    currentSkip.value = 0;
-    // Trigger reload
-    nextTick(() => {
-      loadMessages();
-    });
-  }
-}, { immediate: true });
 
 // Add function to toggle info box
 const toggleInfoBox = () => {
@@ -715,6 +831,7 @@ const handleLinkDelete = async (linkData) => {
   gap: var(--space-md);
   overflow-y: auto;
   height: 100%;
+  margin-top: 56px;
 }
 
 .login-message {
@@ -1119,8 +1236,8 @@ const handleLinkDelete = async (linkData) => {
 .info-box {
   background: var(--color-surface-light, #222);
   border: 1px solid var(--color-border, #333);
-  margin: 20px auto;
-  margin-top: 32px;
+  margin: 0px auto;
+  margin-bottom: 8px;
   padding: 12px 16px;
   width: 70%;
   border-radius: var(--radius-md, 8px);
@@ -1131,8 +1248,8 @@ const handleLinkDelete = async (linkData) => {
 
 .info-box.collapsed {
   padding: 4px 8px;
-  margin: 8px auto;
-  margin-top: 16px;
+  margin: 0px auto;
+  margin-bottom: 8px;
   width: 100px;
   min-width: unset;
   max-width: unset;
