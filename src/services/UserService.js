@@ -435,5 +435,25 @@ export default {
         console.error('Error creating link:', error);
         throw error;
       }
+    },
+
+    /**
+     * Submit a waitlist application
+     * @param {Object} applicationData - The application data
+     * @returns {Promise<Object>} - Response with success status and application ID
+     */
+    async submitWaitlistApplication(applicationData) {
+      try {
+        console.log('[UserService] Submitting waitlist application:', applicationData);
+        
+        const response = await apiClient.post('/users/waitlist', applicationData);
+        
+        console.log('[UserService] Waitlist application response:', response.data);
+        return response.data;
+      } catch (error) {
+        console.error('[UserService] Error submitting waitlist application:', error);
+        console.error('[UserService] Error details:', error.response?.data || error.message);
+        throw error;
+      }
     }
 }; 

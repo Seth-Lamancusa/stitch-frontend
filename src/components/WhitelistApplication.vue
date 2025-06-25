@@ -36,6 +36,7 @@
             v-if="currentStep > 1" 
             @click="prevStep" 
             class="btn-secondary"
+            :disabled="submitting"
           >
             Back
           </button>
@@ -44,7 +45,7 @@
               v-if="currentStep < totalSteps" 
               @click="nextStep" 
               class="btn-primary"
-              :disabled="!isStepValid(index + 1)"
+              :disabled="!isStepValid(index + 1) || submitting"
             >
               Next
             </button>
@@ -52,11 +53,16 @@
               v-else 
               @click="submitApplication" 
               class="btn-primary"
-              :disabled="!isFormValid"
+              :disabled="!isFormValid || submitting"
             >
-              Submit
+              {{ submitting ? 'Submitting...' : 'Submit' }}
             </button>
           </div>
+        </div>
+        
+        <!-- Error Message -->
+        <div v-if="submitError" class="error-message">
+          {{ submitError }}
         </div>
       </div>
     </div>
@@ -71,9 +77,12 @@
 
 <script setup>
 import { ref, computed } from 'vue';
+import UserService from '../services/UserService.js';
 
 const currentStep = ref(1);
 const submitted = ref(false);
+const submitting = ref(false);
+const submitError = ref('');
 
 const steps = ref([
   {
@@ -82,7 +91,8 @@ const steps = ref([
     placeholder: "Name, experiences, interests, accomplishments, beliefs, etc. What makes you you?",
     answer: "",
     maxLength: 1000,
-    optional: true
+    optional: true,
+    key: "who_are_you"
   },
   {
     question: "What do you do?",
@@ -90,7 +100,8 @@ const steps = ref([
     placeholder: "For fun, for work, for play, for learning, for living, etc. What's your lifestyle, in practice?",
     answer: "",
     maxLength: 1000,
-    optional: true
+    optional: true,
+    key: "what_do_you_do"
   },
   {
     question: "Connections",
@@ -98,7 +109,8 @@ const steps = ref([
     placeholder: "Academics, artists, creators, entrepreneurs, politicians, athletes, your buddies from high school, etc.",
     answer: "",
     maxLength: 1000,
-    optional: true
+    optional: true,
+    key: "connections"
   },
   {
     question: "Contact Info",
@@ -106,7 +118,8 @@ const steps = ref([
     placeholder: "Email, phone number, GPS coordinates for a carrier pigeon, etc.",
     answer: "",
     maxLength: 500,
-    optional: false
+    optional: false,
+    key: "contact_info"
   }
 ]);
 
@@ -145,10 +158,36 @@ const prevStep = () => {
   }
 };
 
-const submitApplication = () => {
-  if (isFormValid.value) {
-    // Handle form submission
-    submitted.value = true;
+const submitApplication = async () => {
+  if (!isFormValid.value || submitting.value) {
+    return;
+  }
+
+  submitting.value = true;
+  submitError.value = '';
+
+  try {
+    // Build the application data object
+    const applicationData = {};
+    steps.value.forEach(step => {
+      applicationData[step.key] = step.answer.trim();
+    });
+
+    console.log('Submitting application:', applicationData);
+    
+    const response = await UserService.submitWaitlistApplication(applicationData);
+    
+    if (response.success) {
+      submitted.value = true;
+      console.log('Application submitted successfully:', response.application_id);
+    } else {
+      throw new Error(response.message || 'Submission failed');
+    }
+  } catch (error) {
+    console.error('Error submitting application:', error);
+    submitError.value = error.response?.data?.detail || error.message || 'Failed to submit application. Please try again.';
+  } finally {
+    submitting.value = false;
   }
 };
 
@@ -349,6 +388,17 @@ textarea:focus {
 .success-message p {
   color: rgba(255, 255, 255, 0.8);
   line-height: 1.5;
+}
+
+.error-message {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(234, 68, 53, 0.1);
+  border-radius: var(--border-radius-md);
+  border: 1px solid rgba(234, 68, 53, 0.2);
+  color: #ea4435;
+  text-align: center;
+  font-size: 0.9rem;
 }
 
 @media (max-width: 768px) {
