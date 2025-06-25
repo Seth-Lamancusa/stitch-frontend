@@ -251,7 +251,7 @@
           
           <!-- Save/Bookmark Button -->
           <button 
-            v-if="!inListView"
+            v-if="!inListView || currentTab === 'saved'"
             @click.stop="toggleSaveMessage" 
             class="save-button"
             :class="{ 'saved': isMessageSaved }"
@@ -499,6 +499,11 @@ export default {
     threadMessages: {
       type: Array,
       default: () => []
+    },
+    // Current tab context for conditional rendering
+    currentTab: {
+      type: String,
+      default: null
     }
   },
   

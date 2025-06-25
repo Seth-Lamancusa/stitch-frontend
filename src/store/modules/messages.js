@@ -252,11 +252,7 @@ export default {
     },
     
     // Restore REMOVE_TEMP_THREAD mutation
-    REMOVE_TEMP_THREAD(state, threadId) {
-      if (state.messages[threadId]) {
-        delete state.messages[threadId];
-      }
-    },
+
     
     UPDATE_PIN_STATUS(state, { messageId, isPinned }) {
       if (state.messages[messageId]) {
@@ -721,6 +717,19 @@ export default {
               throw new Error(adminResponse.error || 'Failed to load admin messages');
             }
             break;
+          case 'public':
+            // Import MessageService when needed
+            const MessageService = (await import('../../services/MessageService')).default;
+            const publicResponse = await MessageService.getPublicMessages(skip, limit);
+            response = {
+              messages: publicResponse.data || [],
+              exhausted: (publicResponse.data || []).length < limit
+            };
+            break;
+          case 'saved':
+            // Use existing UserService.getSavedMessages (which already handles pagination properly)
+            response = await UserService.getSavedMessages(skip, limit);
+            break;
           case 'incoming-links':
             if (!sourceMessageId) throw new Error('sourceMessageId required for incoming-links mode');
             response = await UserService.getUserIncomingLinks(sourceMessageId, skip, limit, showAllLinks);
@@ -728,9 +737,6 @@ export default {
           case 'outgoing-links':
             if (!sourceMessageId) throw new Error('sourceMessageId required for outgoing-links mode');
             response = await UserService.getUserOutgoingLinks(sourceMessageId, skip, limit, showAllLinks);
-            break;
-          case 'saved':
-            response = await UserService.getSavedMessages(skip, limit);
             break;
           case 'custom':
             // Custom mode doesn't fetch - just return empty
@@ -864,10 +870,6 @@ export default {
         // Always clear loading state
         commit('SET_LOADING', { key: 'fetchingMessages', isLoading: false });
       }
-    },
-    
-    removeTemporaryThread({ commit }, threadId) {
-      commit('REMOVE_TEMP_THREAD', threadId);
     },
     
     // Clear cache of all loaded messages

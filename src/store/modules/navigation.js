@@ -6,6 +6,7 @@ export default {
     isLoadingReplyMessage: false,
     isReplying: false,
     previousRoute: '/inbox', // Default to inbox as fallback
+    activeTab: 'inbox', // Track which navigation tab is active
     replySettings: {
       isPublic: true,
       recipients: []  // Will now store objects with {uid, display_name, user_tag} instead of strings
@@ -35,6 +36,10 @@ export default {
     SET_PREVIOUS_ROUTE(state, route) {
       console.log(`[Navigation Store] SET_PREVIOUS_ROUTE mutation - storing: "${route}"`);
       state.previousRoute = route;
+    },
+    
+    SET_ACTIVE_TAB(state, tab) {
+      state.activeTab = tab;
     },
     
     SET_REPLY_PUBLIC(state, isPublic) {
@@ -133,6 +138,15 @@ export default {
       commit('SET_PREVIOUS_ROUTE', route);
     },
     
+    async setActiveTab({ commit, dispatch }, tab) {
+      console.log(`[Navigation Store] Setting active tab to: "${tab}"`);
+      commit('SET_ACTIVE_TAB', tab);
+      // Clear message cache when switching tabs to trigger fresh load
+      console.log('[Navigation Store] Clearing message cache for tab switch');
+      await dispatch('messages/clearCache', {}, { root: true });
+      console.log('[Navigation Store] Message cache cleared');
+    },
+    
     syncReplySettings({ commit, state, rootGetters, rootState }, messageId) {
       const targetId = messageId || state.replyingToMessageId;
       if (!targetId) return;
@@ -219,6 +233,8 @@ export default {
     previousRoute: state => {
       console.log(`[Navigation Store] Getting previous route: "${state.previousRoute}"`);
       return state.previousRoute;
-    }
+    },
+    
+    activeTab: state => state.activeTab
   }
 }

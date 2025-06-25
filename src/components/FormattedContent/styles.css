@@ -110,7 +110,7 @@ hr {
 /* ===== Lists ===== */
 ul, ol {
   padding-left: var(--space-xl);
-  margin: var(--space-xs) 0;
+  margin-bottom: var(--space-md);
 }
 
 li {
