@@ -65,6 +65,19 @@ class ImportService {
    * @returns {Array} - Array of message objects
    */
   parseChatGPTConversation(text) {
+    // Clean up the text first
+    // Remove header text
+    text = text.replace(/^Skip to content\s*Chat history\s*/i, '').trim();
+    
+    // Remove thinking time lines
+    text = text.split('\n')
+      .filter(line => !(/thought for.*seconds/i.test(line)))
+      .join('\n');
+    
+    // Remove footer text
+    text = text.replace(/(?:No file chosen\s*)+(?:ChatGPT can make mistakes\. Check important info\.?)*\s*$/i, '').trim();
+    text = text.replace(/(?:ChatGPT can make mistakes\. Check important info\.?)*\s*$/i, '').trim();
+    
     const messages = [];
     
     // Check if this uses "You said:" / "ChatGPT said:" format
@@ -412,9 +425,6 @@ class ImportService {
         errors.push('Empty message found.');
       }
       
-      if (msg.content && msg.content.length > 50000) {
-        errors.push('Message too long.');
-      }
     }
     
     return {
@@ -426,218 +436,42 @@ class ImportService {
   /**
    * Detect the format of the conversation text
    * @param {String} text - The conversation text to analyze
+   * @param {String} activeImportTab - The active import tab
    * @returns {Object} - Detection result with format and confidence
    */
-  detectConversationFormat(text) {
+  detectConversationFormat(text, activeImportTab) {
     const lines = text.split('\n').filter(line => line.trim());
     if (lines.length === 0) {
       return { format: 'unknown', confidence: 0, hint: 'Paste your conversation text to begin' };
     }
+
+    // Try to parse the conversation and see if we get any messages
+    let messages = [];
     
-    // Check for explicit marker format first
-    const hasYouSaid = text.includes('You said:\n');
-    const hasChatGPTSaid = text.includes('ChatGPT said:\n');
-    
-    if (hasYouSaid || hasChatGPTSaid) {
-      const hasThinking = /^Thought for .+$/im.test(text);
-      return {
-        format: 'explicit-markers',
-        confidence: 1.0,
-        hint: hasThinking 
-          ? 'Ready to import!'
-          : 'Ready to import!'
-      };
+    if (activeImportTab === 'chatgpt') {
+      messages = this.parseChatGPTConversation(text);
+    } else if (activeImportTab === 'cursor') {
+      messages = this.parseCursorConversation(text);
+    } else if (activeImportTab === 'claude') {
+      messages = this.parseClaudeConversation(text);
+    } else if (activeImportTab === 'gemini') {
+      messages = this.parseGeminiConversation(text);
     }
-    
-    // Count occurrences of different patterns
-    const patterns = {
-      'You:': 0,
-      'ChatGPT:': 0,
-      'Cursor:': 0,
-      'Claude:': 0,
-      'Gemini:': 0,
-      'Grok:': 0,
-      'ChatGPT said:': 0,
-      'User:': 0,
-      'Assistant:': 0,
-      'Human:': 0,
-      'AI:': 0,
-      'Me:': 0,
-      'Thought for': 0,
-      'markdown_headers': 0,
-      'Edit': 0,  // Claude's Edit marker
-      'Sources': 0,  // Gemini's Sources marker
-      'web pages': 0  // Grok's metadata marker
-    };
-    
-    lines.forEach(line => {
-      const trimmed = line.trim();
-      Object.keys(patterns).forEach(pattern => {
-        if (pattern === 'ChatGPT said:') {
-          if (/^ChatGPT said:?\s*$/i.test(trimmed)) {
-            patterns[pattern]++;
-          }
-        } else if (pattern === 'Thought for') {
-          if (/^Thought for .+$/i.test(trimmed)) {
-            patterns[pattern]++;
-          }
-        } else if (pattern === 'Edit') {
-          // Match "Edit" on its own line (Claude's response marker)
-          if (/^Edit\s*$/i.test(trimmed)) {
-            patterns[pattern]++;
-          }
-        } else if (pattern === 'Sources') {
-          // Match "Sources" on its own line (Gemini's sources marker)
-          if (/^Sources\s*$/i.test(trimmed)) {
-            patterns[pattern]++;
-          }
-        } else if (pattern === 'web pages') {
-          // Match "X web pages" pattern (Grok's metadata marker)
-          if (/\d+\s+web\s+pages?/i.test(trimmed)) {
-            patterns[pattern]++;
-          }
-        } else if (pattern === 'markdown_headers') {
-          if (/^#{1,6}\s+(You|User|Human|Cursor|Assistant|AI)\s*$/i.test(trimmed) ||
-              /^\*\*(You|User|Human|Cursor|Assistant|AI):\*\*\s*$/i.test(trimmed) ||
-              /^\*\*(User)\*\*$/i.test(trimmed) ||
-              /^\*\*(Cursor)\*\*$/i.test(trimmed)) {
-            patterns[pattern]++;
-          }
-        } else if (trimmed.startsWith(pattern)) {
-          patterns[pattern]++;
-        }
-      });
-    });
-    
-    // Determine the most likely format
-    const totalPatterns = Object.values(patterns).reduce((a, b) => a + b, 0);
-    
-    if (totalPatterns === 0) {
+
+    // If we got any messages, the conversation was detected
+    if (messages.length > 0) {
       return {
-        format: 'unstructured',
-        confidence: 0.3,
-        hint: 'No conversation detected.'
-      };
-    }
-    
-    // Check for "ChatGPT said:" format (with or without thinking times)
-    if (patterns['ChatGPT said:'] > 0) {
-      const hasThinking = patterns['Thought for'] > 0;
-      return {
-        format: 'chatgpt-web',
-        confidence: 1.0,
-        hint: hasThinking 
-          ? 'Ready to import!'
-          : 'Ready to import!'
-      };
-    }
-    
-    // Check for standard formats
-    if (patterns['You:'] > 0 && patterns['ChatGPT:'] > 0) {
-      return {
-        format: 'standard',
+        format: activeImportTab,
         confidence: 1.0,
         hint: 'Ready to import!'
       };
     }
-    
-    if (patterns['You:'] > 0 && patterns['Cursor:'] > 0) {
-      return {
-        format: 'cursor',
-        confidence: 1.0,
-        hint: 'Ready to import!'
-      };
-    }
-    
-    if (patterns['You:'] > 0 && patterns['Claude:'] > 0) {
-      return {
-        format: 'claude',
-        confidence: 1.0,
-        hint: 'Ready to import!'
-      };
-    }
-    
-    if (patterns['You:'] > 0 && patterns['Gemini:'] > 0) {
-      return {
-        format: 'gemini',
-        confidence: 1.0,
-        hint: 'Ready to import!'
-      };
-    }
-    
-    if (patterns['You:'] > 0 && patterns['Grok:'] > 0) {
-      return {
-        format: 'grok',
-        confidence: 1.0,
-        hint: 'Ready to import!'
-      };
-    }
-    
-    if (patterns['Human:'] > 0 && (patterns['Assistant:'] > 0 || patterns['Claude:'] > 0)) {
-      return {
-        format: 'claude',
-        confidence: 1.0,
-        hint: 'Ready to import!'
-      };
-    }
-    
-    // Check for Claude "Edit" format
-    if (patterns['Edit'] > 0) {
-      return {
-        format: 'claude',
-        confidence: 1.0,
-        hint: 'Ready to import!'
-      };
-    }
-    
-    // Check for Gemini "Sources" format or content patterns
-    if (patterns['Sources'] > 0 || this.detectGeminiContent(text)) {
-      return {
-        format: 'gemini',
-        confidence: 0.8,
-        hint: 'Ready to import!'
-      };
-    }
-    
-    // Check for Grok "web pages" format or content patterns
-    if (patterns['web pages'] > 0 || this.detectGrokContent(text)) {
-      return {
-        format: 'grok',
-        confidence: 0.8,
-        hint: 'Ready to import!'
-      };
-    }
-    
-    // Check for markdown conversation format
-    if (patterns['markdown_headers'] > 1) {
-      return {
-        format: 'cursor-markdown',
-        confidence: 1.0,
-        hint: 'Ready to import!'
-      };
-    }
-    
-    if (patterns['User:'] > 0 && patterns['Assistant:'] > 0) {
-      return {
-        format: 'openai',
-        confidence: 0.9,
-        hint: 'Ready to import!'
-      };
-    }
-    
-    if (patterns['Human:'] > 0 && patterns['AI:'] > 0) {
-      return {
-        format: 'anthropic',
-        confidence: 0.9,
-        hint: 'Ready to import!'
-      };
-    }
-    
-    // Some patterns detected but not matching pairs
+
+    // Otherwise no conversation was detected
     return {
-      format: 'partial',
-      confidence: 0.5,
-      hint: 'Ready to import!'
+      format: 'unknown',
+      confidence: 0,
+      hint: 'No conversation detected.'
     };
   }
   
@@ -1358,6 +1192,13 @@ class ImportService {
   parseGeminiSimpleFormat(text) {
     const messages = [];
     
+    // Remove everything before and including "Conversation with Gemini"
+    const parts = text.split(/^.*?Conversation with Gemini.*$/m);
+    text = parts[parts.length - 1].trim();
+    
+    // Remove "Deep Research" line and everything after it
+    text = text.split(/^Deep Research/m)[0].trim();
+    
     // Split by multiple newlines to get conversation blocks
     let blocks = text.split(/\n\s*\n\s*\n+/).filter(block => block.trim());
     
@@ -1502,252 +1343,230 @@ class ImportService {
    * @param {String} text - The conversation text to parse
    * @returns {Array} - Array of message objects
    */
-  parseGrokConversation(text) {
-    // Check if this uses explicit "You:" / "Grok:" format
-    if (text.includes('You:') && text.includes('Grok:')) {
-      return this.parseGrokExplicitFormat(text);
-    }
-    
-    // Check if this uses "User:" / "Assistant:" format
-    if (text.includes('User:') && text.includes('Assistant:')) {
-      return this.parseStandardFormat(text);
-    }
-    
-    // Otherwise use simple format parsing (most common for Grok)
-    return this.parseGrokSimpleFormat(text);
-  }
+  // parseGrokConversation(text) {  // Commented out entire Grok parsing
+  //   // Check if this uses explicit "You:" / "Grok:" format
+  //   if (text.includes('You:') && text.includes('Grok:')) {
+  //     return this.parseGrokExplicitFormat(text);
+  //   }
+  //   
+  //   // Check if this uses "User:" / "Assistant:" format
+  //   if (text.includes('User:') && text.includes('Assistant:')) {
+  //     return this.parseStandardFormat(text);
+  //   }
+  //   
+  //   // Otherwise use simple format parsing (most common for Grok)
+  //   return this.parseGrokSimpleFormat(text);
+  // }
 
   /**
    * Parse Grok conversation with explicit "You:" / "Grok:" markers
    * @param {String} text - The conversation text to parse
    * @returns {Array} - Array of message objects
    */
-  parseGrokExplicitFormat(text) {
-    const messages = [];
-    const lines = text.split('\n');
-    
-    const cleanContent = (line, patterns) => {
-      let cleaned = line;
-      patterns.forEach(pattern => {
-        cleaned = cleaned.replace(new RegExp(`^${pattern}\\s*`, 'i'), '');
-      });
-      return cleaned.trim();
-    };
-    
-    let currentMessage = null;
-    
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        if (currentMessage && currentMessage.content) {
-          currentMessage.content += '\n';
-        }
-        continue;
-      }
-      
-      // Check for role markers
-      if (/^You:\s*/i.test(trimmed)) {
-        // Save previous message
-        if (currentMessage && currentMessage.content.trim()) {
-          messages.push({
-            role: currentMessage.role,
-            content: currentMessage.content.trim()
-          });
-        }
-        
-        // Start new user message
-        currentMessage = {
-          role: 'user',
-          content: cleanContent(trimmed, ['You:'])
-        };
-      } else if (/^Grok:\s*/i.test(trimmed)) {
-        // Save previous message
-        if (currentMessage && currentMessage.content.trim()) {
-          messages.push({
-            role: currentMessage.role,
-            content: currentMessage.content.trim()
-          });
-        }
-        
-        // Start new assistant message
-        currentMessage = {
-          role: 'assistant',
-          content: cleanContent(trimmed, ['Grok:'])
-        };
-      } else if (currentMessage) {
-        // Continue current message
-        if (currentMessage.content) {
-          currentMessage.content += '\n' + trimmed;
-        } else {
-          currentMessage.content = trimmed;
-        }
-      } else {
-        // No current message, assume this is the start of a user message
-        currentMessage = {
-          role: 'user',
-          content: trimmed
-        };
-      }
-    }
-    
-    // Don't forget the last message
-    if (currentMessage && currentMessage.content.trim()) {
-      messages.push({
-        role: currentMessage.role,
-        content: currentMessage.content.trim()
-      });
-    }
-    
-    return messages;
-  }
+  // parseGrokExplicitFormat(text) {  // Commented out Grok explicit format parsing
+  //   const messages = [];
+  //   const lines = text.split('\n');
+  //   
+  //   const cleanContent = (line, patterns) => {
+  //     let cleaned = line;
+  //     patterns.forEach(pattern => {
+  //       cleaned = cleaned.replace(new RegExp(`^${pattern}\\s*`, 'i'), '');
+  //     });
+  //     return cleaned.trim();
+  //   };
+  //   
+  //   let currentMessage = null;
+  //   
+  //   for (const line of lines) {
+  //     const trimmed = line.trim();
+  //     if (!trimmed) {
+  //       if (currentMessage && currentMessage.content) {
+  //         currentMessage.content += '\n';
+  //       }
+  //       continue;
+  //     }
+  //     
+  //     // Check for user message start
+  //     if (trimmed.startsWith('You:') || trimmed.startsWith('User:')) {
+  //       if (currentMessage) {
+  //         messages.push(currentMessage);
+  //       }
+  //       currentMessage = {
+  //         role: 'user',
+  //         content: cleanContent(trimmed, ['You:', 'User:'])
+  //       };
+  //       continue;
+  //     }
+  //     
+  //     // Check for Grok message start
+  //     if (trimmed.startsWith('Grok:') || trimmed.startsWith('Assistant:')) {
+  //       if (currentMessage) {
+  //         messages.push(currentMessage);
+  //       }
+  //       currentMessage = {
+  //         role: 'assistant',
+  //         content: cleanContent(trimmed, ['Grok:', 'Assistant:'])
+  //       };
+  //       continue;
+  //     }
+  //     
+  //     // Add line to current message if exists
+  //     if (currentMessage) {
+  //       if (currentMessage.content) {
+  //         currentMessage.content += '\n';
+  //       }
+  //       currentMessage.content += trimmed;
+  //     }
+  //   }
+  //   
+  //   // Add final message
+  //   if (currentMessage) {
+  //     messages.push(currentMessage);
+  //   }
+  //   
+  //   return messages;
+  // }
 
   /**
    * Parse simple Grok conversation format (no explicit markers)
    * @param {String} text - The conversation text to parse
    * @returns {Array} - Array of message objects
    */
-  parseGrokSimpleFormat(text) {
-    const messages = [];
-    
-    // Use a more direct approach for Grok conversations
-    // Split the text into paragraphs and then intelligently group them
-    const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
-    
-    if (paragraphs.length === 0) {
-      return [];
-    }
-    
-    // If only one paragraph, treat as user message
-    if (paragraphs.length === 1) {
-      return [{
-        role: 'user',
-        content: paragraphs[0].trim()
-      }];
-    }
-    
-    // Group paragraphs into conversation blocks
-    const conversationBlocks = [];
-    let currentBlock = '';
-    let isInLongResponse = false;
-    
-    for (let i = 0; i < paragraphs.length; i++) {
-      const paragraph = paragraphs[i].trim();
-      
-      // Skip empty paragraphs
-      if (!paragraph) continue;
-      
-             // Check if this paragraph looks like the start of a new user question
-       const isShortQuestion = paragraph.length < 300 && 
-         (/\b(i want|help me|lets?|what|how|where|when|why|can you|should i|tell me)\b/i.test(paragraph) || 
-          paragraph.includes('?')) &&
-         // Exclude paragraphs that start with markdown headers or bullet points
-         !paragraph.startsWith('**') && 
-         !paragraph.startsWith('- ') &&
-         !paragraph.startsWith('* ');
-      
-      // Check if this paragraph looks like metadata
-      const isMetadata = /^\d+\s+web\s+pages?\s*$/i.test(paragraph) || 
-                        /^\d+\.\d+s\s*$/i.test(paragraph);
-      
-      // If we're in a long response and encounter a short question, start new block
-      if (isInLongResponse && isShortQuestion && !isMetadata) {
-        // Save current block
-        if (currentBlock.trim()) {
-          conversationBlocks.push(currentBlock.trim());
-        }
-        currentBlock = paragraph;
-        isInLongResponse = false;
-      } else {
-        // Add to current block
-        if (currentBlock) {
-          currentBlock += '\n\n' + paragraph;
-        } else {
-          currentBlock = paragraph;
-        }
-        
-        // Check if we're now in a long response
-        if (!isInLongResponse && currentBlock.length > 500) {
-          const lowerContent = currentBlock.toLowerCase();
-          const hasGrokIndicators = [
-            'deciding whether',
-            'overview of the',
-            'pros of choosing',
-            'cons and challenges',
-            'key considerations',
-            'recommendations',
-            'conclusion'
-          ].some(pattern => lowerContent.includes(pattern));
-          
-          if (hasGrokIndicators) {
-            isInLongResponse = true;
-          }
-        }
-      }
-    }
-    
-    // Don't forget the last block
-    if (currentBlock.trim()) {
-      conversationBlocks.push(currentBlock.trim());
-    }
-    
-    // Now convert blocks to messages, alternating roles
-    let currentRole = 'user'; // Start with user
-    
-    for (let i = 0; i < conversationBlocks.length; i++) {
-      const content = conversationBlocks[i].trim();
-      if (!content) continue;
-      
-      const lowerContent = content.toLowerCase();
-      
-      // Determine role based on content analysis
-      let blockRole = currentRole;
-      
-      if (i === 0) {
-        // First block - check if it's a short question or long response
-        const isShortQuestion = content.length < 300 && 
-          (/\b(i want|help me|lets?|what|how|where|when|why|can you|should i|tell me)\b/i.test(lowerContent) || 
-           content.includes('?'));
-        blockRole = isShortQuestion ? 'user' : 'assistant';
-             } else {
-         // For subsequent blocks, use strong indicators
-         const hasUserIndicators = /\b(i want|help me|lets?|what|how|where|when|why|can you|should i|tell me)\b/i.test(lowerContent) || 
-                                  (content.includes('?') && content.length < 200);
-         const hasAssistantIndicators = [
-           'deciding whether',
-           'overview of the',
-           'pros of choosing',
-           'cons and challenges',
-           'key considerations',
-           'recommendations',
-           'here\'s a comprehensive',
-           'engine & drivetrain',
-           'maintenance records',
-           'known issues',
-           'inspection priorities',
-           'budget considerations'
-         ].some(pattern => lowerContent.includes(pattern));
-         
-         if (hasUserIndicators && !hasAssistantIndicators && content.length < 500) {
-           blockRole = 'user';
-         } else if (hasAssistantIndicators || content.length > 1000) {
-           blockRole = 'assistant';
-         } else {
-           // Default to alternating
-           blockRole = currentRole === 'user' ? 'assistant' : 'user';
-         }
-       }
-      
-      // Create message
-      messages.push({
-        role: blockRole,
-        content: content
-      });
-      
-      currentRole = blockRole;
-    }
-    
-    return messages;
-  }
+  // parseGrokSimpleFormat(text) {  // Commented out Grok simple format parsing
+  //   const messages = [];
+  //   
+  //   // Use a more direct approach for Grok conversations
+  //   // Split the text into paragraphs and then intelligently group them
+  //   const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
+  //   
+  //   if (paragraphs.length === 0) {
+  //     return [];
+  //   }
+  //   
+  //   // If only one paragraph, treat as user message
+  //   if (paragraphs.length === 1) {
+  //     return [{
+  //       role: 'user',
+  //       content: paragraphs[0].trim()
+  //     }];
+  //   }
+  //   
+  //   // Group paragraphs into conversation blocks
+  //   const conversationBlocks = [];
+  //   let currentBlock = '';
+  //   let isInLongResponse = false;
+  //   
+  //   for (let i = 0; i < paragraphs.length; i++) {
+  //     const paragraph = paragraphs[i].trim();
+  //     if (!paragraph) continue;
+  //     
+  //     const lowerParagraph = paragraph.toLowerCase();
+  //     
+  //     // Check for metadata markers that indicate Grok responses
+  //     if (lowerParagraph.includes('web pages') || 
+  //         lowerParagraph.includes('search results') ||
+  //         lowerParagraph.includes('sources:')) {
+  //       
+  //       // If we were building a block, save it
+  //       if (currentBlock.trim()) {
+  //         conversationBlocks.push(currentBlock.trim());
+  //         currentBlock = '';
+  //       }
+  //       
+  //       // Start a new response block
+  //       isInLongResponse = true;
+  //       currentBlock = paragraph;
+  //       continue;
+  //     }
+  //     
+  //     // Check for likely question/command starts
+  //     const looksLikeQuestion = 
+  //       /^(what|how|why|when|where|who|can you|could you|please|help|i want|i need)/i.test(lowerParagraph) ||
+  //       paragraph.includes('?') ||
+  //       paragraph.length < 200;
+  //     
+  //     if (looksLikeQuestion && !isInLongResponse) {
+  //       // If we were building a block, save it
+  //       if (currentBlock.trim()) {
+  //         conversationBlocks.push(currentBlock.trim());
+  //       }
+  //       currentBlock = paragraph;
+  //     } else {
+  //       // Add to current block
+  //       if (currentBlock) {
+  //         currentBlock += '\n\n';
+  //       }
+  //       currentBlock += paragraph;
+  //       
+  //       // If this was a long paragraph, mark as potential response
+  //       if (paragraph.length > 200) {
+  //         isInLongResponse = true;
+  //       }
+  //     }
+  //     
+  //     // Reset long response flag if we see likely question markers
+  //     if (looksLikeQuestion) {
+  //       isInLongResponse = false;
+  //     }
+  //   }
+  //   
+  //   // Don't forget the last block
+  //   if (currentBlock.trim()) {
+  //     conversationBlocks.push(currentBlock.trim());
+  //   }
+  //   
+  //   // Now convert blocks to messages, alternating roles
+  //   let currentRole = 'user'; // Start with user
+  //   
+  //   for (let i = 0; i < conversationBlocks.length; i++) {
+  //     const content = conversationBlocks[i].trim();
+  //     if (!content) continue;
+  //     
+  //     const lowerContent = content.toLowerCase();
+  //     
+  //     // Determine role based on content analysis
+  //     let blockRole = currentRole;
+  //     
+  //     if (i === 0) {
+  //       // First block - check if it's a short question or long response
+  //       const isShortQuestion = content.length < 300 && 
+  //         (/\b(i want|help me|lets?|what|how|where|when|why|can you|should i|tell me)\b/i.test(lowerContent) || 
+  //          content.includes('?'));
+  //       blockRole = isShortQuestion ? 'user' : 'assistant';
+  //     } else {
+  //       // For subsequent blocks, use more sophisticated detection
+  //       const hasMetadata = lowerContent.includes('web pages') || 
+  //                          lowerContent.includes('search results') ||
+  //                          lowerContent.includes('sources:');
+  //                          
+  //       const looksLikeQuestion = content.length < 300 && 
+  //         (/\b(i want|help me|lets?|what|how|where|when|why|can you|should i|tell me)\b/i.test(lowerContent) || 
+  //          content.includes('?'));
+  //          
+  //       const looksLikeResponse = content.length > 300 ||
+  //         hasMetadata ||
+  //         /\b(here's|based on|according to|i found|the answer|to answer)\b/i.test(lowerContent);
+  //       
+  //       if (looksLikeQuestion && !looksLikeResponse) {
+  //         blockRole = 'user';
+  //       } else if (looksLikeResponse && !looksLikeQuestion) {
+  //         blockRole = 'assistant';
+  //       } else {
+  //         // If ambiguous, alternate roles
+  //         blockRole = currentRole === 'user' ? 'assistant' : 'user';
+  //       }
+  //     }
+  //     
+  //     messages.push({
+  //       role: blockRole,
+  //       content: content
+  //     });
+  //     
+  //     currentRole = blockRole === 'user' ? 'assistant' : 'user';
+  //   }
+  //   
+  //   return messages;
+  // }
 
   /**
    * Split Grok conversation by pattern recognition when normal splitting fails
