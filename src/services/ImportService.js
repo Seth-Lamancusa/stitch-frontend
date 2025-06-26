@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { getFirebaseAuth } from '../firebase.js';
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+const apiBaseUrl = '/api';
 
 // Helper function to get auth headers
 const getAuthHeaders = async () => {

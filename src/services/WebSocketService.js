@@ -1,5 +1,7 @@
 import store from '../store';
 
+const WS_BASE_URL = '/ws'
+
 const WebSocketService = {
   // Core state
   connection: null,
@@ -259,53 +261,26 @@ const WebSocketService = {
     
     // Create a new connection promise
     this.connectionPromise = new Promise((resolve, reject) => {
-      // Create WebSocket connection - use backend URL, not frontend
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://stitch-backend-659986757275.us-central1.run.app';
-      this.log(`Using API URL: ${apiUrl}`);
       
-      // Parse the URL to handle any path format
+      // Build WebSocket URL using current window location
       let wsUrl;
       try {
-        // Create URL object to easily work with parts
-        const apiUrlObj = new URL(apiUrl);
-        
-        // Switch protocol
-        apiUrlObj.protocol = apiUrlObj.protocol === 'https:' ? 'wss:' : 'ws:';
-        
-        // WebSocket endpoint should not have /api prefix
-        // Replace /api/ or /api in the pathname
-        apiUrlObj.pathname = apiUrlObj.pathname
-          .replace(/\/api\/?$/, '/') // Replace /api/ or /api at the end
-          .replace(/\/api\//, '/');  // Replace /api/ in the middle
-          
-        // Ensure pathname ends with /
-        if (!apiUrlObj.pathname.endsWith('/')) {
-          apiUrlObj.pathname += '/';
-        }
+        // Get current protocol and host from window.location
+        const isSecure = window.location.protocol === 'https:';
+        const wsProtocol = isSecure ? 'wss:' : 'ws:';
+        const host = window.location.host;
         
         // Generate a random view ID for this connection
         const viewId = `view_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
         
-        // Append WebSocket path with user token
-        wsUrl = `${apiUrlObj.toString()}ws/user/${token}/${viewId}`;
-        
-        // Clean up any double slashes (except in protocol)
-        wsUrl = wsUrl.replace(/([^:])\/\//g, '$1/');
+        // Construct WebSocket URL
+        wsUrl = `${wsProtocol}//${host}${WS_BASE_URL}/user/${token}/${viewId}`;
         
         this.log(`WebSocket URL constructed: ${wsUrl.replace(token, '[TOKEN]')}`);
       } catch (e) {
-        // Fallback if URL parsing fails
-        this.log(`Error parsing URL: ${e}. Using simple string manipulation.`);
-        const baseWsUrl = apiUrl
-          .replace('https://', 'wss://')
-          .replace('http://', 'ws://')
-          .replace(/\/api\/?$/, '') // Remove trailing /api or /api/
-          .replace(/\/api\//, '/'); // Replace /api/ in the path
-          
-        const viewId = `view_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-        wsUrl = `${baseWsUrl}/ws/user/${token}/${viewId}`;
-        
-        this.log(`WebSocket URL (fallback): ${wsUrl.replace(token, '[TOKEN]')}`);
+        this.log(`Error constructing WebSocket URL: ${e}`);
+        reject(new Error(`Failed to construct WebSocket URL: ${e.message}`));
+        return;
       }
       
       this.log(`Connecting to ${wsUrl.replace(token, '[TOKEN]')}`);
