@@ -6,6 +6,7 @@ import AdminView from './views/app_views/AdminView.vue';
 import UserManagementView from './views/app_views/UserManagementView.vue';
 import MessageManagementView from './views/app_views/MessageManagementView.vue';
 import NewThreadView from './views/app_views/NewThreadView.vue';
+import ImportView from './views/app_views/ImportView.vue';
 import HomeView from './views/info_views/HomeView.vue';
 import ArchitectureView from './views/info_views/ArchitectureView.vue';
 import RequestAccessView from './views/info_views/RequestAccessView.vue';
@@ -66,6 +67,11 @@ const routes = [
     path: '/new-thread',
     name: 'new-thread',
     component: NewThreadView
+  },
+  {
+    path: '/import',
+    name: 'import',
+    component: ImportView
   },
   {
     path: '/:id',
