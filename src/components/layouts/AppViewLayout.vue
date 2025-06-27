@@ -158,7 +158,8 @@ const handleTabClick = (tab) => {
   background: #000;
   position: fixed;
   top: 0;
-  width: 100%;
+  left: 0;
+  right: 0;
   z-index: 100;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
@@ -167,6 +168,7 @@ const handleTabClick = (tab) => {
   display: flex;
   align-items: center;
   gap: var(--space-lg, 24px);
+  flex-shrink: 0;
 }
 
 .branding {
@@ -216,6 +218,8 @@ const handleTabClick = (tab) => {
   display: flex;
   align-items: center;
   gap: var(--space-sm, 12px);
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .user-info {
