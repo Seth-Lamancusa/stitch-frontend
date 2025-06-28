@@ -72,15 +72,20 @@ Notes: There is currently no easy way to copy full conversations on mobile. Plea
           </ul>
         </div>
         
-        <button 
-          @click="importChatGPT"
-          :disabled="!canImport || isImporting"
-          class="import-button"
-          :class="{ 'importing': isImporting }"
-        >
-          <span v-if="!isImporting">Import Conversation</span>
-          <span v-else>Importing...</span>
-        </button>
+        <div class="import-button-container">
+          <button 
+            @click="importChatGPT"
+            :disabled="!canImport || isImporting"
+            class="import-button"
+            :class="{ 'importing': isImporting, 'disabled': !hasImportPermissions }"
+          >
+            <span v-if="!isImporting">Import Conversation</span>
+            <span v-else>Importing...</span>
+          </button>
+          <p v-if="!hasImportPermissions" class="permission-message">
+            {{ importPermissionMessage }}
+          </p>
+        </div>
       </div>
 
       <div v-else-if="activeImportTab === 'cursor'" class="import-panel">
@@ -173,15 +178,20 @@ Click &quot;Import Conversation&quot;"
           </ul>
         </div>
         
-        <button 
-          @click="importCursor"
-          :disabled="!canImport || isImporting"
-          class="import-button"
-          :class="{ 'importing': isImporting }"
-        >
-          <span v-if="!isImporting">Import Conversation</span>
-          <span v-else>Importing...</span>
-        </button>
+        <div class="import-button-container">
+          <button 
+            @click="importCursor"
+            :disabled="!canImport || isImporting"
+            class="import-button"
+            :class="{ 'importing': isImporting, 'disabled': !hasImportPermissions }"
+          >
+            <span v-if="!isImporting">Import Conversation</span>
+            <span v-else>Importing...</span>
+          </button>
+          <p v-if="!hasImportPermissions" class="permission-message">
+            {{ importPermissionMessage }}
+          </p>
+        </div>
       </div>
 
       <div v-else-if="activeImportTab === 'claude'" class="import-panel">
@@ -228,15 +238,20 @@ Click &quot;Import Conversation&quot;"
           </ul>
         </div>
         
-        <button 
-          @click="importClaude"
-          :disabled="!canImport || isImporting"
-          class="import-button"
-          :class="{ 'importing': isImporting }"
-        >
-          <span v-if="!isImporting">Import Conversation</span>
-          <span v-else>Importing...</span>
-        </button>
+        <div class="import-button-container">
+          <button 
+            @click="importClaude"
+            :disabled="!canImport || isImporting"
+            class="import-button"
+            :class="{ 'importing': isImporting, 'disabled': !hasImportPermissions }"
+          >
+            <span v-if="!isImporting">Import Conversation</span>
+            <span v-else>Importing...</span>
+          </button>
+          <p v-if="!hasImportPermissions" class="permission-message">
+            {{ importPermissionMessage }}
+          </p>
+        </div>
       </div>
 
       <div v-else-if="activeImportTab === 'gemini'" class="import-panel">
@@ -283,15 +298,20 @@ Click &quot;Import Conversation&quot;"
           </ul>
         </div>
         
-        <button 
-          @click="importGemini"
-          :disabled="!canImport || isImporting"
-          class="import-button"
-          :class="{ 'importing': isImporting }"
-        >
-          <span v-if="!isImporting">Import Conversation</span>
-          <span v-else>Importing...</span>
-        </button>
+        <div class="import-button-container">
+          <button 
+            @click="importGemini"
+            :disabled="!canImport || isImporting"
+            class="import-button"
+            :class="{ 'importing': isImporting, 'disabled': !hasImportPermissions }"
+          >
+            <span v-if="!isImporting">Import Conversation</span>
+            <span v-else>Importing...</span>
+          </button>
+          <p v-if="!hasImportPermissions" class="permission-message">
+            {{ importPermissionMessage }}
+          </p>
+        </div>
       </div>
 
       <!-- Temporarily disabled - no reliable way to distinguish messages -->
@@ -339,15 +359,20 @@ Click &quot;Import Conversation&quot;"
           </ul>
         </div>
         
-        <button 
-          @click="importGrok"
-          :disabled="!canImport || isImporting"
-          class="import-button"
-          :class="{ 'importing': isImporting }"
-        >
-          <span v-if="!isImporting">Import Conversation</span>
-          <span v-else>Importing...</span>
-        </button>
+        <div class="import-button-container">
+          <button 
+            @click="importGrok"
+            :disabled="!canImport || isImporting"
+            class="import-button"
+            :class="{ 'importing': isImporting, 'disabled': !hasImportPermissions }"
+          >
+            <span v-if="!isImporting">Import Conversation</span>
+            <span v-else>Importing...</span>
+          </button>
+          <p v-if="!hasImportPermissions" class="permission-message">
+            {{ importPermissionMessage }}
+          </p>
+        </div>
       </div> -->
 
       <div v-else class="import-panel">
@@ -444,8 +469,29 @@ const canInteract = computed(() => {
   return false;
 });
 
+// Computed property for import permissions
+const hasImportPermissions = computed(() => {
+  // First check if user is logged in
+  if (!user.value) {
+    return false;
+  }
+  
+  // Check if user has import or admin status
+  if (user.value.status === 'import' || user.value.status === 'admin') {
+    return true;
+  }
+  
+  return false;
+});
+
 // Computed property for import button state
 const canImport = computed(() => {
+  // First check import permissions
+  if (!hasImportPermissions.value) {
+    return false;
+  }
+  
+  // Then check content validation
   if (activeImportTab.value === 'cursor') {
     const hasContent = cursorFileContent.value.trim().length > 0 || importText.value.trim().length > 0;
     return hasContent && 
@@ -455,6 +501,17 @@ const canImport = computed(() => {
     return importText.value.trim().length > 0 && 
            parsedMessages.value.length > 0 && 
            importErrors.value.length === 0;
+  }
+});
+
+// Computed property for permission error message
+const importPermissionMessage = computed(() => {
+  if (!user.value) {
+    return 'You need to log in with import permissions to use this feature';
+  } else if (user.value.status === 'whitelisted') {
+    return 'You need import permissions to use this feature';
+  } else {
+    return 'Import permissions required';
   }
 });
 
@@ -1218,9 +1275,6 @@ const handleImportError = (error) => {
   cursor: pointer;
   transition: all var(--transition-fast);
   min-width: 160px;
-  align-self: center;
-  margin-top: var(--space-md);
-  margin-bottom: 50px;
 }
 
 .import-button:hover:not(:disabled) {
@@ -1239,6 +1293,33 @@ const handleImportError = (error) => {
 .import-button.importing {
   background-color: var(--color-accent);
   cursor: wait;
+}
+
+.import-button.disabled {
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.import-button-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  align-items: center;
+  margin-top: var(--space-md);
+  margin-bottom: 50px;
+}
+
+.permission-message {
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  margin: 0;
+  padding: var(--space-xs) var(--space-sm);
+  background-color: var(--color-surface-light);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  max-width: 300px;
 }
 
 .loading-overlay {

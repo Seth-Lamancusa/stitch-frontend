@@ -1,7 +1,8 @@
 <template>
   <AppViewLayout>
     <!-- Whitelist rejection notification -->
-    <div v-if="wasRejectedForWhitelist" class="whitelist-rejection-notice">
+    <div v-if="wasRejectedForWhitelist && !isRejectionNoticeDismissed" class="whitelist-rejection-notice">
+      <button @click="dismissRejectionNotice" class="close-button" title="Dismiss">×</button>
       <div class="rejection-content">
         <div class="rejection-icon">❌</div>
         <h4>Oh no! You aren't whitelisted.</h4>
@@ -15,7 +16,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, watch } from 'vue';
+import { computed, onMounted, watch, ref } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute } from 'vue-router';
 import AppViewLayout from '../../components/layouts/AppViewLayout.vue';
@@ -63,25 +64,70 @@ const user = computed(() => store.getters['auth/user']);
 
 // Check if user was recently rejected due to not being whitelisted
 const wasRejectedForWhitelist = computed(() => {
-  if (user.value) return false; // Don't show if user is logged in
-  
-  // Use Vuex store state instead of localStorage
+  // Only show banner if user was explicitly rejected for whitelist
+  // (they shouldn't be able to stay logged in if not whitelisted)
   return store.getters['auth/wasRejectedForWhitelist'];
 });
+
+// Track if the rejection notice has been dismissed
+const isRejectionNoticeDismissed = ref(false);
+
+// Watch for changes in wasRejectedForWhitelist to reset dismissal state
+watch(wasRejectedForWhitelist, (newValue, oldValue) => {
+  if (newValue) {
+    // Always reset dismissal state when rejection flag is set
+    // This ensures the banner shows for every failed login attempt
+    isRejectionNoticeDismissed.value = false;
+    console.log('[MessageListView] Rejection state changed, showing banner');
+  }
+});
+
+// Handler to dismiss the rejection notice
+const dismissRejectionNotice = () => {
+  isRejectionNoticeDismissed.value = true;
+};
 </script>
 
 <style scoped>
 /* Whitelist rejection notice styles */
 .whitelist-rejection-notice {
-  margin: 12px;
   padding: 0;
   border-radius: var(--radius-sm, 4px);
   background-color: #ff8a8aad;
   border: 1px solid rgba(255, 179, 0, 0.3);
   box-shadow: 0 2px 8px rgba(255, 179, 0, 0.1);
-  width: 70%;
-  margin: 0 auto;
-  margin-top: 56px;
+  width: 50%;
+  margin: var(--space-md, 16px) auto;
+  position: relative;
+}
+
+.close-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--color-text-inverse, #fff);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all var(--transition-fast, 0.2s);
+}
+
+.close-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+.close-button:active {
+  transform: scale(0.95);
 }
 
 .rejection-content {

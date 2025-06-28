@@ -9,7 +9,7 @@
         </div>
         
         <!-- Navigation Tabs -->
-        <div class="navigation-tabs" v-if="user">
+        <div class="navigation-tabs">
           <router-link 
             to="/public" 
             class="nav-tab"
@@ -18,22 +18,24 @@
           >
             Public
           </router-link>
-          <router-link 
-            to="/saved" 
-            class="nav-tab"
-            :class="{ 'active': activeTab === 'saved' }"
-            @click="handleTabClick('saved')"
-          >
-            Saved
-          </router-link>
-          <router-link 
-            to="/inbox" 
-            class="nav-tab"
-            :class="{ 'active': activeTab === 'inbox' }"
-            @click="handleTabClick('inbox')"
-          >
-            Inbox
-          </router-link>
+          <template v-if="user">
+            <router-link 
+              to="/saved" 
+              class="nav-tab"
+              :class="{ 'active': activeTab === 'saved' }"
+              @click="handleTabClick('saved')"
+            >
+              Saved
+            </router-link>
+            <router-link 
+              to="/inbox" 
+              class="nav-tab"
+              :class="{ 'active': activeTab === 'inbox' }"
+              @click="handleTabClick('inbox')"
+            >
+              Inbox
+            </router-link>
+          </template>
         </div>
       </div>
       
@@ -113,13 +115,26 @@ const handleLogin = async () => {
   isLoggingIn.value = true;
   try {
     await signInWithGoogle();
-    if (route.query.redirect) {
-      router.push(route.query.redirect);
-    } else {
-      router.push('/inbox');
+    
+    // Wait a moment for auth state to be processed
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // Check if user is still logged in and whitelisted
+    const currentUser = store.getters['auth/user'];
+    if (currentUser && ['admin', 'whitelisted'].includes(currentUser.status)) {
+      // User is whitelisted, redirect to inbox or original destination
+      if (route.query.redirect) {
+        router.push(route.query.redirect);
+      } else {
+        router.push('/inbox');
+      }
     }
+    // If user is not logged in or not whitelisted, 
+    // the auth store will have already handled the logout and redirect
   } catch (e) {
     console.error("Login error:", e);
+    // On authentication error, redirect to public page
+    router.push('/public');
   } finally {
     isLoggingIn.value = false;
   }
@@ -142,10 +157,10 @@ const handleTabClick = (tab) => {
 
 <style scoped>
 .app-layout {
-  display: block;
-  min-height: 100%;
+  display: grid;
+  grid-template-rows: 56px 1fr;
+  min-height: 100vh;
   background: var(--color-background, #fff);
-  overflow-y: auto;
 }
 
 .app-header {
@@ -156,10 +171,6 @@ const handleTabClick = (tab) => {
   height: 56px;
   border-bottom: 1px solid var(--color-border, #eee);
   background: #000;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
   z-index: 100;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
@@ -358,5 +369,6 @@ const handleTabClick = (tab) => {
 
 .main-content {
   padding: 6px;
+  overflow-y: auto;
 }
 </style> 

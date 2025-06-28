@@ -231,10 +231,17 @@ export default {
           await auth.signOut();
         }
         
-        // Clear user state and mark as rejected for whitelist
+        // Clear user state
         commit('SET_USER', null);
         commit('SET_AUTH_READY', true);
-        commit('SET_REJECTED_FOR_WHITELIST', true);
+        
+        // Ensure rejection state is properly cycled to trigger watchers
+        // First clear it, then set it to ensure the change is detected
+        commit('SET_REJECTED_FOR_WHITELIST', false);
+        setTimeout(() => {
+          commit('SET_REJECTED_FOR_WHITELIST', true);
+        }, 0);
+        
         localStorage.removeItem('auth_token');
         
         // Store the notification message in localStorage to survive the redirect
@@ -246,10 +253,10 @@ export default {
         localStorage.setItem('pending_notification', JSON.stringify(notificationData));
         console.log('Stored pending notification:', notificationData);
         
-        // Redirect to the Request Whitelist page
-        if (window.location.pathname !== '/inbox') {
-          console.log('Redirecting to /inbox');
-          window.location.href = '/inbox';
+        // Redirect to the public page to show whitelist rejection banner
+        if (window.location.pathname !== '/public') {
+          console.log('Redirecting to /public');
+          window.location.href = '/public';
         }
       } catch (error) {
         console.error('Error during force logout:', error);

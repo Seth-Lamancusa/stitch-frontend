@@ -22,7 +22,7 @@ export function useAuthentication() {
 
   /**
    * Initiates Google authentication flow
-   * On success, updates store and navigates to chat
+   * The auth store will handle validation and redirect logic
    */
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
@@ -31,9 +31,11 @@ export function useAuthentication() {
       const auth = getFirebaseAuth();
       const result = await signInWithPopup(auth, provider);
       
-      router.push('/chat');
+      // The auth store's validateUser will handle the rest
+      // including potential logout and redirect for non-whitelisted users
     } catch (e) {
       error.value = e.message;
+      throw e; // Re-throw to let the caller handle it
     }
   };
 
