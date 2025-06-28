@@ -13,7 +13,28 @@
       <div class="import-hint">
         Want to stitch an existing conversation?
         <br>
-        <router-link to="/import" class="import-link">Import from your other apps.</router-link>
+        <!-- Show import link for users with import or admin status -->
+        <router-link 
+          v-if="user && (user.status === 'import' || user.status === 'admin')" 
+          to="/import" 
+          class="import-link"
+        >
+          Import from your other apps.
+        </router-link>
+        <!-- Show message for whitelisted users without import permissions -->
+        <span 
+          v-else-if="user && user.status === 'whitelisted'" 
+          class="import-disabled-message"
+        >
+          You need import permissions to use this feature.
+        </span>
+        <!-- Fallback for users not logged in or other statuses -->
+        <span 
+          v-else 
+          class="import-disabled-message"
+        >
+          Log in with import permissions to use this feature.
+        </span>
       </div>
     </div>
     
@@ -222,6 +243,11 @@ const handleSendError = (error) => {
 .import-link:hover {
   color: var(--color-primary-dark);
   text-decoration: underline;
+}
+
+.import-disabled-message {
+  color: var(--color-text-secondary);
+  font-weight: 500;
 }
 
 .loading-overlay {
