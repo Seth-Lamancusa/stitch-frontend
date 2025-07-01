@@ -458,7 +458,7 @@ const formatDetection = ref({ format: 'unknown', confidence: 0, hint: '' });
 // Computed properties from store
 const user = computed(() => store.getters['auth/user']);
 const canInteract = computed(() => {
-  if (user.value?.status === 'admin' || user.value?.status === 'whitelisted') {
+  if (user.value?.status === 'admin' || user.value?.status === 'whitelisted' || user.value?.status === 'import') {
     return true;
   }
   
@@ -720,7 +720,7 @@ const importChatGPT = async () => {
     if (error.response?.status === 429) {
       errorMessage = error.response.data?.detail || 'You have exceeded the import rate limit. Please try again later.';
     } else if (error.response?.status === 403) {
-      errorMessage = 'You do not have permission to import conversations. Only whitelisted users and admins can import.';
+      errorMessage = 'You do not have permission to import conversations. Only whitelisted users, admins, and import users can import.';
     } else if (error.response?.status === 400) {
       errorMessage = error.response.data?.detail || 'Invalid conversation format.';
     } else if (error.response?.data?.detail) {
@@ -844,7 +844,7 @@ const handleImportError = (error) => {
   if (error.response?.status === 429) {
     errorMessage = error.response.data?.detail || 'You have exceeded the import rate limit. Please try again later.';
   } else if (error.response?.status === 403) {
-    errorMessage = 'You do not have permission to import conversations. Only whitelisted users and admins can import.';
+    errorMessage = 'You do not have permission to import conversations. Only whitelisted users, admins, and import users can import.';
   } else if (error.response?.status === 400) {
     errorMessage = error.response.data?.detail || 'Invalid conversation format.';
   } else if (error.response?.data?.detail) {

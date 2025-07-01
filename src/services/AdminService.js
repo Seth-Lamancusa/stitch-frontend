@@ -81,7 +81,7 @@ class AdminService {
 
   async getMetrics() {
     try {
-      const response = await this.client.get('/metrics/readable');
+      const response = await this.client.get('/metrics');
       return {
         metrics: response.data,
         success: true

@@ -95,7 +95,7 @@ const canInteract = computed(() => {
   );
   
   // First priority: direct user status check
-  if (user.value?.status === 'admin' || user.value?.status === 'whitelisted') {
+  if (user.value?.status === 'admin' || user.value?.status === 'whitelisted' || user.value?.status === 'import') {
     return true;
   }
   

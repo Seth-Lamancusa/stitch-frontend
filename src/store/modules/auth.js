@@ -58,7 +58,7 @@ export default {
     async validateUser({ commit }, firebaseUser) {
       try {
         const token = await firebaseUser.getIdToken();
-        const response = await fetch('/api/users/me', {
+        const response = await fetch('/api/users/login', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -73,7 +73,7 @@ export default {
             console.log('User not in database, forcing logout');
             await this.dispatch('auth/forceLogoutWithMessage');
             return;
-          } else if (!userData.status || !['whitelisted', 'admin'].includes(userData.status)) {
+          } else if (!userData.status || !['whitelisted', 'admin', 'import'].includes(userData.status)) {
             // User has invalid status - auto-logout
             console.log('User has invalid status, forcing logout');
             await this.dispatch('auth/forceLogoutWithMessage');
@@ -275,13 +275,13 @@ export default {
     authReady: state => state.authReady,
     wasRejectedForWhitelist: state => state.wasRejectedForWhitelist,
     isAdmin: state => state.user?.status === 'admin',
-    isWhitelisted: state => state.user && ['whitelisted', 'admin'].includes(state.user.status),
+    isWhitelisted: state => state.user && ['whitelisted', 'admin', 'import'].includes(state.user.status),
     // Check if user has any platform access (whitelisted or admin)
     hasPlatformAccess: state => {
-      return state.user && ['whitelisted', 'admin'].includes(state.user.status);
+      return state.user && ['whitelisted', 'admin', 'import'].includes(state.user.status);
     },
     
     // Legacy getters for backward compatibility
-    canInteract: state => state.user && ['whitelisted', 'admin'].includes(state.user.status)
+    canInteract: state => state.user && ['whitelisted', 'admin', 'import'].includes(state.user.status)
   }
 }
