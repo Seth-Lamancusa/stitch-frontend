@@ -316,10 +316,58 @@ const handleSendError = (error) => {
 /* Responsive styles */
 @media (max-width: 768px) {
   .messages-container {
-    padding-left: 16px;
-    padding-right: 16px;
-    margin-bottom: 60px;
+    padding-left: 12px;
+    padding-right: 12px;
+    margin-bottom: 70px;
     max-height: calc(100vh - 120px);
+  }
+  
+  .import-hint {
+    width: 90%;
+    margin: 60px auto;
+    padding: var(--space-md);
+    font-size: calc(var(--font-size-sm));
+  }
+  
+  .thread-header {
+    padding: var(--space-xs) var(--space-sm);
+  }
+  
+  .back-button {
+    padding: 4px 8px;
+    font-size: calc(var(--font-size-sm) - 1px);
+  }
+  
+  .thread-title {
+    font-size: var(--font-size-md);
+  }
+}
+
+@media (max-width: 480px) {
+  .messages-container {
+    padding-left: 8px;
+    padding-right: 8px;
+    margin-bottom: 80px;
+  }
+  
+  .import-hint {
+    width: 96%;
+    margin: 40px auto;
+    padding: var(--space-sm);
+    font-size: calc(var(--font-size-sm) - 1px);
+  }
+  
+  .thread-header {
+    padding: 6px 8px;
+  }
+  
+  .back-button {
+    padding: 3px 6px;
+    font-size: calc(var(--font-size-xs));
+  }
+  
+  .thread-title {
+    font-size: calc(var(--font-size-md) - 1px);
   }
 }
 
