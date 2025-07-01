@@ -2363,11 +2363,7 @@ export default {
     margin: 0 4px; /* Add small margins */
   }
   
-  /* Add bottom padding when sibling navigator is present to avoid overlap */
-  .message-node:has(> .sibling-navigator) .message-content,
-  .message-node > .sibling-navigator ~ .message-content {
-    padding-bottom: calc(var(--space-sm) + 32px); /* Space for corner navigation buttons */
-  }
+  /* No extra padding needed - navigation is now inline with action buttons */
   
   .message-body {
     word-break: break-word;
@@ -2789,11 +2785,7 @@ export default {
     margin: 0 2px; /* Minimal margins */
   }
   
-  /* Adjust bottom padding for even smaller navigation buttons */
-  .message-node:has(> .sibling-navigator) .message-content,
-  .message-node > .sibling-navigator ~ .message-content {
-    padding-bottom: calc(var(--space-xs) + 28px); /* Space for smaller corner navigation buttons */
-  }
+  /* Navigation buttons are inline - no special padding needed */
   
   .message-header {
     gap: 4px; /* Reduce header gaps */

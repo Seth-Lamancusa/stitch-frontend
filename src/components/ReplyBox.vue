@@ -5,6 +5,8 @@
       v-if="isReplying || isNewThread" 
       class="reply-backdrop"
       @click="handleBackdropClick"
+      @touchstart.passive="handleBackdropTouchStart"
+      @touchmove.passive="handleBackdropTouchMove"
     ></div>
     
     <!-- Bottom sheet -->
@@ -31,39 +33,26 @@
         <div class="reply-sheet__header-left">
           <span class="reply-sheet__title">{{ replyHeaderText }}</span>
         </div>
-        <div class="reply-sheet__header-right">
-          <!-- Segmented control for Public/Private -->
-          <div class="visibility-control" role="radiogroup" aria-label="Message visibility">
-            <button
-              class="visibility-control__option"
-              :class="{ 'visibility-control__option--active': isPublic }"
-              @click="setVisibility(true)"
-              :disabled="!canInteract"
-              role="radio"
-              :aria-checked="isPublic"
-              aria-label="Public message"
-            >
-              Public
-            </button>
-            <button
-              class="visibility-control__option"
-              :class="{ 'visibility-control__option--active': !isPublic }"
-              @click="setVisibility(false)"
-              :disabled="!canInteract"
-              role="radio"
-              :aria-checked="!isPublic"
-              aria-label="Private message"
-            >
-              Private
-            </button>
-          </div>
-        </div>
       </div>
       
-      <!-- Meta row with uniform ghost pills -->
-      <div class="reply-sheet__meta">
+      <!-- Controls toolbar above input -->
+      <div class="reply-sheet__toolbar">
+        <!-- Public/Private dropdown -->
+        <div class="toolbar-control">
+          <select 
+            v-model="isPublic" 
+            class="visibility-dropdown"
+            :disabled="!canInteract"
+            aria-label="Message visibility"
+          >
+            <option :value="true">Public</option>
+            <option :value="false">Private</option>
+          </select>
+        </div>
+        
+        <!-- Recipients button -->
         <button 
-          class="meta-pill" 
+          class="toolbar-control meta-pill" 
           @click="toggleRecipientSelector"
           :disabled="!canInteract"
           :aria-expanded="showRecipientSelector"
@@ -73,15 +62,16 @@
           <span class="meta-pill__text">Recipients ({{ recipients.length }})</span>
         </button>
         
+        <!-- Add bots button -->
         <button 
-          class="meta-pill" 
+          class="toolbar-control meta-pill" 
           @click="toggleChatbotSelector"
           :disabled="!canInteract"
           :aria-expanded="showChatbotSelector"
           aria-label="Add chatbots"
         >
           <span class="meta-pill__icon">🤖</span>
-          <span class="meta-pill__text">Add bots</span>
+          <span class="meta-pill__text">+ Add bots</span>
         </button>
       </div>
       
@@ -413,9 +403,6 @@ const replyHeaderText = computed(() => {
 });
 
 // Methods
-const setVisibility = (isPublic) => {
-  store.dispatch('navigation/updateReplyVisibility', isPublic);
-};
 
 const ensureReplyingActive = () => {
   if (!isReplying.value && props.targetId) {
@@ -447,8 +434,42 @@ const hideBottomSheet = () => {
   }
 };
 
-const handleBackdropClick = () => {
-  hideBottomSheet();
+// Track touch movement to distinguish between tap and scroll
+let touchStartY = 0;
+let touchMoveDistance = 0;
+
+const handleBackdropTouchStart = (event) => {
+  touchStartY = event.touches[0].clientY;
+  touchMoveDistance = 0;
+};
+
+const handleBackdropTouchMove = (event) => {
+  if (touchStartY) {
+    touchMoveDistance = Math.abs(event.touches[0].clientY - touchStartY);
+  }
+};
+
+const handleBackdropClick = (event) => {
+  // On mobile, only close if clicking outside the reply sheet and not scrolling
+  if (window.innerWidth <= 768) {
+    // Check if this was a scroll gesture (moved more than 10px)
+    if (touchMoveDistance > 10) {
+      touchMoveDistance = 0;
+      return;
+    }
+    
+    // Check if the click is actually outside the reply sheet
+    const replySheetElement = replySheet.value;
+    if (replySheetElement && !replySheetElement.contains(event.target)) {
+      hideBottomSheet();
+    }
+  } else {
+    // On desktop, any backdrop click closes
+    hideBottomSheet();
+  }
+  
+  // Reset touch tracking
+  touchMoveDistance = 0;
 };
 
 // Touch gesture handlers
@@ -1086,46 +1107,61 @@ defineExpose({
   flex-shrink: 0;
 }
 
-/* Segmented control for visibility */
-.visibility-control {
+
+
+/* Controls toolbar */
+.reply-sheet__toolbar {
   display: flex;
-  background-color: var(--color-surface-light);
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-surface-light, var(--color-surface));
+}
+
+/* Toolbar controls */
+.toolbar-control {
+  flex-shrink: 0;
+}
+
+/* Visibility dropdown */
+.visibility-dropdown {
+  appearance: none;
+  background: transparent;
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  overflow: hidden;
-}
-
-.visibility-control__option {
-  padding: 6px 12px;
-  background: none;
-  border: none;
-  color: var(--color-text-secondary);
+  padding: 8px 12px;
   font-size: var(--font-size-sm);
   font-weight: 500;
+  color: var(--color-text);
   cursor: pointer;
   transition: all 0.2s ease;
-  position: relative;
+  min-height: 36px;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 8px center;
+  background-repeat: no-repeat;
+  background-size: 16px;
+  padding-right: 32px;
 }
 
-.visibility-control__option--active {
-  background-color: var(--color-primary);
-  color: var(--color-text-inverse);
+.visibility-dropdown:hover:not(:disabled) {
+  background-color: var(--color-hover-overlay);
+  border-color: var(--color-border-hover);
 }
 
-.visibility-control__option:disabled {
+.visibility-dropdown:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 79, 140, 255), 0.2);
+}
+
+.visibility-dropdown:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-/* Meta row */
-.reply-sheet__meta {
-  display: flex;
-  gap: 8px;
-  padding: 0 16px 12px;
-  flex-shrink: 0;
-}
-
-/* Uniform ghost pills */
+/* Uniform ghost pills for toolbar */
 .meta-pill {
   display: flex;
   align-items: center;
@@ -1266,6 +1302,11 @@ defineExpose({
     display: none !important;
   }
   
+  /* Remove background dimming on mobile - keep transparent but allow clicks outside reply sheet */
+  .reply-backdrop {
+    background-color: transparent;
+  }
+  
   .reply-sheet {
     border-radius: 0;
     border-top-left-radius: 16px;
@@ -1290,9 +1331,16 @@ defineExpose({
     font-size: var(--font-size-sm);
   }
   
-  .visibility-control__option {
-    padding: 4px 8px;
+  .reply-sheet__toolbar {
+    padding: 0 12px 8px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  
+  .visibility-dropdown {
     font-size: var(--font-size-xs);
+    padding: 6px 24px 6px 8px;
+    min-height: 32px;
   }
   
   .meta-pill {
@@ -1763,6 +1811,30 @@ defineExpose({
   height: 16px;
   cursor: pointer;
   accent-color: var(--color-primary);
+  position: relative;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 2px solid var(--color-border);
+  border-radius: 3px;
+  background-color: var(--color-surface);
+  transition: all 0.2s ease;
+}
+
+.chatbot-toggle input[type="checkbox"]:checked {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.chatbot-toggle input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: black;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 1;
 }
 
 /* OLD MOBILE STYLES MOVED TO DESKTOP-ONLY SECTION ABOVE */
