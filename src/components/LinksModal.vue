@@ -525,4 +525,108 @@ const addSelectedLinks = async () => {
   transform: translateX(20px);
 }
 
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  .modal-container {
+    width: 95%;
+    max-width: none;
+    max-height: 90vh;
+  }
+  
+  .modal-content {
+    padding: var(--space-md);
+  }
+  
+  .modal-header {
+    padding: var(--space-sm) var(--space-md);
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+  }
+  
+  .header-left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-xs);
+  }
+  
+  .tab-button {
+    padding: var(--space-sm) var(--space-md);
+    font-size: calc(var(--font-size-sm) - 1px);
+  }
+  
+  .add-link-section {
+    padding: var(--space-md);
+  }
+  
+  .add-link-button {
+    padding: var(--space-xs) var(--space-md);
+    font-size: calc(var(--font-size-sm) - 1px);
+  }
+  
+  .modal-footer {
+    padding: var(--space-sm) var(--space-md);
+    gap: var(--space-xs);
+  }
+  
+  .close-btn, .cancel-btn, .add-btn {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: calc(var(--font-size-sm) - 1px);
+    min-width: 70px;
+    height: 32px;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-container {
+    width: 98%;
+    max-height: 95vh;
+    margin: 1% 1%;
+  }
+  
+  .modal-content {
+    padding: var(--space-sm);
+  }
+  
+  .modal-header {
+    padding: var(--space-xs) var(--space-sm);
+  }
+  
+  .modal-header h3 {
+    font-size: var(--font-size-md);
+  }
+  
+  .tab-navigation {
+    flex-direction: column;
+  }
+  
+  .tab-button {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: calc(var(--font-size-xs));
+  }
+  
+  .add-link-section {
+    padding: var(--space-sm);
+  }
+  
+  .toggle-container {
+    gap: var(--space-sm);
+  }
+  
+  .toggle-label {
+    font-size: calc(var(--font-size-xs));
+  }
+  
+  .modal-footer {
+    flex-direction: column;
+    gap: var(--space-xs);
+  }
+  
+  .close-btn, .cancel-btn, .add-btn {
+    width: 100%;
+    padding: var(--space-xs);
+    min-width: unset;
+    height: 36px;
+  }
+}
+
 </style>

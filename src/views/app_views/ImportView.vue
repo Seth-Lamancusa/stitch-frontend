@@ -1483,12 +1483,12 @@ const handleImportError = (error) => {
 /* Responsive styles */
 @media (max-width: 768px) {
   .import-content {
-    padding: var(--space-md);
+    padding: var(--space-sm);
     max-width: 100%;
   }
   
   .service-selector-container {
-    padding: var(--space-md);
+    padding: var(--space-sm);
   }
   
   .service-dropdown {
@@ -1496,18 +1496,108 @@ const handleImportError = (error) => {
   }
   
   .import-textarea {
-    min-height: 150px;
-    max-height: 250px;
+    min-height: 120px;
+    max-height: 200px;
+    padding: var(--space-sm);
+    font-size: calc(var(--font-size-sm));
   }
   
   .import-button {
     width: 100%;
     margin-top: var(--space-md);
+    padding: var(--space-sm);
   }
   
   .preview-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+  
+  .import-header {
+    padding: var(--space-xs) var(--space-sm);
+  }
+  
+  .back-button {
+    padding: 4px 8px;
+    font-size: calc(var(--font-size-sm) - 1px);
+  }
+  
+  .import-title {
+    font-size: var(--font-size-md);
+  }
+  
+  .import-preview {
+    padding: var(--space-sm);
+  }
+  
+  .preview-messages {
+    max-height: 200px;
+  }
+  
+  .file-upload-label {
+    padding: var(--space-sm);
+    min-height: 50px;
+  }
+}
+
+@media (max-width: 480px) {
+  .import-content {
+    padding: var(--space-xs);
+  }
+  
+  .service-selector-container {
+    padding: var(--space-xs) var(--space-sm);
+  }
+  
+  .import-textarea {
+    min-height: 100px;
+    max-height: 150px;
+    padding: var(--space-xs);
+    font-size: calc(var(--font-size-sm) - 1px);
+  }
+  
+  .import-header {
+    padding: 6px 8px;
+  }
+  
+  .back-button {
+    padding: 3px 6px;
+    font-size: calc(var(--font-size-xs));
+  }
+  
+  .import-title {
+    font-size: calc(var(--font-size-md) - 1px);
+  }
+  
+  .import-panel h3 {
+    font-size: var(--font-size-lg);
+  }
+  
+  .import-preview {
+    padding: var(--space-xs);
+  }
+  
+  .preview-messages {
+    max-height: 150px;
+  }
+  
+  .format-detection {
+    flex-direction: column;
+    gap: 4px;
+    text-align: center;
+  }
+  
+  .loading-content {
+    width: 96%;
+    padding: var(--space-md);
+  }
+  
+  .loading-message {
+    font-size: var(--font-size-md);
+  }
+  
+  .loading-submessage {
+    font-size: calc(var(--font-size-sm) - 1px);
   }
 }
 

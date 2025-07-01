@@ -186,11 +186,12 @@
       </div>
       
       <div class="message-footer">
-        <div class="message-actions">
-          <div class="reply-count">
-            {{ totalReplies }} {{ totalReplies === 1 ? 'reply' : 'replies' }}
-          </div>
-          
+        <div class="reply-count">
+          {{ totalReplies }} {{ totalReplies === 1 ? 'reply' : 'replies' }}
+        </div>
+        
+        <!-- Desktop message actions - hidden on mobile -->
+        <div class="message-actions desktop-actions">
           <!-- Add reply button, but hide it in list view -->
           <button 
             v-if="!inListView"
@@ -201,20 +202,6 @@
             <span class="reply-icon">↩️</span>
             Reply
           </button>
-          
-          <!-- Add reformat button -->
-          <!-- <button 
-            v-if="!inListView"
-            @click.stop="handleReformat" 
-            class="reformat-button"
-            :class="{ 'loading': isReformatting }"
-            :disabled="isReformatting"
-            title="Reformat this message according to Stitch guidelines"
-          >
-            <span v-if="isReformatting" class="loading-indicator"></span>
-            <span v-else class="reformat-icon">✨</span>
-            Reformat
-          </button> -->
           
           <!-- Copy JSON Button - Admin only -->
           <button 
@@ -268,7 +255,82 @@
             <span class="links-icon">🔗</span>
             Links
           </button>
+        </div>
+      </div>
+      
+      <!-- Mobile floating action controls - only shown on mobile -->
+      <div v-if="!inListView" class="mobile-action-controls">
+        <!-- Persistent Reply Button -->
+        <button 
+          @click.stop="$emit('reply', message.id)"
+          class="mobile-reply-button"
+          title="Reply to this message"
+        >
+          <span class="reply-icon">↩️</span>
+        </button>
+        
+        <!-- Visual Discovery Hint -->
+        <button 
+          @click.stop="toggleActionBar"
+          class="action-hint-button"
+          :class="{ 'active': showActionBar }"
+          title="More actions"
+        >
+          <span class="hint-icon">⋯</span>
+        </button>
+        
+        <!-- Floating Action Bar -->
+        <div 
+          class="floating-action-bar" 
+          :class="{ 'active': showActionBar }"
+          @click.stop
+          @touchstart.stop="handleActionBarTouchStart"
+          @touchmove.stop="handleActionBarTouchMove"
+          @touchend.stop="handleActionBarTouchEnd"
+        >
+          <!-- Copy Text Button -->
+          <button 
+            @click.stop="copyMessageText" 
+            class="fab-button text-button"
+            :class="{ 'copied': isTextCopied }"
+            title="Copy message text with metadata to clipboard"
+          >
+            <span v-if="isTextCopied" class="copied-icon">✓</span>
+            <span v-else class="text-icon">📝</span>
+          </button>
           
+          <!-- Save/Bookmark Button -->
+          <button 
+            @click.stop="toggleSaveMessage" 
+            class="fab-button save-button"
+            :class="{ 'saved': isMessageSaved }"
+            :disabled="isSavingMessage"
+            :title="isMessageSaved ? 'Remove bookmark' : 'Bookmark this message'"
+          >
+            <span v-if="isSavingMessage" class="loading-indicator"></span>
+            <span v-else class="bookmark-icon">🔖</span>
+          </button>
+          
+          <!-- Links Button -->
+          <button 
+            @click.stop="openLinksModal" 
+            class="fab-button links-button"
+            title="View links in this message"
+          >
+            <span class="links-icon">🔗</span>
+          </button>
+          
+          <!-- Copy JSON Button - Admin only -->
+          <button 
+            v-if="isAdmin"
+            @click.stop="copyMessageJson" 
+            class="fab-button json-button"
+            :class="{ 'copied': isJsonCopied }"
+            title="Copy message JSON to clipboard"
+          >
+            <span v-if="isJsonCopied" class="copied-icon">✓</span>
+            <span v-else class="json-icon">{ }</span>
+          </button>
         </div>
       </div>
     </div>
@@ -476,6 +538,14 @@ export default {
     // Add refs for save button state
     const isMessageSaved = ref(false);
     const isSavingMessage = ref(false);
+    
+    // Mobile floating action bar state - using global store
+    const actionBarTimeout = ref(null);
+    const actionBarTouchStartY = ref(0);
+    const actionBarTouchMoveY = ref(0);
+    
+    // Global action bar state from store
+    const showActionBar = computed(() => store.getters['navigation/isActionBarOpen'](props.message.id));
     
     // Message click handler - handles selection vs navigation
     const handleMessageClick = () => {
@@ -1170,6 +1240,93 @@ export default {
       isMobile.value = window.innerWidth <= 768;
     };
     
+    // Handle viewport changes for keyboard detection
+    const handleViewportChange = () => {
+      if (!isMobile.value) return;
+      
+      // If action bar is open and viewport height decreased significantly, 
+      // it's likely the keyboard opened - hide the action bar
+      const currentHeight = window.innerHeight;
+      const expectedHeight = window.screen.height;
+      const heightDifference = expectedHeight - currentHeight;
+      
+      // If height difference is more than 150px, likely keyboard is open
+      if (heightDifference > 150 && showActionBar.value) {
+        hideActionBar();
+      }
+    };
+    
+    // Mobile floating action bar methods
+    const toggleActionBar = () => {
+      // Get current state before toggling
+      const wasOpen = showActionBar.value;
+      
+      // Use the global store action to toggle this message's action bar
+      store.dispatch('navigation/toggleActionBar', props.message.id);
+      
+      // Handle auto-hide timeout based on new state (opposite of what it was)
+      if (!wasOpen) {
+        // Action bar was closed, now it's open - set timeout
+        // Clear any existing timeout first
+        if (actionBarTimeout.value) {
+          clearTimeout(actionBarTimeout.value);
+        }
+        
+        // Set timeout to auto-hide after 4 seconds
+        actionBarTimeout.value = setTimeout(() => {
+          store.dispatch('navigation/hideActionBar', props.message.id);
+        }, 4000);
+      } else {
+        // Action bar was open, now it's closed - clear timeout
+        if (actionBarTimeout.value) {
+          clearTimeout(actionBarTimeout.value);
+          actionBarTimeout.value = null;
+        }
+      }
+    };
+    
+    const hideActionBar = () => {
+      // Use the global store action to hide this message's action bar
+      store.dispatch('navigation/hideActionBar', props.message.id);
+      if (actionBarTimeout.value) {
+        clearTimeout(actionBarTimeout.value);
+        actionBarTimeout.value = null;
+      }
+    };
+    
+    // Handle touch events for swipe down to dismiss
+    const handleActionBarTouchStart = (e) => {
+      actionBarTouchStartY.value = e.touches[0].clientY;
+    };
+    
+    const handleActionBarTouchMove = (e) => {
+      actionBarTouchMoveY.value = e.touches[0].clientY;
+    };
+    
+    const handleActionBarTouchEnd = (e) => {
+      const swipeDistance = actionBarTouchMoveY.value - actionBarTouchStartY.value;
+      const swipeThreshold = 30; // pixels
+      
+      // If swiped down more than threshold, hide action bar
+      if (swipeDistance > swipeThreshold) {
+        hideActionBar();
+      }
+    };
+    
+    // Handle outside clicks to hide action bar
+    const handleActionBarOutsideClick = (event) => {
+      if (!showActionBar.value) return;
+      
+      // Check if the click is outside the action bar and hint button
+      const actionBarElement = event.target.closest('.floating-action-bar');
+      const hintButtonElement = event.target.closest('.action-hint-button');
+      const replyButtonElement = event.target.closest('.mobile-reply-button');
+      
+      if (!actionBarElement && !hintButtonElement && !replyButtonElement) {
+        hideActionBar();
+      }
+    };
+    
     // Computed style for swipe effect - horizontal deck-like movement
     const swipeStyle = computed(() => {
       if (!isBeingSwiped.value || swipeProgress.value === 0) {
@@ -1277,12 +1434,14 @@ export default {
       // Initialize save state from message data
       initializeSaveState();
       
-      // Listen for clicks to handle dropdown closing
+      // Listen for clicks to handle dropdown closing and action bar outside clicks
       document.addEventListener('click', handleClickOutside);
+      document.addEventListener('click', handleActionBarOutsideClick);
       
       // Check if we're on mobile
       checkMobileDevice();
       window.addEventListener('resize', checkMobileDevice);
+      window.addEventListener('resize', handleViewportChange);
       
       // Add touch events for mobile swipe navigation - only if we have siblings
       if (messageContentRef.value) {
@@ -1294,7 +1453,19 @@ export default {
     
     onBeforeUnmount(() => {
       document.removeEventListener('click', handleClickOutside);
+      document.removeEventListener('click', handleActionBarOutsideClick);
       window.removeEventListener('resize', checkMobileDevice);
+      window.removeEventListener('resize', handleViewportChange);
+      
+      // Clean up action bar timeout
+      if (actionBarTimeout.value) {
+        clearTimeout(actionBarTimeout.value);
+      }
+      
+      // Close this message's action bar if it's open
+      if (showActionBar.value) {
+        store.dispatch('navigation/hideActionBar', props.message.id);
+      }
       
       // Clean up touch event listeners
       if (messageContentRef.value) {
@@ -1364,7 +1535,15 @@ export default {
       toggleSaveMessage,
       openLinksModal,
       handleMessageClick,
-      handleSelectionToggle
+      handleSelectionToggle,
+      // Mobile floating action bar
+      showActionBar,
+      toggleActionBar,
+      hideActionBar,
+      handleActionBarTouchStart,
+      handleActionBarTouchMove,
+      handleActionBarTouchEnd,
+      handleViewportChange
     };
   },
   
@@ -1841,6 +2020,11 @@ export default {
   flex-wrap: wrap;
 }
 
+/* Mobile action controls - hidden on desktop */
+.mobile-action-controls {
+  display: none;
+}
+
 /* Modal styles */
 .modal-overlay {
   position: fixed;
@@ -2165,6 +2349,25 @@ export default {
     transition: transform 0.02s linear, opacity 0.02s linear;
     z-index: 1;
     background-color: var(--color-surface);
+    padding: var(--space-sm) var(--space-md); /* Reduce padding for mobile */
+    margin: 0 4px; /* Add small margins */
+  }
+  
+  .message-body {
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: 100%;
+  }
+  
+  .author-info {
+    flex-wrap: wrap;
+    max-width: 70%; /* Prevent username overflow */
+  }
+  
+  .message-author, .author-user-tag {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   
   .message-header {
@@ -2176,50 +2379,168 @@ export default {
     gap: 8px;
   }
   
-  /* Make the action buttons more consistent and clean for mobile */
-  .message-actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    width: 100%;
-    margin-top: 4px;  /* Reduced from 12px to move buttons up */
-    gap: 8px;
+  /* Hide desktop actions on mobile */
+  .desktop-actions {
+    display: none;
   }
   
-  /* Button container that holds all action buttons */
-  .message-actions {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
+  /* Mobile action controls container */
+  .mobile-action-controls {
+    display: flex !important; /* Override desktop display: none */
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    z-index: 10;
     gap: 8px;
-    align-items: start;  /* Align items to the top */
+    align-items: flex-end;
   }
   
-  /* All action buttons share same consistent styling */
-  .reply-button,
-  /* .reformat-button, */
-  .text-button,
-  .json-button,
-  .save-button {
-    width: 100%;
-    padding: 4px 2px;  /* Reduced padding */
-    border-radius: var(--radius-sm);
-    font-size: calc(var(--font-size-xs) - 1px);
+  /* Persistent Reply Button - Always visible */
+  .mobile-reply-button {
+    min-width: 44px;
+    min-height: 44px;
+    background-color: var(--color-primary);
+    color: var(--color-text-inverse);
+    border: none;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    background-color: var(--color-surface);
-    border: 1px solid var(--color-border);
-    height: 28px;  /* Reduced from 32px */
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all var(--transition-fast);
+    font-size: 16px;
+    z-index: 12;
   }
   
-  /* Put reply count in its own row */
-  .reply-count {
-    grid-column: 1 / -1;
-    margin-bottom: 0px;  /* Reduced from 5px to bring buttons closer */
-    text-align: left;
-    font-size: var(--font-size-xs);
+  .mobile-reply-button:hover {
+    background-color: var(--color-primary-dark);
+    transform: scale(1.05);
+  }
+  
+  .mobile-reply-button:active {
+    transform: scale(0.95);
+  }
+  
+  /* Visual Discovery Hint Button */
+  .action-hint-button {
+    min-width: 32px;
+    min-height: 32px;
+    background-color: var(--color-surface);
     color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    transition: all var(--transition-fast);
+    font-size: 18px;
+    font-weight: bold;
+    z-index: 11;
+    opacity: 0.7;
+  }
+  
+  .action-hint-button:hover {
+    opacity: 1;
+    background-color: var(--color-surface-hover);
+    transform: scale(1.1);
+  }
+  
+  .action-hint-button.active {
+    background-color: var(--color-primary);
+    color: var(--color-text-inverse);
+    opacity: 1;
+    transform: rotate(90deg);
+  }
+  
+  .action-hint-button .hint-icon {
+    line-height: 1;
+    transform: rotate(90deg);
+    transition: transform var(--transition-fast);
+  }
+  
+  .action-hint-button.active .hint-icon {
+    transform: rotate(0deg);
+  }
+  
+  /* Floating Action Bar */
+  .floating-action-bar {
+    position: absolute;
+    bottom: 52px; /* Position above the reply button */
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(10px);
+    z-index: 10;
+    
+    /* Hide by default */
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(8px) scale(0.95);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .floating-action-bar.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+  }
+  
+  /* Floating Action Bar Buttons */
+  .fab-button {
+    min-width: 44px;
+    min-height: 44px;
+    background-color: transparent;
+    color: var(--color-text);
+    border: none;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    font-size: 16px;
+    position: relative;
+  }
+  
+  .fab-button:hover {
+    background-color: var(--color-hover-overlay);
+    transform: scale(1.05);
+  }
+  
+  .fab-button:active {
+    transform: scale(0.95);
+  }
+  
+  .fab-button.copied,
+  .fab-button.saved {
+    background-color: var(--color-success);
+    color: var(--color-text-inverse);
+    transform: scale(1.1);
+  }
+  
+  .fab-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+  
+  /* Add loading indicator for save button */
+  .fab-button .loading-indicator {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top: 2px solid var(--color-text);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
   }
   
   /* Ensure message content takes full width */
@@ -2438,6 +2759,67 @@ export default {
     width: 8px;
     height: 80%;
     box-shadow: -1px 0 3px rgba(0, 0, 0, 0.1);
+  }
+}
+
+@media (max-width: 480px) {
+  .message-content {
+    padding: var(--space-xs) var(--space-sm); /* Further reduce padding */
+    margin: 0 2px; /* Minimal margins */
+  }
+  
+  .message-header {
+    gap: 4px; /* Reduce header gaps */
+  }
+  
+  .author-section {
+    gap: 4px;
+    max-width: 75%; /* More space for author info */
+  }
+  
+  .message-author {
+    font-size: calc(var(--font-size-sm) - 1px);
+  }
+  
+  .author-user-tag {
+    font-size: calc(var(--font-size-xs) - 1px);
+  }
+  
+  .visibility-indicator, .recipients-toggle {
+    font-size: calc(var(--font-size-xs) - 1px);
+    padding: 1px 4px;
+    height: 18px;
+  }
+  
+  /* Adjust mobile action controls for very narrow screens */
+  .mobile-action-controls {
+    bottom: 6px;
+    right: 6px;
+    gap: 6px;
+  }
+  
+  .mobile-reply-button {
+    min-width: 40px;
+    min-height: 40px;
+    font-size: 14px;
+  }
+  
+  .action-hint-button {
+    min-width: 28px;
+    min-height: 28px;
+    font-size: 16px;
+  }
+  
+  .floating-action-bar {
+    bottom: 48px; /* Adjust for smaller reply button */
+    padding: 6px;
+    gap: 6px;
+  }
+  
+  .fab-button {
+    min-width: 40px;
+    min-height: 40px;
+    font-size: 14px;
   }
 }
 </style>
