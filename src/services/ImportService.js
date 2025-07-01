@@ -25,23 +25,17 @@ class ImportService {
   /**
    * Import a ChatGPT conversation
    * @param {Array} messages - Array of message objects with role and content
-   * @param {String} title - Optional title for the imported thread
-   * @param {String} description - Optional description
    * @returns {Promise} - API response with thread_id
    */
-  async importChatGPTConversation(messages, title = null, description = null) {
+  async importChatGPTConversation(messages) {
     const headers = await getAuthHeaders();
     
     const importData = {
-      messages: messages,
-      title: title || 'Imported ChatGPT Conversation',
-      description: description
+      messages: messages
     };
     
     console.log('[ImportService] Importing ChatGPT conversation:', {
-      messageCount: messages.length,
-      title: title,
-      hasDescription: !!description
+      messageCount: messages.length
     });
     
     try {
@@ -478,23 +472,17 @@ class ImportService {
   /**
    * Import a Claude conversation
    * @param {Array} messages - Array of message objects with role and content
-   * @param {String} title - Optional title for the imported thread
-   * @param {String} description - Optional description
    * @returns {Promise} - API response with thread_id
    */
-  async importClaudeConversation(messages, title = null, description = null) {
+  async importClaudeConversation(messages) {
     const headers = await getAuthHeaders();
     
     const importData = {
-      messages: messages,
-      title: title || 'Imported Claude Conversation',
-      description: description
+      messages: messages
     };
     
     console.log('[ImportService] Importing Claude conversation:', {
-      messageCount: messages.length,
-      title: title,
-      hasDescription: !!description
+      messageCount: messages.length
     });
     
     try {
@@ -515,23 +503,17 @@ class ImportService {
   /**
    * Import a Gemini conversation
    * @param {Array} messages - Array of message objects with role and content
-   * @param {String} title - Optional title for the imported thread
-   * @param {String} description - Optional description
    * @returns {Promise} - API response with thread_id
    */
-  async importGeminiConversation(messages, title = null, description = null) {
+  async importGeminiConversation(messages) {
     const headers = await getAuthHeaders();
     
     const importData = {
-      messages: messages,
-      title: title || 'Imported Gemini Conversation',
-      description: description
+      messages: messages
     };
     
     console.log('[ImportService] Importing Gemini conversation:', {
-      messageCount: messages.length,
-      title: title,
-      hasDescription: !!description
+      messageCount: messages.length
     });
     
     try {
@@ -552,23 +534,17 @@ class ImportService {
   /**
    * Import a Grok conversation
    * @param {Array} messages - Array of message objects with role and content
-   * @param {String} title - Optional title for the imported thread
-   * @param {String} description - Optional description
    * @returns {Promise} - API response with thread_id
    */
-  async importGrokConversation(messages, title = null, description = null) {
+  async importGrokConversation(messages) {
     const headers = await getAuthHeaders();
     
     const importData = {
-      messages: messages,
-      title: title || 'Imported Grok Conversation',
-      description: description
+      messages: messages
     };
     
     console.log('[ImportService] Importing Grok conversation:', {
-      messageCount: messages.length,
-      title: title,
-      hasDescription: !!description
+      messageCount: messages.length
     });
     
     try {
@@ -589,26 +565,17 @@ class ImportService {
   /**
    * Import a Cursor conversation
    * @param {Array} messages - Array of message objects with role and content
-   * @param {String} title - Optional title for the imported thread
-   * @param {String} model - The AI model used (chatgpt, claude, gemini)
-   * @param {String} description - Optional description
    * @returns {Promise} - API response with thread_id
    */
-  async importCursorConversation(messages, title = null, model = 'chatgpt', description = null) {
+  async importCursorConversation(messages) {
     const headers = await getAuthHeaders();
     
     const importData = {
-      messages: messages,
-      title: title || 'Imported Cursor Conversation',
-      model: model,
-      description: description
+      messages: messages
     };
     
     console.log('[ImportService] Importing Cursor conversation:', {
-      messageCount: messages.length,
-      title: title,
-      model: model,
-      hasDescription: !!description
+      messageCount: messages.length
     });
     
     try {

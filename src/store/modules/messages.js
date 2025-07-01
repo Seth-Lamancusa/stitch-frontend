@@ -137,31 +137,6 @@ export default {
       }
     },
     
-    // Consolidated branch path mutation
-    SET_BRANCH_PATH(state, messageId) {
-      // First ensure the message exists
-      if (!state.messages[messageId]) return;
-      
-      // Set this message's branch path flag to true
-      state.messages[messageId] = {
-        ...state.messages[messageId],
-        in_branch_path: true
-      };
-      
-      // If the message has a parent, remove all siblings from branch path
-      const parentId = state.messages[messageId].parent_id;
-      if (parentId && state.messages[parentId] && state.messages[parentId].child_ids) {
-        state.messages[parentId].child_ids.forEach(childId => {
-          if (childId !== messageId && state.messages[childId]) {
-            state.messages[childId] = {
-              ...state.messages[childId],
-              in_branch_path: false
-            };
-          }
-        });
-      }
-    },
-    
     // Restore REMOVE_MESSAGE mutation
     REMOVE_MESSAGE(state, messageId) {
       // First check if message exists
@@ -424,24 +399,9 @@ export default {
       return true;
     },
     
-    // Consolidated branch path management
-    setBranchPath({ commit, state }, messageId) {
-      if (!messageId || !state.messages[messageId]) return;
-      
-      // Ensure this message is in branch path
-      commit('SET_BRANCH_PATH', messageId);
-      
-      // If message has parent in store, add parent to branch path
-      const message = state.messages[messageId];
-      if (message.parent_id && state.messages[message.parent_id]) {
-        commit('SET_BRANCH_PATH', message.parent_id);
-      }
-      
-      console.log(`[DEBUG] Set branch path for message ${messageId}`);
-      return true;
-    },
+    // REMOVED setBranchPath - no longer needed since in_branch_path flags are unused
     
-    // Load parent branch
+    // Load parent branch - FIXED: Now consistent with loadMessageBranchDown
     async loadMessageBranchUp({ commit, dispatch, state }, { messageId, depth = 1 }) {
       if (!messageId) return [];
       
@@ -454,10 +414,10 @@ export default {
           // Add messages to store
           commit('SET_MESSAGES', messages);
           
-          // Add all messages to branch path
-          for (const message of messages) {
-            dispatch('setBranchPath', message.id);
-          }
+          // Use prepareBranchPath to establish branch_child relationships
+          // This will establish upward links from the messageId to the newly loaded parents
+          // without resetting any existing sibling relationships
+          dispatch('prepareBranchPath', messageId);
           
           console.log(`[DEBUG] Loaded ${messages.length} messages in parent branch for ${messageId}`);
         }
@@ -926,28 +886,6 @@ export default {
       }
     },
     
-    // New action for updating title and description
-    async updateTitleDescription({ commit, state }, { messageId, title, description }) {
-      try {
-        await MessageService.updateTitleDescription(messageId, { title, description });
-        
-        // Update the message in the store
-        const message = state.messages[messageId];
-        if (message) {
-          commit('SET_MESSAGE', {
-            ...message,
-            title,
-            description
-          });
-        }
-        
-        return true;
-      } catch (error) {
-        console.error(`Error updating title/description for message ${messageId}:`, error);
-        return false;
-      }
-    },
-    
     // Mark a message as read and update unread count
     async markMessageAsRead({ commit, state }, messageId) {
       console.log(`[Store] markMessageAsRead called for message ${messageId}`);
@@ -1238,6 +1176,30 @@ export default {
         console.error('[Store] Error creating link:', error);
         throw error;
       }
+    },
+
+    async toggleReadStatus({ commit, state }, { messageId, currentUserId }) {
+      try {
+        const message = state.messages[messageId];
+        if (!message) {
+          console.error(`Message ${messageId} not found in store`);
+          return false;
+        }
+        
+        const newReadStatus = !message.is_read;
+        await MessageService.updateReadStatus(messageId, newReadStatus);
+        
+        // Update the message in the store
+        commit('SET_MESSAGE', {
+          ...message,
+          is_read: newReadStatus
+        });
+        
+        return true;
+      } catch (error) {
+        console.error(`Error toggling read status for message ${messageId}:`, error);
+        return false;
+      }
     }
 
   },
@@ -1278,11 +1240,7 @@ export default {
       });
     },
     
-    // Get all messages in the branch path
-    getBranchPathMessages: (state) => {
-      return Object.values(state.messages)
-        .filter(message => message.in_branch_path);
-    },
+    // REMOVED getBranchPathMessages - no longer needed since in_branch_path flags are unused
     
     // Modified getter - PURE GETTER with no state modifications
     // Get the visible branch - follows the path from root where each message is in branch_path
@@ -1393,10 +1351,7 @@ export default {
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Sort by timestamp (newest first)
     },
     
-    // Check if a message is in the branch path
-    isInBranchPath: state => (messageId) => {
-      return state.messages[messageId]?.in_branch_path === true;
-    },
+    // REMOVED isInBranchPath - no longer needed since in_branch_path flags are unused
     
     // New getter to get the selected child of a message
     getBranchChild: (state) => (messageId) => {

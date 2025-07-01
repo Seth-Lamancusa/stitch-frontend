@@ -34,11 +34,7 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  // Hide loading indicators
-  hideLoading: {
-    type: Boolean,
-    default: false
-  },
+
   // Source message ID for link-based modes
   sourceMessageId: {
     type: String,
@@ -96,9 +92,12 @@ const messageListRef = ref(null);
 // Reference to the loading indicator for intersection observer
 const loadingIndicatorRef = ref(null);
 
-// Determine active tab from route path - SIMPLIFIED since we only have inbox now
+// Determine active tab from route path
 const activeTab = computed(() => {
-  return 'inbox'; // Always inbox now
+  if (route.path === '/public') return 'public';
+  if (route.path === '/saved') return 'saved';
+  if (route.path === '/inbox') return 'inbox';
+  return 'public'; // Default to public instead of inbox
 });
 
 const threads = computed(() => {
@@ -123,11 +122,19 @@ const threads = computed(() => {
 
 // Loading indicator should be visible if we're loading or have more to load
 const shouldShowLoadingIndicator = computed(() => {
+  // For saved mode, don't show loading indicator if user is not logged in
+  if (props.mode === 'saved' && !user.value) {
+    return false;
+  }
   return isLoading.value || !isAllLoaded.value;
 });
 
 // Empty state only shows if we've loaded and have no messages
 const shouldShowEmptyState = computed(() => {
+  // For saved mode when not logged in, show empty state immediately
+  if (props.mode === 'saved' && !user.value) {
+    return threads.value.length === 0;
+  }
   return !isLoading.value && isAllLoaded.value && threads.value.length === 0;
 });
 
@@ -135,11 +142,19 @@ const shouldShowEmptyState = computed(() => {
 const emptyStateMessage = computed(() => {
   switch (props.mode) {
     case 'inbox':
-      return 'No messages in your inbox.';
+      if (user.value) {
+        return 'No messages in your inbox.';
+      } else {
+        return 'You must be logged in and whitelisted to view your inbox.';
+      }
     case 'admin':
       return 'No messages found.';
     case 'saved':
-      return 'No saved messages found.';
+      if (user.value) {
+        return 'No saved messages found.';
+      } else {
+        return 'You must be logged in and whitelisted to view your saved messages.';
+      }
     case 'incoming-links':
       return 'No incoming links found.';
     case 'outgoing-links':
@@ -325,12 +340,6 @@ const loadMessages = async () => {
     return;
   }
   
-  // Skip for inbox mode if no user
-  if (props.mode === 'inbox' && !user.value) {
-    console.log('[MessageList] Skipping load for inbox - no user logged in');
-    return;
-  }
-  
   // Skip for saved mode if no user (requires authentication)
   if (props.mode === 'saved' && !user.value) {
     console.log('[MessageList] Skipping load for saved - no user logged in');
@@ -451,8 +460,11 @@ onMounted(async () => {
   if (props.mode === 'admin') {
     // Admin mode - load immediately (auth checked server-side)
     loadMessages();
-  } else if (user.value) {
-    // Inbox mode - only start loading if user is authenticated
+  } else if (props.mode === 'saved' && !user.value) {
+    // Don't load saved messages for guests
+    return;
+  } else {
+    // Load messages for all other modes
     loadMessages();
   }
 });
@@ -703,16 +715,8 @@ const handleLinkDelete = async (linkData) => {
         </button>
       </div>
     </div>
-
-    <!-- Login message for guests -->
-    <div v-if="shouldShowLoginMessage" class="login-message">
-      <div class="login-content">
-        <h3>Welcome to Stitch</h3>
-        <p>Log in to recieve direct messages and participate in conversations, or view free public messages by url.</p>
-      </div>
-    </div>
     
-    <div v-if="user && mode !== 'admin' && !hideInfoBox" class="info-box" :class="{ 'collapsed': isInfoBoxCollapsed }">
+    <div v-if="mode !== 'admin' && !hideInfoBox" class="info-box" :class="{ 'collapsed': isInfoBoxCollapsed }">
       <div class="info-header">
         <button class="toggle-button" @click.stop="toggleInfoBox">
           {{ isInfoBoxCollapsed ? 'Show Info' : 'Hide Info' }}
@@ -720,9 +724,19 @@ const handleLinkDelete = async (linkData) => {
         </button>
       </div>
       <div class="info-content" :class="{ 'hidden': isInfoBoxCollapsed }">
-        <p class="info-text">Welcome to Stitch! Messages may be public or private, and may have any number of direct recipients, even if public. Below is the last in each thread in which you are author or direct recipient.</p>
-        <p class="info-text">There are three badge types: orange, blue, and green. Orange indicates direct recipients for messages you sent. Blue indicates the number of other direct recipients for messages you received, along with a manual read/unread indicator. Green badges indicate "public".</p>
-        <p class="info-text">You may click on a message to view it in full, along with its ancestors, descendants, and retroactively linked messages (coming soon).</p>
+        <!-- Content for logged-in users -->
+        <template v-if="user">
+          <p class="info-text">Welcome to Stitch! Messages may be public or private, and may have any number of direct recipients, even if public. Below is the last in each thread in which you are author or direct recipient.</p>
+          <p class="info-text">There are three badge types: orange, blue, and green. Orange indicates direct recipients for messages you sent. Blue indicates the number of other direct recipients for messages you received, along with a manual read/unread indicator. Green badges indicate "public".</p>
+          <p class="info-text">You may click on a message to view it in full, along with its ancestors, descendants, and messages linked by you or other users.</p>
+        </template>
+        
+        <!-- Content for guests -->
+        <template v-else>
+          <p class="info-text">Welcome to Stitch! This is a platform for nonlinear threaded conversations designed for AI participation. Below are the most recent public leaf messages posted to Stitch.</p>
+          <p class="info-text">As a guest, you can view public messages. To send messages (including to bots) and receive direct messages, you'll need to be whitelisted and log in.</p>
+          <p class="info-text">Click on any message to view the full thread with its conversation history and linked public messages.</p>
+        </template>
       </div>
     </div>
 
@@ -776,9 +790,9 @@ const handleLinkDelete = async (linkData) => {
         />
       </div>
       
-      <!-- Loading indicator - only show for authenticated users -->
+      <!-- Loading indicator -->
       <div 
-        v-if="shouldShowLoadingIndicator && user && !hideLoading" 
+        v-if="shouldShowLoadingIndicator" 
         ref="loadingIndicatorRef"
         class="loading-indicator" 
         :class="{ 'full-height': threads.length === 0, 'loading': isLoading }"
@@ -798,7 +812,7 @@ const handleLinkDelete = async (linkData) => {
       </div>
       
       <!-- End of results message when all messages are loaded -->
-      <div v-if="!isLoading && isAllLoaded && threads.length > 0 && !hideLoading" class="end-of-results">
+      <div v-if="!isLoading && isAllLoaded && threads.length > 0" class="end-of-results">
         <p>No more messages to load</p>
       </div>
     </div>
@@ -841,34 +855,6 @@ const handleLinkDelete = async (linkData) => {
   min-height: 300px;
   padding: var(--space-xl);
   text-align: center;
-}
-
-.login-content {
-  max-width: 400px;
-  padding: var(--space-xl);
-  background-color: var(--color-surface-light);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.login-content h3 {
-  margin: 0 0 var(--space-md) 0;
-  color: var(--color-text);
-  font-size: var(--font-size-xl);
-  font-weight: 600;
-}
-
-.login-content p {
-  margin: 0 0 var(--space-sm) 0;
-  color: var(--color-text);
-  font-size: var(--font-size-base);
-  line-height: 1.5;
-}
-
-.login-subtitle {
-  color: var(--color-text-secondary) !important;
-  font-size: var(--font-size-sm) !important;
 }
 
 .empty-state {
@@ -991,10 +977,10 @@ const handleLinkDelete = async (linkData) => {
   text-align: center;
   flex-direction: column;
   gap: 12px;
-  margin-top: var(--space-sm);
   height: auto;
   padding: var(--space-sm);
   min-height: 50px;
+  margin-bottom: var(--space-lg);
 }
 
 .loading-indicator.full-height {
@@ -1243,6 +1229,7 @@ const handleLinkDelete = async (linkData) => {
   display: flex;
   flex-direction: column;
   transition: all 0.3s ease;
+  max-width: 650px;
 }
 
 .info-box.collapsed {

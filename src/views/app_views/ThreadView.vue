@@ -25,9 +25,15 @@
       </div>
       
       <!-- Messages container with fixed spacing -->
-      <div class="messages-container" ref="messageList" @click="handleContainerClick">
-        <!-- Top of thread marker - always show -->
+      <div 
+        class="messages-container" 
+        ref="messageList" 
+        @click="handleContainerClick"
+        :style="{ visibility: isContainerVisible ? 'visible' : 'hidden' }"
+      >
+        <!-- Top of thread marker - only show after scroll is complete -->
         <adaptive-marker
+          v-if="shouldShowMarkers"
           position="top"
           :state="topMarkerState"
           class-name="thread-begin-marker"
@@ -67,8 +73,9 @@
           </div>
         </template>
         
-        <!-- Bottom of thread marker - always show -->
+        <!-- Bottom of thread marker - only show after scroll is complete -->
         <adaptive-marker
+          v-if="shouldShowMarkers"
           position="bottom"
           :state="bottomMarkerState"
           class-name="thread-end-marker"
@@ -159,6 +166,10 @@ const isLoadingChildren = ref(false); // Keep for incremental child loading
 // Scroll anchor ref
 const scrollAnchor = ref(null);
 const hasInitiallyScrolled = ref(false);
+
+// Add new refs for controlling visibility and marker attachment
+const isContainerVisible = ref(false);
+const shouldShowMarkers = ref(false);
 
 // Message ID from route
 const messageId = computed(() => {
@@ -289,6 +300,12 @@ const renderThread = async (preserveScroll = false, preserveBranchPath = true) =
     const messages = displayedMessages.value;
     console.log(`[ThreadView] Thread rendered with ${messages.length} messages, first message: ${messages.length > 0 ? messages[0].id : 'none'}`);
     
+    // For incremental updates (preserveScroll = true), ensure container remains visible
+    if (preserveScroll && !isContainerVisible.value) {
+      isContainerVisible.value = true;
+      shouldShowMarkers.value = true;
+    }
+    
     // Scroll to center the message ID from the URL if messages exist and not preserving scroll
     if (messages.length > 0 && !preserveScroll) {
       await nextTick();
@@ -393,6 +410,9 @@ onBeforeUnmount(() => {
 watch(messageId, async (newId, oldId) => {
   console.log(`[ThreadView] 👀 WATCH messageId changed from ${oldId} to ${newId}, triggered by:`, new Error().stack);
   if (newId) {
+    // Reset visibility states immediately when navigating to new thread
+    isContainerVisible.value = false;
+    shouldShowMarkers.value = false;
     await loadInitialContent(newId);
   }
 });
@@ -486,6 +506,10 @@ const loadInitialContent = async (targetMessageId) => {
   }
   
   try {
+    // Hide container and markers immediately at start of loading
+    isContainerVisible.value = false;
+    shouldShowMarkers.value = false;
+    
     // Set single loading state
     isLoadingThread.value = true;
     hasInitiallyScrolled.value = false;
@@ -510,6 +534,8 @@ const loadInitialContent = async (targetMessageId) => {
   } catch (error) {
     console.error('[ThreadView] Error loading initial content:', error);
     store.commit('ui/SET_ERROR', 'Failed to load thread.');
+    // Show container even on error so user can see the error state
+    isContainerVisible.value = true;
   } finally {
     // Clear loading state - this will trigger displayedMessages to show content
     isLoadingThread.value = false;
@@ -634,61 +660,69 @@ const ensureCorrectScroll = () => {
   // Mark that we've handled initial scrolling
   hasInitiallyScrolled.value = true;
   
-  // Add a small delay to make sure DOM is fully updated
-  setTimeout(() => {
-    nextTick(() => {
-      // For initial load, only use the message from the URL
-      const targetId = messageId.value;
-      
-      // Make sure we have a message list and a target message
-      if (!messageList.value || !targetId) return;
-      
-      
-      // Find the target message element
-      const messageElement = document.querySelector(`[data-message-id="${targetId}"]`);
-      if (!messageElement) {
-        console.log(`[ThreadView] Could not find element with data-message-id="${targetId}"`);
-        return;
-      }
-      
-      // Log all messages to see if they are properly rendered
-      const allMessages = document.querySelectorAll('.message-node');
-      console.log(`[ThreadView] Found ${allMessages.length} total message nodes`);
-      console.log('[ThreadView] All messages:', Array.from(allMessages).map((msg, i) => {
-        const id = msg.getAttribute('data-message-id');
-        return {
-          index: i,
-          id,
-          isTarget: id == targetId,
-          top: msg.getBoundingClientRect().top,
-          offsetTop: msg.offsetTop
-        };
-      }));
-      
-      // Log detailed information about the elements and their positions
-      const containerRect = messageList.value.getBoundingClientRect();
-      const messageRect = messageElement.getBoundingClientRect();
-      
-      // Calculate the relative top position of the message within the container
-      const relativeTop = messageRect.top - containerRect.top + messageList.value.scrollTop;
-      
-      // Try an alternative calculation that might scroll further down
-      const alternateTop = messageElement.offsetTop;
-      
-      // Try scrolling to max first to force container to update its scrollHeight
-      const maxScroll = messageList.value.scrollHeight - messageList.value.clientHeight;
-      messageList.value.scrollTop = maxScroll;
-      
-      
-      // Force browser to recalculate layout
-      void messageList.value.offsetHeight;
-      
-      // Now try scrolling to our target
-      const adjustedPosition = alternateTop - 70; // Adjust 70px up to show a bit more context
-      messageList.value.scrollTop = adjustedPosition;
-      
-    });
-  }, 200); // Small delay to ensure DOM is fully rendered
+  nextTick(() => {
+    // For initial load, only use the message from the URL
+    const targetId = messageId.value;
+    
+    // Make sure we have a message list and a target message
+    if (!messageList.value || !targetId) {
+      // Show container even if we can't scroll
+      isContainerVisible.value = true;
+      shouldShowMarkers.value = true;
+      return;
+    }
+    
+    // Find the target message element
+    const messageElement = document.querySelector(`[data-message-id="${targetId}"]`);
+    if (!messageElement) {
+      console.log(`[ThreadView] Could not find element with data-message-id="${targetId}"`);
+      // Show container even if we can't find the target message
+      isContainerVisible.value = true;
+      shouldShowMarkers.value = true;
+      return;
+    }
+    
+    // Log all messages to see if they are properly rendered
+    const allMessages = document.querySelectorAll('.message-node');
+    console.log(`[ThreadView] Found ${allMessages.length} total message nodes`);
+    console.log('[ThreadView] All messages:', Array.from(allMessages).map((msg, i) => {
+      const id = msg.getAttribute('data-message-id');
+      return {
+        index: i,
+        id,
+        isTarget: id == targetId,
+        top: msg.getBoundingClientRect().top,
+        offsetTop: msg.offsetTop
+      };
+    }));
+    
+    // Log detailed information about the elements and their positions
+    const containerRect = messageList.value.getBoundingClientRect();
+    const messageRect = messageElement.getBoundingClientRect();
+    
+    // Calculate the relative top position of the message within the container
+    const relativeTop = messageRect.top - containerRect.top + messageList.value.scrollTop;
+    
+    // Try an alternative calculation that might scroll further down
+    const alternateTop = messageElement.offsetTop;
+    
+    // Try scrolling to max first to force container to update its scrollHeight
+    const maxScroll = messageList.value.scrollHeight - messageList.value.clientHeight;
+    messageList.value.scrollTop = maxScroll;
+    
+    // Force browser to recalculate layout
+    void messageList.value.offsetHeight;
+    
+    // Now try scrolling to our target
+    const adjustedPosition = alternateTop - 70; // Adjust 70px up to show a bit more context
+    messageList.value.scrollTop = adjustedPosition;
+    
+    console.log(`[ThreadView] Scroll complete, showing container and attaching markers`);
+    
+    // Show the container and attach markers after scroll is complete
+    isContainerVisible.value = true;
+    shouldShowMarkers.value = true;
+  });
 };
 
 // Handle container click to clear replying if clicked outside of messages
