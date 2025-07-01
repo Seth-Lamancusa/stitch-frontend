@@ -85,4 +85,18 @@ const router = createRouter({
   routes
 });
 
+// Navigation guard to prevent Vue router from handling backend-only routes
+router.beforeEach((to, from, next) => {
+  // List of routes that should bypass Vue router and go directly to backend
+  const backendOnlyRoutes = ['/metrics'];
+  
+  if (backendOnlyRoutes.includes(to.path)) {
+    // Force a full page navigation to the backend
+    window.location.href = to.path;
+    return;
+  }
+  
+  next();
+});
+
 export default router; 
