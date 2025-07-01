@@ -419,35 +419,9 @@ export default {
       type: Boolean,
       default: false
     },
-    // Legacy props for compatibility
-    isSelected: {
-      type: Boolean,
-      default: false
-    },
-    indentLevel: {
-      type: Number,
-      default: 0
-    },
-    loadedReplies: {
-      type: Number,
-      default: 0
-    },
-    totalReplies: {
-      type: Number,
-      default: 0
-    },
-    canReply: {
-      type: Boolean,
-      default: true
-    },
     inListView: {
       type: Boolean,
       default: false
-    },
-    // Add prop for thread messages to calculate unread count
-    threadMessages: {
-      type: Array,
-      default: () => []
     },
     // Current tab context for conditional rendering
     currentTab: {
@@ -1116,15 +1090,54 @@ export default {
     
 
     
+    // Function to strip basic markdown formatting
+    const stripMarkdown = (text) => {
+      if (!text) return '';
+      
+      return text
+        // Remove headers (# ## ###)
+        .replace(/^#{1,6}\s+/gm, '')
+        // Remove bold/italic (**text** __text__ *text* _text_)
+        .replace(/(\*\*|__)(.*?)\1/g, '$2')
+        .replace(/(\*|_)(.*?)\1/g, '$2')
+        // Remove strikethrough (~~text~~)
+        .replace(/~~(.*?)~~/g, '$1')
+        // Remove inline code (`text`)
+        .replace(/`([^`]+)`/g, '$1')
+        // Remove code blocks (```text```)
+        .replace(/```[\s\S]*?```/g, '[code block]')
+        // Remove links [text](url)
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        // Remove images ![alt](url)
+        .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+        // Remove blockquotes (> text)
+        .replace(/^>\s+/gm, '')
+        // Remove horizontal rules (--- or ***)
+        .replace(/^(---|\*\*\*)\s*$/gm, '')
+        // Remove list markers (- * + 1.)
+        .replace(/^[\s]*[-*+]\s+/gm, '')
+        .replace(/^[\s]*\d+\.\s+/gm, '')
+        // Clean up extra whitespace
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
+    
     const truncatedContent = computed(() => {
       if (!props.message.content) return '';
       
       // Memoize the truncation logic based on the content
       return memoize((content) => {
-        // Remove newlines and extra spaces
-        const contentWithoutNewlines = content.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+        let processedContent = content;
         
-        // Truncate to 300 characters with ellipsis if needed
+        // Strip markdown formatting in preview mode
+        if (props.displayMode === 'preview') {
+          processedContent = stripMarkdown(content);
+        }
+        
+        // Remove newlines and extra spaces
+        const contentWithoutNewlines = processedContent.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+        
+        // Truncate to 200 characters with ellipsis if needed
         if (contentWithoutNewlines.length > 200) {
           return contentWithoutNewlines.substring(0, 200) + '...';
         }
