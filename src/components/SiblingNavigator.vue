@@ -143,34 +143,57 @@ const navigate = async (direction) => {
   transform: translateY(-50%);
 }
 
-/* Mobile styles for sibling navigator - corner inscribed positioning */
+/* Mobile styles for sibling navigator - inline with action buttons */
 @media (max-width: 768px) {
   .sibling-navigator {
-    top: 0;
+    top: auto;
+    bottom: 8px;
     left: 0;
     width: 100%;
-    height: 100%;
+    height: auto;
     transform: none;
-    z-index: 3; /* Lower z-index to stay behind floating action controls */
+    z-index: 11; /* Same level as action controls */
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    pointer-events: none;
   }
   
   .nav-button {
-    width: 28px;
-    height: 24px; /* Reduced height for corner inscription */
-    border-radius: var(--radius-sm);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xs);
+    padding: 8px;
+    transition: all var(--transition-fast);
+    color: var(--color-text-secondary);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    opacity: 0.7;
+    min-width: 36px;
+    min-height: 36px;
+    pointer-events: auto;
+  }
+  
+  .nav-button:hover:not(:disabled) {
+    opacity: 1;
+    background-color: var(--color-surface-hover);
+    border-color: var(--color-border-hover);
+    color: var(--color-primary);
+    transform: scale(1.1);
+  }
+  
+  .nav-button.disabled {
+    opacity: 0.3;
   }
   
   .nav-prev {
-    bottom: 8px;
     left: 8px;
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0; /* Only round right side */
   }
   
   .nav-next {
-    bottom: 8px;
-    right: 56px; /* Offset to avoid mobile action controls */
-    border-radius: var(--radius-sm) 0 0 var(--radius-sm); /* Only round left side */
+    right: 8px;
   }
   
   .left-triangle {
@@ -183,19 +206,22 @@ const navigate = async (direction) => {
 }
 
 @media (max-width: 480px) {
+  .sibling-navigator {
+    bottom: 6px;
+  }
+  
   .nav-button {
-    width: 26px;
-    height: 22px; /* Even more reduced height for very narrow screens */
+    padding: 6px;
+    min-width: 32px;
+    min-height: 32px;
   }
   
   .nav-prev {
-    bottom: 6px;
     left: 6px;
   }
   
   .nav-next {
-    bottom: 6px;
-    right: 52px; /* Offset to avoid mobile action controls */
+    right: 6px;
   }
   
   .left-triangle {
@@ -328,22 +354,8 @@ const navigate = async (direction) => {
     border: 1px solid rgba(var(--color-border-rgb, 200, 200, 200), 0.8);
   }
   
-  /* Subtle corner rounding for inscribed appearance - bottom corners */
-  .nav-prev {
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-  }
+  /* Square buttons - consistent styling with action hint button */
   
-  .nav-next {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-  }
-  
-  /* Hover effects for mobile */
-  .nav-button:hover:not(:disabled) {
-    background-color: var(--color-primary-light);
-    transform: scale(1.05);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  }
+  /* Consistent with other mobile action buttons */
 }
 </style> 
