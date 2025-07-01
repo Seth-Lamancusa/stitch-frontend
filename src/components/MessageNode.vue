@@ -266,7 +266,7 @@
           class="mobile-reply-button"
           title="Reply to this message"
         >
-          <span class="reply-icon">↩️</span>
+          Reply
         </button>
         
         <!-- Visual Discovery Hint -->
@@ -1557,7 +1557,7 @@ export default {
 
 <style scoped>
 .message-node {
-  margin-bottom: var(--space-xs);
+  margin-bottom: calc(var(--space-xs) * 0.5); /* Reduced gap by 50% */
   transition: all var(--transition-fast);
   position: relative;
   contain: layout style;
@@ -1597,7 +1597,7 @@ export default {
   text-overflow: ellipsis;
 }
 
-/* Add extra horizontal margin for messages with siblings */
+/* Add extra horizontal margin for messages with siblings - desktop only */
 /* First selector uses :has() which isn't supported in all browsers */
 .message-node:has(> .sibling-navigator) .message-content,
 /* Fallback for browsers that don't support :has() */
@@ -1605,6 +1605,16 @@ export default {
   margin-left: 40px;
   margin-right: 40px;
   max-width: calc(100% - 80px);
+}
+
+/* On mobile, remove extra margins since navigation is inscribed in corners */
+@media (max-width: 768px) {
+  .message-node:has(> .sibling-navigator) .message-content,
+  .message-node > .sibling-navigator ~ .message-content {
+    margin-left: 0;
+    margin-right: 0;
+    max-width: 100%;
+  }
 }
 
 .message-content {
@@ -2353,6 +2363,12 @@ export default {
     margin: 0 4px; /* Add small margins */
   }
   
+  /* Add bottom padding when sibling navigator is present to avoid overlap */
+  .message-node:has(> .sibling-navigator) .message-content,
+  .message-node > .sibling-navigator ~ .message-content {
+    padding-bottom: calc(var(--space-sm) + 32px); /* Space for corner navigation buttons */
+  }
+  
   .message-body {
     word-break: break-word;
     overflow-wrap: break-word;
@@ -2395,26 +2411,28 @@ export default {
     align-items: flex-end;
   }
   
-  /* Persistent Reply Button - Always visible */
+  /* Persistent Reply Button - Desktop style without emoji */
   .mobile-reply-button {
-    min-width: 44px;
-    min-height: 44px;
-    background-color: var(--color-primary);
-    color: var(--color-text-inverse);
-    border: none;
-    border-radius: 50%;
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 6px;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xs);
+    padding: 8px 12px;
+    font-size: var(--font-size-xs);
     cursor: pointer;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     transition: all var(--transition-fast);
-    font-size: 16px;
+    color: var(--color-text-secondary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     z-index: 12;
+    min-height: 36px;
   }
   
   .mobile-reply-button:hover {
-    background-color: var(--color-primary-dark);
+    background-color: var(--color-surface-hover);
+    border-color: var(--color-border-hover);
+    color: var(--color-primary);
     transform: scale(1.05);
   }
   
@@ -2422,35 +2440,38 @@ export default {
     transform: scale(0.95);
   }
   
-  /* Visual Discovery Hint Button */
+  /* Visual Discovery Hint Button - Desktop style square */
   .action-hint-button {
-    min-width: 32px;
-    min-height: 32px;
-    background-color: var(--color-surface);
-    color: var(--color-text-secondary);
-    border: 1px solid var(--color-border);
-    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xs);
+    padding: 8px;
+    font-size: var(--font-size-xs);
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
     transition: all var(--transition-fast);
-    font-size: 18px;
-    font-weight: bold;
+    color: var(--color-text-secondary);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
     z-index: 11;
     opacity: 0.7;
+    min-width: 36px;
+    min-height: 36px;
   }
   
   .action-hint-button:hover {
     opacity: 1;
     background-color: var(--color-surface-hover);
+    border-color: var(--color-border-hover);
+    color: var(--color-primary);
     transform: scale(1.1);
   }
   
   .action-hint-button.active {
     background-color: var(--color-primary);
     color: var(--color-text-inverse);
+    border-color: var(--color-primary);
     opacity: 1;
     transform: rotate(90deg);
   }
@@ -2768,6 +2789,12 @@ export default {
     margin: 0 2px; /* Minimal margins */
   }
   
+  /* Adjust bottom padding for even smaller navigation buttons */
+  .message-node:has(> .sibling-navigator) .message-content,
+  .message-node > .sibling-navigator ~ .message-content {
+    padding-bottom: calc(var(--space-xs) + 28px); /* Space for smaller corner navigation buttons */
+  }
+  
   .message-header {
     gap: 4px; /* Reduce header gaps */
   }
@@ -2799,15 +2826,16 @@ export default {
   }
   
   .mobile-reply-button {
-    min-width: 40px;
-    min-height: 40px;
-    font-size: 14px;
+    padding: 6px 10px;
+    font-size: calc(var(--font-size-xs) - 1px);
+    min-height: 32px;
   }
   
   .action-hint-button {
-    min-width: 28px;
-    min-height: 28px;
-    font-size: 16px;
+    padding: 6px;
+    font-size: calc(var(--font-size-xs) - 1px);
+    min-width: 32px;
+    min-height: 32px;
   }
   
   .floating-action-bar {
