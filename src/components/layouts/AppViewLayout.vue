@@ -396,4 +396,208 @@ const handleTabClick = (tab) => {
   padding: 6px;
   overflow-y: auto;
 }
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  .app-header {
+    padding: 0 12px; /* Reduce header padding */
+    flex-wrap: nowrap; /* Prevent wrapping */
+  }
+  
+  .header-left {
+    gap: var(--space-md, 16px); /* Reduce gap */
+    min-width: 0; /* Allow shrinking */
+    flex: 1; /* Take available space */
+  }
+  
+  .logo-text {
+    font-size: 1.2rem; /* Smaller logo */
+  }
+  
+  .navigation-tabs {
+    gap: var(--space-xs, 8px); /* Reduce tab gaps */
+    overflow-x: auto; /* Allow horizontal scroll if needed */
+    flex-shrink: 1; /* Allow shrinking */
+    min-width: 0;
+  }
+  
+  .nav-tab {
+    padding: var(--space-xs, 6px) var(--space-sm, 10px); /* Smaller tab padding */
+    font-size: calc(var(--font-size-xs) - 1px); /* Smaller font */
+    white-space: nowrap; /* Prevent text wrapping */
+    flex-shrink: 0; /* Don't shrink tabs */
+  }
+  
+  .user-controls {
+    gap: var(--space-xs, 8px); /* Reduce gap */
+    flex-shrink: 0; /* Never shrink user controls */
+    min-width: 0;
+  }
+  
+  .user-info {
+    gap: 2px; /* Minimal gap */
+    margin-right: var(--space-xs, 8px); /* Reduce margin */
+    min-width: 0; /* Allow shrinking */
+  }
+  
+  .username-container {
+    gap: 2px; /* Reduce gap */
+    padding: 1px 4px; /* Smaller padding */
+    max-width: 100px; /* Limit username width */
+    min-width: 0;
+  }
+  
+  .username {
+    max-width: 60px; /* Much smaller username width on mobile */
+    font-size: calc(var(--font-size-xs)); /* Smaller font */
+  }
+  
+  .user-tag {
+    font-size: calc(var(--font-size-xs) - 2px); /* Even smaller tag */
+    display: none; /* Hide user tag on mobile to save space */
+  }
+  
+  .edit-icon {
+    display: none; /* Hide edit icon on mobile */
+  }
+  
+  .whitelist-badge, .admin-badge, .non-whitelist-badge, .guest-badge, .auth-loading-badge {
+    width: 14px; /* Smaller badges */
+    height: 14px;
+    line-height: 14px;
+    font-size: 10px;
+    margin-left: 2px; /* Reduce margin */
+  }
+  
+  .logout-btn, .login-btn {
+    padding: var(--space-xs, 6px) var(--space-sm, 8px); /* Smaller button padding */
+    font-size: calc(var(--font-size-xs) - 1px); /* Smaller font */
+    white-space: nowrap; /* Prevent text wrapping */
+    flex-shrink: 0; /* Never shrink the logout button */
+  }
+}
+
+@media (max-width: 480px) {
+  .app-header {
+    padding: 0 8px; /* Even less padding on very narrow screens */
+    min-height: 56px; /* Ensure minimum height */
+  }
+  
+  .header-left {
+    gap: var(--space-sm, 12px); /* Further reduce gap */
+    overflow: hidden; /* Hide overflow */
+  }
+  
+  .logo-text {
+    font-size: 1rem; /* Even smaller logo */
+  }
+  
+  .navigation-tabs {
+    gap: 4px; /* Minimal gap between tabs */
+    flex-shrink: 1;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none; /* Hide scrollbar in Firefox */
+    -ms-overflow-style: none; /* Hide scrollbar in IE */
+  }
+  
+  .navigation-tabs::-webkit-scrollbar {
+    display: none; /* Hide scrollbar in WebKit browsers */
+  }
+  
+  .nav-tab {
+    padding: 4px 6px; /* Minimal tab padding */
+    font-size: calc(var(--font-size-xs) - 2px); /* Very small font */
+    min-width: fit-content; /* Only take needed space */
+  }
+  
+  .user-controls {
+    gap: 4px; /* Minimal gap */
+    flex-shrink: 0; /* Never shrink */
+  }
+  
+  .user-info {
+    margin-right: 4px; /* Minimal margin */
+    min-width: 0;
+  }
+  
+  .username-container {
+    max-width: 80px; /* Even smaller username container */
+    padding: 1px 2px;
+  }
+  
+  .username {
+    max-width: 50px; /* Very small username width */
+    font-size: calc(var(--font-size-xs) - 1px);
+  }
+  
+  .whitelist-badge, .admin-badge, .non-whitelist-badge, .guest-badge, .auth-loading-badge {
+    width: 12px; /* Very small badges */
+    height: 12px;
+    line-height: 12px;
+    font-size: 8px;
+    margin-left: 1px;
+  }
+  
+  .logout-btn, .login-btn {
+    padding: 4px 6px; /* Minimal button padding */
+    font-size: calc(var(--font-size-xs) - 2px); /* Very small font */
+    min-width: 50px; /* Ensure minimum button width */
+  }
+}
+
+/* Stack layout vertically on very narrow screens - much better UX */
+@media (max-width: 380px) {
+  .app-header {
+    flex-direction: column; /* Stack everything vertically */
+    padding: 8px;
+    height: auto; /* Allow height to expand */
+    min-height: 56px;
+    align-items: stretch; /* Full width for all elements */
+  }
+  
+  .header-left {
+    justify-content: space-between; /* Logo on left, user controls on right */
+    margin-bottom: 8px; /* Space between rows */
+    flex: none; /* Don't grow */
+  }
+  
+  .branding {
+    flex-shrink: 0; /* Never shrink logo */
+  }
+  
+  .navigation-tabs {
+    order: 2; /* Put navigation on second row */
+    justify-content: center; /* Center the navigation tabs */
+    flex-wrap: wrap; /* Allow wrapping if needed */
+    gap: 8px; /* Restore normal gaps */
+    margin-top: 4px; /* Small space from user controls */
+  }
+  
+  .user-controls {
+    order: 1; /* Keep with logo on first row */
+    margin-left: 0; /* Reset margin */
+    flex-shrink: 0; /* Never shrink */
+  }
+  
+  .user-tag {
+    display: none; /* Still hide user tag for space */
+  }
+  
+  .username {
+    max-width: 60px; /* Bit more space since we have vertical room */
+  }
+  
+  .logout-btn, .login-btn {
+    min-width: 60px; /* Better button size with vertical layout */
+    padding: 4px 8px;
+    font-size: calc(var(--font-size-xs)); /* Slightly larger font */
+  }
+  
+  .nav-tab {
+    padding: 6px 10px; /* Better padding with vertical layout */
+    font-size: calc(var(--font-size-xs)); /* Restore normal size */
+    min-width: fit-content;
+  }
+}
 </style> 

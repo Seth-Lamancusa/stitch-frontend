@@ -597,4 +597,83 @@ const systemHealthCheck = () => {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  .admin-dashboard {
+    padding: var(--space-md);
+  }
+  
+  .admin-grid {
+    grid-template-columns: 1fr; /* Single column on mobile */
+    gap: var(--space-sm);
+  }
+  
+  .admin-card {
+    padding: var(--space-md);
+    margin: 0 4px;
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr); /* 2 columns instead of auto-fit */
+  }
+  
+  .metrics-grid {
+    grid-template-columns: 1fr; /* Single column for metrics */
+  }
+  
+  .card-actions {
+    flex-direction: column;
+    gap: var(--space-xs);
+  }
+  
+  .admin-btn {
+    width: 100%;
+    text-align: center;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+    gap: var(--space-xs);
+  }
+  
+  .metrics-actions {
+    flex-direction: column;
+    gap: var(--space-xs);
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-dashboard {
+    padding: var(--space-sm);
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr; /* Single column on very narrow */
+  }
+  
+  .admin-card {
+    padding: var(--space-sm);
+    margin: 0 2px;
+  }
+  
+  .card-header h3 {
+    font-size: var(--font-size-md);
+  }
+  
+  .admin-header h1 {
+    font-size: var(--font-size-lg);
+  }
+  
+  .card-badge {
+    font-size: calc(var(--font-size-xs) - 1px);
+    padding: 2px 8px;
+  }
+  
+  .admin-btn {
+    font-size: calc(var(--font-size-sm) - 1px);
+    padding: var(--space-xs) var(--space-sm);
+  }
+}
 </style>
