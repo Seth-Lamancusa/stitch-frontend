@@ -389,6 +389,9 @@ onBeforeUnmount(() => {
   // Clear message selection when leaving the thread view
   store.dispatch('navigation/clearReplyingTo');
   
+  // Clear any open action bars when leaving the thread view
+  store.dispatch('navigation/closeActiveActionBar');
+  
   // Keep message cache when leaving thread view
   
   // Clean up any pending timer
@@ -1012,22 +1015,7 @@ const findEndOfBranchMessage = () => {
   scroll-behavior: auto;
 }
 
-/* Media query for mobile responsiveness */
-@media (max-width: 768px) {
-  .messages-container {
-    padding-left: 16px;
-    padding-right: 16px;
-    padding-bottom: 120px; /* More space for the reply box on mobile */
-  }
-  
-  .thread-header {
-    padding: var(--space-xs) var(--space-sm);
-  }
-  
-  .thread-title {
-    font-size: var(--font-size-md);
-  }
-}
+/* Media query for mobile responsiveness - moved to consolidated section below */
 
 .auth-loading,
 .loading-indicator,
@@ -1210,6 +1198,12 @@ const findEndOfBranchMessage = () => {
 }
 
 @media (max-width: 768px) {
+  .messages-container {
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-bottom: 120px; /* More space for the reply box on mobile */
+  }
+  
   .reply-box-container {
     padding: 0 16px; /* Reduce padding on mobile */
     bottom: 10px; /* Position slightly higher on mobile */
@@ -1219,6 +1213,40 @@ const findEndOfBranchMessage = () => {
   /* Make the reply box take up more width on mobile */
   .reply-box {
     width: 100%;
+  }
+  
+  .thread-header {
+    padding: var(--space-xs) var(--space-sm);
+  }
+  
+  .thread-title {
+    font-size: var(--font-size-md);
+  }
+}
+
+@media (max-width: 480px) {
+  .messages-container {
+    padding-left: 4px; /* Minimal padding for thread content */
+    padding-right: 4px;
+    padding-bottom: 130px;
+  }
+  
+  .reply-box-container {
+    padding: 0 8px; /* Further reduce on very narrow screens */
+    bottom: 5px;
+  }
+  
+  .thread-header {
+    padding: 6px 8px; /* Minimal header padding */
+  }
+  
+  .back-button {
+    padding: 4px 8px;
+    font-size: calc(var(--font-size-sm) - 1px);
+  }
+  
+  .thread-title {
+    font-size: calc(var(--font-size-md) - 1px);
   }
 }
 </style> 

@@ -143,26 +143,93 @@ const navigate = async (direction) => {
   transform: translateY(-50%);
 }
 
-/* Mobile styles for sibling navigator */
+/* Mobile styles for sibling navigator - inline with action buttons */
 @media (max-width: 768px) {
   .sibling-navigator {
     top: auto;
-    bottom: 10px;
+    bottom: 8px;
+    left: 0;
+    width: 100%;
+    height: auto;
     transform: none;
-    height: 40px;
+    z-index: 11; /* Same level as action controls */
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    pointer-events: none;
   }
   
   .nav-button {
-    width: 32px;
-    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xs);
+    padding: 8px;
+    transition: all var(--transition-fast);
+    color: var(--color-text-secondary);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    opacity: 0.7;
+    min-width: 36px;
+    min-height: 36px;
+    pointer-events: auto;
+  }
+  
+  .nav-button:hover:not(:disabled) {
+    opacity: 1;
+    background-color: var(--color-surface-hover);
+    border-color: var(--color-border-hover);
+    color: var(--color-primary);
+    transform: scale(1.1);
+  }
+  
+  .nav-button.disabled {
+    opacity: 0.3;
+  }
+  
+  .nav-prev {
+    left: 8px;
+  }
+  
+  .nav-next {
+    right: 8px;
   }
   
   .left-triangle {
-    border-width: 6px 9px 6px 0;
+    border-width: 5px 7px 5px 0;
   }
   
   .right-triangle {
-    border-width: 6px 0 6px 9px;
+    border-width: 5px 0 5px 7px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sibling-navigator {
+    bottom: 6px;
+  }
+  
+  .nav-button {
+    padding: 6px;
+    min-width: 32px;
+    min-height: 32px;
+  }
+  
+  .nav-prev {
+    left: 6px;
+  }
+  
+  .nav-next {
+    right: 6px;
+  }
+  
+  .left-triangle {
+    border-width: 4px 6px 4px 0;
+  }
+  
+  .right-triangle {
+    border-width: 4px 0 4px 6px;
   }
 }
 
@@ -277,5 +344,18 @@ const navigate = async (direction) => {
   100% { opacity: 0.3; transform: scale(0.8); }
 }
 
-/* Dark theme styles are no longer needed as we're using CSS variables */
+/* Mobile-specific corner inscribed styling */
+@media (max-width: 768px) {
+  /* Override desktop gradients for cleaner mobile appearance */
+  .nav-button.nav-prev:not(.disabled):not(:disabled),
+  .nav-button.nav-next:not(.disabled):not(:disabled) {
+    background: var(--color-surface);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(var(--color-border-rgb, 200, 200, 200), 0.8);
+  }
+  
+  /* Square buttons - consistent styling with action hint button */
+  
+  /* Consistent with other mobile action buttons */
+}
 </style> 

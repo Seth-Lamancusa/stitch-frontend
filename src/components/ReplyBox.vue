@@ -1,60 +1,114 @@
 <template>
   <div class="reply-box-wrapper">
-    <div v-if="isReplying || isNewThread" class="reply-container">
-      <div class="reply-form">
-        <div class="reply-settings">
-          <label class="visibility-toggle">
-            <input 
-              type="checkbox" 
-              :checked="isPublic" 
-              @click="toggleVisibility"
-              :disabled="!canInteract"
-            >
-            <span>Public reply</span>
-          </label>
-          
-          <button 
-            class="recipients-toggle" 
-            @click="toggleRecipientSelector"
-            :disabled="!canInteract"
-          >
-            Recipients ({{ recipients.length }})
-          </button>
-          
-          <button 
-            class="chatbots-toggle" 
-            @click="toggleChatbotSelector"
-            :disabled="!canInteract"
-          >
-            Add bots
-          </button>
+    <!-- Backdrop overlay -->
+    <div 
+      v-if="isReplying || isNewThread" 
+      class="reply-backdrop"
+      @click="handleBackdropClick"
+      @touchstart.passive="handleBackdropTouchStart"
+      @touchmove.passive="handleBackdropTouchMove"
+    ></div>
+    
+    <!-- Bottom sheet -->
+    <div 
+      v-if="isReplying || isNewThread" 
+      class="reply-sheet"
+      :class="{ 
+        'reply-sheet--raised': isKeyboardVisible,
+        'reply-sheet--visible': showSheet 
+      }"
+      ref="replySheet"
+      role="dialog"
+      aria-labelledby="reply-header"
+      aria-modal="true"
+      @touchstart="handleTouchStart"
+      @touchmove="handleTouchMove"
+      @touchend="handleTouchEnd"
+    >
+      <!-- Sheet handle for swipe gesture -->
+      <div class="reply-sheet__handle" aria-hidden="true"></div>
+      
+      <!-- Header row -->
+      <div class="reply-sheet__header" id="reply-header">
+        <div class="reply-sheet__header-left">
+          <span class="reply-sheet__title">{{ replyHeaderText }}</span>
         </div>
       </div>
       
-      <div class="textarea-container">
+      <!-- Controls toolbar above input -->
+      <div class="reply-sheet__toolbar">
+        <!-- Public/Private dropdown -->
+        <div class="toolbar-control">
+          <select 
+            v-model="isPublic" 
+            class="visibility-dropdown"
+            :disabled="!canInteract"
+            aria-label="Message visibility"
+          >
+            <option :value="true">Public</option>
+            <option :value="false">Private</option>
+          </select>
+        </div>
+        
+        <!-- Recipients button -->
+        <button 
+          class="toolbar-control meta-pill" 
+          @click="toggleRecipientSelector"
+          :disabled="!canInteract"
+          :aria-expanded="showRecipientSelector"
+          aria-label="Manage recipients"
+        >
+          <span class="meta-pill__icon">👥</span>
+          <span class="meta-pill__text">Recipients ({{ recipients.length }})</span>
+        </button>
+        
+        <!-- Add bots button -->
+        <button 
+          class="toolbar-control meta-pill" 
+          @click="toggleChatbotSelector"
+          :disabled="!canInteract"
+          :aria-expanded="showChatbotSelector"
+          aria-label="Add chatbots"
+        >
+          <span class="meta-pill__icon">🤖</span>
+          <span class="meta-pill__text">+ Add bots</span>
+        </button>
+      </div>
+      
+      <!-- Text area -->
+      <div class="reply-sheet__textarea-container">
         <textarea 
           v-model="content" 
           :placeholder="placeholderText" 
-          class="reply-input"
+          class="reply-sheet__textarea"
           ref="replyTextarea"
           @keydown="handleTextareaKeyDown"
-          @focus="ensureReplyingActive"
+          @focus="handleTextareaFocus"
+          @blur="handleTextareaBlur"
           @input="autoResizeTextarea"
           :disabled="!canInteract"
           :class="{ 'disabled': !canInteract }"
+          aria-label="Message content"
+          rows="3"
         ></textarea>
-        
-        <div class="reply-actions">
-          <button 
-            @click.stop="sendReply" 
-            class="send-button"
-            :disabled="!canSendReply"
-          >
-            <span v-if="!isSending">Send</span>
-            <div v-else class="button-spinner"></div>
-          </button>
-        </div>
       </div>
+      
+      <!-- Floating send button -->
+      <button 
+        class="reply-sheet__send-button"
+        :class="{ 
+          'reply-sheet__send-button--disabled': !canSendReply,
+          'reply-sheet__send-button--loading': isSending,
+          'reply-sheet__send-button--success': showSendSuccess
+        }"
+        @click.stop="sendReply" 
+        :disabled="!canSendReply"
+        :aria-label="isSending ? 'Sending message' : 'Send message'"
+      >
+        <span v-if="showSendSuccess" class="send-button__icon">✓</span>
+        <span v-else-if="isSending" class="send-button__spinner" aria-hidden="true"></span>
+        <span v-else class="send-button__text">Send</span>
+      </button>
     </div>
 
     <!-- Recipients modal moved outside the reply-container but inside the wrapper -->
@@ -229,8 +283,19 @@ const store = useStore();
 
 // Refs
 const replyTextarea = ref(null);
+const replySheet = ref(null);
 const content = ref('');
 const isSending = ref(false);
+
+// Bottom sheet state
+const showSheet = ref(false);
+const isKeyboardVisible = ref(false);
+const showSendSuccess = ref(false);
+
+// Touch gesture state
+const touchStartY = ref(0);
+const isDragging = ref(false);
+const dragDistance = ref(0);
 
 // UI state
 const showRecipientSelector = ref(false);
@@ -296,7 +361,7 @@ const canSendReply = computed(() => {
 const placeholderText = computed(() => {
   // First priority: check if we're creating a new thread
   if (props.isNewThread) {
-    return "Type your message to create a new thread (no parent message)...";
+    return "Type your message to create a new thread...";
   }
   
   // Second: check if no message is selected
@@ -312,43 +377,171 @@ const placeholderText = computed(() => {
     return "You need to be whitelisted to send messages";
   }
   
-  // If we're replying to a message, show "Reply to [author]..."
+  return "Type your message...";
+});
+
+// Generate reply header text
+const replyHeaderText = computed(() => {
+  if (props.isNewThread) {
+    return "New Message";
+  }
+  
   if (props.targetId) {
-    // First get the message we're replying to
     const targetMessage = store.getters['messages/getMessage'](props.targetId);
     if (targetMessage) {
-      // Get the most appropriate display name for the author
       const displayName = getAuthorDisplayName(targetMessage);
       const userTag = getAuthorUserTag(targetMessage);
       
       if (userTag) {
-        return `Reply to ${displayName} (@${userTag})...`;
+        return `Replying to @${userTag}`;
       }
-      return `Reply to ${displayName}...`;
+      return `Replying to ${displayName}`;
     }
   }
   
-  return props.placeholder;
+  return "Reply";
 });
 
 // Methods
-const toggleVisibility = () => {
-  // Get current state
-  const currentState = store.getters['navigation/replyIsPublic'];
-  // Toggle to opposite
-  store.dispatch('navigation/updateReplyVisibility', !currentState);
-  
-  // Remove the forced sync - we only want to sync when initially setting up the reply
-  // if (!props.isNewThread) {
-  //   // Force sync settings after toggle
-  //   store.dispatch('navigation/syncReplySettings');
-  // }
-};
 
 const ensureReplyingActive = () => {
   if (!isReplying.value && props.targetId) {
     store.dispatch('navigation/toggleReply', true);
   }
+};
+
+// Bottom sheet methods
+const showBottomSheet = () => {
+  showSheet.value = true;
+  
+  // Focus textarea after animation
+  setTimeout(() => {
+    if (replyTextarea.value) {
+      replyTextarea.value.focus();
+    }
+  }, 350);
+};
+
+const hideBottomSheet = () => {
+  showSheet.value = false;
+  isKeyboardVisible.value = false;
+  
+  // Clear replying state if not new thread
+  if (!props.isNewThread) {
+    setTimeout(() => {
+      store.dispatch('navigation/clearReplyingTo');
+    }, 300);
+  }
+};
+
+// Track touch movement to distinguish between tap and scroll
+let touchStartY = 0;
+let touchMoveDistance = 0;
+
+const handleBackdropTouchStart = (event) => {
+  touchStartY = event.touches[0].clientY;
+  touchMoveDistance = 0;
+};
+
+const handleBackdropTouchMove = (event) => {
+  if (touchStartY) {
+    touchMoveDistance = Math.abs(event.touches[0].clientY - touchStartY);
+  }
+};
+
+const handleBackdropClick = (event) => {
+  // On mobile, only close if clicking outside the reply sheet and not scrolling
+  if (window.innerWidth <= 768) {
+    // Check if this was a scroll gesture (moved more than 10px)
+    if (touchMoveDistance > 10) {
+      touchMoveDistance = 0;
+      return;
+    }
+    
+    // Check if the click is actually outside the reply sheet
+    const replySheetElement = replySheet.value;
+    if (replySheetElement && !replySheetElement.contains(event.target)) {
+      hideBottomSheet();
+    }
+  } else {
+    // On desktop, any backdrop click closes
+    hideBottomSheet();
+  }
+  
+  // Reset touch tracking
+  touchMoveDistance = 0;
+};
+
+// Touch gesture handlers
+const handleTouchStart = (event) => {
+  const touch = event.touches[0];
+  touchStartY.value = touch.clientY;
+  isDragging.value = false;
+  dragDistance.value = 0;
+};
+
+const handleTouchMove = (event) => {
+  if (!isDragging.value) {
+    const touch = event.touches[0];
+    const deltaY = touch.clientY - touchStartY.value;
+    
+    // Only start dragging if moving down and near the top of the sheet
+    if (deltaY > 5 && touchStartY.value < 100) {
+      isDragging.value = true;
+    }
+  }
+  
+  if (isDragging.value) {
+    const touch = event.touches[0];
+    dragDistance.value = Math.max(0, touch.clientY - touchStartY.value);
+    
+    // Apply visual feedback
+    if (replySheet.value) {
+      replySheet.value.style.transform = `translateY(${dragDistance.value}px)`;
+    }
+  }
+};
+
+const handleTouchEnd = () => {
+  if (isDragging.value) {
+    // Reset visual transform
+    if (replySheet.value) {
+      replySheet.value.style.transform = '';
+    }
+    
+    // If dragged down more than 60px, close the sheet
+    if (dragDistance.value > 60) {
+      hideBottomSheet();
+    }
+  }
+  
+  isDragging.value = false;
+  dragDistance.value = 0;
+};
+
+// Keyboard handling
+const handleTextareaFocus = () => {
+  ensureReplyingActive();
+  
+  // Detect mobile keyboard
+  if (window.innerWidth <= 768) {
+    // Use a timeout to detect keyboard appearance
+    setTimeout(() => {
+      const viewportHeight = window.visualViewport?.height || window.innerHeight;
+      const initialHeight = window.screen.height;
+      
+      if (initialHeight - viewportHeight > 150) {
+        isKeyboardVisible.value = true;
+      }
+    }, 300);
+  }
+};
+
+const handleTextareaBlur = () => {
+  // Reset keyboard state
+  setTimeout(() => {
+    isKeyboardVisible.value = false;
+  }, 100);
 };
 
 const handleTextareaKeyDown = (event) => {
@@ -412,6 +605,12 @@ const sendReply = async () => {
     
     // Resize the textarea
     autoResizeTextarea();
+    
+    // Show success feedback
+    showSendSuccess.value = true;
+    setTimeout(() => {
+      showSendSuccess.value = false;
+    }, 2000);
     
     // Only emit send-success for new threads
     // WebSockets will handle updates for replies to existing messages
@@ -778,6 +977,32 @@ const handleClickOutsideSearch = (event) => {
   }
 };
 
+// Watchers
+watch(() => isReplying.value || props.isNewThread, (shouldShow) => {
+  if (shouldShow) {
+    showBottomSheet();
+  } else {
+    hideBottomSheet();
+  }
+}, { immediate: true });
+
+// Handle viewport changes for keyboard detection
+if (typeof window !== 'undefined' && window.visualViewport) {
+  const handleViewportChange = () => {
+    if (window.innerWidth <= 768) {
+      const heightDiff = window.screen.height - window.visualViewport.height;
+      isKeyboardVisible.value = heightDiff > 150;
+    }
+  };
+  
+  window.visualViewport.addEventListener('resize', handleViewportChange);
+  
+  // Cleanup
+  onBeforeUnmount(() => {
+    window.visualViewport.removeEventListener('resize', handleViewportChange);
+  });
+}
+
 // Expose methods and properties that parent components might need
 defineExpose({
   content,
@@ -797,158 +1022,374 @@ defineExpose({
 </script>
 
 <style scoped>
-/* Add styles for new wrapper */
+/* Bottom sheet wrapper */
 .reply-box-wrapper {
-  /* This ensures the wrapper doesn't affect layout */
   display: contents;
 }
 
-.reply-container {
+/* Backdrop overlay */
+.reply-backdrop {
   position: fixed;
-  bottom: 20px; /* Reduced bottom spacing */
-  left: 40px;
-  right: 40px;
-  padding: var(--space-xs) var(--space-md);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  z-index: 999;
+  animation: backdrop-fade-in 0.3s ease-out;
+}
+
+@keyframes backdrop-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Bottom sheet */
+.reply-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
   background-color: var(--color-surface);
-  z-index: 10;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-.reply-form {
-  margin-bottom: 4px; /* Reduce margin */
-}
-
-.reply-settings {
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  padding-bottom: env(safe-area-inset-bottom);
   display: flex;
-  gap: 12px;
-  margin-bottom: var(--space-xs);
+  flex-direction: column;
+  max-height: 50vh;
+  min-height: 200px;
+  transform: translateY(100%);
+  transition: transform 0.3s ease-out;
+}
+
+.reply-sheet--visible {
+  transform: translateY(0);
+}
+
+.reply-sheet--raised {
+  transform: translateY(-8px);
+}
+
+/* Sheet handle */
+.reply-sheet__handle {
+  width: 40px;
+  height: 4px;
+  background-color: var(--color-border);
+  border-radius: 2px;
+  margin: 8px auto 0;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+/* Header row */
+.reply-sheet__header {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  position: relative;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
 }
 
-.textarea-container {
+.reply-sheet__header-left {
+  flex: 1;
+}
+
+.reply-sheet__title {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.reply-sheet__header-right {
+  flex-shrink: 0;
+}
+
+
+
+/* Controls toolbar */
+.reply-sheet__toolbar {
   display: flex;
-  flex-direction: row;
-  align-items: flex-end;
-  gap: var(--space-xs);
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-surface-light, var(--color-surface));
 }
 
-.visibility-toggle {
+/* Toolbar controls */
+.toolbar-control {
+  flex-shrink: 0;
+}
+
+/* Visibility dropdown */
+.visibility-dropdown {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 36px;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 8px center;
+  background-repeat: no-repeat;
+  background-size: 16px;
+  padding-right: 32px;
+}
+
+.visibility-dropdown:hover:not(:disabled) {
+  background-color: var(--color-hover-overlay);
+  border-color: var(--color-border-hover);
+}
+
+.visibility-dropdown:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 79, 140, 255), 0.2);
+}
+
+.visibility-dropdown:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Uniform ghost pills for toolbar */
+.meta-pill {
   display: flex;
   align-items: center;
   gap: 6px;
-  cursor: pointer;
-}
-
-.recipients-toggle {
-  padding: 6px 12px;
-  background-color: var(--color-primary-light);
-  border: 1px solid var(--color-primary);
-  color: var(--color-primary);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  transition: background-color var(--transition-fast);
-}
-
-.recipients-toggle:hover:not(:disabled) {
-  background-color: var(--color-primary-light);
-  filter: brightness(95%);
-}
-
-.recipients-toggle:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.chatbots-toggle {
-  padding: 6px 12px;
-  background-color: var(--color-secondary-light, var(--color-primary-light));
-  border: 1px solid var(--color-secondary, var(--color-primary));
-  color: var(--color-secondary, var(--color-primary));
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  transition: background-color var(--transition-fast);
-}
-
-.chatbots-toggle:hover:not(:disabled) {
-  background-color: var(--color-secondary-light, var(--color-primary-light));
-  filter: brightness(95%);
-}
-
-.chatbots-toggle:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Reply input styles */
-.reply-input {
-  flex: 1;
-  min-height: 30px; /* Single line height */
-  height: 30px; /* Start with single line */
-  padding: 6px 10px;
+  padding: 8px 12px;
+  background: transparent;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  resize: none;
-  margin-bottom: 0;
-  font-family: inherit;
+  border-radius: 8px;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-height: 36px;
+}
+
+.meta-pill:hover:not(:disabled) {
+  background-color: var(--color-hover-overlay);
+  border-color: var(--color-border-hover);
+}
+
+.meta-pill:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.meta-pill__icon {
   font-size: var(--font-size-md);
+  line-height: 1;
+}
+
+.meta-pill__text {
+  font-weight: 500;
+}
+
+/* Textarea container */
+.reply-sheet__textarea-container {
+  flex: 1;
+  padding: 0 16px;
+  position: relative;
+  min-height: 0;
+}
+
+.reply-sheet__textarea {
+  width: 100%;
+  min-height: 120px;
+  max-height: 40vh;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
   background-color: var(--color-surface);
   color: var(--color-text);
-  transition: height var(--transition-fast);
-  overflow-y: auto; /* Let browser handle scrollbars naturally */
+  font-family: inherit;
+  font-size: var(--font-size-md);
+  line-height: 1.5;
+  resize: none;
+  transition: border-color 0.2s ease;
+  box-sizing: border-box;
 }
 
-.reply-input:focus:not(:disabled) {
+.reply-sheet__textarea:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-light);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 79, 140, 255), 0.2);
 }
 
-.reply-input.disabled {
-  background-color: var(--color-surface);
+.reply-sheet__textarea.disabled {
+  background-color: var(--color-surface-light);
   color: var(--color-text-disabled);
   cursor: not-allowed;
 }
 
-.reply-actions {
-  display: flex;
-  align-items: center;
-  margin-left: var(--space-xs);
-}
-
-.send-button {
-  padding: var(--space-xs) var(--space-md);
+/* Floating send button */
+.reply-sheet__send-button {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  min-width: 44px;
+  min-height: 44px;
   background-color: var(--color-primary);
   color: var(--color-text-inverse);
   border: none;
-  border-radius: var(--radius-pill);
+  border-radius: 50%;
   cursor: pointer;
-  font-weight: bold;
-  min-width: 80px;
-  height: 36px;
+  font-weight: 600;
+  font-size: var(--font-size-sm);
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+  z-index: 1;
 }
 
-.send-button:disabled {
-  opacity: 0.6;
+.reply-sheet__send-button:hover:not(:disabled) {
+  background-color: var(--color-primary-dark);
+  transform: scale(1.05);
+}
+
+.reply-sheet__send-button--disabled {
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
   cursor: not-allowed;
+  transform: none;
 }
 
-.button-spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.5);
+.reply-sheet__send-button--loading {
+  cursor: wait;
+}
+
+.reply-sheet__send-button--success {
+  background-color: var(--color-success);
+  transform: scale(1.1);
+}
+
+.send-button__text {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.send-button__icon {
+  font-size: var(--font-size-lg);
+  font-weight: bold;
+}
+
+.send-button__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
   border-top: 2px solid var(--color-text-inverse);
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  animation: spin 1s linear infinite;
+}
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  /* Hide desktop reply container on mobile */
+  .reply-container {
+    display: none !important;
+  }
+  
+  /* Remove background dimming on mobile - keep transparent but allow clicks outside reply sheet */
+  .reply-backdrop {
+    background-color: transparent;
+  }
+  
+  .reply-sheet {
+    border-radius: 0;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+  }
+  
+  .reply-sheet__header {
+    padding: 16px;
+  }
+  
+  .reply-sheet__meta {
+    padding: 0 16px 16px;
+  }
+  
+  .reply-sheet__textarea-container {
+    padding: 0 16px 60px; /* Extra bottom padding for send button */
+  }
+}
+
+@media (max-width: 480px) {
+  .reply-sheet__title {
+    font-size: var(--font-size-sm);
+  }
+  
+  .reply-sheet__toolbar {
+    padding: 0 12px 8px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  
+  .visibility-dropdown {
+    font-size: var(--font-size-xs);
+    padding: 6px 24px 6px 8px;
+    min-height: 32px;
+  }
+  
+  .meta-pill {
+    padding: 6px 8px;
+    font-size: var(--font-size-xs);
+    min-height: 32px;
+  }
+  
+  .reply-sheet__send-button {
+    min-width: 40px;
+    min-height: 40px;
+    bottom: 12px;
+    right: 12px;
+  }
+  
+  .reply-sheet__textarea {
+    min-height: 100px;
+    padding: 10px;
+  }
+}
+
+/* Desktop optimizations - keep mobile design but improve desktop UX */
+@media (min-width: 769px) {
+  .reply-sheet {
+    max-width: 600px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: var(--radius-md);
+    max-height: 60vh;
+  }
+  
+  .reply-sheet--visible {
+    transform: translateX(-50%) translateY(0);
+  }
+  
+  .reply-sheet--raised {
+    transform: translateX(-50%) translateY(-8px);
+  }
+  
+  /* Hide mobile touch handle on desktop */
+  .reply-sheet__handle {
+    display: none;
+  }
+}
+
+/* Common styles */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 /* Modal styles */
@@ -963,7 +1404,6 @@ defineExpose({
   justify-content: center;
   align-items: center;
   z-index: 1000; /* Higher explicit z-index */
-  backdrop-filter: blur(2px);
 }
 
 .recipient-modal {
@@ -1371,5 +1811,32 @@ defineExpose({
   height: 16px;
   cursor: pointer;
   accent-color: var(--color-primary);
+  position: relative;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 2px solid var(--color-border);
+  border-radius: 3px;
+  background-color: var(--color-surface);
+  transition: all 0.2s ease;
 }
+
+.chatbot-toggle input[type="checkbox"]:checked {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.chatbot-toggle input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: black;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+/* OLD MOBILE STYLES MOVED TO DESKTOP-ONLY SECTION ABOVE */
+/* These styles are now only active on desktop (min-width: 769px) to avoid conflicts with the new bottom sheet */
 </style> 

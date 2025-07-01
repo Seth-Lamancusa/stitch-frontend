@@ -10,7 +10,9 @@ export default {
     replySettings: {
       isPublic: true,
       recipients: []  // Will now store objects with {uid, display_name, user_tag} instead of strings
-    }
+    },
+    // Global state for mobile floating action bars
+    activeActionBarMessageId: null // Only one action bar can be open at a time
   },
   
   mutations: {
@@ -64,6 +66,14 @@ export default {
     
     CLEAR_REPLY_RECIPIENTS(state) {
       state.replySettings.recipients = [];
+    },
+    
+    SET_ACTIVE_ACTION_BAR(state, messageId) {
+      state.activeActionBarMessageId = messageId;
+    },
+    
+    CLEAR_ACTIVE_ACTION_BAR(state) {
+      state.activeActionBarMessageId = null;
     }
   },
   
@@ -208,6 +218,35 @@ export default {
       
       // 6. Set the final recipients list
       commit('SET_REPLY_RECIPIENTS', newRecipients);
+    },
+    
+    // Global action bar management
+    toggleActionBar({ commit, state }, messageId) {
+      if (state.activeActionBarMessageId === messageId) {
+        // Same message - close the action bar
+        commit('CLEAR_ACTIVE_ACTION_BAR');
+      } else {
+        // Different message (or no current action bar) - open for this message
+        commit('SET_ACTIVE_ACTION_BAR', messageId);
+      }
+    },
+    
+    closeActiveActionBar({ commit }) {
+      commit('CLEAR_ACTIVE_ACTION_BAR');
+    },
+    
+    showActionBar({ commit }, messageId) {
+      commit('SET_ACTIVE_ACTION_BAR', messageId);
+    },
+    
+    hideActionBar({ commit, state }, messageId) {
+      // Only hide if this is the currently active action bar
+      if (messageId && state.activeActionBarMessageId === messageId) {
+        commit('CLEAR_ACTIVE_ACTION_BAR');
+      } else if (!messageId) {
+        // No specific message - clear any active action bar
+        commit('CLEAR_ACTIVE_ACTION_BAR');
+      }
     }
   },
   
@@ -234,6 +273,10 @@ export default {
       return state.previousRoute;
     },
     
-    activeTab: state => state.activeTab
+    activeTab: state => state.activeTab,
+    
+    // Global action bar getters
+    activeActionBarMessageId: state => state.activeActionBarMessageId,
+    isActionBarOpen: state => messageId => state.activeActionBarMessageId === messageId
   }
 }

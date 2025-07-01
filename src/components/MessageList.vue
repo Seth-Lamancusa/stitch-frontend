@@ -491,6 +491,10 @@ onUnmounted(() => {
   // Cancel any pending requests to prevent memory leaks
   currentRequestId.value++;
   localLoadingState.value = false;
+  
+  // Clear any open action bars when MessageList is unmounted
+  store.dispatch('navigation/closeActiveActionBar');
+  
   console.log('[MessageList] Component unmounted, canceling pending requests');
 });
 
@@ -1066,6 +1070,15 @@ const handleLinkDelete = async (linkData) => {
   transition: background-color var(--transition-normal);
   z-index: 10;
   font-size: 52px;
+  line-height: 1;
+}
+
+.new-message-btn .btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transform: translateY(-1px); /* Fine-tune vertical centering */
 }
 
 .new-message-btn:hover {
@@ -1303,5 +1316,93 @@ const handleLinkDelete = async (linkData) => {
 
 .info-text:last-child {
   margin-bottom: 0;
+}
+
+/* Mobile responsive styles for info box */
+@media (max-width: 768px) {
+  .info-box {
+    width: 95%;
+    margin: 0 auto;
+    margin-bottom: 12px;
+    padding: 16px;
+    max-width: none;
+  }
+  
+  .info-box.collapsed {
+    width: 120px;
+    margin: 0 auto;
+    margin-bottom: 8px;
+  }
+  
+  .info-text {
+    font-size: var(--font-size-sm, 13px);
+    line-height: 1.4;
+  }
+  
+  .toggle-button {
+    font-size: calc(var(--font-size-sm) - 1px);
+  }
+}
+
+@media (max-width: 480px) {
+  .info-box {
+    width: 98%;
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+  
+  .info-text {
+    font-size: calc(var(--font-size-sm) - 1px);
+    margin-bottom: 10px;
+  }
+  
+  .toggle-button {
+    font-size: calc(var(--font-size-xs));
+    padding: 1px 4px;
+  }
+  
+  /* Additional mobile responsive fixes */
+  .message-list-item {
+    margin: 0 2px 6px 2px; /* Add horizontal margins */
+  }
+  
+  .empty-state {
+    padding: var(--space-md);
+    margin: 0 4px;
+  }
+  
+  .loading-indicator {
+    padding: var(--space-sm);
+    margin: 0 4px;
+  }
+  
+  .new-message-btn {
+    width: 52px;
+    height: 52px;
+    font-size: 44px;
+    bottom: var(--space-md);
+    right: var(--space-md);
+  }
+  
+  .new-message-btn .btn-icon {
+    transform: translateY(-0.5px); /* Adjust for smaller mobile button */
+  }
+  
+  .delete-confirm-content {
+    width: 96%;
+    padding: var(--space-md);
+    margin: 0 2%;
+  }
+  
+  .delete-confirm-actions {
+    flex-direction: column;
+    gap: var(--space-xs);
+  }
+  
+  .delete-confirm-actions .cancel-button,
+  .delete-confirm-actions .delete-button {
+    width: 100%;
+    padding: var(--space-sm);
+  }
 }
 </style> 
