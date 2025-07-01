@@ -143,26 +143,67 @@ const navigate = async (direction) => {
   transform: translateY(-50%);
 }
 
-/* Mobile styles for sibling navigator */
+/* Mobile styles for sibling navigator - corner inscribed positioning */
 @media (max-width: 768px) {
   .sibling-navigator {
-    top: auto;
-    bottom: 10px;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     transform: none;
-    height: 40px;
+    z-index: 3; /* Lower z-index to stay behind floating action controls */
   }
   
   .nav-button {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 24px; /* Reduced height for corner inscription */
+    border-radius: var(--radius-sm);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  }
+  
+  .nav-prev {
+    bottom: 8px;
+    left: 8px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0; /* Only round right side */
+  }
+  
+  .nav-next {
+    bottom: 8px;
+    right: 56px; /* Offset to avoid mobile action controls */
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm); /* Only round left side */
   }
   
   .left-triangle {
-    border-width: 6px 9px 6px 0;
+    border-width: 5px 7px 5px 0;
   }
   
   .right-triangle {
-    border-width: 6px 0 6px 9px;
+    border-width: 5px 0 5px 7px;
+  }
+}
+
+@media (max-width: 480px) {
+  .nav-button {
+    width: 26px;
+    height: 22px; /* Even more reduced height for very narrow screens */
+  }
+  
+  .nav-prev {
+    bottom: 6px;
+    left: 6px;
+  }
+  
+  .nav-next {
+    bottom: 6px;
+    right: 52px; /* Offset to avoid mobile action controls */
+  }
+  
+  .left-triangle {
+    border-width: 4px 6px 4px 0;
+  }
+  
+  .right-triangle {
+    border-width: 4px 0 4px 6px;
   }
 }
 
@@ -277,5 +318,32 @@ const navigate = async (direction) => {
   100% { opacity: 0.3; transform: scale(0.8); }
 }
 
-/* Dark theme styles are no longer needed as we're using CSS variables */
+/* Mobile-specific corner inscribed styling */
+@media (max-width: 768px) {
+  /* Override desktop gradients for cleaner mobile appearance */
+  .nav-button.nav-prev:not(.disabled):not(:disabled),
+  .nav-button.nav-next:not(.disabled):not(:disabled) {
+    background: var(--color-surface);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(var(--color-border-rgb, 200, 200, 200), 0.8);
+  }
+  
+  /* Subtle corner rounding for inscribed appearance - bottom corners */
+  .nav-prev {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+  
+  .nav-next {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  
+  /* Hover effects for mobile */
+  .nav-button:hover:not(:disabled) {
+    background-color: var(--color-primary-light);
+    transform: scale(1.05);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+}
 </style> 

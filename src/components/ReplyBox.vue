@@ -1015,7 +1015,6 @@ defineExpose({
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.4);
   z-index: 999;
-  backdrop-filter: blur(2px);
   animation: backdrop-fade-in 0.3s ease-out;
 }
 
@@ -1315,160 +1314,27 @@ defineExpose({
   }
 }
 
-/* Legacy desktop styles - hidden on mobile */
+/* Desktop optimizations - keep mobile design but improve desktop UX */
 @media (min-width: 769px) {
-  .reply-backdrop,
   .reply-sheet {
-    display: none; /* Hide bottom sheet on desktop */
-  }
-  
-  /* Show old desktop reply box */
-  .reply-container {
-    display: block;
-    position: fixed;
-    bottom: 20px;
-    left: 40px;
-    right: 40px;
-    padding: var(--space-xs) var(--space-md);
-    border: 1px solid var(--color-border);
+    max-width: 600px;
+    left: 50%;
+    transform: translateX(-50%);
     border-radius: var(--radius-md);
-    background-color: var(--color-surface);
-    z-index: 10;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    max-height: 60vh;
   }
   
-  .reply-form {
-    margin-bottom: 4px;
+  .reply-sheet--visible {
+    transform: translateX(-50%) translateY(0);
   }
   
-  .reply-settings {
-    display: flex;
-    gap: 12px;
-    margin-bottom: var(--space-xs);
-    align-items: center;
-    position: relative;
+  .reply-sheet--raised {
+    transform: translateX(-50%) translateY(-8px);
   }
   
-  .textarea-container {
-    display: flex;
-    flex-direction: row;
-    align-items: flex-end;
-    gap: var(--space-xs);
-  }
-  
-  .visibility-toggle {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-  }
-  
-  .recipients-toggle {
-    padding: 6px 12px;
-    background-color: var(--color-primary-light);
-    border: 1px solid var(--color-primary);
-    color: var(--color-primary);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: var(--font-size-xs);
-    font-weight: 500;
-    transition: background-color var(--transition-fast);
-  }
-  
-  .recipients-toggle:hover:not(:disabled) {
-    background-color: var(--color-primary-light);
-    filter: brightness(95%);
-  }
-  
-  .recipients-toggle:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  
-  .chatbots-toggle {
-    padding: 6px 12px;
-    background-color: var(--color-secondary-light, var(--color-primary-light));
-    border: 1px solid var(--color-secondary, var(--color-primary));
-    color: var(--color-secondary, var(--color-primary));
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    font-size: var(--font-size-xs);
-    font-weight: 500;
-    transition: background-color var(--transition-fast);
-  }
-  
-  .chatbots-toggle:hover:not(:disabled) {
-    background-color: var(--color-secondary-light, var(--color-primary-light));
-    filter: brightness(95%);
-  }
-  
-  .chatbots-toggle:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  
-  .reply-input {
-    flex: 1;
-    min-height: 30px;
-    height: 30px;
-    padding: 6px 10px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    resize: none;
-    margin-bottom: 0;
-    font-family: inherit;
-    font-size: var(--font-size-md);
-    background-color: var(--color-surface);
-    color: var(--color-text);
-    transition: height var(--transition-fast);
-    overflow-y: auto;
-  }
-  
-  .reply-input:focus:not(:disabled) {
-    outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px var(--color-primary-light);
-  }
-  
-  .reply-input.disabled {
-    background-color: var(--color-surface);
-    color: var(--color-text-disabled);
-    cursor: not-allowed;
-  }
-  
-  .reply-actions {
-    display: flex;
-    align-items: center;
-    margin-left: var(--space-xs);
-  }
-  
-  .send-button {
-    padding: var(--space-xs) var(--space-md);
-    background-color: var(--color-primary);
-    color: var(--color-text-inverse);
-    border: none;
-    border-radius: var(--radius-pill);
-    cursor: pointer;
-    font-weight: bold;
-    min-width: 80px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  
-  .send-button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-  
-  .button-spinner {
-    width: 14px;
-    height: 14px;
-    border: 2px solid rgba(255, 255, 255, 0.5);
-    border-top: 2px solid var(--color-text-inverse);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+  /* Hide mobile touch handle on desktop */
+  .reply-sheet__handle {
+    display: none;
   }
 }
 
@@ -1490,7 +1356,6 @@ defineExpose({
   justify-content: center;
   align-items: center;
   z-index: 1000; /* Higher explicit z-index */
-  backdrop-filter: blur(2px);
 }
 
 .recipient-modal {
