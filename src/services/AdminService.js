@@ -41,15 +41,21 @@ class AdminService {
   // User management methods
   async getUsers(params = {}) {
     try {
-      const response = await this.client.get('/users', { params });
+      // Set default limit if not provided
+      const defaultParams = { limit: 15, skip: 0, ...params };
+      const response = await this.client.get('/users', { params: defaultParams });
       return {
-        users: response.data,
+        users: response.data.users,
+        total: response.data.total,
+        has_more: response.data.has_more,
         success: true
       };
     } catch (error) {
       console.error('Error fetching users:', error);
       return {
         users: [],
+        total: 0,
+        has_more: false,
         success: false,
         error: error.response?.data?.detail || error.message
       };
@@ -73,20 +79,59 @@ class AdminService {
     }
   }
 
+  async getMetrics() {
+    try {
+      const response = await this.client.get('/metrics/readable');
+      return {
+        metrics: response.data,
+        success: true
+      };
+    } catch (error) {
+      console.error('Error fetching metrics:', error);
+      return {
+        metrics: null,
+        success: false,
+        error: error.response?.data?.detail || error.message
+      };
+    }
+  }
+
+  async resetMetrics() {
+    try {
+      const response = await this.client.post('/metrics/reset');
+      return {
+        success: true,
+        message: response.data.message
+      };
+    } catch (error) {
+      console.error('Error resetting metrics:', error);
+      return {
+        success: false,
+        error: error.response?.data?.detail || error.message
+      };
+    }
+  }
+
   // Note: Toggle methods removed - not implemented in simplified admin endpoints
 
   // Message management methods
   async getMessages(params = {}) {
     try {
-      const response = await this.client.get('/messages', { params });
+      // Set default limit if not provided
+      const defaultParams = { limit: 15, skip: 0, ...params };
+      const response = await this.client.get('/messages', { params: defaultParams });
       return {
-        messages: response.data,
+        messages: response.data.messages,
+        total: response.data.total,
+        has_more: response.data.has_more,
         success: true
       };
     } catch (error) {
       console.error('Error fetching messages:', error);
       return {
         messages: [],
+        total: 0,
+        has_more: false,
         success: false,
         error: error.response?.data?.detail || error.message
       };

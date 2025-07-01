@@ -61,7 +61,7 @@ const emit = defineEmits(['messageClicked', 'selectionChanged']);
 
 const isAllLoaded = ref(false);
 const currentSkip = ref(0);
-const pageSize = ref(20);
+const pageSize = ref(15);
 
 // Local state for non-store modes (like saved mode)
 const localMessages = ref([]);
@@ -395,7 +395,8 @@ const loadMessages = async () => {
     if (response) {
       console.log(`[MessageList] Request ${requestId} response for ${props.mode}:`, {
         messageCount: response.messages?.length || 0,
-        exhausted: response.exhausted,
+        has_more: response.has_more,
+        total: response.total,
         currentSkip: currentSkip.value
       });
       
@@ -416,8 +417,8 @@ const loadMessages = async () => {
       // Store modes (inbox/admin) are handled by the store action itself
       
       // Update pagination state
-      isAllLoaded.value = response.exhausted || false;
-      if (!response.exhausted && response.messages && response.messages.length > 0) {
+      isAllLoaded.value = !response.has_more;
+      if (response.has_more && response.messages && response.messages.length > 0) {
         currentSkip.value += response.messages.length;
       }
       

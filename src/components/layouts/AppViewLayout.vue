@@ -10,31 +10,52 @@
         
         <!-- Navigation Tabs -->
         <div class="navigation-tabs">
-          <router-link 
-            to="/public" 
-            class="nav-tab"
-            :class="{ 'active': activeTab === 'public' }"
-            @click="handleTabClick('public')"
-          >
-            Public
-          </router-link>
-          <template v-if="user">
+          <!-- Admin Navigation -->
+          <template v-if="isOnAdminPage && isAdmin">
             <router-link 
-              to="/saved" 
+              to="/admin/users" 
               class="nav-tab"
-              :class="{ 'active': activeTab === 'saved' }"
-              @click="handleTabClick('saved')"
+              :class="{ 'active': $route.path === '/admin/users' }"
             >
-              Saved
+              Users
             </router-link>
             <router-link 
-              to="/inbox" 
+              to="/admin/messages" 
               class="nav-tab"
-              :class="{ 'active': activeTab === 'inbox' }"
-              @click="handleTabClick('inbox')"
+              :class="{ 'active': $route.path === '/admin/messages' }"
             >
-              Inbox
+              Messages
             </router-link>
+          </template>
+          
+          <!-- Regular Navigation -->
+          <template v-else>
+            <router-link 
+              to="/public" 
+              class="nav-tab"
+              :class="{ 'active': activeTab === 'public' }"
+              @click="handleTabClick('public')"
+            >
+              Public
+            </router-link>
+            <template v-if="user">
+              <router-link 
+                to="/saved" 
+                class="nav-tab"
+                :class="{ 'active': activeTab === 'saved' }"
+                @click="handleTabClick('saved')"
+              >
+                Saved
+              </router-link>
+              <router-link 
+                to="/inbox" 
+                class="nav-tab"
+                :class="{ 'active': activeTab === 'inbox' }"
+                @click="handleTabClick('inbox')"
+              >
+                Inbox
+              </router-link>
+            </template>
           </template>
         </div>
       </div>
@@ -100,6 +121,11 @@ const authReady = computed(() => store.getters['auth/authReady']);
 const activeTab = computed(() => store.getters['navigation/activeTab']);
 const isLoggingIn = ref(false);
 const isProfileModalOpen = ref(false);
+
+// Check if we're on an admin page
+const isOnAdminPage = computed(() => {
+  return route.path.startsWith('/admin');
+});
 
 const userDisplayName = computed(() => {
   if (!user.value) return 'Guest';
