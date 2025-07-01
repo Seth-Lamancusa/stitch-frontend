@@ -147,7 +147,7 @@ const handleLogin = async () => {
     
     // Check if user is still logged in and whitelisted
     const currentUser = store.getters['auth/user'];
-    if (currentUser && ['admin', 'whitelisted'].includes(currentUser.status)) {
+    if (currentUser && ['admin', 'whitelisted', 'import'].includes(currentUser.status)) {
       // Only redirect if there was a specific redirect requested
       if (route.query.redirect) {
         router.push(route.query.redirect);

@@ -262,7 +262,7 @@ const handleNewThreadClick = (event) => {
   }
 
   // Check user status directly
-  if (user.value.status === 'admin' || user.value.status === 'whitelisted') {
+        if (user.value.status === 'admin' || user.value.status === 'whitelisted' || user.value.status === 'import') {
     createNewThread();
   } else {
     alert("You need to be whitelisted to create new messages");
