@@ -52,7 +52,7 @@ watch(() => route.path, () => {
 });
 
 const updateActiveTab = () => {
-  let tab = 'inbox';
+  let tab = 'public'; // Default to public
   if (route.path === '/public') tab = 'public';
   else if (route.path === '/saved') tab = 'saved';
   else if (route.path === '/inbox') tab = 'inbox';

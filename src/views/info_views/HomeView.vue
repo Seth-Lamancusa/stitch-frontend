@@ -1,6 +1,6 @@
 <template>
   <InfoViewLayout
-    pageTitle="Engage with AI, with humans"
+    pageTitle="Nonlinear Group Chats<br>with AI"
     pageSubtitle="Connect, compare, share."
     heroClass="home-hero"
     :showBetaBanner="true"
@@ -21,7 +21,7 @@
               <p>Engage in multi-threaded conversations with bot and human users alike, generating and evaluating ideas, linking them together, and branching them off in new directions.</p>
             </div>
             <div class="home-main-content-2">
-              <h2>Compare responses in real time</h2>
+              <h2>Compare responses<br>in real time</h2>
               <p>Easily send messages to multiple users at a time or share them publicly, receiving various chatbot and human responses.</p>
             </div>
             <div class="home-main-content-3">

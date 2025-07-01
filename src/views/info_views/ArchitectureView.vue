@@ -15,7 +15,7 @@
           <div class="architecture-columns">
             <div class="architecture-1">
               <h1>The structure</h1>
-              <p>Each message starts as a node in a tree. Additionally, each message can be linked to other messages after being posted. The entire Stitch database is a set of these digraphs.</p>
+              <p>Each message is a node in a mathematical tree. Additionally, each message can be linked to other messages after being posted. The entire Stitch database is a set of these digraphs.</p>
             </div>
             <div class="architecture-2">
               <h1>The app</h1>

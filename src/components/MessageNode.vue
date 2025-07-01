@@ -6,7 +6,8 @@
       'list-view': inListView,
       'shake-animation': isShaking,
       'being-swiped': isBeingSwiped,
-      'compact': compact
+      'compact': compact,
+      'dropdown-open': showRecipientsDropdown
     }"
     :data-message-id="message.id"
     :data-has-siblings="hasSiblings"
@@ -144,12 +145,6 @@
           
           <!-- Admin controls -->
           <div class="admin-controls" v-if="isAdmin">
-            <span 
-              @click.stop="openTitleDescriptionModal" 
-              class="title-icon"
-              title="Edit title and description"
-            >T</span>
-            
             <button 
               @click.stop="$emit('delete', message)" 
               class="delete-button"
@@ -208,7 +203,7 @@
           </button>
           
           <!-- Add reformat button -->
-          <button 
+          <!-- <button 
             v-if="!inListView"
             @click.stop="handleReformat" 
             class="reformat-button"
@@ -219,7 +214,7 @@
             <span v-if="isReformatting" class="loading-indicator"></span>
             <span v-else class="reformat-icon">✨</span>
             Reformat
-          </button>
+          </button> -->
           
           <!-- Copy JSON Button - Admin only -->
           <button 
@@ -317,7 +312,7 @@
             </div>
             <div class="preview-buttons">
               <button class="preview-button">Reply</button>
-              <button class="preview-button">Reformat</button>
+              <!-- <button class="preview-button">Reformat</button> -->
               <button class="preview-button">Copy Text</button>
               <button class="preview-button">Save</button>
             </div>
@@ -365,7 +360,7 @@
             </div>
             <div class="preview-buttons">
               <button class="preview-button">Reply</button>
-              <button class="preview-button">Reformat</button>
+              <!-- <button class="preview-button">Reformat</button> -->
               <button class="preview-button">Copy Text</button>
               <button class="preview-button">Save</button>
             </div>
@@ -374,53 +369,7 @@
       </div>
     </div>
     
-    <!-- Title/Description Edit Modal -->
-    <div v-if="showTitleDescModal" class="modal-overlay" @click.stop="closeTitleDescModal">
-      <div class="modal-container" @click.stop>
-        <div class="modal-header">
-          <h3>Edit Title & Description</h3>
-          <button class="close-button" @click.stop="closeTitleDescModal">×</button>
-        </div>
-        
-        <div class="modal-content">
-          <div class="form-group">
-            <label for="messageTitle">Title</label>
-            <input 
-              id="messageTitle" 
-              v-model="editableTitle" 
-              type="text" 
-              placeholder="Message title"
-              ref="titleInput"
-            />
-          </div>
-          
-          <div class="form-group">
-            <label for="messageDescription">Description</label>
-            <textarea 
-              id="messageDescription" 
-              v-model="editableDescription" 
-              rows="3" 
-              placeholder="Brief description of this message"
-            ></textarea>
-          </div>
-          
-          <div v-if="saveMessage" class="save-status" :class="{ 'error': saveError }">
-            {{ saveMessage }}
-          </div>
-        </div>
-        
-        <div class="modal-footer">
-          <button class="cancel-btn" @click.stop="closeTitleDescModal">Cancel</button>
-          <button 
-            class="save-btn" 
-            @click.stop="saveTitleAndDescription" 
-            :disabled="isSaving"
-          >
-            {{ isSaving ? 'Saving...' : 'Save Changes' }}
-          </button>
-        </div>
-      </div>
-    </div>
+
   </div>
 </template>
 
@@ -513,19 +462,12 @@ export default {
     const isAdmin = computed(() => store.getters['auth/isAdmin']);
     const showRecipientsDropdown = ref(false);
     
-    // Title/Description Modal
-    const showTitleDescModal = ref(false);
-    const editableTitle = ref('');
-    const editableDescription = ref('');
-    const isSaving = ref(false);
-    const saveMessage = ref('');
-    const saveError = ref(false);
-    const titleInput = ref(null);
+
     
     // For regular users, just use token info
     const isTogglingReadStatus = ref(false);
     
-    const isReformatting = ref(false);
+    // const isReformatting = ref(false);
     
     // Add refs for copy button states
     const isJsonCopied = ref(false);
@@ -581,70 +523,9 @@ export default {
     const showNextCard = ref(false);
     const showPrevCard = ref(false);
     
-    const openTitleDescriptionModal = () => {
-      editableTitle.value = props.message.title || '';
-      editableDescription.value = props.message.description || '';
-      showTitleDescModal.value = true;
-      
-      // Clear any previous status message
-      saveMessage.value = '';
-      saveError.value = false;
-      
-      // Focus the title input after the modal is shown
-      nextTick(() => {
-        if (titleInput.value) {
-          titleInput.value.focus();
-        }
-      });
-    };
-    
-    const closeTitleDescModal = () => {
-      showTitleDescModal.value = false;
-      // Clear any status message
-      saveMessage.value = '';
-      saveError.value = false;
-    };
-    
     const openLinksModal = () => {
       // Emit event to parent to handle the modal
       emit('showLinks', props.message);
-    };
-    
-    const saveTitleAndDescription = async () => {
-      // For now just close the modal, since updateMessage action was removed
-      isSaving.value = true;
-      
-      try {
-        // Create update data object with only the fields that should be sent
-        const updateData = {};
-        
-        // Always send both fields, with null for empty strings
-        // This explicitly indicates we want to clear the field if it's empty
-        updateData.title = editableTitle.value.trim() || null;
-        updateData.description = editableDescription.value.trim() || null;
-        
-        // Call the store action to update title and description
-        const success = await store.dispatch('messages/updateTitleDescription', {
-          messageId: props.message.id,
-          ...updateData
-        });
-        
-        if (success) {
-          closeTitleDescModal();
-          saveMessage.value = 'Title and description saved successfully!';
-        } else {
-          // Handle error - could add error state here if needed
-          console.error('Failed to save title and description');
-          saveError.value = true;
-          saveMessage.value = 'Failed to save title and description. Please try again later.';
-        }
-      } catch (error) {
-        console.error('Error saving title and description:', error);
-        saveError.value = true;
-        saveMessage.value = 'An error occurred while saving title and description. Please try again later.';
-      } finally {
-        isSaving.value = false;
-      }
     };
     
     const isPublic = computed(() => {
@@ -1252,18 +1133,18 @@ export default {
       })(props.message.content);
     });
     
-    const handleReformat = async () => {
-      if (isReformatting.value) return;
-      
-      isReformatting.value = true;
-      try {
-        await store.dispatch('messages/reformatMessage', props.message.id);
-      } catch (error) {
-        console.error('Error reformatting message:', error);
-      } finally {
-        isReformatting.value = false;
-      }
-    };
+    // const handleReformat = async () => {
+    //   if (isReformatting.value) return;
+    //   
+    //   isReformatting.value = true;
+    //   try {
+    //     await store.dispatch('messages/reformatMessage', props.message.id);
+    //   } catch (error) {
+    //     console.error('Error reformatting message:', error);
+    //   } finally {
+    //     isReformatting.value = false;
+    //   }
+    // };
     
     const toggleSaveMessage = async () => {
       if (isSavingMessage.value) return;
@@ -1443,13 +1324,6 @@ export default {
       isPublic,
       isAdmin,
       isMessageUnread,
-      showTitleDescModal,
-      editableTitle,
-      editableDescription,
-      isSaving,
-      openTitleDescriptionModal,
-      closeTitleDescModal,
-      saveTitleAndDescription,
       hasReplies: computed(() => props.totalReplies > 0),
       isEndOfBranch,
       hasRecipients,
@@ -1462,16 +1336,13 @@ export default {
       handleSiblingNavigation,
       isCurrentUser,
       isCurrentUserRecipient,
-      saveMessage,
-      saveError,
-      titleInput,
       isTogglingReadStatus,
       toggleReadStatus,
       copyMessageJson,
       copyMessageText,
       truncatedContent,
-      isReformatting,
-      handleReformat,
+      // isReformatting,
+      // handleReformat,
       messageContentRef,
       isShaking,
       hasSiblings,
@@ -1511,6 +1382,11 @@ export default {
   transition: all var(--transition-fast);
   position: relative;
   contain: layout style;
+}
+
+/* Elevate z-index when dropdown is open to ensure it appears above subsequent messages */
+.message-node.dropdown-open {
+  z-index: 10;
 }
 
 /* Add styling for list view mode */
@@ -1939,15 +1815,15 @@ export default {
   gap: 12px;
 }
 
-.message-node.compact .reply-button,
-.message-node.compact .reformat-button,
-.message-node.compact .text-button,
-.message-node.compact .json-button,
-.message-node.compact .save-button,
-.message-node.compact .links-button {
-  font-size: calc(var(--font-size-xs) - 1px);
-  padding: 4px 6px;
-}
+  .message-node.compact .reply-button,
+  /* .message-node.compact .reformat-button, */
+  .message-node.compact .text-button,
+  .message-node.compact .json-button,
+  .message-node.compact .save-button,
+  .message-node.compact .links-button {
+    font-size: calc(var(--font-size-xs) - 1px);
+    padding: 4px 6px;
+  }
 
 .message-footer {
   display: flex;
@@ -2149,7 +2025,8 @@ export default {
   100% { transform: rotate(360deg); }
 }
 
-.reply-button, .reformat-button, .text-button, .json-button {
+/* .reply-button, .reformat-button, .text-button, .json-button { */
+.reply-button, .text-button, .json-button {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2163,7 +2040,8 @@ export default {
   color: var(--color-text-secondary);
 }
 
-.reply-button:hover, .reformat-button:hover:not(:disabled), .text-button:hover, .json-button:hover {
+/* .reply-button:hover, .reformat-button:hover:not(:disabled), .text-button:hover, .json-button:hover { */
+.reply-button:hover, .text-button:hover, .json-button:hover {
   background-color: var(--color-surface-hover);
   border-color: var(--color-border-hover);
   color: var(--color-primary);
@@ -2174,7 +2052,7 @@ export default {
   line-height: 1;
 }
 
-.reformat-icon {
+/* .reformat-icon {
   font-size: var(--font-size-sm);
   line-height: 1;
 }
@@ -2192,7 +2070,7 @@ export default {
   border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
-}
+} */
 
 .save-button {
   display: flex;
@@ -2318,7 +2196,7 @@ export default {
   
   /* All action buttons share same consistent styling */
   .reply-button,
-  .reformat-button,
+  /* .reformat-button, */
   .text-button,
   .json-button,
   .save-button {

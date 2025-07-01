@@ -603,42 +603,6 @@ const removeRecipient = (index) => {
   store.dispatch('navigation/removeRecipient', index);
 };
 
-const isAuthorRecipient = (recipient) => {
-  // If we're replying to a message
-  if (props.targetId) {
-    // Get the target message
-    const targetMessage = store.getters['messages/getMessage'](props.targetId);
-    if (targetMessage) {
-      // Special case for ChatGPT
-      if ((targetMessage.content_author === 'chatgpt' || 
-           targetMessage.content_author === 'chatgpt-system' ||
-           targetMessage.author_email === 'chatgpt') && 
-          (recipient.uid === 'chatgpt-system')) {
-        return true;
-      }
-      
-      // Check if recipient UID matches the target message's author UID
-      if (recipient.uid && recipient.uid === targetMessage.content_author) {
-        return true;
-      }
-      
-      // Check if recipient tag matches the target message's author tag
-      if (recipient.user_tag && targetMessage.author_user_tag && 
-          recipient.user_tag === targetMessage.author_user_tag) {
-        return true;
-      }
-      
-      // For backward compatibility, check email as well
-      if (recipient.user_tag && targetMessage.author_email && 
-          recipient.user_tag === targetMessage.author_email) {
-        return true;
-      }
-    }
-  }
-  
-  return false;
-};
-
 // Helper function to get the best display name for an author
 const getAuthorDisplayName = (message) => {
   const currentUser = store.getters['auth/user'];
@@ -654,11 +618,10 @@ const getAuthorDisplayName = (message) => {
 
 // Helper function to get author user tag
 const getAuthorUserTag = (message) => {
-  const currentUser = store.getters['auth/user'];
   
   // First priority: message's author_user_tag from database
   if (message.author_user_tag) {
-    // This will handle ChatGPT and all users with proper database records
+    // This will handle all users with proper database records
     return message.author_user_tag;
   }
   

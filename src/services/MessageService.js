@@ -147,11 +147,7 @@ export default {
     return response;
   },
   
-  // Update message title and description
-  async updateTitleDescription(id, titleData) {
-    const headers = await getAuthHeaders();
-    return axios.patch(`${apiBaseUrl}/messages/${id}/title-description`, titleData, { headers });
-  },
+
   
   // Mark a message as read
   async markMessageAsRead(id) {
@@ -189,6 +185,12 @@ export default {
   async getAllSavedMessages(skip = 0, limit = 20) {
     const headers = await getAuthHeaders();
     return axios.get(`${apiBaseUrl}/messages/saved?skip=${skip}&limit=${limit}`, { headers });
+  },
+
+  // Update message read status
+  async updateReadStatus(id, isRead) {
+    const headers = await getAuthHeaders();
+    return axios.patch(`${apiBaseUrl}/messages/${id}/read-status`, { is_read: isRead }, { headers });
   },
 
 };

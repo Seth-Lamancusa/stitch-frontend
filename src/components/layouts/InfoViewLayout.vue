@@ -28,7 +28,7 @@
     <!-- Page Hero Section with dynamic title and subtitle -->
     <section class="page-hero" :class="heroClass">
       <div class="hero-content">
-        <h1>{{ pageTitle }}</h1>
+        <h1 v-html="pageTitle"></h1>
         <p>{{ pageSubtitle }}</p>
       </div>
     </section>

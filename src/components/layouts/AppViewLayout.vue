@@ -122,12 +122,11 @@ const handleLogin = async () => {
     // Check if user is still logged in and whitelisted
     const currentUser = store.getters['auth/user'];
     if (currentUser && ['admin', 'whitelisted'].includes(currentUser.status)) {
-      // User is whitelisted, redirect to inbox or original destination
+      // Only redirect if there was a specific redirect requested
       if (route.query.redirect) {
         router.push(route.query.redirect);
-      } else {
-        router.push('/inbox');
       }
+      // Otherwise stay on current page
     }
     // If user is not logged in or not whitelisted, 
     // the auth store will have already handled the logout and redirect
