@@ -50,6 +50,13 @@
                 Whitelisted
               </span>
               <span 
+                v-else-if="user.status === 'import'" 
+                class="status-badge import-badge" 
+                title="Import"
+              >
+                Import
+              </span>
+              <span 
                 v-else 
                 class="status-badge guest-badge" 
                 title="Guest user"
@@ -156,8 +163,8 @@ const loadUsers = async (reset = false) => {
   
   try {
     const params = {
-      skip: reset ? 0 : (currentPage.value - 1) * 20,
-      limit: 20,
+      skip: reset ? 0 : (currentPage.value - 1) * 15,
+      limit: 15,
     };
     
     if (props.searchQuery.trim()) {
@@ -174,10 +181,10 @@ const loadUsers = async (reset = false) => {
         users.value.push(...response.users);
       }
       
-      // Check if we got fewer results than requested (indicating end)
-      if (response.users.length < 20) {
-        isAllLoaded.value = true;
-      } else {
+      // Use the has_more flag from the backend response
+      isAllLoaded.value = !response.has_more;
+      
+      if (!isAllLoaded.value) {
         currentPage.value += 1;
       }
     } else {
@@ -333,6 +340,11 @@ defineExpose({
 
 .admin-badge {
   background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.import-badge {
+  background: var(--color-warning, #f59e0b);
   color: var(--color-text-inverse);
 }
 

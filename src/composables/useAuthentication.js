@@ -41,7 +41,7 @@ export function useAuthentication() {
 
   /**
    * Signs out the current user
-   * On success, clears store and refreshes the page
+   * On success, clears store and redirects to public page
    */
   const logout = async () => {
     try {
@@ -51,8 +51,8 @@ export function useAuthentication() {
       // Let the store handle clearing user state
       store.dispatch('auth/setUser', null);
       
-      // Force page refresh to ensure clean state
-      window.location.reload();
+      // Redirect to public page
+      window.location.href = '/public';
     } catch (e) {
       error.value = e.message;
     }

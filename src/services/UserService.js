@@ -17,7 +17,7 @@ export default {
    * @param {Number} limit - Maximum number of results to return
    * @returns {Promise<Array>} - Array of matching users
    */
-  async searchUsers(query, limit = 10) {
+  async searchUsers(query, limit = 15) {
     try {
       console.log('[Service] Searching users with query:', query, 'limit:', limit);
       const token = await getFirebaseToken();
@@ -77,11 +77,11 @@ export default {
 
   /**
    * Get messages for the current user with skip-based pagination
-   * @param {Number} limit - Number of messages to return
+   * @param {Number} limit - Number of messages to return (defaults to 15 on backend)
    * @param {Number} skip - Number of messages to skip (for pagination)
    * @returns {Promise<Object>} - Response with messages and pagination info
    */
-  async fetchUserMessages(limit = 20, skip = 0) {
+  async fetchUserMessages(limit = 15, skip = 0) {
     try {
       const token = await getFirebaseToken();
       
@@ -101,8 +101,8 @@ export default {
       
       console.log('[DEBUG] UserService - fetchUserMessages response:', {
         messagesCount: response.data?.messages?.length || 0,
-        exhausted: response.data?.exhausted,
-        page: response.data?.page,
+        has_more: response.data?.has_more,
+        total: response.data?.total,
         skip,
         limit
       });
@@ -118,11 +118,11 @@ export default {
    * Get incoming links for a message
    * @param {String} messageId - The message ID
    * @param {Number} skip - Number of results to skip
-   * @param {Number} limit - Number of results to return
+   * @param {Number} limit - Number of results to return (defaults to 15 on backend)
    * @param {Boolean} showAllLinks - Whether to show all links or just user's links
    * @returns {Promise<Object>} - Response with incoming links
    */
-  async getUserIncomingLinks(messageId, skip = 0, limit = 20, showAllLinks = false) {
+  async getUserIncomingLinks(messageId, skip = 0, limit = 15, showAllLinks = false) {
     try {
       const token = await getFirebaseToken();
       
@@ -152,11 +152,11 @@ export default {
    * Get outgoing links for a message
    * @param {String} messageId - The message ID
    * @param {Number} skip - Number of results to skip
-   * @param {Number} limit - Number of results to return
+   * @param {Number} limit - Number of results to return (defaults to 15 on backend)
    * @param {Boolean} showAllLinks - Whether to show all links or just user's links
    * @returns {Promise<Object>} - Response with outgoing links
    */
-  async getUserOutgoingLinks(messageId, skip = 0, limit = 20, showAllLinks = false) {
+  async getUserOutgoingLinks(messageId, skip = 0, limit = 15, showAllLinks = false) {
     try {
       const token = await getFirebaseToken();
       
@@ -185,10 +185,10 @@ export default {
   /**
    * Get saved messages for the current user
    * @param {Number} skip - Number of messages to skip
-   * @param {Number} limit - Number of messages to return
+   * @param {Number} limit - Number of messages to return (defaults to 15 on backend)
    * @returns {Promise<Object>} - Response with saved messages
    */
-  async getSavedMessages(skip = 0, limit = 20) {
+  async getSavedMessages(skip = 0, limit = 15) {
     try {
       const token = await getFirebaseToken();
       
@@ -206,7 +206,8 @@ export default {
       console.log('[DEBUG] UserService - getSavedMessages response:', {
         fullResponse: response.data,
         messagesCount: response.data?.messages?.length || 0,
-        exhausted: response.data?.exhausted,
+        has_more: response.data?.has_more,
+        total: response.data?.total,
         skip,
         limit
       });

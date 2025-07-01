@@ -56,6 +56,7 @@
           </div>
         </div>
 
+
         <!-- System Settings Card
         <div class="admin-card">
           <div class="card-header">
@@ -85,6 +86,80 @@
             </div>
           </div>
         </div> -->
+      </div>
+
+      <!-- Metrics Section -->
+      <div class="metrics-section">
+        <h2>📊 System Metrics</h2>
+        <div v-if="metrics" class="metrics-grid">
+          <!-- Authentication Metrics -->
+          <div class="metrics-card">
+            <h3>🔐 Authentication</h3>
+            <div class="metrics-content">
+              <div class="metric-group">
+                <h4>Successful Logins</h4>
+                <div v-if="Object.keys(metrics['🔐 Authentication Metrics']['Successful Logins']).length > 0">
+                  <div v-for="(value, role) in metrics['🔐 Authentication Metrics']['Successful Logins']" :key="role" class="metric-item">
+                    <span class="metric-label">{{ role }}:</span>
+                    <span class="metric-value">{{ value }}</span>
+                  </div>
+                </div>
+                <div v-else class="metric-item">
+                  <span class="metric-value no-data">No login data</span>
+                </div>
+              </div>
+              <div class="metric-group">
+                <h4>Unsuccessful Logins</h4>
+                <div class="metric-item">
+                  <span class="metric-value">{{ metrics['🔐 Authentication Metrics']['Unsuccessful Logins'] }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Message Metrics -->
+          <div class="metrics-card">
+            <h3>💬 Message Activity</h3>
+            <div class="metrics-content">
+              <div class="metric-group">
+                <h4>Messages Created</h4>
+                <div v-if="Object.keys(metrics['💬 Message Metrics']['Messages Created']).length > 0">
+                  <div v-for="(value, role) in metrics['💬 Message Metrics']['Messages Created']" :key="role" class="metric-item">
+                    <span class="metric-label">{{ role }}:</span>
+                    <span class="metric-value">{{ value }}</span>
+                  </div>
+                </div>
+                <div v-else class="metric-item">
+                  <span class="metric-value no-data">No message data</span>
+                </div>
+              </div>
+              <div class="metric-group">
+                <h4>Reformat Requests</h4>
+                <div class="metric-item">
+                  <span class="metric-value">{{ metrics['💬 Message Metrics']['Reformat Requests'] }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-else-if="metricsError" class="metrics-error">
+          <p>{{ metricsError }}</p>
+          <button @click="loadMetrics" class="admin-btn secondary">Retry</button>
+        </div>
+        <div v-else class="metrics-loading">
+          <div class="loading-spinner"></div>
+          <p>Loading metrics...</p>
+        </div>
+        
+        <!-- Metrics Actions -->
+        <div class="metrics-actions">
+          <button @click="loadMetrics" class="admin-btn secondary">
+            🔄 Refresh Metrics
+          </button>
+          <button @click="resetMetrics" class="admin-btn secondary" :disabled="isResettingMetrics">
+            {{ isResettingMetrics ? '⏳ Resetting...' : '🗑️ Reset Metrics' }}
+          </button>
+        </div>
       </div>
 
       <!-- Quick Actions
@@ -121,8 +196,11 @@ const user = computed(() => store.getters['auth/user']);
 const isAdmin = computed(() => store.getters['auth/isAdmin']);
 const authReady = computed(() => store.getters['auth/authReady']);
 
-// Stats data
+// Stats and metrics data
 const stats = ref(null);
+const metrics = ref(null);
+const metricsError = ref(null);
+const isResettingMetrics = ref(false);
 
 // Redirect non-admin users after auth is ready
 onMounted(() => {
@@ -141,8 +219,9 @@ onMounted(() => {
     router.push('/inbox');
   }
 
-  // TODO: Fetch actual admin dashboard data
+  // Load dashboard data and metrics
   loadDashboardData();
+  loadMetrics();
 });
 
 const loadDashboardData = async () => {
@@ -153,6 +232,41 @@ const loadDashboardData = async () => {
     }
   } catch (error) {
     console.error('Error loading dashboard data:', error);
+  }
+};
+
+const loadMetrics = async () => {
+  try {
+    metricsError.value = null;
+    metrics.value = null;
+    const response = await AdminService.getMetrics();
+    if (response.success) {
+      metrics.value = response.metrics;
+    } else {
+      metricsError.value = response.error;
+    }
+  } catch (error) {
+    console.error('Error loading metrics:', error);
+    metricsError.value = 'Failed to load metrics. Please try again.';
+  }
+};
+
+const resetMetrics = async () => {
+  try {
+    isResettingMetrics.value = true;
+    const response = await AdminService.resetMetrics();
+    if (response.success) {
+      // After successful reset, reload metrics
+      await loadMetrics();
+      console.log('Metrics reset successfully');
+    } else {
+      metricsError.value = response.error || 'Failed to reset metrics';
+    }
+  } catch (error) {
+    console.error('Error resetting metrics:', error);
+    metricsError.value = 'Failed to reset metrics. Please try again.';
+  } finally {
+    isResettingMetrics.value = false;
   }
 };
 
@@ -315,10 +429,11 @@ const systemHealthCheck = () => {
 .card-badge {
   background: var(--color-primary, #4f8cff);
   color: var(--color-text-inverse, #fff);
-  padding: 2px 8px;
+  padding: 4px 12px;
   border-radius: var(--radius-sm, 4px);
   font-size: var(--font-size-xs, 0.75rem);
   font-weight: 600;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .card-content p {
@@ -377,5 +492,109 @@ const systemHealthCheck = () => {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-sm, 12px);
+}
+
+.metrics-section {
+  margin-top: var(--space-xl, 32px);
+  background: var(--color-surface, #222);
+  border: 1px solid var(--color-border, #eee);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-lg, 24px);
+}
+
+.metrics-section h2 {
+  margin: 0 0 var(--space-lg, 24px) 0;
+  color: var(--color-text, #fff);
+  font-size: var(--font-size-lg, 1.25rem);
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-lg, 24px);
+}
+
+.metrics-card {
+  background: var(--color-surface-elevated, #2a2a2a);
+  border: 1px solid var(--color-border, #eee);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-lg, 24px);
+}
+
+.metrics-card h3 {
+  margin: 0 0 var(--space-md, 16px) 0;
+  color: var(--color-text, #fff);
+  font-size: var(--font-size-md, 1rem);
+}
+
+.metrics-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg, 24px);
+}
+
+.metric-group {
+  border-left: 2px solid var(--color-primary, #4f8cff);
+  padding-left: var(--space-md, 16px);
+}
+
+.metric-group h4 {
+  margin: 0 0 var(--space-sm, 12px) 0;
+  color: var(--color-text-secondary, #aaa);
+  font-size: var(--font-size-sm, 0.9rem);
+  font-weight: 500;
+}
+
+.metric-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-xs, 8px);
+}
+
+.metric-label {
+  color: var(--color-text-secondary, #aaa);
+  font-size: var(--font-size-sm, 0.9rem);
+}
+
+.metric-value {
+  color: var(--color-text, #fff);
+  font-size: var(--font-size-sm, 0.9rem);
+  font-weight: 500;
+}
+
+.metric-value.no-data {
+  color: var(--color-text-secondary, #aaa);
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.metrics-error {
+  text-align: center;
+  padding: var(--space-lg, 24px);
+  color: var(--color-error, #ff4f4f);
+}
+
+.metrics-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md, 16px);
+  padding: var(--space-lg, 24px);
+}
+
+.metrics-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--space-md, 16px);
+  padding-top: var(--space-md, 16px);
+  border-top: 1px solid var(--color-border, #eee);
+  gap: var(--space-sm, 12px);
+}
+
+.metrics-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

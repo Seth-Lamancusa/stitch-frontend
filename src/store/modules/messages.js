@@ -641,12 +641,12 @@ export default {
     },
     
     // Universal fetch action that routes to appropriate service based on mode
-    async fetchMessages({ commit, state, rootState }, { mode, skip = 0, limit = 20, sourceMessageId = null, showAllLinks = false }) {
+    async fetchMessages({ commit, state, rootState }, { mode, skip = 0, limit = 15, sourceMessageId = null, showAllLinks = false }) {
       try {
         // Check auth for modes that require it
         if ((mode === 'inbox') && !rootState.auth?.user) {
           console.log('[Store] fetchMessages called but no user authenticated for inbox mode, skipping');
-          return { messages: [], exhausted: true };
+          return { messages: [], has_more: false };
         }
 
         // Set loading state
@@ -671,7 +671,8 @@ export default {
             if (adminResponse.success) {
               response = {
                 messages: adminResponse.messages,
-                exhausted: adminResponse.messages.length < limit
+                has_more: adminResponse.has_more,
+                total: adminResponse.total
               };
             } else {
               throw new Error(adminResponse.error || 'Failed to load admin messages');
@@ -682,8 +683,9 @@ export default {
             const MessageService = (await import('../../services/MessageService')).default;
             const publicResponse = await MessageService.getPublicMessages(skip, limit);
             response = {
-              messages: publicResponse.data || [],
-              exhausted: (publicResponse.data || []).length < limit
+              messages: publicResponse.data.messages || [],
+              has_more: publicResponse.data.has_more || false,
+              total: publicResponse.data.total || 0
             };
             break;
           case 'saved':
@@ -700,7 +702,7 @@ export default {
             break;
           case 'custom':
             // Custom mode doesn't fetch - just return empty
-            return { messages: [], exhausted: true };
+            return { messages: [], has_more: false };
           default:
             throw new Error(`Unknown fetch mode: ${mode}`);
         }
@@ -708,7 +710,8 @@ export default {
         console.log('messages from fetchMessages', response.messages);
         
         const rawMessages = response.messages || response.data?.messages || response.data || response || [];
-        const exhausted = response.exhausted || response.data?.exhausted || false;
+        const has_more = response.has_more !== undefined ? response.has_more : (response.data?.has_more || false);
+        const total = response.total || response.data?.total || 0;
         
         // Ensure rawMessages is always an array
         const messagesArray = Array.isArray(rawMessages) ? rawMessages : [];
@@ -728,7 +731,8 @@ export default {
           rawMessagesIsArray: Array.isArray(rawMessages),
           messagesArrayCount: messagesArray.length,
           messagesCount: messages.length,
-          exhausted,
+          has_more,
+          total,
           firstMessageId: messages[0]?.id || 'none'
         });
         
@@ -748,12 +752,12 @@ export default {
           }
         }
         
-        return { messages, exhausted };
+        return { messages, has_more, total };
         
       } catch (error) {
         console.error(`[Store] Error in fetchMessages (${mode}):`, error);
         commit('ui/SET_ERROR', error.message || `Failed to load ${mode} messages`, { root: true });
-        return { messages: [], exhausted: true };
+        return { messages: [], has_more: false };
       } finally {
         commit('SET_LOADING', { key: 'fetchingMessages', isLoading: false });
       }
@@ -767,7 +771,7 @@ export default {
           console.log('[Store] fetchUserMessages called but no user authenticated, skipping');
           return {
             messages: [],
-            exhausted: true
+            has_more: false
           };
         }
 
@@ -779,9 +783,10 @@ export default {
           user: rootState.auth.user.email
         });
         
-        const response = await UserService.fetchUserMessages(10, page);
+        const response = await UserService.fetchUserMessages(15, page);
         const rawMessages = response.messages || response.data?.messages || response.data || response || [];
-        const exhausted = response.exhausted || response.data?.exhausted || false;
+        const has_more = response.has_more !== undefined ? response.has_more : (response.data?.has_more || false);
+        const total = response.total || response.data?.total || 0;
         const currentPage = response.data?.page || page;
         
         // Ensure rawMessages is always an array
@@ -799,7 +804,8 @@ export default {
         console.log(`[Store] API response:`, {
           rawMessagesCount: messagesArray.length,
           messagesCount: messages.length,
-          exhausted,
+          has_more,
+          total,
           currentPage,
           firstMessageId: messages[0]?.id || 'none',
           firstRawMessage: messagesArray[0] ? { _key: messagesArray[0]._key, _id: messagesArray[0]._id, id: messagesArray[0].id } : 'none'
@@ -814,17 +820,18 @@ export default {
           console.log(`[Store] No messages to commit`);
         }
         
-        // Return the response data with exhausted flag
+        // Return the response data with has_more flag
         return {
           messages,
-          exhausted
+          has_more,
+          total
         };
       } catch (error) {
         console.error('[Store] Error in fetchUserMessages:', error);
         commit('ui/SET_ERROR', error.message || 'Failed to load user messages', { root: true });
         return {
           messages: [],
-          exhausted: true
+          has_more: false
         };
       } finally {
         // Always clear loading state

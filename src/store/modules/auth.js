@@ -146,7 +146,7 @@ export default {
     async searchUsers({ }, query) {
       try {
         const token = await getFirebaseAuth().currentUser.getIdToken();
-        const response = await fetch(`/api/users/search?query=${encodeURIComponent(query)}&limit=10`, {
+        const response = await fetch(`/api/users/search?query=${encodeURIComponent(query)}&limit=15`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }

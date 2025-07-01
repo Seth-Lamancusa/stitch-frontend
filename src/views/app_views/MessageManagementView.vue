@@ -18,32 +18,36 @@
 
     <!-- Message Management Content -->
     <div v-else class="message-management-view">
-      <div class="view-header">
-        <div class="header-content">
-          <div class="breadcrumb">
-            <router-link to="/admin" class="breadcrumb-link">Admin</router-link>
-            <span class="breadcrumb-separator">›</span>
-            <span class="breadcrumb-current">Message Management</span>
+      <div class="scrollable-content">
+        <div class="view-header">
+          <div class="header-content">
+            <div class="breadcrumb">
+              <router-link to="/admin" class="breadcrumb-link">Admin</router-link>
+              <span class="breadcrumb-separator">›</span>
+              <span class="breadcrumb-current">Message Management</span>
+            </div>
+            <h1>Message Management</h1>
+            <p class="view-subtitle">Monitor, moderate, and manage platform messages</p>
+            
+            <!-- Message Stats -->
+            <div v-if="stats" class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-value">{{ stats.total_messages }}</div>
+                <div class="stat-label">Total Messages</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">{{ stats.public_messages }}</div>
+                <div class="stat-label">Public Messages</div>
+              </div>
+            </div>
           </div>
-          <h1>Message Management</h1>
-          <p class="view-subtitle">Monitor, moderate, and manage platform messages</p>
         </div>
-        
-        <!-- Message Stats -->
-        <div v-if="stats" class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-value">{{ stats.total_messages }}</div>
-            <div class="stat-label">Total Messages</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value">{{ stats.public_messages }}</div>
-            <div class="stat-label">Public Messages</div>
-          </div>
+
+        <!-- Message List in Admin Mode -->
+        <div class="message-list-container">
+          <MessageList mode="admin" />
         </div>
       </div>
-
-      <!-- Message List in Admin Mode -->
-      <MessageList mode="admin" />
     </div>
   </AppViewLayout>
 </template>
@@ -104,6 +108,106 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.message-management-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.scrollable-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: var(--space-lg);
+}
+
+.view-header {
+  background: var(--color-surface, #222);
+  border-bottom: 1px solid var(--color-border, #eee);
+  padding: var(--space-lg, 24px);
+}
+
+.header-content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs, 6px);
+  margin-bottom: var(--space-sm, 12px);
+  font-size: var(--font-size-sm, 0.9rem);
+}
+
+.breadcrumb-link {
+  color: var(--color-primary, #4f8cff);
+  text-decoration: none;
+  transition: opacity var(--transition-fast, 0.2s);
+}
+
+.breadcrumb-link:hover {
+  opacity: 0.8;
+}
+
+.breadcrumb-separator {
+  color: var(--color-text-secondary, #aaa);
+}
+
+.breadcrumb-current {
+  color: var(--color-text, #fff);
+}
+
+.view-header h1 {
+  margin: 0 0 var(--space-sm, 12px) 0;
+  color: var(--color-text, #fff);
+  font-size: var(--font-size-xl, 2rem);
+}
+
+.view-subtitle {
+  margin: 0 0 var(--space-lg, 24px) 0;
+  color: var(--color-text-secondary, #aaa);
+  font-size: var(--font-size-md, 1rem);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-md, 16px);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.stat-card {
+  background: var(--color-background, #111);
+  border: 1px solid var(--color-border, #333);
+  border-radius: var(--radius-sm, 4px);
+  padding: var(--space-md, 16px);
+  text-align: center;
+}
+
+.stat-value {
+  font-size: var(--font-size-xl, 1.5rem);
+  font-weight: 600;
+  color: var(--color-primary, #4f8cff);
+  margin-bottom: var(--space-xs, 6px);
+}
+
+.stat-label {
+  font-size: var(--font-size-sm, 0.9rem);
+  color: var(--color-text-secondary, #aaa);
+}
+
+.message-list-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 0 var(--space-md, 16px);
+}
+
 .access-denied-notice {
   display: flex;
   justify-content: center;
@@ -175,89 +279,5 @@ onMounted(() => {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
-}
-
-.message-management-view {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.view-header {
-  background: var(--color-surface, #222);
-  border-bottom: 1px solid var(--color-border, #eee);
-  padding: var(--space-lg, 24px);
-}
-
-.header-content {
-  max-width: 1200px;
-  margin: 0 auto;
-  margin-bottom: var(--space-lg, 24px);
-}
-
-.breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs, 6px);
-  margin-bottom: var(--space-sm, 12px);
-  font-size: var(--font-size-sm, 0.9rem);
-}
-
-.breadcrumb-link {
-  color: var(--color-primary, #4f8cff);
-  text-decoration: none;
-  transition: opacity var(--transition-fast, 0.2s);
-}
-
-.breadcrumb-link:hover {
-  opacity: 0.8;
-}
-
-.breadcrumb-separator {
-  color: var(--color-text-secondary, #aaa);
-}
-
-.breadcrumb-current {
-  color: var(--color-text, #fff);
-}
-
-.view-header h1 {
-  margin: 0 0 var(--space-sm, 12px) 0;
-  color: var(--color-text, #fff);
-  font-size: var(--font-size-xl, 2rem);
-}
-
-.view-subtitle {
-  margin: 0;
-  color: var(--color-text-secondary, #aaa);
-  font-size: var(--font-size-md, 1rem);
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--space-md, 16px);
-  max-width: 600px;
-  margin: 0 auto;
-}
-
-.stat-card {
-  background: var(--color-background, #111);
-  border: 1px solid var(--color-border, #333);
-  border-radius: var(--radius-sm, 4px);
-  padding: var(--space-md, 16px);
-  text-align: center;
-}
-
-.stat-value {
-  font-size: var(--font-size-xl, 1.5rem);
-  font-weight: 600;
-  color: var(--color-primary, #4f8cff);
-  margin-bottom: var(--space-xs, 6px);
-}
-
-.stat-label {
-  font-size: var(--font-size-sm, 0.9rem);
-  color: var(--color-text-secondary, #aaa);
 }
 </style> 
