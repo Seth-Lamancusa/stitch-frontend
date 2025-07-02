@@ -12,14 +12,6 @@
     :data-message-id="message.id"
     :data-has-siblings="hasSiblings"
   >
-    <!-- Add sibling navigator if message has a parent -->
-    <sibling-navigator
-      v-if="message.parent_id && !inListView"
-      :message-id="message.id"
-      :parent-id="message.parent_id"
-      @navigate="handleSiblingNavigation"
-    />
-    
     <!-- Deck visualization - only show when siblings exist -->
     <div 
       v-if="hasSiblings && !inListView" 
@@ -192,6 +184,29 @@
         
         <!-- Desktop message actions - hidden on mobile -->
         <div class="message-actions desktop-actions">
+          <!-- Navigation buttons - show if message has siblings -->
+          <button 
+            v-if="message.parent_id && !inListView && canNavigatePrev"
+            @click.stop="navigateSibling('prev')" 
+            class="nav-button nav-prev"
+            :disabled="isNavigating"
+            title="Previous reply"
+          >
+            <div v-if="isNavigating" class="loading-dot"></div>
+            <div v-else class="triangle-icon left-triangle"></div>
+          </button>
+          
+          <button 
+            v-if="message.parent_id && !inListView && canNavigateNext"
+            @click.stop="navigateSibling('next')" 
+            class="nav-button nav-next"
+            :disabled="isNavigating"
+            title="Next reply"
+          >
+            <div v-if="isNavigating" class="loading-dot"></div>
+            <div v-else class="triangle-icon right-triangle"></div>
+          </button>
+
           <!-- Add reply button, but hide it in list view -->
           <button 
             v-if="!inListView"
@@ -260,6 +275,29 @@
       
       <!-- Mobile floating action controls - only shown on mobile -->
       <div v-if="!inListView" class="mobile-action-controls">
+        <!-- Navigation buttons - show if message has siblings -->
+        <button 
+          v-if="message.parent_id && canNavigatePrev"
+          @click.stop="navigateSibling('prev')" 
+          class="nav-button nav-prev mobile-nav"
+          :disabled="isNavigating"
+          title="Previous reply"
+        >
+          <div v-if="isNavigating" class="loading-dot"></div>
+          <div v-else class="triangle-icon left-triangle"></div>
+        </button>
+        
+        <button 
+          v-if="message.parent_id && canNavigateNext"
+          @click.stop="navigateSibling('next')" 
+          class="nav-button nav-next mobile-nav"
+          :disabled="isNavigating"
+          title="Next reply"
+        >
+          <div v-if="isNavigating" class="loading-dot"></div>
+          <div v-else class="triangle-icon right-triangle"></div>
+        </button>
+
         <!-- Persistent Reply Button -->
         <button 
           @click.stop="$emit('reply', message.id)"
@@ -437,7 +475,6 @@
 
 <script>
 import AdaptiveMarker from './AdaptiveMarker.vue';
-import SiblingNavigator from './SiblingNavigator.vue';
 import FormattedContent from './FormattedContent/index.vue';
 import { initFormatters } from './FormattedContent/init';
 import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
@@ -451,7 +488,6 @@ export default {
   
   components: {
     AdaptiveMarker,
-    SiblingNavigator,
     FormattedContent
   },
   
@@ -512,6 +548,9 @@ export default {
     // Add refs for save button state
     const isMessageSaved = ref(false);
     const isSavingMessage = ref(false);
+    
+    // Add navigation loading state
+    const isNavigating = ref(false);
     
     // Mobile floating action bar state - using global store
     const actionBarTimeout = ref(null);
@@ -729,12 +768,52 @@ export default {
       }
     };
     
-    // New method to handle swipe navigation
-    const handleSiblingNavigation = ({ direction, targetSiblingId, parentId }) => {
-      // No longer automatically select the new target sibling
-      // Selection will be handled by the navigateToSibling action
-      // based on whether the previous sibling was selected
-      console.log(`[MessageNode] Sibling navigation: ${direction}, target: ${targetSiblingId}`);
+    // Enhanced navigation function that works for both swipes and button clicks
+    const navigateSibling = async (direction) => {
+      if (!props.message.parent_id) return false;
+      
+      // Set loading state
+      isNavigating.value = true;
+      
+      try {
+        // Check if navigation is possible
+        if (direction === 'prev' && !canNavigatePrev.value) {
+          if (isMobile.value) {
+            triggerShakeAnimation();
+          }
+          return false;
+        }
+        if (direction === 'next' && !canNavigateNext.value) {
+          if (isMobile.value) {
+            triggerShakeAnimation();  
+          }
+          return false;
+        }
+        
+        // Clear any active reply box when navigating between siblings
+        store.dispatch('navigation/clearReplyingTo');
+        
+        // Call the central store action for sibling navigation
+        const success = await store.dispatch('messages/navigateToSibling', {
+          messageId: props.message.parent_id,
+          direction: direction
+        });
+        
+        if (success) {
+          // Get the new branch child after navigation
+          const newBranchChild = store.getters['messages/getBranchChild'](props.message.parent_id);
+          
+          console.log(`[MessageNode] Sibling navigation: ${direction}, target: ${newBranchChild}`);
+          return true;
+        }
+        return false;
+      } catch (error) {
+        console.error("Error navigating to sibling:", error);
+        return false;
+      } finally {
+        // Clear loading state
+        isNavigating.value = false;
+      }
     };
     
     // Check if this message has siblings that can be navigated to
@@ -982,49 +1061,7 @@ export default {
       }
     };
     
-    // Method to navigate between siblings via swipe
-    const navigateSibling = async (direction) => {
-      // Only allow swipe navigation on mobile and when siblings exist
-      if (!isMobile.value || !hasSiblings.value) return false;
-      
-      if (!props.message.parent_id) return false;
-      
-      try {
-        // Check if navigation is possible
-        if (direction === 'prev' && !canNavigatePrev.value) {
-          triggerShakeAnimation();
-          return false;
-        }
-        if (direction === 'next' && !canNavigateNext.value) {
-          triggerShakeAnimation();
-          return false;
-        }
-        
-        // Call the central store action for sibling navigation
-        const success = await store.dispatch('messages/navigateToSibling', {
-          messageId: props.message.parent_id,
-          direction: direction
-        });
-        
-        if (success) {
-          // Get the new branch child after navigation
-          const newBranchChild = store.getters['messages/getBranchChild'](props.message.parent_id);
-          
-          // Handle navigation event
-          handleSiblingNavigation({
-            direction,
-            targetSiblingId: newBranchChild,
-            parentId: props.message.parent_id
-          });
-          
-          return true;
-        }
-        return false;
-      } catch (error) {
-        console.error("Error swiping to sibling:", error);
-        return false;
-      }
-    };
+    // This function has been replaced by the unified navigateSibling function above
     
     // Process swipe gesture - used for handleTouchEnd
     const handleSwipe = () => {
@@ -1517,7 +1554,7 @@ export default {
       authorDisplayName,
       authorUserTag,
       isUserAuthorOfContent,
-      handleSiblingNavigation,
+      navigateSibling,
       isCurrentUser,
       isCurrentUserRecipient,
       isTogglingReadStatus,
@@ -1556,7 +1593,8 @@ export default {
       handleActionBarTouchStart,
       handleActionBarTouchMove,
       handleActionBarTouchEnd,
-      handleViewportChange
+      handleViewportChange,
+      isNavigating
     };
   },
   
@@ -1610,25 +1648,7 @@ export default {
   text-overflow: ellipsis;
 }
 
-/* Add extra horizontal margin for messages with siblings - desktop only */
-/* First selector uses :has() which isn't supported in all browsers */
-.message-node:has(> .sibling-navigator) .message-content,
-/* Fallback for browsers that don't support :has() */
-.message-node > .sibling-navigator ~ .message-content {
-  margin-left: 40px;
-  margin-right: 40px;
-  max-width: calc(100% - 80px);
-}
-
-/* On mobile, remove extra margins since navigation is inscribed in corners */
-@media (max-width: 768px) {
-  .message-node:has(> .sibling-navigator) .message-content,
-  .message-node > .sibling-navigator ~ .message-content {
-    margin-left: 0;
-    margin-right: 0;
-    max-width: 100%;
-  }
-}
+/* Navigation buttons are now integrated into the footer - no extra margins needed */
 
 .message-content {
   background-color: var(--color-surface);
@@ -2573,12 +2593,7 @@ export default {
     animation: spin 1s linear infinite;
   }
   
-  /* Ensure message content takes full width */
-  .message-node > .sibling-navigator ~ .message-content {
-    margin-left: 0;
-    margin-right: 0;
-    max-width: 100%;
-  }
+  /* Message content takes full width with integrated navigation */
   
   /* Add subtle visual indicator for swipeable messages - only when siblings exist */
   .message-node:not(.list-view)[data-has-siblings="true"] .message-content::after {
@@ -2853,6 +2868,99 @@ export default {
     min-width: 40px;
     min-height: 40px;
     font-size: 14px;
+  }
+}
+
+/* Mobile-specific styling for navigation buttons handled in main nav-button styles */
+
+/* Navigation button styles - matching action hint button styling */
+.nav-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  padding: 8px;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--color-text-secondary);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  opacity: 0.7;
+  min-width: 36px;
+  min-height: 36px;
+}
+
+.nav-button:hover:not(:disabled) {
+  opacity: 1;
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+  color: var(--color-primary);
+  transform: scale(1.05);
+}
+
+.nav-button:disabled {
+  opacity: 0.3;
+  cursor: wait;
+}
+
+/* Triangle icon styling for navigation buttons */
+.triangle-icon {
+  width: 0;
+  height: 0;
+  border-style: solid;
+}
+
+.left-triangle {
+  border-width: 5px 7px 5px 0;
+  border-color: transparent currentColor transparent transparent;
+}
+
+.right-triangle {
+  border-width: 5px 0 5px 7px;
+  border-color: transparent transparent transparent currentColor;
+}
+
+/* Loading dot for navigation buttons */
+.loading-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--color-primary);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 0.3; transform: scale(0.8); }
+}
+
+/* Mobile navigation button styling */
+@media (max-width: 768px) {
+  .nav-button.mobile-nav {
+    margin-left: 8px; /* Space them out from other buttons */
+  }
+  
+  .nav-button.mobile-nav:first-of-type {
+    margin-left: 0; /* No margin for the first nav button */
+  }
+}
+
+@media (max-width: 480px) {
+  .nav-button {
+    padding: 6px;
+    min-width: 32px;
+    min-height: 32px;
+  }
+  
+  .left-triangle {
+    border-width: 4px 6px 4px 0;
+  }
+  
+  .right-triangle {
+    border-width: 4px 0 4px 6px;
   }
 }
 </style>
