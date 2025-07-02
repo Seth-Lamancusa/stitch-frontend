@@ -924,11 +924,14 @@ const handleAddRecipients = async (recipients) => {
     
     console.log('[ThreadView] Recipients added successfully', response.data);
     
-    // Show success message
-    store.commit('ui/SET_SUCCESS', `Added ${recipients.length} recipient${recipients.length === 1 ? '' : 's'} to message`);
+    // Refresh the message data to get updated recipients list
+    await store.dispatch('messages/loadMessageRadius', { 
+      messageId: messageId, 
+      radius: 1 
+    });
     
-    // Close the modal
-    closeRecipientsModal();
+    // Don't close the modal - let it stay open for more additions
+    // The existingRecipients prop will be updated by the parent component
     
   } catch (error) {
     console.error('[ThreadView] Error adding recipients:', error);
@@ -938,9 +941,6 @@ const handleAddRecipients = async (recipients) => {
 
 const handleRecipientRemoved = (recipientUid) => {
   console.log('[ThreadView] handleRecipientRemoved called with', recipientUid);
-  
-  // Show success message
-  store.commit('ui/SET_SUCCESS', 'Recipient removed from message');
 };
 
 const deleteMessage = async () => {

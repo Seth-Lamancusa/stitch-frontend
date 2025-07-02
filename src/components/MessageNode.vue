@@ -260,7 +260,7 @@
             title="Add recipients to this message"
           >
             <span class="add-recipients-icon">👥</span>
-            Add Recipients
+            Recipients
           </button>
         </div>
         
@@ -499,12 +499,18 @@ export default {
     const isMobile = ref(false);
     
     const openLinksModal = () => {
+      // Close the ReplyBox if it's open
+      store.dispatch('navigation/clearReplyingTo');
+      
       // Emit event to parent to handle the modal
       emit('showLinks', props.message);
     };
     
     const openAddRecipientsModal = () => {
       console.log('[MessageNode] openAddRecipientsModal called for message', props.message.id);
+      
+      // Close the ReplyBox if it's open
+      store.dispatch('navigation/clearReplyingTo');
       
       // Get existing recipients for this message
       const existingRecipients = props.message.recipients && Array.isArray(props.message.recipients) 

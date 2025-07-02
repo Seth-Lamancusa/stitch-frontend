@@ -128,9 +128,6 @@ const handleAddRecipients = async (recipients) => {
     
     console.log('[MessageListView] Recipients added successfully', response.data);
     
-    // Show success message
-    store.commit('ui/SET_SUCCESS', `Added ${recipients.length} recipient${recipients.length === 1 ? '' : 's'} to message`);
-    
     // Close the modal
     closeRecipientsModal();
     
@@ -142,9 +139,6 @@ const handleAddRecipients = async (recipients) => {
 
 const handleRecipientRemoved = (recipientUid) => {
   console.log('[MessageListView] handleRecipientRemoved called with', recipientUid);
-  
-  // Show success message
-  store.commit('ui/SET_SUCCESS', 'Recipient removed from message');
 };
 </script>
 
