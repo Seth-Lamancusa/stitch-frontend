@@ -252,9 +252,9 @@
             Links
           </button>
           
-          <!-- Add Recipients Button - only for message authors -->
+          <!-- Add Recipients Button - available to all users -->
           <button 
-            v-if="!inListView && isUserAuthor"
+            v-if="!inListView"
             @click.stop="openAddRecipientsModal" 
             class="add-recipients-button"
             title="Add recipients to this message"
@@ -356,9 +356,8 @@
             <span v-else class="json-icon">{ }</span>
           </button>
           
-          <!-- Add Recipients Button - only for message authors -->
+          <!-- Add Recipients Button - available to all users -->
           <button 
-            v-if="isUserAuthor"
             @click.stop="openAddRecipientsModal" 
             class="fab-button add-recipients-button"
             title="Add recipients to this message"
@@ -368,9 +367,6 @@
         </div>
       </div>
     </div>
-    
-
-    
 
   </div>
 </template>
@@ -509,10 +505,22 @@ export default {
     
     const openAddRecipientsModal = () => {
       console.log('[MessageNode] openAddRecipientsModal called for message', props.message.id);
-      // Trigger the ReplyBox with add-recipients mode
-      store.dispatch('navigation/setAddRecipientsMode', {
+      
+      // Get existing recipients for this message
+      const existingRecipients = props.message.recipients && Array.isArray(props.message.recipients) 
+        ? props.message.recipients 
+        : [];
+      
+      // Clear the navigation store - we want a fresh start for new recipients
+      store.commit('navigation/CLEAR_REPLY_RECIPIENTS');
+      
+      // Show the global recipients modal
+      store.dispatch('navigation/showRecipientsModal', {
+        isPublic: false, // Adding recipients is always for private messages
+        isAddMode: true,
+        existingRecipients: existingRecipients,
         messageId: props.message.id,
-        existingRecipients: props.message.recipients || []
+        isRecipientRemovalDisabled: false
       });
     };
     

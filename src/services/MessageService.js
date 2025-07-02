@@ -129,6 +129,39 @@ export default {
     }
   },
   
+  // Remove a recipient from an existing message
+  async removeRecipientFromMessage(messageId, recipientUid) {
+    console.log('[MessageService] removeRecipientFromMessage called with:', {
+      messageId,
+      recipientUid
+    });
+    
+    const headers = await getAuthHeaders();
+    
+    console.log('[MessageService] Sending remove recipient request:', {
+      endpoint: `${apiBaseUrl}/messages/${messageId}/recipients/${recipientUid}`,
+      hasHeaders: !!headers
+    });
+    
+    try {
+      const response = await axios.delete(`${apiBaseUrl}/messages/${messageId}/recipients/${recipientUid}`, { headers });
+      console.log('[MessageService] Remove recipient request successful:', {
+        status: response.status,
+        removed: response.data?.removed_recipient
+      });
+      return response;
+    } catch (error) {
+      console.error('[MessageService] Remove recipient request failed:', error);
+      console.error('[MessageService] Error details:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
+      throw error;
+    }
+  },
+  
   // Delete a message and all its descendants
   async deleteMessage(id) {
     const headers = await getAuthHeaders();

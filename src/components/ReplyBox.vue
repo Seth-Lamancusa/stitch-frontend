@@ -156,104 +156,14 @@
 
     </div>
 
-    <!-- Recipients modal moved outside the reply-container but inside the wrapper -->
-    <div v-if="showRecipientSelector" class="modal-overlay" @click.self="showRecipientSelector = false">
-      <div class="recipient-modal">
-        <div class="modal-header">
-          <h3>Recipients</h3>
-          <button class="close-button" @click="showRecipientSelector = false">×</button>
-        </div>
-        
-        <div class="modal-content">
-          <p class="modal-description" v-if="!isPublic">Private replies require at least one recipient</p>
-          <p class="modal-description" v-else>Recipients for public replies (optional)</p>
-          
-          <div class="recipient-input-container">
-            <div class="input-wrapper" :class="{ 'valid': isTagValid === true, 'invalid': isTagValid === false, 'searching': isSearching }">
-              <input 
-                v-model="newRecipient" 
-                @input="searchUsers"
-                @keydown.enter.prevent="addRecipient" 
-                @keydown.escape="clearSearch"
-                placeholder="Search by username or tag" 
-                class="recipient-input"
-                ref="recipientInput"
-              />
-              <div v-if="isSearching" class="search-indicator" title="Searching...">
-                <div class="spinner"></div>
-              </div>
-              <div v-else-if="isTagValid === true" class="valid-indicator" title="Valid user tag">✓</div>
-              <div v-else-if="isTagValid === false" class="invalid-indicator" title="Invalid user tag">✗</div>
-            </div>
-            <button 
-              @click="addRecipient" 
-              class="add-recipient-btn"
-              :disabled="!canAddRecipient"
-            >Add</button>
-          </div>
-          
-          <div class="search-results-container">
-            <div v-if="showSearchResults && searchResults && searchResults.length > 0" class="search-results-list">
-              <div 
-                v-for="(user, index) in searchResults" 
-                :key="user.uid" 
-                class="search-result-item"
-                @click="selectSearchResult(user)"
-              >
-                <div class="search-result-content">
-                  <span class="search-result-name">{{ user.display_name || 'User' }}</span>
-                  <span class="search-result-tag">@{{ user.user_tag }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div v-else-if="searchResults.length === 0 && hasSearched && !isSearching" class="no-search-results">
-              No users found. Try a different search term.
-            </div>
-          </div>
-          
-          <div class="recipients-list">
-            <div 
-              v-if="typeof recipients === 'object' && recipients !== null"
-              v-for="(recipient, index) in recipients" 
-              :key="recipient.uid || index" 
-              class="recipient-tag"
-            >
-              <div class="recipient-info">
-                <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
-                <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
-              </div>
-              <div class="recipient-controls">
-                <button 
-                  @click="() => toggleRecipientVisibility(index)"
-                  class="visibility-toggle-btn"
-                  :class="{ 'visible': recipient.visible !== false, 'invisible': recipient.visible === false }"
-                  :title="recipient.visible !== false ? 'Visible (CC)' : 'Hidden (BCC)'"
-                >
-                  {{ recipient.visible !== false ? '👁️' : '🙈' }}
-                </button>
-                <button 
-                  @click="() => removeRecipient(index)" 
-                  class="remove-recipient-btn"
-                >×</button>
-              </div>
-            </div>
-            
-            <div v-else-if="typeof recipients === 'string'" class="no-recipients">
-              {{ recipients }}
-            </div>
-            
-            <div v-else-if="recipients && recipients.length === 0" class="no-recipients">
-              No recipients {{ isPublic ? '(public reply)' : '' }}
-            </div>
-          </div>
-        </div>
-        
-        <div class="modal-footer">
-          <button @click="closeRecipientSelector" class="done-button">Done</button>
-        </div>
-      </div>
-    </div>
+    <!-- Recipients modal -->
+    <RecipientsModal
+      :is-visible="showRecipientSelector"
+      :is-public="isPublic"
+      :is-add-mode="false"
+      @close="closeRecipientSelector"
+      @done="closeRecipientSelector"
+    />
 
     <!-- Chatbots modal -->
     <div v-if="showChatbotSelector" class="modal-overlay" @click.self="showChatbotSelector = false">
@@ -301,6 +211,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
+import RecipientsModal from './RecipientsModal.vue';
 
 const props = defineProps({
   targetId: {
@@ -339,6 +250,7 @@ const replyTextarea = ref(null);
 const replySheet = ref(null);
 const content = ref('');
 const isSending = ref(false);
+const showSearchResults = ref(false);
 
 // Bottom sheet state
 const isKeyboardVisible = ref(false);
@@ -351,13 +263,6 @@ const dragDistance = ref(0);
 
 // UI state
 const showRecipientSelector = ref(false);
-const newRecipient = ref('');
-const isTagValid = ref(null);
-const searchResults = ref([]);
-const isSearching = ref(false);
-const hasSearched = ref(false);
-const showSearchResults = ref(false);
-const recipientInput = ref(null);
 
 // Chatbot selector state
 const showChatbotSelector = ref(false);
@@ -386,10 +291,7 @@ const isAddRecipientsMode = computed(() => store.getters['navigation/isAddRecipi
 const addRecipientsMessageId = computed(() => store.getters['navigation/addRecipientsMessageId']);
 const addRecipientsExisting = computed(() => store.getters['navigation/addRecipientsExisting']);
 
-// Check if the reply can be added
-const canAddRecipient = computed(() => {
-  return newRecipient.value.trim() !== '' && isTagValid.value;
-});
+
 
 // Centralized validation logic
 const canSendReply = computed(() => {
@@ -738,112 +640,7 @@ const sendReply = async () => {
   }
 };
 
-// Debounce function for search
-let searchTimeout = null;
-const searchUsers = (event) => {
-  clearTimeout(searchTimeout);
-  const query = event.target.value.trim();
-  
-  // Clear previous search state
-  isSearching.value = query.length >= 1;
-  
-  if (query.length < 1) {
-    isTagValid.value = null;
-    searchResults.value = [];
-    showSearchResults.value = false;
-    return;
-  }
-  
-  // Set up debounce
-  searchTimeout = setTimeout(async () => {
-    try {
-      isSearching.value = true;
-      hasSearched.value = true;
-      
-      // Call API to search users
-      const results = await store.dispatch('auth/searchUsers', query);
-      
-      if (!results) {
-        searchResults.value = [];
-        showSearchResults.value = false;
-      } else if (!Array.isArray(results)) {
-        searchResults.value = [];
-        showSearchResults.value = false;
-      } else {
-        searchResults.value = results;
-        
-        // Only show dropdown if we have actual results
-        showSearchResults.value = results.length > 0;
-      }
-      
-      // Update validation state based on search results
-      isTagValid.value = results && results.length > 0;
-      
-      isSearching.value = false;
-    } catch (error) {
-      console.error('Error searching users:', error);
-      isTagValid.value = false;
-      searchResults.value = [];
-      isSearching.value = false;
-    }
-  }, 300); // 300ms debounce
-};
 
-const clearSearch = () => {
-  newRecipient.value = '';
-  isTagValid.value = null;
-  searchResults.value = [];
-  isSearching.value = false;
-  hasSearched.value = false;
-  showSearchResults.value = false;
-};
-
-const selectSearchResult = (user) => {
-  if (user && user.user_tag) {
-    // Use the full user object
-    isTagValid.value = true;
-    
-    // Add the recipient right away with default visibility
-    store.dispatch('navigation/addRecipient', {
-      uid: user.uid,
-      display_name: user.display_name,
-      user_tag: user.user_tag,
-      visible: true  // Default to visible (CC)
-    });
-    
-    // Clear the input
-    newRecipient.value = '';
-  }
-  
-  // Clean up search state
-  searchResults.value = [];
-  isSearching.value = false;
-  hasSearched.value = false;
-  showSearchResults.value = false;
-};
-
-const addRecipient = async () => {
-  const tag = newRecipient.value.trim();
-  
-  if (!tag) return;
-  
-  // Only allow adding recipients from search results
-  if (searchResults.value.length > 0) {
-    selectSearchResult(searchResults.value[0]);
-    return;
-  }
-  
-  // If no search results, show that the tag is invalid
-  isTagValid.value = false;
-};
-
-const removeRecipient = (index) => {
-  store.dispatch('navigation/removeRecipient', index);
-};
-
-const toggleRecipientVisibility = (index) => {
-  store.dispatch('navigation/toggleRecipientVisibility', index);
-};
 
 // Helper function to get the best display name for an author
 const getAuthorDisplayName = (message) => {
@@ -874,18 +671,6 @@ const getAuthorUserTag = (message) => {
 // Toggle recipient selector visibility
 const toggleRecipientSelector = () => {
   showRecipientSelector.value = !showRecipientSelector.value;
-  
-  // Reset input field when opening the modal
-  if (showRecipientSelector.value) {
-    newRecipient.value = '';
-    
-    // Focus the input field after DOM update
-    nextTick(() => {
-      if (recipientInput.value) {
-        recipientInput.value.focus();
-      }
-    });
-  }
 };
 
 // Chatbot selector methods
@@ -1234,17 +1019,18 @@ defineExpose({
 /* Textarea container */
 .reply-sheet__textarea-container {
   flex: none; /* Don't expand to fill space */
-  padding: 16px;
+  padding: 0px;
   position: relative;
   min-height: 0;
   background-color: #2A2A2A;
 }
 
 .reply-sheet__textarea {
-  width: 100%;
+  width: 90%;
   min-height: 24px; /* Single line height */
   max-height: 40vh;
   padding: 8px 12px;
+  margin: 8px 16px 24px 16px;
   border: 1px solid var(--color-border);
   border-radius: 12px;
   background-color: var(--color-surface);

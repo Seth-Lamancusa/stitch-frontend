@@ -142,6 +142,19 @@
       :message="linksModalMessage"
       @close="closeLinksModal"
     />
+
+    <!-- Global Recipients Modal -->
+    <RecipientsModal
+      :is-visible="recipientsModalVisible"
+      :is-public="recipientsModalIsPublic"
+      :is-add-mode="recipientsModalIsAddMode"
+      :existing-recipients="recipientsModalExistingRecipients"
+      :message-id="recipientsModalMessageId"
+      :is-recipient-removal-disabled="recipientsModalIsRecipientRemovalDisabled"
+      @close="closeRecipientsModal"
+      @done="closeRecipientsModal"
+      @add-recipients="handleAddRecipients"
+    />
   </div>
 </template>
 
@@ -154,6 +167,7 @@ import AdaptiveMarker from '../../components/AdaptiveMarker.vue';
 import ReplyBox from '../../components/ReplyBox.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
 import LinksModal from '../../components/LinksModal.vue';
+import RecipientsModal from '../../components/RecipientsModal.vue';
 import MessageService from '../../services/MessageService';
 import WebSocketService from '../../services/WebSocketService';
 
@@ -255,6 +269,14 @@ const isSelectionMode = computed(() => store.getters['navigation/isSelectionMode
 const selectedMessageIds = computed(() => store.getters['navigation/selectedMessageIds']);
 const selectedMessageCount = computed(() => store.getters['navigation/selectedMessageCount']);
 const isMessageSelected = computed(() => (messageId) => store.getters['navigation/isMessageSelected'](messageId));
+
+// Recipients modal computed properties
+const recipientsModalVisible = computed(() => store.getters['navigation/recipientsModalVisible']);
+const recipientsModalIsPublic = computed(() => store.getters['navigation/recipientsModalIsPublic']);
+const recipientsModalIsAddMode = computed(() => store.getters['navigation/recipientsModalIsAddMode']);
+const recipientsModalExistingRecipients = computed(() => store.getters['navigation/recipientsModalExistingRecipients']);
+const recipientsModalMessageId = computed(() => store.getters['navigation/recipientsModalMessageId']);
+const recipientsModalIsRecipientRemovalDisabled = computed(() => store.getters['navigation/recipientsModalIsRecipientRemovalDisabled']);
 
 // In the script setup section, add refs for the adaptive markers
 const topMarker = ref(null);
@@ -873,6 +895,44 @@ const handleShowLinks = (message) => {
 const closeLinksModal = () => {
   showLinksModal.value = false;
   linksModalMessage.value = null;
+};
+
+// Recipients modal methods
+const closeRecipientsModal = () => {
+  store.dispatch('navigation/hideRecipientsModal');
+  // Clear recipients when closing modal
+  store.commit('navigation/CLEAR_REPLY_RECIPIENTS');
+};
+
+const handleAddRecipients = async (recipients) => {
+  console.log('[ThreadView] handleAddRecipients called with', recipients);
+  
+  if (!recipients || recipients.length === 0) {
+    console.log('[ThreadView] No recipients to add');
+    return;
+  }
+
+  try {
+    const messageId = recipientsModalMessageId.value;
+    if (!messageId) {
+      console.error('[ThreadView] No message ID for adding recipients');
+      return;
+    }
+
+    const response = await MessageService.addRecipientsToMessage(messageId, recipients);
+    
+    console.log('[ThreadView] Recipients added successfully', response.data);
+    
+    // Show success message
+    store.commit('ui/SET_SUCCESS', `Added ${recipients.length} recipient${recipients.length === 1 ? '' : 's'} to message`);
+    
+    // Close the modal
+    closeRecipientsModal();
+    
+  } catch (error) {
+    console.error('[ThreadView] Error adding recipients:', error);
+    store.commit('ui/SET_ERROR', 'Failed to add recipients. Please try again.');
+  }
 };
 
 const deleteMessage = async () => {
