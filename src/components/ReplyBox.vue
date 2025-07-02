@@ -1054,6 +1054,7 @@ defineExpose({
   padding: 12px 16px;
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
+  background-color: #2A2A2A;
 }
 
 .reply-sheet__header-left {
@@ -1080,7 +1081,7 @@ defineExpose({
   padding: 0 16px 12px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--color-border);
-  background-color: var(--color-surface-light, var(--color-surface));
+  background-color: #2A2A2A;
 }
 
 /* Toolbar controls */
@@ -1165,11 +1166,12 @@ defineExpose({
   padding: 0 16px;
   position: relative;
   min-height: 0;
+  background-color: #2A2A2A;
 }
 
 .reply-sheet__textarea {
   width: 100%;
-  min-height: 120px;
+  min-height: 40px;
   max-height: 40vh;
   padding: 12px;
   border: 1px solid var(--color-border);
@@ -1182,6 +1184,7 @@ defineExpose({
   resize: none;
   transition: border-color 0.2s ease;
   box-sizing: border-box;
+  overflow-y: hidden;
 }
 
 .reply-sheet__textarea:focus {
@@ -1317,7 +1320,7 @@ defineExpose({
   }
   
   .reply-sheet__textarea {
-    min-height: 100px;
+    min-height: 40px;
     padding: 10px;
   }
 }
@@ -1325,7 +1328,7 @@ defineExpose({
 /* Desktop optimizations - keep mobile design but improve desktop UX */
 @media (min-width: 769px) {
   .reply-sheet {
-    max-width: 600px;
+    max-width: none;
     left: 50%;
     transform: translateX(-50%);
     border-radius: var(--radius-md);

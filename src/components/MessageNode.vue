@@ -198,7 +198,7 @@
           />
         </div>
         
-        <div class="reply-count">
+        <div class="reply-count" :class="{ 'mobile-hidden': isMobile && !inListView }">
           {{ message.child_ids?.length === 0 ? '🍃' : `${message.child_ids?.length} ${message.child_ids?.length === 1 ? 'reply' : 'replies'}` }}
         </div>
         
@@ -283,6 +283,11 @@
       
       <!-- Mobile floating action controls - only shown on mobile and not in selection mode -->
       <div v-if="!inListView && !isSelectionMode" class="mobile-action-controls">
+        <!-- Reply count for mobile - positioned next to reply button -->
+        <div v-if="isMobile" class="mobile-reply-count">
+          {{ message.child_ids?.length === 0 ? '🍃' : `${message.child_ids?.length} ${message.child_ids?.length === 1 ? 'reply' : 'replies'}` }}
+        </div>
+        
         <!-- Persistent Reply Button -->
         <button 
           @click.stop="$emit('reply', message.id)"
@@ -2583,6 +2588,11 @@ export default {
     display: none;
   }
   
+  /* Hide reply count in footer on mobile when not in list view */
+  .mobile-hidden {
+    display: none !important;
+  }
+  
   /* Mobile action controls container */
   .mobile-action-controls {
     display: flex !important; /* Override desktop display: none */
@@ -2592,6 +2602,22 @@ export default {
     z-index: 10;
     gap: 8px;
     align-items: flex-end;
+  }
+  
+  /* Mobile reply count - positioned next to reply button */
+  .mobile-reply-count {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xs);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 12;
+    min-height: 36px;
+    white-space: nowrap;
   }
   
   /* Persistent Reply Button - Desktop style without emoji */
@@ -2754,18 +2780,7 @@ export default {
     max-width: 100%;
   }
   
-  /* Add subtle visual indicator for swipeable messages - only when siblings exist */
-  .message-node:not(.list-view)[data-has-siblings="true"] .message-content::after {
-    content: '';
-    position: absolute;
-    bottom: 10px;
-    right: 10px;
-    width: 8px;
-    height: 8px;
-    background-color: var(--color-primary);
-    border-radius: 50%;
-    opacity: 0.5;
-  }
+
 }
 
 /* Shake animation for invalid swipes */
@@ -3002,6 +3017,12 @@ export default {
     bottom: 6px;
     right: 6px;
     gap: 6px;
+  }
+  
+  .mobile-reply-count {
+    padding: 6px 10px;
+    font-size: calc(var(--font-size-xs) - 1px);
+    min-height: 32px;
   }
   
   .mobile-reply-button {
