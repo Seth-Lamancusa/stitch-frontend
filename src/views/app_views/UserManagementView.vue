@@ -33,6 +33,13 @@
 
         <!-- Search and Stats Section -->
         <div class="management-controls">
+          <!-- Create User Section -->
+          <div class="create-user-section">
+            <button @click="openCreateUserModal" class="create-user-btn">
+              ➕ Create New User
+            </button>
+          </div>
+
           <!-- Search Bar
           <div class="search-section">
             <div class="search-container">
@@ -78,10 +85,18 @@
             :search-query="debouncedSearchQuery"
             @update:loading="handleLoadingUpdate"
             @update:error="handleErrorUpdate"
+            ref="userList"
           />
         </div>
       </div>
     </div>
+
+    <!-- Create User Modal -->
+    <CreateUserModal
+      :is-open="showCreateUserModal"
+      @close="closeCreateUserModal"
+      @user-created="handleUserCreated"
+    />
   </AppViewLayout>
 </template>
 
@@ -91,6 +106,7 @@ import { useStore } from 'vuex';
 import { useRouter } from 'vue-router';
 import AppViewLayout from '../../components/layouts/AppViewLayout.vue';
 import UserList from '../../components/UserList.vue';
+import CreateUserModal from '../../components/CreateUserModal.vue';
 import AdminService from '../../services/AdminService';
 
 const store = useStore();
@@ -102,6 +118,12 @@ const debouncedSearchQuery = ref('');
 const userStats = ref(null);
 const isLoadingStats = ref(false);
 const error = ref(null);
+
+// Modal state
+const showCreateUserModal = ref(false);
+
+// Refs
+const userList = ref(null);
 
 // Authentication state
 const user = computed(() => store.getters['auth/user']);
@@ -153,6 +175,28 @@ const handleLoadingUpdate = (loading) => {
 const handleErrorUpdate = (errorMessage) => {
   error.value = errorMessage;
   // Could show a global error notification here
+};
+
+// Modal methods
+const openCreateUserModal = () => {
+  showCreateUserModal.value = true;
+};
+
+const closeCreateUserModal = () => {
+  showCreateUserModal.value = false;
+};
+
+const handleUserCreated = (newUser) => {
+  // Show success notification
+  store.commit('ui/SET_SUCCESS', `User ${newUser.display_name} created successfully!`);
+  
+  // Refresh user list if the component has a refresh method
+  if (userList.value && typeof userList.value.refresh === 'function') {
+    userList.value.refresh();
+  }
+  
+  // Reload stats to reflect the new user
+  loadUserStats();
 };
 
 // Redirect non-admin users after auth is ready
@@ -243,6 +287,30 @@ onMounted(() => {
 .management-controls {
   background: var(--color-surface, #222);
   border-bottom: 1px solid var(--color-border, #eee);
+}
+
+.create-user-section {
+  padding: var(--space-md, 16px);
+  border-bottom: 1px solid var(--color-border, #eee);
+}
+
+.create-user-btn {
+  padding: var(--space-sm, 12px) var(--space-md, 16px);
+  background-color: var(--color-primary, #4f8cff);
+  color: var(--color-text-inverse, #fff);
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  font-weight: 500;
+  font-size: var(--font-size-sm, 0.9rem);
+  transition: background-color var(--transition-fast, 0.2s);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs, 6px);
+}
+
+.create-user-btn:hover {
+  background-color: var(--color-primary-dark, #357ae8);
 }
 
 .search-section {
