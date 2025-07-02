@@ -19,7 +19,16 @@ export default {
     // Add recipients mode state
     addRecipientsMode: false,
     addRecipientsMessageId: null,
-    addRecipientsExisting: []
+    addRecipientsExisting: [],
+    // Global recipients modal state
+    recipientsModal: {
+      isVisible: false,
+      isPublic: true,
+      isAddMode: false,
+      existingRecipients: [],
+      messageId: null,
+      isRecipientRemovalDisabled: false
+    }
   },
   
   mutations: {
@@ -129,13 +138,74 @@ export default {
       state.addRecipientsMode = false;
       state.addRecipientsMessageId = null;
       state.addRecipientsExisting = [];
+    },
+    
+    // Global recipients modal mutations
+    SHOW_RECIPIENTS_MODAL(state, { isPublic, isAddMode, existingRecipients, messageId, isRecipientRemovalDisabled }) {
+      state.recipientsModal.isVisible = true;
+      state.recipientsModal.isPublic = isPublic !== undefined ? isPublic : true;
+      state.recipientsModal.isAddMode = isAddMode !== undefined ? isAddMode : false;
+      state.recipientsModal.existingRecipients = existingRecipients || [];
+      state.recipientsModal.messageId = messageId || null;
+      state.recipientsModal.isRecipientRemovalDisabled = isRecipientRemovalDisabled !== undefined ? isRecipientRemovalDisabled : false;
+    },
+    
+    HIDE_RECIPIENTS_MODAL(state) {
+      state.recipientsModal.isVisible = false;
+      state.recipientsModal.isPublic = true;
+      state.recipientsModal.isAddMode = false;
+      state.recipientsModal.existingRecipients = [];
+      state.recipientsModal.messageId = null;
+      state.recipientsModal.isRecipientRemovalDisabled = false;
     }
   },
   
   getters: {
     isAddRecipientsMode: (state) => state.addRecipientsMode,
     addRecipientsMessageId: (state) => state.addRecipientsMessageId,
-    addRecipientsExisting: (state) => state.addRecipientsExisting
+    addRecipientsExisting: (state) => state.addRecipientsExisting,
+    
+    replyingToMessageId: state => state.replyingToMessageId,
+    isReplying: state => state.isReplying,
+    replyIsPublic: state => state.replySettings.isPublic,
+    replyRecipients: state => state.replySettings.recipients,
+    
+    replyTargetId: state => state.replyingToMessageId,
+    
+    replyTargetAuthor: (state, getters, rootState, rootGetters) => {
+      const messageId = state.replyingToMessageId;
+      if (!messageId) return '';
+      
+      const message = rootGetters['messages/getMessage'](messageId);
+      return message ? message.content_author : '';
+    },
+    
+    isReplyMessageLoading: state => state.isLoadingReplyMessage,
+    
+    previousRoute: state => {
+      console.log(`[Navigation Store] Getting previous route: "${state.previousRoute}"`);
+      return state.previousRoute;
+    },
+    
+    activeTab: state => state.activeTab,
+    
+    // Global action bar getters
+    activeActionBarMessageId: state => state.activeActionBarMessageId,
+    isActionBarOpen: state => messageId => state.activeActionBarMessageId === messageId,
+    
+    // Selection mode getters
+    isSelectionMode: state => state.selectionMode,
+    selectedMessageIds: state => state.selectedMessageIds,
+    selectedMessageCount: state => state.selectedMessageIds.length,
+    isMessageSelected: state => messageId => state.selectedMessageIds.includes(messageId),
+    
+    // Global recipients modal getters
+    recipientsModalVisible: state => state.recipientsModal.isVisible,
+    recipientsModalIsPublic: state => state.recipientsModal.isPublic,
+    recipientsModalIsAddMode: state => state.recipientsModal.isAddMode,
+    recipientsModalExistingRecipients: state => state.recipientsModal.existingRecipients,
+    recipientsModalMessageId: state => state.recipientsModal.messageId,
+    recipientsModalIsRecipientRemovalDisabled: state => state.recipientsModal.isRecipientRemovalDisabled
   },
   
   actions: {
@@ -352,42 +422,15 @@ export default {
     clearAddRecipientsMode({ commit }) {
       commit('CLEAR_ADD_RECIPIENTS_MODE');
       commit('SET_REPLYING', false);
+    },
+    
+    // Global recipients modal actions
+    showRecipientsModal({ commit }, modalConfig) {
+      commit('SHOW_RECIPIENTS_MODAL', modalConfig);
+    },
+    
+    hideRecipientsModal({ commit }) {
+      commit('HIDE_RECIPIENTS_MODAL');
     }
-  },
-  
-  getters: {
-    replyingToMessageId: state => state.replyingToMessageId,
-    isReplying: state => state.isReplying,
-    replyIsPublic: state => state.replySettings.isPublic,
-    replyRecipients: state => state.replySettings.recipients,
-    
-    replyTargetId: state => state.replyingToMessageId,
-    
-    replyTargetAuthor: (state, getters, rootState, rootGetters) => {
-      const messageId = state.replyingToMessageId;
-      if (!messageId) return '';
-      
-      const message = rootGetters['messages/getMessage'](messageId);
-      return message ? message.content_author : '';
-    },
-    
-    isReplyMessageLoading: state => state.isLoadingReplyMessage,
-    
-    previousRoute: state => {
-      console.log(`[Navigation Store] Getting previous route: "${state.previousRoute}"`);
-      return state.previousRoute;
-    },
-    
-    activeTab: state => state.activeTab,
-    
-    // Global action bar getters
-    activeActionBarMessageId: state => state.activeActionBarMessageId,
-    isActionBarOpen: state => messageId => state.activeActionBarMessageId === messageId,
-    
-    // Selection mode getters
-    isSelectionMode: state => state.selectionMode,
-    selectedMessageIds: state => state.selectedMessageIds,
-    selectedMessageCount: state => state.selectedMessageIds.length,
-    isMessageSelected: state => messageId => state.selectedMessageIds.includes(messageId)
   }
-}
+};
