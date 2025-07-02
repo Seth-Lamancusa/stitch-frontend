@@ -160,7 +160,7 @@
     <RecipientsModal
       :is-visible="showRecipientSelector"
       :is-public="isPublic"
-      :is-add-mode="false"
+      :is-add-mode="true"
       @close="closeRecipientSelector"
       @done="closeRecipientSelector"
     />

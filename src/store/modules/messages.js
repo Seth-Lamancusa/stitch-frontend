@@ -397,12 +397,12 @@ export default {
     // REMOVED setBranchPath - no longer needed since in_branch_path flags are unused
     
     // Load parent branch - FIXED: Now consistent with loadMessageBranchDown
-    async loadMessageBranchUp({ commit, dispatch, state }, { messageId, depth = 1 }) {
+    async loadMessageBranchUp({ commit, dispatch, state }, { messageId, depth = 1, get_replies = true }) {
       if (!messageId) return [];
       
       try {
         // Call the backend endpoint for efficient branch loading
-        const response = await MessageService.loadBranchUp(messageId, depth);
+        const response = await MessageService.loadBranchUp(messageId, depth, get_replies);
         const messages = response.data || [];
         
         if (messages.length > 0) {
@@ -425,12 +425,12 @@ export default {
     },
     
     // Load child branch
-    async loadMessageBranchDown({ commit, dispatch, state }, { messageId, depth = 1 }) {
+    async loadMessageBranchDown({ commit, dispatch, state }, { messageId, depth = 1, get_replies = true }) {
       if (!messageId) return [];
       
       try {
         // Call the backend endpoint for efficient branch loading
-        const response = await MessageService.loadBranchDown(messageId, depth);
+        const response = await MessageService.loadBranchDown(messageId, depth, get_replies);
         const messages = response.data || [];
         
         if (messages.length > 0) {
@@ -1117,9 +1117,9 @@ export default {
     // setSelectedRecipients
     // setSelectedAuthor
 
-    async loadMessageRadius({ commit }, { messageId, radius }) {
+    async loadMessageRadius({ commit }, { messageId, radius, get_replies = true }) {
       try {
-        const response = await MessageService.loadMessageRadius(messageId, radius);
+        const response = await MessageService.loadMessageRadius(messageId, radius, get_replies);
         
         // Commit all loaded messages to the store
         if (response.data && response.data.length > 0) {

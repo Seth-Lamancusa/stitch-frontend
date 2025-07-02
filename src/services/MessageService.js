@@ -181,10 +181,10 @@ export default {
   },
   
   // Load parent branch with specified depth
-  async loadBranchUp(messageId, depth = 2) {
+  async loadBranchUp(messageId, depth = 2, get_replies = true) {
     const headers = await getAuthHeaders();
-    const response = await axios.get(`${apiBaseUrl}/messages/branch_up/${messageId}?depth=${depth}`, { headers });
-    console.log(`[DEBUG] MessageService - loadBranchUp(${messageId}, depth=${depth}) response:`, 
+    const response = await axios.get(`${apiBaseUrl}/messages/branch_up/${messageId}?depth=${depth}&get_replies=${get_replies}`, { headers });
+    console.log(`[DEBUG] MessageService - loadBranchUp(${messageId}, depth=${depth}, get_replies=${get_replies}) response:`, 
       response.data.length > 0 ? 
       {count: response.data.length, firstMessage: response.data[0]} : 
       {count: 0});
@@ -192,10 +192,10 @@ export default {
   },
   
   // Load child branch with specified depth
-  async loadBranchDown(messageId, depth = 2) {
+  async loadBranchDown(messageId, depth = 2, get_replies = true) {
     const headers = await getAuthHeaders();
-    const response = await axios.get(`${apiBaseUrl}/messages/branch_down/${messageId}?depth=${depth}`, { headers });
-    console.log(`[DEBUG] MessageService - loadBranchDown(${messageId}, depth=${depth}) response:`, 
+    const response = await axios.get(`${apiBaseUrl}/messages/branch_down/${messageId}?depth=${depth}&get_replies=${get_replies}`, { headers });
+    console.log(`[DEBUG] MessageService - loadBranchDown(${messageId}, depth=${depth}, get_replies=${get_replies}) response:`, 
       response.data.length > 0 ? 
       {count: response.data.length, firstMessage: response.data[0]} : 
       {count: 0});
@@ -203,10 +203,10 @@ export default {
   },
   
   // Load messages within a radius of a target message (both parents and children)
-  async loadMessageRadius(messageId, radius = 5) {
+  async loadMessageRadius(messageId, radius = 5, get_replies = true) {
     const headers = await getAuthHeaders();
-    const response = await axios.get(`${apiBaseUrl}/messages/radius/${messageId}?radius=${radius}`, { headers });
-    console.log(`[DEBUG] MessageService - loadMessageRadius(${messageId}, radius=${radius}) response:`, 
+    const response = await axios.get(`${apiBaseUrl}/messages/radius/${messageId}?radius=${radius}&get_replies=${get_replies}`, { headers });
+    console.log(`[DEBUG] MessageService - loadMessageRadius(${messageId}, radius=${radius}, get_replies=${get_replies}) response:`, 
       response.data.length > 0 ? 
       {count: response.data.length, messageIds: response.data.map(m => m.id)} : 
       {count: 0});

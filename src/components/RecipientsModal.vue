@@ -22,8 +22,11 @@
               :title="!recipient.timestamp ? 'Original recipient (added when message was created)' : 'Added after message creation'"
             >
               <div class="recipient-info">
-                <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
-                <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
+                <div class="recipient-name-line">
+                  <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
+                  <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
+                </div>
+                <span class="recipient-timestamp">{{ recipient.timestamp ? new Date(recipient.timestamp).toLocaleString() : 'creation' }}</span>
               </div>
               <div class="recipient-controls">
                 <span class="visibility-indicator" :title="recipient.visible !== false ? 'Visible (CC)' : 'Hidden (BCC)'">
@@ -107,8 +110,11 @@
             :title="!recipient.timestamp ? 'Original recipient (added when message was created)' : 'Added after message creation'"
           >
             <div class="recipient-info">
-              <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
-              <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
+              <div class="recipient-name-line">
+                <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
+                <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
+              </div>
+              <span class="recipient-timestamp">{{ recipient.timestamp ? new Date(recipient.timestamp).toLocaleString() : 'creation' }}</span>
             </div>
             <div class="recipient-controls">
               <button 
@@ -117,7 +123,9 @@
                 :class="{ 'visible': recipient.visible !== false, 'invisible': recipient.visible === false }"
                 :title="recipient.visible !== false ? 'Visible (CC)' : 'Hidden (BCC)'"
               >
-                {{ recipient.visible !== false ? '👁️' : '🙈' }}
+                <span class="visibility-emoji visible-emoji">👁️</span>
+                <span class="visibility-emoji hidden-emoji">🙈</span>
+                <div class="visibility-slider" :class="{ 'is-visible': recipient.visible !== false }"></div>
               </button>
               <button 
                 v-if="canRemoveRecipient(recipient)"
@@ -754,6 +762,15 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.recipient-name-line {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .recipient-name {
   font-weight: 500;
   color: var(--color-text);
@@ -761,9 +778,17 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .recipient-tag-name {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.recipient-timestamp {
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   white-space: nowrap;
@@ -779,30 +804,67 @@ onBeforeUnmount(() => {
 }
 
 .visibility-toggle-btn {
+  position: relative;
   background: none;
-  border: none;
-  font-size: 16px;
+  border: 1px solid var(--color-border);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  padding: 0;
+  border-radius: 12px;
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 56px;
+  height: 24px;
+  overflow: hidden;
 }
 
 .visibility-toggle-btn:hover {
+  border-color: var(--color-border-hover);
   background-color: var(--color-hover-overlay);
 }
 
-.visibility-toggle-btn.visible {
+.visibility-emoji {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 14px;
+  transition: opacity 0.2s ease;
+}
+
+.visible-emoji {
+  left: 2px;
+  opacity: 0.4;
+}
+
+.hidden-emoji {
+  right: 2px;
+  opacity: 0.4;
+}
+
+.visibility-slider {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background-color: var(--color-primary);
+  border-radius: 10px;
+  transition: transform 0.2s ease;
+  left: 2px;
+  transform: translateX(0);
+}
+
+.visibility-slider.is-visible {
+  transform: translateX(32px);
+}
+
+.visibility-toggle-btn.visible .visible-emoji {
   opacity: 1;
 }
 
-.visibility-toggle-btn.invisible {
-  opacity: 0.7;
+.visibility-toggle-btn.invisible .hidden-emoji {
+  opacity: 1;
 }
 
 .visibility-indicator {
@@ -813,6 +875,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 28px;
   height: 28px;
+  cursor: default;
 }
 
 .remove-recipient-btn {
