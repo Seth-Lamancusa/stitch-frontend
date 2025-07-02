@@ -206,10 +206,20 @@ export default {
     recipientsModalExistingRecipients: (state, getters, rootState, rootGetters) => {
       // Make this getter dynamic - always return current recipients from the message data
       const messageId = state.recipientsModal.messageId;
-      if (!messageId) return state.recipientsModal.existingRecipients;
+      if (!messageId) {
+        console.log('[Navigation Store] recipientsModalExistingRecipients: no messageId, returning stored recipients');
+        return state.recipientsModal.existingRecipients;
+      }
       
       const message = rootGetters['messages/getMessage'](messageId);
-      return message && message.recipients ? message.recipients : state.recipientsModal.existingRecipients;
+      const recipients = message && message.recipients ? message.recipients : state.recipientsModal.existingRecipients;
+      console.log('[Navigation Store] recipientsModalExistingRecipients:', {
+        messageId,
+        hasMessage: !!message,
+        recipientsCount: recipients?.length || 0,
+        recipients
+      });
+      return recipients;
     },
     recipientsModalMessageId: state => state.recipientsModal.messageId,
     recipientsModalIsRecipientRemovalDisabled: state => state.recipientsModal.isRecipientRemovalDisabled
@@ -283,6 +293,10 @@ export default {
     
     toggleRecipientVisibility({ commit }, index) {
       commit('TOGGLE_RECIPIENT_VISIBILITY', index);
+    },
+    
+    clearRecipients({ commit }) {
+      commit('CLEAR_REPLY_RECIPIENTS');
     },
     
     setPreviousRoute({ commit }, route) {

@@ -140,13 +140,13 @@ const addSelectedLinks = async () => {
               :title="showAllLinks ? 'Showing all links' : 'Showing only your links'"
             >
               <span class="toggle-label" :class="{ 'active': !showAllLinks }">Mine</span>
-              <div class="toggle-switch" @click="showAllLinks = !showAllLinks">
+              <div class="toggle-switch" @click.stop="showAllLinks = !showAllLinks">
                 <div class="toggle-slider" :class="{ 'active': showAllLinks }"></div>
               </div>
               <span class="toggle-label" :class="{ 'active': showAllLinks }">All</span>
             </div>
           </div>
-          <button class="close-button" @click="closeModal">×</button>
+          <button class="close-button" @click.stop="closeModal">×</button>
         </div>
         
         <!-- Tab Navigation - only show when not selecting -->
@@ -154,14 +154,14 @@ const addSelectedLinks = async () => {
           <button 
             class="tab-button"
             :class="{ 'active': activeTab === 'incoming' }"
-            @click="activeTab = 'incoming'"
+            @click.stop="activeTab = 'incoming'"
           >
             Incoming
           </button>
           <button 
             class="tab-button"
             :class="{ 'active': activeTab === 'outgoing' }"
-            @click="activeTab = 'outgoing'"
+            @click.stop="activeTab = 'outgoing'"
           >
             Outgoing
           </button>
@@ -171,7 +171,7 @@ const addSelectedLinks = async () => {
         <div v-if="!isSelecting" class="add-link-section">
           <button 
             class="add-link-button"
-            @click="startAddingLinks(activeTab)"
+            @click.stop="startAddingLinks(activeTab)"
           >
             Add {{ activeTab }} links
           </button>
@@ -204,12 +204,12 @@ const addSelectedLinks = async () => {
         
         <div class="modal-footer">
           <template v-if="isSelecting">
-            <button class="cancel-btn" @click="cancelSelection" :disabled="isLoading">
+            <button class="cancel-btn" @click.stop="cancelSelection" :disabled="isLoading">
               Cancel
             </button>
             <button 
               class="add-btn" 
-              @click="addSelectedLinks" 
+              @click.stop="addSelectedLinks" 
               :disabled="isLoading || selectedMessages.size === 0"
             >
               <span v-if="!isLoading">Add ({{ selectedMessages.size }})</span>
@@ -217,7 +217,7 @@ const addSelectedLinks = async () => {
             </button>
           </template>
           <template v-else>
-            <button class="close-btn" @click="closeModal">Close</button>
+            <button class="close-btn" @click.stop="closeModal">Close</button>
           </template>
         </div>
       </div>

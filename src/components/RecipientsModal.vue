@@ -2,24 +2,26 @@
   <div v-if="isVisible" class="modal-overlay" @click.self="closeModal">
     <div class="recipient-modal">
       <div class="modal-header">
-        <h3>{{ isAddMode ? 'Add Recipients' : 'Recipients' }}</h3>
-        <button class="close-button" @click="closeModal">×</button>
+        <h3>{{ isActuallyAddingToExisting ? 'Add Recipients' : 'Recipients' }}</h3>
+        <button class="close-button" @click.stop="closeModal">×</button>
       </div>
       
       <div class="modal-content">
-        <!-- Show existing recipients in add mode -->
-        <div v-if="isAddMode && existingRecipients && existingRecipients.length > 0" class="existing-recipients">
-          <p class="modal-description">Current recipients (removing them takes effect immediately):</p>
-          <div class="recipients-list">
-            <div 
+
+
+          <!-- Existing Recipients Section -->
+          <div v-if="isAddMode && existingRecipients && existingRecipients.length > 0" class="existing-recipients-section">
+            <p class="section-header">Current recipients</p>
+            <div class="recipients-list">
+              <div  
               v-for="(recipient, index) in existingRecipients" 
               :key="recipient.uid" 
-              class="recipient-tag existing"
+              class="recipient-tag existing-recipient"
               :class="{
                 'original': !recipient.timestamp,
                 'added-later': recipient.timestamp
               }"
-              :title="!recipient.timestamp ? 'Original recipient (added when message was created)' : 'Added after message creation'"
+              :title="getRecipientTitle({ ...recipient, isExisting: true })"
             >
               <div class="recipient-info">
                 <div class="recipient-name-line">
@@ -34,11 +36,10 @@
                 </span>
                 <button 
                   v-if="canRemoveExistingRecipient(recipient)"
-                  @click="() => removeExistingRecipient(index, recipient)" 
+                  @click.stop="() => removeExistingRecipient(index, recipient)" 
                   class="remove-recipient-btn"
                   :class="{ 'removing': removingRecipientIds.has(recipient.uid) }"
                   :disabled="removingRecipientIds.has(recipient.uid)"
-                  :title="removingRecipientIds.has(recipient.uid) ? 'Removing...' : 'Remove recipient from message'"
                 >
                   <div v-if="removingRecipientIds.has(recipient.uid)" class="spinner-small"></div>
                   <span v-else>×</span>
@@ -46,60 +47,103 @@
               </div>
             </div>
           </div>
-          <hr class="divider" />
         </div>
 
-        <p class="modal-description" v-if="!isAddMode && !isPublic">Private replies require at least one recipient</p>
-        <p class="modal-description" v-else-if="!isAddMode">Recipients for public replies (optional)</p>
-        <p class="modal-description" v-else>Add new recipients below (they will be added when you click "Add Recipients"):</p>
-        
-        <div class="recipient-input-container">
-          <div class="input-wrapper" :class="{ 'valid': isTagValid === true, 'invalid': isTagValid === false, 'searching': isSearching }">
-            <input 
-              v-model="newRecipient" 
-              @input="searchUsers"
-              @keydown.enter.prevent="addRecipient" 
-              @keydown.escape="clearSearch"
-              placeholder="Search by username or tag" 
-              class="recipient-input"
-              ref="recipientInput"
-            />
-            <div v-if="isSearching" class="search-indicator" title="Searching...">
-              <div class="spinner"></div>
+        <!-- Search and Add Section -->
+        <div class="search-and-add-section">
+          <p class="modal-description" v-if="!isAddMode && !isPublic">Private replies require at least one recipient</p>
+          <p class="modal-description" v-else-if="!isAddMode">Recipients for public replies (optional)</p>
+          <p class="section-header" v-else-if="isActuallyAddingToExisting">Add new recipients</p>
+          <p class="section-header" v-else>Recipients</p>
+          
+          <div class="recipient-input-container">
+            <div class="input-wrapper" :class="{ 'valid': isTagValid === true, 'invalid': isTagValid === false, 'searching': isSearching }">
+              <input 
+                v-model="newRecipient" 
+                @input="searchUsers"
+                @keydown.enter.prevent="addRecipient" 
+                @keydown.escape="clearSearch"
+                placeholder="Search by username or tag" 
+                class="recipient-input"
+                ref="recipientInput"
+              />
+              <div v-if="isSearching" class="search-indicator" title="Searching...">
+                <div class="spinner"></div>
+              </div>
+              <div v-else-if="isTagValid === true" class="valid-indicator" title="Valid user tag">✓</div>
+              <div v-else-if="isTagValid === false" class="invalid-indicator" title="Invalid user tag">✗</div>
             </div>
-            <div v-else-if="isTagValid === true" class="valid-indicator" title="Valid user tag">✓</div>
-            <div v-else-if="isTagValid === false" class="invalid-indicator" title="Invalid user tag">✗</div>
+            <button 
+              @click.stop="addRecipient" 
+              class="add-recipient-btn"
+              :disabled="!canAddRecipient"
+            >Add</button>
           </div>
-          <button 
-            @click="addRecipient" 
-            class="add-recipient-btn"
-            :disabled="!canAddRecipient"
-          >Add</button>
-        </div>
         
-        <div class="search-results-container">
-          <div v-if="showSearchResults && searchResults && searchResults.length > 0" class="search-results-list">
-            <div 
-              v-for="(user, index) in searchResults" 
-              :key="user.uid" 
-              class="search-result-item"
-              @click="selectSearchResult(user)"
-            >
-              <div class="search-result-content">
-                <span class="search-result-name">{{ user.display_name || 'User' }}</span>
-                <span class="search-result-tag">@{{ user.user_tag }}</span>
+          <div class="search-results-container">
+            <div v-if="showSearchResults && searchResults && searchResults.length > 0" class="search-results-list">
+              <div 
+                v-for="(user, index) in searchResults" 
+                :key="user.uid" 
+                class="search-result-item"
+                @click.stop="selectSearchResult(user)"
+              >
+                <div class="search-result-content">
+                  <span class="search-result-name">{{ user.display_name || 'User' }}</span>
+                  <span class="search-result-tag">@{{ user.user_tag }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div v-else-if="searchResults.length === 0 && hasSearched && !isSearching" class="no-search-results">
+              No users found. Try a different search term.
+            </div>
+          </div>
+
+          <!-- New Recipients Section -->
+          <div v-if="isAddMode" class="new-recipients-section">
+            <div class="recipients-list">
+              <div 
+                v-for="(recipient, index) in recipients" 
+                :key="recipient.uid || index" 
+                class="recipient-tag new-recipient"
+                :title="getRecipientTitle({ ...recipient, isNew: true })"
+              >
+                <div class="recipient-info">
+                  <div class="recipient-name-line">
+                    <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
+                    <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
+                  </div>
+                  <span class="recipient-timestamp">{{ recipient.timestamp ? new Date(recipient.timestamp).toLocaleString() : 'creation' }}</span>
+                </div>
+                <div class="recipient-controls">
+                  <button 
+                    @click.stop="() => toggleRecipientVisibility(index)"
+                    class="visibility-toggle-btn"
+                    :class="{ 'visible': recipient.visible !== false, 'invisible': recipient.visible === false }"
+                    :title="recipient.visible !== false ? 'Visible (CC)' : 'Hidden (BCC)'"
+                  >
+                    <span class="visibility-emoji visible-emoji">👁️</span>
+                    <span class="visibility-emoji hidden-emoji">🙈</span>
+                    <div class="visibility-slider" :class="{ 'is-visible': recipient.visible !== false }"></div>
+                  </button>
+                  <button 
+                    @click.stop="() => removeRecipient(index, recipient)" 
+                    class="remove-recipient-btn"
+                  >×</button>
+                </div>
+              </div>
+              
+              <div v-if="!recipients || recipients.length === 0" class="no-recipients">
+                No new recipients added yet
               </div>
             </div>
           </div>
-
-          <div v-else-if="searchResults.length === 0 && hasSearched && !isSearching" class="no-search-results">
-            No users found. Try a different search term.
-          </div>
         </div>
         
-        <div class="recipients-list">
+        <!-- Non-Add Mode Recipients List -->
+        <div v-if="!isAddMode" class="recipients-list">
           <div 
-            v-if="typeof recipients === 'object' && recipients !== null"
             v-for="(recipient, index) in recipients" 
             :key="recipient.uid || index" 
             class="recipient-tag"
@@ -107,7 +151,7 @@
               'original': !recipient.timestamp,
               'added-later': recipient.timestamp
             }"
-            :title="!recipient.timestamp ? 'Original recipient (added when message was created)' : 'Added after message creation'"
+            :title="getRecipientTitle(recipient)"
           >
             <div class="recipient-info">
               <div class="recipient-name-line">
@@ -118,7 +162,7 @@
             </div>
             <div class="recipient-controls">
               <button 
-                @click="() => toggleRecipientVisibility(index)"
+                @click.stop="() => toggleRecipientVisibility(index)"
                 class="visibility-toggle-btn"
                 :class="{ 'visible': recipient.visible !== false, 'invisible': recipient.visible === false }"
                 :title="recipient.visible !== false ? 'Visible (CC)' : 'Hidden (BCC)'"
@@ -129,24 +173,22 @@
               </button>
               <button 
                 v-if="canRemoveRecipient(recipient)"
-                @click="() => removeRecipient(index, recipient)" 
+                @click.stop="() => removeRecipient(index, recipient)" 
                 class="remove-recipient-btn"
               >×</button>
             </div>
           </div>
           
-          <div v-else-if="typeof recipients === 'string'" class="no-recipients">
-            {{ recipients }}
-          </div>
-          
-          <div v-else-if="recipients && recipients.length === 0" class="no-recipients">
-            No {{ isAddMode ? 'new ' : '' }}recipients {{ !isAddMode && isPublic ? '(public reply)' : '' }}
+          <div v-if="!recipients || recipients.length === 0" class="no-recipients">
+            No recipients {{ isPublic ? '(public reply)' : '' }}
           </div>
         </div>
       </div>
       
       <div class="modal-footer">
-        <button @click="handleDone" class="done-button">{{ isAddMode ? 'Add Recipients' : 'Done' }}</button>
+        <button @click.stop="handleDone" class="done-button">
+          {{ isActuallyAddingToExisting ? 'Add Recipients' : 'Done' }}
+        </button>
       </div>
     </div>
   </div>
@@ -201,7 +243,43 @@ const removingRecipientIds = ref(new Set()); // Track which recipients are being
 let searchTimeout = null;
 
 // Computed
-const recipients = computed(() => store.getters['navigation/replyRecipients']);
+const recipients = computed(() => {
+  if (props.isAddMode) {
+    // In add mode, show only the new recipients being added (from navigation store)
+    return store.getters['navigation/replyRecipients'];
+  } else {
+    // In non-add mode, show the current message recipients
+    return store.getters['navigation/replyRecipients'];
+  }
+});
+
+// New computed property for unified display in add mode
+const allRecipientsUnified = computed(() => {
+  if (!props.isAddMode) return recipients.value;
+  
+  // In add mode, combine existing recipients with new ones
+  const existing = props.existingRecipients || [];
+  const newOnes = store.getters['navigation/replyRecipients'] || [];
+  
+  // Create a map to avoid duplicates (by uid)
+  const recipientMap = new Map();
+  
+  // Add existing recipients first
+  existing.forEach(recipient => {
+    if (recipient.uid) {
+      recipientMap.set(recipient.uid, { ...recipient, isExisting: true });
+    }
+  });
+  
+  // Add new recipients, marking them as new
+  newOnes.forEach(recipient => {
+    if (recipient.uid) {
+      recipientMap.set(recipient.uid, { ...recipient, isExisting: false, isNew: true });
+    }
+  });
+  
+  return Array.from(recipientMap.values());
+});
 
 const canAddRecipient = computed(() => {
   return newRecipient.value.trim() !== '' && isTagValid.value;
@@ -214,13 +292,23 @@ const currentMessage = computed(() => {
   return store.getters['messages/getMessage'](props.messageId);
 });
 
+// Determine if we're actually adding to an existing message or just managing staged recipients
+const isActuallyAddingToExisting = computed(() => {
+  return props.isAddMode && props.existingRecipients && props.existingRecipients.length > 0;
+});
+
 const canRemoveRecipient = computed(() => {
   return (recipient) => {
     if (!currentUser.value) return false;
     
-    // In add mode, we're working with new recipients being added locally
+    // In add mode, check if it's a new recipient or existing one
     if (props.isAddMode) {
-      return !props.isRecipientRemovalDisabled;
+      // If it's a new recipient being added, allow removal
+      if (recipient.isNew) {
+        return !props.isRecipientRemovalDisabled;
+      }
+      // If it's an existing recipient, use existing logic
+      return canRemoveExistingRecipient.value(recipient);
     }
     
     // For non-add mode, use the existing recipient removal logic
@@ -246,19 +334,43 @@ const canRemoveExistingRecipient = computed(() => {
 });
 
 // Methods
+const getRecipientTitle = (recipient) => {
+  if (recipient.isNew) {
+    return 'New recipient being added';
+  } else if (!recipient.timestamp) {
+    return 'Original recipient (added when message was created)';
+  } else {
+    return 'Added after message creation';
+  }
+};
+
 const closeModal = () => {
+  console.log('[RecipientsModal] closeModal called');
   clearSearch();
   emit('close');
 };
 
 const handleDone = async () => {
-  if (props.isAddMode) {
+  console.log('[RecipientsModal] handleDone called, isAddMode:', props.isAddMode);
+  console.log('[RecipientsModal] isActuallyAddingToExisting:', isActuallyAddingToExisting.value);
+  console.log('[RecipientsModal] Current recipients:', recipients.value);
+  
+  if (isActuallyAddingToExisting.value) {
+    console.log('[RecipientsModal] Actually adding to existing message, emitting add-recipients event');
     // Emit add-recipients event with current recipients
     emit('add-recipients', recipients.value);
+    
+    console.log('[RecipientsModal] Clearing navigation store recipients');
+    // Clear the new recipients list after adding them
+    await store.dispatch('navigation/clearRecipients');
+    
+    console.log('[RecipientsModal] Add mode complete - modal should stay open');
+    // Don't close the modal - let it stay open for more additions
   } else {
+    console.log('[RecipientsModal] Just managing staged recipients, closing modal');
     emit('done');
+    closeModal();
   }
-  closeModal();
 };
 
 // Debounce function for search
@@ -361,9 +473,16 @@ const addRecipient = async () => {
 
 const removeRecipient = async (index, recipient) => {
   try {
-    if (props.isAddMode) {
-      // In add mode, just remove from local state (new recipients being added)
-      store.dispatch('navigation/removeRecipient', index);
+    if (props.isAddMode && recipient.isNew) {
+      // Remove new recipient from navigation store
+      const newRecipients = store.getters['navigation/replyRecipients'];
+      const newIndex = newRecipients.findIndex(r => r.uid === recipient.uid);
+      if (newIndex !== -1) {
+        store.dispatch('navigation/removeRecipient', newIndex);
+      }
+    } else if (props.isAddMode && recipient.isExisting) {
+      // Remove existing recipient via API
+      await removeExistingRecipient(index, recipient);
     } else {
       // For non-add mode, use the existing recipient removal logic
       await removeExistingRecipient(index, recipient);
@@ -420,6 +539,8 @@ const removeExistingRecipient = async (index, recipient) => {
 };
 
 const toggleRecipientVisibility = (index) => {
+  // Since we're now iterating directly over the navigation store recipients,
+  // we can pass the index directly
   store.dispatch('navigation/toggleRecipientVisibility', index);
 };
 
@@ -454,6 +575,15 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside);
   clearTimeout(searchTimeout);
 });
+
+// Add logging to watch existing recipients
+watch(() => props.existingRecipients, (newVal, oldVal) => {
+  console.log('[RecipientsModal] existingRecipients changed:', {
+    old: oldVal?.length,
+    new: newVal?.length,
+    recipients: newVal
+  });
+}, { deep: true });
 </script>
 
 <style scoped>
@@ -533,15 +663,19 @@ onBeforeUnmount(() => {
   line-height: 1.4;
 }
 
-/* Existing recipients section */
-.existing-recipients {
-  margin-bottom: 20px;
+.section-header {
+  margin: 0 0 8px 0;
+  color: var(--color-text-tertiary, #666);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+  opacity: 0.8;
 }
 
-.divider {
-  border: none;
-  border-top: 1px solid var(--color-border);
-  margin: 16px 0;
+/* Existing recipients section */
+.existing-recipients {
+  margin-bottom: 10px;
 }
 
 /* Recipient input container */
@@ -733,11 +867,11 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background-color: var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.1));
-  border: 1px solid var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.2));
   border-radius: var(--radius-md);
   margin-bottom: 8px;
   transition: all 0.2s ease;
+  background-color: var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.05));
+  border: 1px solid var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.2));
 }
 
 .recipient-tag.original {
@@ -745,9 +879,9 @@ onBeforeUnmount(() => {
   border: 2px solid var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.3));
 }
 
-.recipient-tag.added-later {
-  background-color: var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.05));
-  border: 1px solid var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.2));
+.recipient-tag.original {
+  background-color: var(--color-surface-light, var(--color-surface));
+  border: 2px solid var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.3));
 }
 
 .recipient-tag.existing {
@@ -805,7 +939,7 @@ onBeforeUnmount(() => {
 
 .visibility-toggle-btn {
   position: relative;
-  background: none;
+  background: var(--color-primary-light);
   border: 1px solid var(--color-border);
   cursor: pointer;
   padding: 0;
@@ -841,14 +975,14 @@ onBeforeUnmount(() => {
 
 .hidden-emoji {
   right: 2px;
-  opacity: 0.4;
+  opacity: 0.1;
 }
 
 .visibility-slider {
   position: absolute;
   width: 20px;
   height: 20px;
-  background-color: var(--color-primary);
+  background-color: var(--color-primary-rgb);
   border-radius: 10px;
   transition: transform 0.2s ease;
   left: 2px;
@@ -917,6 +1051,37 @@ onBeforeUnmount(() => {
   font-size: var(--font-size-sm);
 }
 
+/* Section styling */
+.existing-recipients-section,
+.new-recipients-section {
+  margin-bottom: 0;
+}
+
+.existing-recipients-section {
+  background-color: var(--color-background-light);
+  border-radius: var(--radius-md);
+  padding: 8px;
+}
+
+.search-and-add-section {
+  padding: 8px;
+}
+
+.new-recipients-section {
+  margin-top: 20px;
+}
+
+  /* New recipient styling */
+  .recipient-tag.new-recipient {
+    background-color: var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.05));
+    border: 1px solid var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.2));
+  }
+
+  .recipient-tag.existing-recipient,
+.recipient-tag.new-recipient {
+  opacity: 0.7;
+}
+
 /* Modal footer */
 .modal-footer {
   padding: 16px 24px 20px;
@@ -979,4 +1144,4 @@ onBeforeUnmount(() => {
     width: 100%;
   }
 }
-</style> 
+</style>
