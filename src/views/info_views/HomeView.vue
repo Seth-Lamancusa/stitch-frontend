@@ -1,6 +1,6 @@
 <template>
   <InfoViewLayout
-    pageTitle="Nonlinear Group Chats<br>with AI"
+    pageTitle="Threaded Group Chats<br>with AI"
     pageSubtitle="Connect, compare, share."
     heroClass="home-hero"
     :showBetaBanner="true"
