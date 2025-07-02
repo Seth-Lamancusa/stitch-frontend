@@ -1334,6 +1334,11 @@ const handleLinkDelete = async (linkData) => {
     margin-bottom: 8px;
   }
   
+  /* Center the toggle button when collapsed on mobile */
+  .info-box.collapsed .info-header {
+    justify-content: center;
+  }
+  
   .info-text {
     font-size: var(--font-size-sm, 13px);
     line-height: 1.4;

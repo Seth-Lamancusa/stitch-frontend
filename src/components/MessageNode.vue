@@ -263,6 +263,18 @@
             Add Recipients
           </button>
         </div>
+        
+        <!-- Mobile JSON button - Admin only, positioned on the right side -->
+        <button 
+          v-if="isAdmin && isMobile && !inListView && !isSelectionMode"
+          @click.stop="copyMessageJson" 
+          class="mobile-json-button"
+          :class="{ 'copied': isJsonCopied }"
+          title="Copy message JSON to clipboard"
+        >
+          <span v-if="isJsonCopied" class="copied-icon">✓</span>
+          <span v-else class="json-icon">{ }</span>
+        </button>
       </div>
       
       <!-- Mobile floating action controls - only shown on mobile and not in selection mode -->
@@ -1641,7 +1653,7 @@ export default {
   
   .message-footer .reply-count {
     flex: 1;
-    text-align: center;
+    text-align: left;
   }
   
   .mobile-nav-slot {
@@ -2079,6 +2091,37 @@ export default {
     white-space: nowrap;
   }
   
+  /* Mobile JSON button - positioned on the right side of footer */
+  .mobile-json-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xs);
+    padding: 6px 8px;
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    color: var(--color-text-secondary);
+    min-height: 32px;
+    min-width: 40px;
+  }
+  
+  .mobile-json-button:hover {
+    background-color: var(--color-surface-hover);
+    border-color: var(--color-border-hover);
+    color: var(--color-primary);
+  }
+  
+  .mobile-json-button.copied {
+    background-color: var(--color-success);
+    border-color: var(--color-success);
+    color: var(--color-text-inverse);
+    transform: scale(1.05);
+  }
+  
   /* Persistent Reply Button - Desktop style without emoji */
   .mobile-reply-button {
     display: flex;
@@ -2315,6 +2358,13 @@ export default {
     min-width: 40px;
     min-height: 40px;
     font-size: 14px;
+  }
+  
+  .mobile-json-button {
+    padding: 4px 6px;
+    min-height: 28px;
+    min-width: 36px;
+    font-size: calc(var(--font-size-xs) - 1px);
   }
 }
 
