@@ -31,13 +31,79 @@
           <span class="reply-sheet__title">{{ replyHeaderText }}</span>
         </div>
         <div class="reply-sheet__header-right">
-          <!-- Send button moved to header -->
+          <!-- Close button -->
           <button 
-            class="reply-sheet__send-button header-send-button"
+            class="reply-sheet__close-button"
+            @click.stop="hideBottomSheet"
+            :aria-label="'Close reply box'"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+      
+      <!-- Controls toolbar above input -->
+      <div class="reply-sheet__toolbar">
+        <!-- Left side controls -->
+        <div class="toolbar-left">
+          <!-- Public/Private toggle switch -->
+          <div class="toolbar-control">
+            <div class="visibility-toggle" :class="{ 'disabled': !canInteract }">
+              <button 
+                @click="isPublic = false"
+                class="visibility-option"
+                :class="{ 'active': !isPublic }"
+                :disabled="!canInteract"
+                aria-label="Set message to private"
+              >
+                Private
+              </button>
+              <button 
+                @click="isPublic = true"
+                class="visibility-option"
+                :class="{ 'active': isPublic }"
+                :disabled="!canInteract"
+                aria-label="Set message to public"
+              >
+                Public
+              </button>
+            </div>
+          </div>
+          
+          <!-- Recipients button -->
+          <button 
+            class="toolbar-control meta-pill" 
+            @click="toggleRecipientSelector"
+            :disabled="!canInteract"
+            :aria-expanded="showRecipientSelector"
+            aria-label="Manage recipients"
+          >
+            <span class="meta-pill__icon">👥</span>
+            <span class="meta-pill__text">Recipients ({{ recipients.length }})</span>
+          </button>
+          
+          <!-- Add bots button -->
+          <button 
+            class="toolbar-control meta-pill" 
+            @click="toggleChatbotSelector"
+            :disabled="!canInteract"
+            :aria-expanded="showChatbotSelector"
+            aria-label="Add chatbots"
+          >
+            <span class="meta-pill__icon">🤖</span>
+            <span class="meta-pill__text">+ Add bots</span>
+          </button>
+        </div>
+
+        <!-- Right side controls -->
+        <div class="toolbar-right">
+          <!-- Send button -->
+          <button 
+            class="header-send-button"
             :class="{ 
-              'reply-sheet__send-button--disabled': !canSendReply,
-              'reply-sheet__send-button--loading': isSending,
-              'reply-sheet__send-button--success': showSendSuccess
+              'header-send-button--disabled': !canSendReply,
+              'header-send-button--loading': isSending,
+              'header-send-button--success': showSendSuccess
             }"
             @click.stop="sendReply" 
             :disabled="!canSendReply"
@@ -47,67 +113,7 @@
             <span v-else-if="isSending" class="send-button__spinner" aria-hidden="true"></span>
             <span v-else class="send-button__text">Send</span>
           </button>
-          
-          <!-- Triangular close button -->
-          <button 
-            class="reply-sheet__close-button"
-            @click.stop="hideBottomSheet"
-            :aria-label="'Close reply box'"
-          >
-            <span class="close-triangle"></span>
-          </button>
         </div>
-      </div>
-      
-      <!-- Controls toolbar above input -->
-      <div class="reply-sheet__toolbar">
-        <!-- Public/Private toggle switch -->
-        <div class="toolbar-control">
-          <div class="visibility-toggle" :class="{ 'disabled': !canInteract }">
-            <button 
-              @click="isPublic = false"
-              class="visibility-option"
-              :class="{ 'active': !isPublic }"
-              :disabled="!canInteract"
-              aria-label="Set message to private"
-            >
-              Private
-            </button>
-            <button 
-              @click="isPublic = true"
-              class="visibility-option"
-              :class="{ 'active': isPublic }"
-              :disabled="!canInteract"
-              aria-label="Set message to public"
-            >
-              Public
-            </button>
-          </div>
-        </div>
-        
-        <!-- Recipients button -->
-        <button 
-          class="toolbar-control meta-pill" 
-          @click="toggleRecipientSelector"
-          :disabled="!canInteract"
-          :aria-expanded="showRecipientSelector"
-          aria-label="Manage recipients"
-        >
-          <span class="meta-pill__icon">👥</span>
-          <span class="meta-pill__text">Recipients ({{ recipients.length }})</span>
-        </button>
-        
-        <!-- Add bots button -->
-        <button 
-          class="toolbar-control meta-pill" 
-          @click="toggleChatbotSelector"
-          :disabled="!canInteract"
-          :aria-expanded="showChatbotSelector"
-          aria-label="Add chatbots"
-        >
-          <span class="meta-pill__icon">🤖</span>
-          <span class="meta-pill__text">+ Add bots</span>
-        </button>
       </div>
       
       <!-- Text area - hidden in add recipients mode -->
@@ -124,7 +130,7 @@
           :disabled="!canInteract"
           :class="{ 'disabled': !canInteract }"
           aria-label="Message content"
-          rows="3"
+          rows="1"
         ></textarea>
       </div>
       
@@ -556,9 +562,18 @@ const autoResizeTextarea = () => {
   const textarea = replyTextarea.value;
   if (!textarea) return;
   
-  // Reset to auto to get the natural height, then set to scrollHeight
+  // Reset height to auto to get the natural height
   textarea.style.height = 'auto';
-  textarea.style.height = Math.min(Math.max(textarea.scrollHeight, 40), 150) + 'px';
+  
+  // Set new height based on scrollHeight, with min and max constraints
+  const minHeight = 24; // Single line
+  const maxHeight = window.innerHeight * 0.4; // 40vh
+  const newHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight);
+  
+  textarea.style.height = `${newHeight}px`;
+  
+  // Only show scrollbar if content exceeds max height
+  textarea.style.overflowY = newHeight >= maxHeight ? 'auto' : 'hidden';
 };
 
 const sendReply = async () => {
@@ -1035,17 +1050,18 @@ defineExpose({
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: -20px; /* Position slightly below the viewport */
   background-color: var(--color-surface);
   border-top-left-radius: 16px;
   border-top-right-radius: 16px;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.4);
   z-index: 1000;
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 20px); /* Keep safe area padding */
   display: flex;
   flex-direction: column;
-  max-height: 50vh;
-  min-height: 200px;
+  max-height: calc(50vh + 20px); /* Account for the extended bottom */
+  min-height: auto; /* Let it size to content */
+  height: auto; /* Auto-size to content */
   transform: translateY(100%);
   transition: transform 0.3s ease-out;
 }
@@ -1074,7 +1090,7 @@ defineExpose({
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--color-border);
   border-top-left-radius: 16px;
   border-top-right-radius: 16px;
@@ -1089,7 +1105,7 @@ defineExpose({
 }
 
 .reply-sheet__title {
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text);
 }
@@ -1101,17 +1117,28 @@ defineExpose({
   flex-shrink: 0;
 }
 
-
-
 /* Controls toolbar */
 .reply-sheet__toolbar {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 12px;
   padding: 6px 16px 6px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--color-border);
   background-color: #2A2A2A;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
 }
 
 /* Toolbar controls */
@@ -1206,7 +1233,7 @@ defineExpose({
 
 /* Textarea container */
 .reply-sheet__textarea-container {
-  flex: 1;
+  flex: none; /* Don't expand to fill space */
   padding: 16px;
   position: relative;
   min-height: 0;
@@ -1215,9 +1242,9 @@ defineExpose({
 
 .reply-sheet__textarea {
   width: 100%;
-  min-height: 40px;
+  min-height: 24px; /* Single line height */
   max-height: 40vh;
-  padding: 12px;
+  padding: 8px 12px;
   border: 1px solid var(--color-border);
   border-radius: 12px;
   background-color: var(--color-surface);
@@ -1228,7 +1255,7 @@ defineExpose({
   resize: none;
   transition: border-color 0.2s ease;
   box-sizing: border-box;
-  overflow-y: auto; /* Allow scrolling when content exceeds max height */
+  overflow-y: hidden; /* Hide scrollbar during resize */
 }
 
 .reply-sheet__textarea:focus {
@@ -1274,93 +1301,49 @@ defineExpose({
   transform: scale(0.95);
 }
 
-.header-send-button.reply-sheet__send-button--disabled {
+.header-send-button--disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
 }
 
-.header-send-button.reply-sheet__send-button--disabled:hover {
+.header-send-button--disabled:hover {
   background: transparent;
   border-color: var(--color-border);
   color: var(--color-text-secondary);
   transform: none;
 }
 
-.header-send-button.reply-sheet__send-button--loading {
+.header-send-button--loading {
   cursor: wait;
 }
 
-.header-send-button.reply-sheet__send-button--success {
+.header-send-button--success {
   background-color: var(--color-success);
   border-color: var(--color-success);
   color: var(--color-text-inverse);
   transform: scale(1.05);
 }
 
-/* Triangular close button */
+/* Close button */
 .reply-sheet__close-button {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 40px;
-  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0;
-  z-index: 2;
-}
-
-.close-triangle {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 0 40px 40px 0;
-  border-color: transparent #dc3545 transparent transparent;
-  transition: border-color 0.2s ease;
-}
-
-.close-triangle::after {
-  content: '×';
-  position: absolute;
-  top: 13px;
-  right: -13px;
-  color: #AAAAAA;
+  color: var(--color-text-secondary);
   font-size: 16px;
   font-weight: bold;
-  line-height: 1;
-  pointer-events: none;
+  transition: color 0.2s ease;
+  padding: 0;
 }
 
-.reply-sheet__close-button:hover .close-triangle {
-  border-color: transparent #c82333 transparent transparent;
-}
-
-.reply-sheet__close-button:active .close-triangle {
-  border-color: transparent #a71e2a transparent transparent;
-}
-
-.send-button__text {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-}
-
-.send-button__icon {
-  font-size: var(--font-size-lg);
-  font-weight: bold;
-}
-
-.send-button__spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top: 2px solid var(--color-text-inverse);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
+.reply-sheet__close-button:hover {
+  color: var(--color-error);
 }
 
 /* Mobile responsive styles */
@@ -1376,10 +1359,14 @@ defineExpose({
     border-radius: 0;
     border-top-left-radius: 16px;
     border-top-right-radius: 16px;
+    bottom: -30px; /* Position even further below on mobile */
+    max-height: calc(50vh + 30px); /* Account for the extended bottom */
+    min-height: auto; /* Let it size to content */
+    height: auto; /* Auto-size to content */
   }
   
   .reply-sheet__header {
-    padding: 12px 16px;
+    padding: 8px 16px;
   }
   
   .reply-sheet__header-right {
@@ -1391,7 +1378,8 @@ defineExpose({
   }
   
   .reply-sheet__textarea-container {
-    padding: 12px; /* Consistent padding on mobile */
+    flex: none; /* Don't expand to fill space on mobile */
+    padding: 16px; /* Consistent padding on mobile */
   }
 }
 
@@ -1430,18 +1418,9 @@ defineExpose({
   }
   
   .reply-sheet__close-button {
-    width: 32px;
-    height: 32px;
-  }
-  
-  .close-triangle {
-    border-width: 0 32px 32px 0;
-  }
-  
-  .close-triangle::after {
-    top: 11px;
-    right: -11px;
-    font-size: 14px;
+    width: 28px;
+    height: 28px;
+    font-size: 20px;
   }
   
   .reply-sheet__textarea {
@@ -1453,11 +1432,12 @@ defineExpose({
 /* Desktop optimizations - keep mobile design but improve desktop UX */
 @media (min-width: 769px) {
   .reply-sheet {
-    max-width: none;
+    width: 100%; /* Add width to ensure it doesn't get too wide */
     left: 50%;
     transform: translateX(-50%);
     border-radius: var(--radius-md);
     max-height: 60vh;
+    padding: 0 60px;
   }
   
   .reply-sheet--visible {
@@ -1472,8 +1452,6 @@ defineExpose({
   .reply-sheet__handle {
     display: none;
   }
-  
-
 }
 
 /* Common styles */
@@ -1955,6 +1933,25 @@ defineExpose({
 .chatbot-toggle input[type="checkbox"]:focus {
   outline: 2px solid var(--color-primary) !important;
   outline-offset: 2px !important;
+}
+
+.send-button__text {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.send-button__icon {
+  font-size: var(--font-size-lg);
+  font-weight: bold;
+}
+
+.send-button__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid var(--color-text-inverse);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
 /* OLD MOBILE STYLES MOVED TO DESKTOP-ONLY SECTION ABOVE */

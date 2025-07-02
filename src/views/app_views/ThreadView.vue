@@ -1,4 +1,4 @@
-emplate>
+<template>
   <div class="thread-view">
     <!-- Loading states -->
     <div v-if="!isAuthReady" class="auth-loading">
@@ -1436,6 +1436,4 @@ const findEndOfBranchMessage = () => {
     font-size: calc(var(--font-size-md) - 1px);
   }
 }
-</style> 
-
-
+</style>
