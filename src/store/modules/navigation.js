@@ -203,7 +203,14 @@ export default {
     recipientsModalVisible: state => state.recipientsModal.isVisible,
     recipientsModalIsPublic: state => state.recipientsModal.isPublic,
     recipientsModalIsAddMode: state => state.recipientsModal.isAddMode,
-    recipientsModalExistingRecipients: state => state.recipientsModal.existingRecipients,
+    recipientsModalExistingRecipients: (state, getters, rootState, rootGetters) => {
+      // Make this getter dynamic - always return current recipients from the message data
+      const messageId = state.recipientsModal.messageId;
+      if (!messageId) return state.recipientsModal.existingRecipients;
+      
+      const message = rootGetters['messages/getMessage'](messageId);
+      return message && message.recipients ? message.recipients : state.recipientsModal.existingRecipients;
+    },
     recipientsModalMessageId: state => state.recipientsModal.messageId,
     recipientsModalIsRecipientRemovalDisabled: state => state.recipientsModal.isRecipientRemovalDisabled
   },

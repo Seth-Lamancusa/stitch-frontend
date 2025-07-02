@@ -15,6 +15,11 @@
               v-for="(recipient, index) in existingRecipients" 
               :key="recipient.uid" 
               class="recipient-tag existing"
+              :class="{
+                'original': !recipient.timestamp,
+                'added-later': recipient.timestamp
+              }"
+              :title="!recipient.timestamp ? 'Original recipient (added when message was created)' : 'Added after message creation'"
             >
               <div class="recipient-info">
                 <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
@@ -95,6 +100,11 @@
             v-for="(recipient, index) in recipients" 
             :key="recipient.uid || index" 
             class="recipient-tag"
+            :class="{
+              'original': !recipient.timestamp,
+              'added-later': recipient.timestamp
+            }"
+            :title="!recipient.timestamp ? 'Original recipient (added when message was created)' : 'Added after message creation'"
           >
             <div class="recipient-info">
               <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
@@ -166,7 +176,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['close', 'done', 'add-recipients']);
+const emit = defineEmits(['close', 'done', 'add-recipients', 'recipient-removed']);
 
 // Setup store
 const store = useStore();
@@ -377,6 +387,17 @@ const removeExistingRecipient = async (index, recipient) => {
       messageId: props.messageId, 
       radius: 1 
     });
+    
+    // Also remove from the navigation store if it exists there
+    // This ensures the display updates immediately
+    const currentRecipients = store.getters['navigation/replyRecipients'];
+    const recipientIndex = currentRecipients.findIndex(r => r.uid === recipient.uid);
+    if (recipientIndex !== -1) {
+      store.dispatch('navigation/removeRecipient', recipientIndex);
+    }
+    
+    // Emit update event to parent to refresh existing recipients display
+    emit('recipient-removed', recipient.uid);
     
   } catch (error) {
     console.error('Error removing existing recipient:', error);
@@ -709,6 +730,16 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-md);
   margin-bottom: 8px;
   transition: all 0.2s ease;
+}
+
+.recipient-tag.original {
+  background-color: var(--color-surface-light, var(--color-surface));
+  border: 2px solid var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.3));
+}
+
+.recipient-tag.added-later {
+  background-color: var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.05));
+  border: 1px solid var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.2));
 }
 
 .recipient-tag.existing {

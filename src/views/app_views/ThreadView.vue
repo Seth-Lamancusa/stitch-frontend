@@ -154,6 +154,7 @@
       @close="closeRecipientsModal"
       @done="closeRecipientsModal"
       @add-recipients="handleAddRecipients"
+      @recipient-removed="handleRecipientRemoved"
     />
   </div>
 </template>
@@ -850,8 +851,8 @@ const copySelectedMessages = () => {
     const formattedText = messagesToCopy.reduce((acc, message, index) => {
       // Format the current message
       const userTag = message.author_user_tag ? `(@${message.author_user_tag})` : '';
-      const header = `${message.author_display_name || 'Unknown'} ${userTag}, ${new Date(message.timestamp).toLocaleString()}`;
-      const messageText = `${header}\n${message.content || ''}`;
+      const header = `${message.author_display_name || 'Unknown'} ${userTag}, ${new Date(message.timestamp).toLocaleString()} (stitch.fyi/${message.id})`;
+      const messageText = `${header}\n\n${message.content || ''}`;
       
       // If this is the first message, just add it
       if (index === 0) {
@@ -861,9 +862,9 @@ const copySelectedMessages = () => {
       // Find positions of current and previous messages in the branch
       const currentPos = branchMessages.findIndex(m => m.id === message.id);
       const prevPos = branchMessages.findIndex(m => m.id === messagesToCopy[index - 1].id);
-      
+
       // Add separator based on whether messages are consecutive
-      const separator = currentPos - prevPos > 1 ? '\n\n...\n\n' : '\n\n';
+      const separator = currentPos - prevPos > 1 ? '\n\n---\n\n...\n\n---\n\n' : '\n\n---\n\n';
       return acc + separator + messageText;
     }, '');
     
@@ -933,6 +934,13 @@ const handleAddRecipients = async (recipients) => {
     console.error('[ThreadView] Error adding recipients:', error);
     store.commit('ui/SET_ERROR', 'Failed to add recipients. Please try again.');
   }
+};
+
+const handleRecipientRemoved = (recipientUid) => {
+  console.log('[ThreadView] handleRecipientRemoved called with', recipientUid);
+  
+  // Show success message
+  store.commit('ui/SET_SUCCESS', 'Recipient removed from message');
 };
 
 const deleteMessage = async () => {

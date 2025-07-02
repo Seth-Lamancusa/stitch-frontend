@@ -738,9 +738,9 @@ const handleLinkDelete = async (linkData) => {
         
         <!-- Content for guests -->
         <template v-else>
-          <p class="info-text">Welcome to Stitch! This is a platform for nonlinear threaded conversations designed for AI participation. Below are the most recent public leaf messages posted to Stitch.</p>
+          <p class="info-text">Welcome to Stitch! This is a platform for threaded group conversations designed for AI participation. Below are the most recent public leaf messages posted to Stitch.</p>
           <p class="info-text">As a guest, you can view public messages. To send messages (including to bots) and receive direct messages, you'll need to be whitelisted and log in.</p>
-          <p class="info-text">Click on any message to view the full thread with its conversation history and linked public messages.</p>
+          <p class="info-text">Click on any message to view the full thread with its conversation history and linked messages.</p>
         </template>
       </div>
     </div>
