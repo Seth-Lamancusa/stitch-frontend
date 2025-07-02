@@ -182,6 +182,8 @@
           />
         </div>
         
+        <span class="message-id" :title="'Message ID: ' + message.id">ID: {{ message.id }}</span>
+        
         <div class="reply-count" :class="{ 'mobile-hidden': isMobile && !inListView }">
           {{ message.child_ids?.length === 0 ? '🍃' : `${message.child_ids?.length} ${message.child_ids?.length === 1 ? 'reply' : 'replies'}` }}
         </div>
@@ -1641,12 +1643,21 @@ export default {
 
 .message-footer {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.reply-count {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
-  width: 100%;
-  gap: var(--space-sm);
+  margin-right: var(--space-sm);
+  padding: 2px 6px;
+  background-color: var(--color-surface-hover);
+  border-radius: var(--radius-xs);
+  cursor: help;
 }
 
 /* Mobile navigation slot styling */
@@ -2387,5 +2398,15 @@ export default {
   opacity: 0.1 !important;
   pointer-events: none !important;
   user-select: none !important;
+}
+
+.message-id {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin-right: var(--space-sm);
+  padding: 2px 6px;
+  background-color: var(--color-surface-hover);
+  border-radius: var(--radius-xs);
+  cursor: help;
 }
 </style>
