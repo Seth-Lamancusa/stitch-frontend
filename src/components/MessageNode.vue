@@ -15,6 +15,7 @@
       v-if="message.parent_id && !inListView && !isMobile"
       :message-id="message.id"
       :parent-id="message.parent_id"
+      :mobile-mode="false"
       :class="{ 'selection-mode-disabled': isSelectionMode }"
       @navigate="handleSiblingNavigation"
     />
@@ -185,18 +186,17 @@
       </div>
       
       <div class="message-footer">
-        <!-- Mobile previous navigation button - left side -->
-        <button 
-          v-if="message.parent_id && !inListView && isMobile && canNavigatePrev"
-          @click.stop="navigateSibling('prev')" 
-          class="mobile-nav-button mobile-nav-prev"
-          :class="{ 'disabled': !canNavigatePrev, 'loading': isLoading }"
-          :disabled="!canNavigatePrev || isLoading"
-          title="Previous reply"
-        >
-          <div v-if="isLoading" class="loading-dot"></div>
-          <div v-else class="triangle-icon left-triangle"></div>
-        </button>
+        <!-- Mobile sibling navigation slot - only on mobile -->
+        <div v-if="isMobile && !inListView" class="mobile-nav-slot">
+          <sibling-navigator
+            v-if="message.parent_id"
+            :message-id="message.id"
+            :parent-id="message.parent_id"
+            :mobile-mode="true"
+            :class="{ 'selection-mode-disabled': isSelectionMode }"
+            @navigate="handleSiblingNavigation"
+          />
+        </div>
         
         <div class="reply-count">
           {{ message.child_ids?.length === 0 ? '🍃' : `${message.child_ids?.length} ${message.child_ids?.length === 1 ? 'reply' : 'replies'}` }}
@@ -290,19 +290,6 @@
           title="Reply to this message"
         >
           Reply
-        </button>
-        
-        <!-- Mobile next navigation button - right side with other actions -->
-        <button 
-          v-if="message.parent_id && isMobile && canNavigateNext"
-          @click.stop="navigateSibling('next')" 
-          class="mobile-nav-button mobile-nav-next"
-          :class="{ 'disabled': !canNavigateNext, 'loading': isLoading }"
-          :disabled="!canNavigateNext || isLoading"
-          title="Next reply"
-        >
-          <div v-if="isLoading" class="loading-dot"></div>
-          <div v-else class="triangle-icon right-triangle"></div>
         </button>
         
         <!-- Visual Discovery Hint -->
@@ -2169,17 +2156,32 @@ export default {
   gap: var(--space-sm);
 }
 
-/* Ensure proper spacing when mobile navigator is present */
+/* Mobile navigation slot styling */
+.mobile-nav-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Mobile footer layout */
 @media (max-width: 768px) {
   .message-footer {
-    justify-content: flex-start;
+    justify-content: space-between;
     position: relative;
-    padding-left: 44px; /* Make room for the left navigation button */
+    align-items: center;
+    flex-wrap: nowrap;
   }
   
   .message-footer .reply-count {
     flex: 1;
     text-align: center;
+  }
+  
+  .mobile-nav-slot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
   }
 }
 
