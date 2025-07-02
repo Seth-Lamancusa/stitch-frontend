@@ -24,6 +24,7 @@
       @close="closeRecipientsModal"
       @done="closeRecipientsModal"
       @add-recipients="handleAddRecipients"
+      @recipient-removed="handleRecipientRemoved"
     />
   </AppViewLayout>
 </template>
@@ -137,6 +138,13 @@ const handleAddRecipients = async (recipients) => {
     console.error('[MessageListView] Error adding recipients:', error);
     store.commit('ui/SET_ERROR', 'Failed to add recipients. Please try again.');
   }
+};
+
+const handleRecipientRemoved = (recipientUid) => {
+  console.log('[MessageListView] handleRecipientRemoved called with', recipientUid);
+  
+  // Show success message
+  store.commit('ui/SET_SUCCESS', 'Recipient removed from message');
 };
 </script>
 
