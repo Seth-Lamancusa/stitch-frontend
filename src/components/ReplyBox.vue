@@ -435,17 +435,17 @@ const hideBottomSheet = () => {
 };
 
 // Track touch movement to distinguish between tap and scroll
-let touchStartY = 0;
+let backdropTouchStartY = 0;
 let touchMoveDistance = 0;
 
 const handleBackdropTouchStart = (event) => {
-  touchStartY = event.touches[0].clientY;
+  backdropTouchStartY = event.touches[0].clientY;
   touchMoveDistance = 0;
 };
 
 const handleBackdropTouchMove = (event) => {
-  if (touchStartY) {
-    touchMoveDistance = Math.abs(event.touches[0].clientY - touchStartY);
+  if (backdropTouchStartY) {
+    touchMoveDistance = Math.abs(event.touches[0].clientY - backdropTouchStartY);
   }
 };
 
@@ -1233,47 +1233,54 @@ defineExpose({
   cursor: not-allowed;
 }
 
-/* Floating send button */
+/* Floating send button - rectangular style matching action buttons */
 .reply-sheet__send-button {
   position: absolute;
   bottom: 16px;
   right: 16px;
-  min-width: 44px;
-  min-height: 44px;
+  min-width: 60px;
+  min-height: 36px;
   background-color: var(--color-primary);
   color: var(--color-text-inverse);
-  border: none;
-  border-radius: 50%;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-xs);
   cursor: pointer;
   font-weight: 600;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: all 0.2s ease;
+  gap: 6px;
+  padding: 8px 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  transition: all var(--transition-fast);
   z-index: 1;
 }
 
 .reply-sheet__send-button:hover:not(:disabled) {
   background-color: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
   transform: scale(1.05);
 }
 
 .reply-sheet__send-button--disabled {
   background-color: var(--color-border);
+  border-color: var(--color-border);
   color: var(--color-text-secondary);
   cursor: not-allowed;
   transform: none;
+  opacity: 0.6;
 }
 
 .reply-sheet__send-button--loading {
   cursor: wait;
+  opacity: 0.8;
 }
 
 .reply-sheet__send-button--success {
   background-color: var(--color-success);
-  transform: scale(1.1);
+  border-color: var(--color-success);
+  transform: scale(1.05);
 }
 
 .send-button__text {
@@ -1350,10 +1357,12 @@ defineExpose({
   }
   
   .reply-sheet__send-button {
-    min-width: 40px;
-    min-height: 40px;
+    min-width: 56px;
+    min-height: 32px;
     bottom: 12px;
     right: 12px;
+    padding: 6px 10px;
+    font-size: calc(var(--font-size-xs) - 1px);
   }
   
   .reply-sheet__textarea {
