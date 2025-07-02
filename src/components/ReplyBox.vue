@@ -1327,8 +1327,8 @@ defineExpose({
 .close-triangle::after {
   content: '×';
   position: absolute;
-  top: 8px;
-  right: -27px;
+  top: 13px;
+  right: -13px;
   color: #AAAAAA;
   font-size: 16px;
   font-weight: bold;
@@ -1439,8 +1439,8 @@ defineExpose({
   }
   
   .close-triangle::after {
-    top: 6px;
-    right: -21px;
+    top: 11px;
+    right: -11px;
     font-size: 14px;
   }
   
@@ -1473,21 +1473,7 @@ defineExpose({
     display: none;
   }
   
-  /* Smaller triangle for desktop - 33% reduction */
-  .close-triangle {
-    border-width: 0 27px 27px 0; /* Reduced from 40px to 27px (33% smaller) */
-  }
-  
-  .reply-sheet__close-button {
-    width: 27px;
-    height: 27px;
-  }
-  
-  .close-triangle::after {
-    top: 5px;
-    right: -18px;
-    font-size: 14px;
-  }
+
 }
 
 /* Common styles */

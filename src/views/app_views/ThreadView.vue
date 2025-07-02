@@ -1,4 +1,4 @@
-<template>
+emplate>
   <div class="thread-view">
     <!-- Loading states -->
     <div v-if="!isAuthReady" class="auth-loading">
