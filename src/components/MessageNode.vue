@@ -10,9 +10,9 @@
     :data-message-id="message.id"
     :data-has-siblings="hasSiblings"
   >
-    <!-- Add sibling navigator if message has a parent -->
+    <!-- Desktop sibling navigator - only show when not mobile and not in list view -->
     <sibling-navigator
-      v-if="message.parent_id && !inListView"
+      v-if="message.parent_id && !inListView && !isMobile"
       :message-id="message.id"
       :parent-id="message.parent_id"
       :class="{ 'selection-mode-disabled': isSelectionMode }"
@@ -2125,6 +2125,24 @@ export default {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
   width: 100%;
+  gap: var(--space-sm);
+}
+
+/* Ensure proper spacing when mobile navigator is present */
+@media (max-width: 768px) {
+  .message-footer {
+    justify-content: center;
+    position: relative;
+  }
+  
+  .message-footer .reply-count {
+    position: absolute;
+    left: 0;
+  }
+  
+  .message-footer .mobile-sibling-navigator {
+    flex: 0 0 auto;
+  }
 }
 
 .message-actions {

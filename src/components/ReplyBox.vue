@@ -1788,34 +1788,43 @@ defineExpose({
 }
 
 .chatbot-toggle input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
+  width: 16px !important;
+  height: 16px !important;
   cursor: pointer;
-  accent-color: var(--color-primary);
-  position: relative;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 2px solid var(--color-border);
-  border-radius: 3px;
-  background-color: var(--color-surface);
-  transition: all 0.2s ease;
+  position: relative !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  border: 2px solid var(--color-border) !important;
+  border-radius: 3px !important;
+  background-color: var(--color-surface) !important;
+  transition: all 0.2s ease !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  outline: none !important;
 }
 
 .chatbot-toggle input[type="checkbox"]:checked {
-  background-color: var(--color-primary);
-  border-color: var(--color-primary);
+  background-color: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
 }
 
 .chatbot-toggle input[type="checkbox"]:checked::after {
-  content: '✓';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: black;
-  font-size: 12px;
-  font-weight: bold;
-  line-height: 1;
+  content: '✓' !important;
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  color: black !important;
+  font-size: 12px !important;
+  font-weight: bold !important;
+  line-height: 1 !important;
+  display: block !important;
+}
+
+.chatbot-toggle input[type="checkbox"]:focus {
+  outline: 2px solid var(--color-primary) !important;
+  outline-offset: 2px !important;
 }
 
 /* OLD MOBILE STYLES MOVED TO DESKTOP-ONLY SECTION ABOVE */
