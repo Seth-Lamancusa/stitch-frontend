@@ -4,9 +4,6 @@
     <div 
       v-if="isReplying || isNewThread" 
       class="reply-backdrop"
-      @click="handleBackdropClick"
-      @touchstart.passive="handleBackdropTouchStart"
-      @touchmove.passive="handleBackdropTouchMove"
     ></div>
     
     <!-- Bottom sheet -->
@@ -15,7 +12,7 @@
       class="reply-sheet"
       :class="{ 
         'reply-sheet--raised': isKeyboardVisible,
-        'reply-sheet--visible': showSheet 
+        'reply-sheet--visible': isReplying || isNewThread 
       }"
       ref="replySheet"
       role="dialog"
@@ -75,8 +72,8 @@
         </button>
       </div>
       
-      <!-- Text area -->
-      <div class="reply-sheet__textarea-container">
+      <!-- Text area - hidden in add recipients mode -->
+      <div v-if="!isAddRecipientsMode" class="reply-sheet__textarea-container">
         <textarea 
           v-model="content" 
           :placeholder="placeholderText" 
@@ -91,6 +88,25 @@
           aria-label="Message content"
           rows="3"
         ></textarea>
+      </div>
+      
+      <!-- Add recipients info - shown only in add recipients mode -->
+      <div v-if="isAddRecipientsMode" class="add-recipients-info">
+        <p class="add-recipients-description">
+          Add new recipients to this message. Only you (the author) can see this list.
+        </p>
+        <div v-if="addRecipientsExisting.length > 0" class="existing-recipients">
+          <h4>Current Recipients:</h4>
+          <div class="existing-recipients-list">
+            <span 
+              v-for="recipient in addRecipientsExisting" 
+              :key="recipient.uid"
+              class="existing-recipient-tag"
+            >
+              {{ recipient.display_name || recipient.user_tag }}
+            </span>
+          </div>
+        </div>
       </div>
       
       <!-- Floating send button -->
@@ -178,7 +194,15 @@
                 <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
                 <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
               </div>
-              <div class="recipient-actions">
+              <div class="recipient-controls">
+                <button 
+                  @click="() => toggleRecipientVisibility(index)"
+                  class="visibility-toggle-btn"
+                  :class="{ 'visible': recipient.visible !== false, 'invisible': recipient.visible === false }"
+                  :title="recipient.visible !== false ? 'Visible (CC)' : 'Hidden (BCC)'"
+                >
+                  {{ recipient.visible !== false ? '👁️' : '🙈' }}
+                </button>
                 <button 
                   @click="() => removeRecipient(index)" 
                   class="remove-recipient-btn"
@@ -288,7 +312,6 @@ const content = ref('');
 const isSending = ref(false);
 
 // Bottom sheet state
-const showSheet = ref(false);
 const isKeyboardVisible = ref(false);
 const showSendSuccess = ref(false);
 
@@ -310,33 +333,15 @@ const recipientInput = ref(null);
 // Chatbot selector state
 const showChatbotSelector = ref(false);
 
-// Hardcoded chatbot data (from backend config.py)
-const availableChatbots = ref([
-  {
-    uid: "chatgpt-system",
-    display_name: "GP",
-    user_tag: "chatgpt",
-    email: "chatgpt@system.ai"
-  },
-  {
-    uid: "claude-system",
-    display_name: "Claude",
-    user_tag: "claude",
-    email: "claude@system.ai"
-  },
-  {
-    uid: "gemini-system",
-    display_name: "Gemini",
-    user_tag: "gemini",
-    email: "gemini@system.ai"
-  },
-  {
-    uid: "grok-system",
-    display_name: "Grok",
-    user_tag: "grok",
-    email: "grok@system.ai"
-  }
-]);
+// Available chatbots (from backend config.py)
+const AVAILABLE_CHATBOTS = [
+  { uid: "chatgpt-system", display_name: "GP", user_tag: "chatgpt", email: "chatgpt@system.ai" },
+  { uid: "claude-system", display_name: "Claude", user_tag: "claude", email: "claude@system.ai" },
+  { uid: "gemini-system", display_name: "Gemini", user_tag: "gemini", email: "gemini@system.ai" },
+  { uid: "grok-system", display_name: "Grok", user_tag: "grok", email: "grok@system.ai" }
+];
+
+const availableChatbots = ref(AVAILABLE_CHATBOTS);
 
 // Computed properties from store
 const user = computed(() => store.getters['auth/user']);
@@ -346,6 +351,11 @@ const isPublic = computed({
 });
 const recipients = computed(() => store.getters['navigation/replyRecipients']);
 const isReplying = computed(() => store.getters['navigation/isReplying']);
+
+// Add recipients mode
+const isAddRecipientsMode = computed(() => store.getters['navigation/isAddRecipientsMode']);
+const addRecipientsMessageId = computed(() => store.getters['navigation/addRecipientsMessageId']);
+const addRecipientsExisting = computed(() => store.getters['navigation/addRecipientsExisting']);
 
 // Check if the reply can be added
 const canAddRecipient = computed(() => {
@@ -382,6 +392,10 @@ const placeholderText = computed(() => {
 
 // Generate reply header text
 const replyHeaderText = computed(() => {
+  if (isAddRecipientsMode.value) {
+    return "Add Recipients";
+  }
+  
   if (props.isNewThread) {
     return "New Message";
   }
@@ -411,9 +425,7 @@ const ensureReplyingActive = () => {
 };
 
 // Bottom sheet methods
-const showBottomSheet = () => {
-  showSheet.value = true;
-  
+const focusTextarea = () => {
   // Focus textarea after animation
   setTimeout(() => {
     if (replyTextarea.value) {
@@ -423,53 +435,12 @@ const showBottomSheet = () => {
 };
 
 const hideBottomSheet = () => {
-  showSheet.value = false;
   isKeyboardVisible.value = false;
   
   // Clear replying state if not new thread
   if (!props.isNewThread) {
-    setTimeout(() => {
-      store.dispatch('navigation/clearReplyingTo');
-    }, 300);
+    store.dispatch('navigation/clearReplyingTo');
   }
-};
-
-// Track touch movement to distinguish between tap and scroll
-let touchStartY = 0;
-let touchMoveDistance = 0;
-
-const handleBackdropTouchStart = (event) => {
-  touchStartY = event.touches[0].clientY;
-  touchMoveDistance = 0;
-};
-
-const handleBackdropTouchMove = (event) => {
-  if (touchStartY) {
-    touchMoveDistance = Math.abs(event.touches[0].clientY - touchStartY);
-  }
-};
-
-const handleBackdropClick = (event) => {
-  // On mobile, only close if clicking outside the reply sheet and not scrolling
-  if (window.innerWidth <= 768) {
-    // Check if this was a scroll gesture (moved more than 10px)
-    if (touchMoveDistance > 10) {
-      touchMoveDistance = 0;
-      return;
-    }
-    
-    // Check if the click is actually outside the reply sheet
-    const replySheetElement = replySheet.value;
-    if (replySheetElement && !replySheetElement.contains(event.target)) {
-      hideBottomSheet();
-    }
-  } else {
-    // On desktop, any backdrop click closes
-    hideBottomSheet();
-  }
-  
-  // Reset touch tracking
-  touchMoveDistance = 0;
 };
 
 // Touch gesture handlers
@@ -579,6 +550,35 @@ const sendReply = async () => {
   
   try {
     isSending.value = true;
+    
+    // Handle add recipients mode
+    if (isAddRecipientsMode.value) {
+      console.log('[ReplyBox] Adding recipients to existing message', {
+        messageId: addRecipientsMessageId.value,
+        recipientsCount: recipients.value.length
+      });
+      
+      const MessageService = (await import('../services/MessageService.js')).default;
+      const response = await MessageService.addRecipientsToMessage(
+        addRecipientsMessageId.value,
+        recipients.value
+      );
+      
+      console.log('[ReplyBox] Recipients added successfully', response.data);
+      
+      // Clear the form and exit add recipients mode
+      content.value = '';
+      store.dispatch('navigation/clearAddRecipientsMode');
+      
+      // Show success message
+      showSendSuccess.value = true;
+      setTimeout(() => {
+        showSendSuccess.value = false;
+      }, 2000);
+      
+      return;
+    }
+    
     console.log('[ReplyBox] Starting to send message', {
       parentId: props.targetId,
       isPrivate: !isPublic.value,
@@ -765,11 +765,12 @@ const selectSearchResult = (user) => {
     // Use the full user object
     isTagValid.value = true;
     
-    // Add the recipient right away
+    // Add the recipient right away with default visibility
     store.dispatch('navigation/addRecipient', {
       uid: user.uid,
       display_name: user.display_name,
-      user_tag: user.user_tag
+      user_tag: user.user_tag,
+      visible: true  // Default to visible (CC)
     });
     
     // Clear the input
@@ -802,6 +803,10 @@ const removeRecipient = (index) => {
   store.dispatch('navigation/removeRecipient', index);
 };
 
+const toggleRecipientVisibility = (index) => {
+  store.dispatch('navigation/toggleRecipientVisibility', index);
+};
+
 // Helper function to get the best display name for an author
 const getAuthorDisplayName = (message) => {
   const currentUser = store.getters['auth/user'];
@@ -828,16 +833,8 @@ const getAuthorUserTag = (message) => {
   return null;
 };
 
-// Add new ref to track if reply box can be closed
-const canCloseReplyBox = ref(true);
-
 // Toggle recipient selector visibility
 const toggleRecipientSelector = () => {
-  // If opening the selector, block immediate closing
-  if (!showRecipientSelector.value) {
-    canCloseReplyBox.value = false;
-  }
-  
   showRecipientSelector.value = !showRecipientSelector.value;
   
   // Reset input field when opening the modal
@@ -855,27 +852,14 @@ const toggleRecipientSelector = () => {
 
 // Chatbot selector methods
 const toggleChatbotSelector = () => {
-  // If opening the selector, block immediate closing
-  if (!showChatbotSelector.value) {
-    canCloseReplyBox.value = false;
-  }
-  
   showChatbotSelector.value = !showChatbotSelector.value;
 };
 
 const closeChatbotSelector = (event) => {
-  // Stop event propagation to prevent the document click event
   if (event) {
     event.stopPropagation();
   }
-  
-  // Close the modal
   showChatbotSelector.value = false;
-  
-  // Set a short timeout to prevent immediate closing of reply box
-  setTimeout(() => {
-    canCloseReplyBox.value = true;
-  }, 100);
 };
 
 const isChatbotSelected = (chatbot) => {
@@ -900,38 +884,28 @@ const toggleChatbot = (chatbot) => {
   }
 };
 
-// Add this method back for the recipient modal
+// Close recipient selector
 const closeRecipientSelector = (event) => {
-  // Stop event propagation to prevent the document click event
   if (event) {
     event.stopPropagation();
   }
-  
-  // Close the modal
   showRecipientSelector.value = false;
-  
-  // Set a short timeout to prevent immediate closing of reply box
-  setTimeout(() => {
-    canCloseReplyBox.value = true;
-  }, 100);
 };
 
-// Update handleClickOutside to use canCloseReplyBox
+// Handle clicks outside reply box
 const handleClickOutside = (event) => {
-  // If any selector is open or we can't close the reply box, return
-  if (showRecipientSelector.value || showChatbotSelector.value || !canCloseReplyBox.value) {
+  // Don't close if any modal is open
+  if (showRecipientSelector.value || showChatbotSelector.value) {
     return;
   }
   
-  // If the click was not on the reply box or any of its children,
-  // and not on a reply button, hide the reply box
-  const replyBox = document.querySelector('.reply-container');
-  const replyButtons = document.querySelectorAll('.reply-button');
+  const replySheetElement = replySheet.value;
+  const replyButtons = document.querySelectorAll('.reply-button, .mobile-reply-button');
   
-  if (replyBox && !replyBox.contains(event.target) && 
+  // Close if clicked outside reply sheet and not on a reply button
+  if (replySheetElement && !replySheetElement.contains(event.target) && 
       Array.from(replyButtons).every(btn => !btn.contains(event.target))) {
-    // Cancel replying
-    store.dispatch('navigation/toggleReply', false);
+    hideBottomSheet();
   }
 };
 
@@ -939,18 +913,12 @@ const handleClickOutside = (event) => {
 onMounted(() => {
   document.addEventListener('click', handleClickOutsideSearch);
   document.addEventListener('click', handleClickOutside);
-  console.log("ReplyBox mounted, canInteract:", props.canInteract);
   
   // Initialize textarea sizing
   nextTick(() => {
     autoResizeTextarea();
   });
 });
-
-// Watch for changes to canInteract
-watch(() => props.canInteract, (newValue, oldValue) => {
-  console.log("ReplyBox canInteract changed:", oldValue, "->", newValue);
-}, { immediate: true });
 
 // Watch content changes to ensure textarea resizes properly
 watch(content, () => {
@@ -980,7 +948,7 @@ const handleClickOutsideSearch = (event) => {
 // Watchers
 watch(() => isReplying.value || props.isNewThread, (shouldShow) => {
   if (shouldShow) {
-    showBottomSheet();
+    focusTextarea();
   } else {
     hideBottomSheet();
   }
@@ -1034,14 +1002,9 @@ defineExpose({
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.4);
+  background-color: transparent;
   z-index: 999;
-  animation: backdrop-fade-in 0.3s ease-out;
-}
-
-@keyframes backdrop-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  pointer-events: none; /* Allow clicks to pass through */
 }
 
 /* Bottom sheet */
@@ -1302,10 +1265,7 @@ defineExpose({
     display: none !important;
   }
   
-  /* Remove background dimming on mobile - keep transparent but allow clicks outside reply sheet */
-  .reply-backdrop {
-    background-color: transparent;
-  }
+  /* Mobile optimizations */
   
   .reply-sheet {
     border-radius: 0;
@@ -1575,10 +1535,31 @@ defineExpose({
   color: var(--color-text-secondary);
 }
 
-.recipient-actions {
+.recipient-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+}
+
+.visibility-toggle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  transition: background-color var(--transition-fast);
+}
+
+.visibility-toggle-btn:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.visibility-toggle-btn.invisible {
+  opacity: 0.6;
 }
 
 .remove-recipient-btn {

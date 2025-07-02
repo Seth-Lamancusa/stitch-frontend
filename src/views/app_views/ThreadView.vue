@@ -22,6 +22,18 @@
           &larr; Back
         </button>
         <h2 class="thread-title">{{ threadTitle }}</h2>
+        
+        <!-- Selection mode controls -->
+        <div v-if="isSelectionMode" class="selection-controls">
+          <span class="selection-count">{{ selectedMessageCount }} message{{ selectedMessageCount === 1 ? '' : 's' }} selected</span>
+          <button @click="copySelectedMessages" class="copy-button" :disabled="selectedMessageCount === 0" :class="{ 'copied': isCopied }">
+            <span class="copy-icon">{{ isCopied ? '✓' : '📝' }}</span>
+            {{ isCopied ? 'Copied!' : 'Copy' }}
+          </button>
+          <button @click="exitSelectionMode" class="exit-selection-button" title="Exit selection mode">
+            ×
+          </button>
+        </div>
       </div>
       
       <!-- Messages container with fixed spacing -->
@@ -53,17 +65,17 @@
                     message.id !== replyingToMessageId)"
             :message="message"
             :displayMode="'full'"
-            :selectable="false"
-            :selected="false"
+            :selectable="true"
+            :selected="isMessageSelected(message.id)"
             :is-selected="message.id === replyingToMessageId"
             :indent-level="0"
             :loaded-replies="getLoadedRepliesCount(message.id)"
             :total-replies="getTotalRepliesCount(message.id)"
             :can-reply="canInteract"
-            @click="handleMessageClick(message.id)"
             @reply="setReplyingTo(message.id)"
             @delete="confirmDeleteMessage"
             @showLinks="handleShowLinks"
+            @selectionToggled="handleMessageSelection"
           />
           
           <!-- Loading indicator for message being replied to -->
@@ -88,6 +100,7 @@
       
       <!-- Reply box component -->
       <reply-box 
+        v-if="!isSelectionMode"
         :target-id="replyTargetId"
         :can-interact="canInteract && !!replyTargetId"
         :is-message-selected="!!replyTargetId"
@@ -157,6 +170,9 @@ const isDeleting = ref(false);
 // Links modal state
 const showLinksModal = ref(false);
 const linksModalMessage = ref(null);
+
+// Copy button state
+const isCopied = ref(false);
 
 // Consolidated loading state - single source of truth
 const isLoadingThread = ref(false); // Main loading state for all thread operations
@@ -234,6 +250,12 @@ const showLoadingState = computed(() => {
   return !isAuthReady.value || isLoadingThread.value;
 });
 
+// Selection mode computed properties
+const isSelectionMode = computed(() => store.getters['navigation/isSelectionMode']);
+const selectedMessageIds = computed(() => store.getters['navigation/selectedMessageIds']);
+const selectedMessageCount = computed(() => store.getters['navigation/selectedMessageCount']);
+const isMessageSelected = computed(() => (messageId) => store.getters['navigation/isMessageSelected'](messageId));
+
 // In the script setup section, add refs for the adaptive markers
 const topMarker = ref(null);
 const bottomMarker = ref(null);
@@ -278,6 +300,92 @@ const topMarkerState = computed(() => {
   // If parent_id exists but parent message isn't in store, we need to load more (waiting state)
   return parentMessage ? 'end' : 'waiting';
 });
+
+// Add a new helper function to wait for content rendering
+const waitForContentRendering = async () => {
+  // Wait for next tick to ensure Vue updates
+  await nextTick();
+  
+  // Find all FormattedContent components in the thread
+  const formattedContents = document.querySelectorAll('.formatted-content');
+  
+  // If no formatted content, return immediately
+  if (!formattedContents.length) return;
+  
+  // Wait a small amount of time for any async formatters to complete
+  // This includes time for markdown, LaTeX, and code highlighting to finish
+  await new Promise(resolve => setTimeout(resolve, 50));
+};
+
+const ensureCorrectScroll = async () => {
+  // Mark that we've handled initial scrolling
+  hasInitiallyScrolled.value = true;
+  
+  // Wait for formatted content to finish rendering
+  await waitForContentRendering();
+  
+  // For initial load, only use the message from the URL
+  const targetId = messageId.value;
+  
+  // Make sure we have a message list and a target message
+  if (!messageList.value || !targetId) {
+    // Show container even if we can't scroll
+    isContainerVisible.value = true;
+    shouldShowMarkers.value = true;
+    return;
+  }
+  
+  // Find the target message element
+  const messageElement = document.querySelector(`[data-message-id="${targetId}"]`);
+  if (!messageElement) {
+    console.log(`[ThreadView] Could not find element with data-message-id="${targetId}"`);
+    // Show container even if we can't find the target message
+    isContainerVisible.value = true;
+    shouldShowMarkers.value = true;
+    return;
+  }
+  
+  // Log all messages to see if they are properly rendered
+  const allMessages = document.querySelectorAll('.message-node');
+  console.log(`[ThreadView] Found ${allMessages.length} total message nodes`);
+  console.log('[ThreadView] All messages:', Array.from(allMessages).map((msg, i) => {
+    const id = msg.getAttribute('data-message-id');
+    return {
+      index: i,
+      id,
+      isTarget: id == targetId,
+      top: msg.getBoundingClientRect().top,
+      offsetTop: msg.offsetTop
+    };
+  }));
+  
+  // Log detailed information about the elements and their positions
+  const containerRect = messageList.value.getBoundingClientRect();
+  const messageRect = messageElement.getBoundingClientRect();
+  
+  // Calculate the relative top position of the message within the container
+  const relativeTop = messageRect.top - containerRect.top + messageList.value.scrollTop;
+  
+  // Try an alternative calculation that might scroll further down
+  const alternateTop = messageElement.offsetTop;
+  
+  // Try scrolling to max first to force container to update its scrollHeight
+  const maxScroll = messageList.value.scrollHeight - messageList.value.clientHeight;
+  messageList.value.scrollTop = maxScroll;
+  
+  // Force browser to recalculate layout
+  void messageList.value.offsetHeight;
+  
+  // Now try scrolling to our target
+  const adjustedPosition = alternateTop - 70; // Adjust 70px up to show a bit more context
+  messageList.value.scrollTop = adjustedPosition;
+  
+  console.log(`[ThreadView] Scroll complete, showing container and attaching markers`);
+  
+  // Show the container and attach markers after scroll is complete
+  isContainerVisible.value = true;
+  shouldShowMarkers.value = true;
+};
 
 // Simplified thread rendering function - used for incremental updates
 const renderThread = async (preserveScroll = false, preserveBranchPath = true) => {
@@ -413,10 +521,24 @@ onBeforeUnmount(() => {
 watch(messageId, async (newId, oldId) => {
   console.log(`[ThreadView] 👀 WATCH messageId changed from ${oldId} to ${newId}, triggered by:`, new Error().stack);
   if (newId) {
+    // Clear selection mode when navigating to a new thread
+    if (isSelectionMode.value) {
+      store.dispatch('navigation/exitSelectionMode');
+    }
+    
     // Reset visibility states immediately when navigating to new thread
     isContainerVisible.value = false;
     shouldShowMarkers.value = false;
     await loadInitialContent(newId);
+  }
+});
+
+// Watch for branch changes (sibling navigation) - removed selection mode clearing to preserve selections
+// when navigating up/down branches
+watch(() => displayedMessages.value.length > 0 ? displayedMessages.value[0].id : null, (newFirstMessageId, oldFirstMessageId) => {
+  if (newFirstMessageId && oldFirstMessageId && newFirstMessageId !== oldFirstMessageId) {
+    // Branch changed (sibling navigation) - no longer clearing selection mode
+    console.log('[ThreadView] Branch changed, preserving selection mode');
   }
 });
 
@@ -544,19 +666,11 @@ const loadInitialContent = async (targetMessageId) => {
     isLoadingThread.value = false;
     
     // Handle scroll positioning after content is rendered
-    await nextTick();
-    ensureCorrectScroll();
+    await ensureCorrectScroll();
   }
 };
 
 // Message selection and reply
-const handleMessageClick = (id) => {
-  // If clicking the same message that's already being replied to, do nothing
-  if (id === replyingToMessageId.value) return;
-  
-  // Otherwise, set as the message being replied to
-  setReplyingTo(id);
-};
 
 // Set message for replying
 const setReplyingTo = async (id) => {
@@ -637,8 +751,10 @@ const checkBranchChange = () => {
   if (lastBranchFirstMessageId.value && 
       currentFirstMessageId && 
       lastBranchFirstMessageId.value !== currentFirstMessageId) {
-    // Clear replying state when branch changes
-    store.dispatch('navigation/clearReplyingTo');
+    // Only clear replying state when branch changes if we're not loading more messages
+    if (!isLoadingParents.value && !isLoadingChildren.value) {
+      store.dispatch('navigation/clearReplyingTo');
+    }
   }
   
   // Update first message ID
@@ -658,76 +774,6 @@ watch(() => store.state.messages.directMessagesLastUpdated, (newVal, oldVal) => 
   }
 });
 
-// Simplified scroll positioning function
-const ensureCorrectScroll = () => {
-  // Mark that we've handled initial scrolling
-  hasInitiallyScrolled.value = true;
-  
-  nextTick(() => {
-    // For initial load, only use the message from the URL
-    const targetId = messageId.value;
-    
-    // Make sure we have a message list and a target message
-    if (!messageList.value || !targetId) {
-      // Show container even if we can't scroll
-      isContainerVisible.value = true;
-      shouldShowMarkers.value = true;
-      return;
-    }
-    
-    // Find the target message element
-    const messageElement = document.querySelector(`[data-message-id="${targetId}"]`);
-    if (!messageElement) {
-      console.log(`[ThreadView] Could not find element with data-message-id="${targetId}"`);
-      // Show container even if we can't find the target message
-      isContainerVisible.value = true;
-      shouldShowMarkers.value = true;
-      return;
-    }
-    
-    // Log all messages to see if they are properly rendered
-    const allMessages = document.querySelectorAll('.message-node');
-    console.log(`[ThreadView] Found ${allMessages.length} total message nodes`);
-    console.log('[ThreadView] All messages:', Array.from(allMessages).map((msg, i) => {
-      const id = msg.getAttribute('data-message-id');
-      return {
-        index: i,
-        id,
-        isTarget: id == targetId,
-        top: msg.getBoundingClientRect().top,
-        offsetTop: msg.offsetTop
-      };
-    }));
-    
-    // Log detailed information about the elements and their positions
-    const containerRect = messageList.value.getBoundingClientRect();
-    const messageRect = messageElement.getBoundingClientRect();
-    
-    // Calculate the relative top position of the message within the container
-    const relativeTop = messageRect.top - containerRect.top + messageList.value.scrollTop;
-    
-    // Try an alternative calculation that might scroll further down
-    const alternateTop = messageElement.offsetTop;
-    
-    // Try scrolling to max first to force container to update its scrollHeight
-    const maxScroll = messageList.value.scrollHeight - messageList.value.clientHeight;
-    messageList.value.scrollTop = maxScroll;
-    
-    // Force browser to recalculate layout
-    void messageList.value.offsetHeight;
-    
-    // Now try scrolling to our target
-    const adjustedPosition = alternateTop - 70; // Adjust 70px up to show a bit more context
-    messageList.value.scrollTop = adjustedPosition;
-    
-    console.log(`[ThreadView] Scroll complete, showing container and attaching markers`);
-    
-    // Show the container and attach markers after scroll is complete
-    isContainerVisible.value = true;
-    shouldShowMarkers.value = true;
-  });
-};
-
 // Handle container click to clear replying if clicked outside of messages
 const handleContainerClick = (event) => {
   // Check if the click is directly on the container (not on a message)
@@ -744,9 +790,74 @@ const handleContainerClick = (event) => {
     target = target.parentElement;
   }
   
-  // If click is not on a message node, deselect current message
-  if (!isMessageNode && replyingToMessageId.value) {
-    store.dispatch('navigation/clearReplyingTo');
+  // If click is not on a message node, clear both reply and selection
+  if (!isMessageNode) {
+    if (replyingToMessageId.value) {
+      store.dispatch('navigation/clearReplyingTo');
+    }
+    if (isSelectionMode.value) {
+      store.dispatch('navigation/exitSelectionMode');
+    }
+  }
+};
+
+// Selection mode methods
+const handleMessageSelection = (messageId) => {
+  store.dispatch('navigation/toggleMessageSelection', messageId);
+};
+
+const exitSelectionMode = () => {
+  store.dispatch('navigation/exitSelectionMode');
+};
+
+const copySelectedMessages = () => {
+  if (selectedMessageIds.value.length === 0) return;
+  
+  try {
+    // Get all messages in the current branch to check for gaps
+    const branchMessages = displayedMessages.value;
+    
+    const messagesToCopy = selectedMessageIds.value
+      .map(id => store.getters['messages/getMessage'](id))
+      .filter(Boolean) // Remove any null/undefined messages
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)); // Sort by timestamp
+    
+    if (messagesToCopy.length === 0) return;
+    
+    // Format messages for copying with gap detection
+    const formattedText = messagesToCopy.reduce((acc, message, index) => {
+      // Format the current message
+      const userTag = message.author_user_tag ? `(@${message.author_user_tag})` : '';
+      const header = `${message.author_display_name || 'Unknown'} ${userTag}, ${new Date(message.timestamp).toLocaleString()}`;
+      const messageText = `${header}\n${message.content || ''}`;
+      
+      // If this is the first message, just add it
+      if (index === 0) {
+        return messageText;
+      }
+      
+      // Find positions of current and previous messages in the branch
+      const currentPos = branchMessages.findIndex(m => m.id === message.id);
+      const prevPos = branchMessages.findIndex(m => m.id === messagesToCopy[index - 1].id);
+      
+      // Add separator based on whether messages are consecutive
+      const separator = currentPos - prevPos > 1 ? '\n\n...\n\n' : '\n\n';
+      return acc + separator + messageText;
+    }, '');
+    
+    navigator.clipboard.writeText(formattedText)
+      .then(() => {
+        console.log('Selected messages copied to clipboard');
+        isCopied.value = true;
+        setTimeout(() => {
+          isCopied.value = false;
+        }, 1000);
+      })
+      .catch(err => {
+        console.error('Failed to copy selected messages: ', err);
+      });
+  } catch (error) {
+    console.error('Error copying selected messages:', error);
   }
 };
 
@@ -974,6 +1085,10 @@ const findEndOfBranchMessage = () => {
   border-bottom: 1px solid var(--color-border);
   background-color: var(--color-surface);
   z-index: 5;
+  position: sticky;
+  top: 0;
+  /* Add a subtle shadow when scrolled */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .back-button {
@@ -992,6 +1107,78 @@ const findEndOfBranchMessage = () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Selection controls */
+.selection-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-left: auto;
+}
+
+.selection-count {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.copy-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  padding: 5px 8px;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--color-text-secondary);
+}
+
+.copy-button:hover:not(:disabled) {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+  color: var(--color-primary);
+}
+
+.copy-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.copy-button.copied {
+  background-color: var(--color-success-light);
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.copy-icon {
+  font-size: var(--font-size-sm);
+  line-height: 1;
+}
+
+.exit-selection-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  padding: 4px 8px;
+  font-size: var(--font-size-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--color-text-secondary);
+  min-width: 28px;
+  height: 28px;
+}
+
+.exit-selection-button:hover {
+  background-color: var(--color-error);
+  border-color: var(--color-error);
+  color: var(--color-text-inverse);
 }
 
 /* Styles for the scroll anchor - make it invisible */

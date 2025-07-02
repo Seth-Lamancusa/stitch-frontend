@@ -309,11 +309,6 @@ export default {
     SET_SORT_ORDER(state, order) {
       state.filters.sortOrder = order;
     },
-
-    // Remove old filter mutations
-    // SET_PUBLIC_FILTER
-    // SET_SELECTED_RECIPIENTS
-    // SET_SELECTED_AUTHOR
   },
   
   actions: {
