@@ -61,17 +61,28 @@
       
       <!-- Controls toolbar above input -->
       <div class="reply-sheet__toolbar">
-        <!-- Public/Private dropdown -->
+        <!-- Public/Private toggle switch -->
         <div class="toolbar-control">
-          <select 
-            v-model="isPublic" 
-            class="visibility-dropdown"
-            :disabled="!canInteract"
-            aria-label="Message visibility"
-          >
-            <option :value="true">Public</option>
-            <option :value="false">Private</option>
-          </select>
+          <div class="visibility-toggle" :class="{ 'disabled': !canInteract }">
+            <button 
+              @click="isPublic = false"
+              class="visibility-option"
+              :class="{ 'active': !isPublic }"
+              :disabled="!canInteract"
+              aria-label="Set message to private"
+            >
+              Private
+            </button>
+            <button 
+              @click="isPublic = true"
+              class="visibility-option"
+              :class="{ 'active': isPublic }"
+              :disabled="!canInteract"
+              aria-label="Set message to public"
+            >
+              Public
+            </button>
+          </div>
         </div>
         
         <!-- Recipients button -->
@@ -1065,9 +1076,12 @@ defineExpose({
   align-items: center;
   padding: 12px 16px;
   border-bottom: 1px solid var(--color-border);
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
   flex-shrink: 0;
   background-color: #2A2A2A;
   position: relative;
+  overflow: hidden; /* Ensures any child elements don't spill outside rounded corners */
 }
 
 .reply-sheet__header-left {
@@ -1105,39 +1119,53 @@ defineExpose({
   flex-shrink: 0;
 }
 
-/* Visibility dropdown */
-.visibility-dropdown {
-  appearance: none;
-  background: transparent;
+/* Visibility toggle switch */
+.visibility-toggle {
+  display: flex;
   border: 1px solid var(--color-border);
   border-radius: 8px;
+  overflow: hidden;
+  background-color: var(--color-surface);
+  min-height: 36px;
+}
+
+.visibility-toggle.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.visibility-option {
+  flex: 1;
+  background: transparent;
+  border: none;
   padding: 8px 12px;
   font-size: var(--font-size-sm);
   font-weight: 500;
-  color: var(--color-text);
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition: all 0.2s ease;
-  min-height: 36px;
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-  background-position: right 8px center;
-  background-repeat: no-repeat;
-  background-size: 16px;
-  padding-right: 32px;
+  position: relative;
 }
 
-.visibility-dropdown:hover:not(:disabled) {
+.visibility-option:first-child {
+  border-right: 1px solid var(--color-border);
+}
+
+.visibility-option:hover:not(:disabled) {
   background-color: var(--color-hover-overlay);
-  border-color: var(--color-border-hover);
 }
 
-.visibility-dropdown:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 79, 140, 255), 0.2);
+.visibility-option.active {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  font-weight: 600;
 }
 
-.visibility-dropdown:disabled {
-  opacity: 0.5;
+.visibility-option:disabled {
+  cursor: not-allowed;
+}
+
+.visibility-toggle.disabled .visibility-option {
   cursor: not-allowed;
 }
 
@@ -1200,7 +1228,7 @@ defineExpose({
   resize: none;
   transition: border-color 0.2s ease;
   box-sizing: border-box;
-  overflow-y: hidden;
+  overflow-y: auto; /* Allow scrolling when content exceeds max height */
 }
 
 .reply-sheet__textarea:focus {
@@ -1296,6 +1324,18 @@ defineExpose({
   transition: border-color 0.2s ease;
 }
 
+.close-triangle::after {
+  content: '×';
+  position: absolute;
+  top: 8px;
+  right: -27px;
+  color: #AAAAAA;
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 1;
+  pointer-events: none;
+}
+
 .reply-sheet__close-button:hover .close-triangle {
   border-color: transparent #c82333 transparent transparent;
 }
@@ -1366,10 +1406,13 @@ defineExpose({
     flex-wrap: wrap;
   }
   
-  .visibility-dropdown {
-    font-size: var(--font-size-xs);
-    padding: 6px 24px 6px 8px;
+  .visibility-toggle {
     min-height: 32px;
+  }
+  
+  .visibility-option {
+    font-size: var(--font-size-xs);
+    padding: 6px 8px;
   }
   
   .meta-pill {
@@ -1393,6 +1436,12 @@ defineExpose({
   
   .close-triangle {
     border-width: 0 32px 32px 0;
+  }
+  
+  .close-triangle::after {
+    top: 6px;
+    right: -21px;
+    font-size: 14px;
   }
   
   .reply-sheet__textarea {
@@ -1422,6 +1471,22 @@ defineExpose({
   /* Hide mobile touch handle on desktop */
   .reply-sheet__handle {
     display: none;
+  }
+  
+  /* Smaller triangle for desktop - 33% reduction */
+  .close-triangle {
+    border-width: 0 27px 27px 0; /* Reduced from 40px to 27px (33% smaller) */
+  }
+  
+  .reply-sheet__close-button {
+    width: 27px;
+    height: 27px;
+  }
+  
+  .close-triangle::after {
+    top: 5px;
+    right: -18px;
+    font-size: 14px;
   }
 }
 
