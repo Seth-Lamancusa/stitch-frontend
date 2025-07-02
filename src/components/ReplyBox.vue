@@ -30,6 +30,33 @@
         <div class="reply-sheet__header-left">
           <span class="reply-sheet__title">{{ replyHeaderText }}</span>
         </div>
+        <div class="reply-sheet__header-right">
+          <!-- Send button moved to header -->
+          <button 
+            class="reply-sheet__send-button header-send-button"
+            :class="{ 
+              'reply-sheet__send-button--disabled': !canSendReply,
+              'reply-sheet__send-button--loading': isSending,
+              'reply-sheet__send-button--success': showSendSuccess
+            }"
+            @click.stop="sendReply" 
+            :disabled="!canSendReply"
+            :aria-label="isSending ? 'Sending message' : 'Send message'"
+          >
+            <span v-if="showSendSuccess" class="send-button__icon">✓</span>
+            <span v-else-if="isSending" class="send-button__spinner" aria-hidden="true"></span>
+            <span v-else class="send-button__text">Send</span>
+          </button>
+          
+          <!-- Triangular close button -->
+          <button 
+            class="reply-sheet__close-button"
+            @click.stop="hideBottomSheet"
+            :aria-label="'Close reply box'"
+          >
+            <span class="close-triangle"></span>
+          </button>
+        </div>
       </div>
       
       <!-- Controls toolbar above input -->
@@ -109,22 +136,7 @@
         </div>
       </div>
       
-      <!-- Floating send button -->
-      <button 
-        class="reply-sheet__send-button"
-        :class="{ 
-          'reply-sheet__send-button--disabled': !canSendReply,
-          'reply-sheet__send-button--loading': isSending,
-          'reply-sheet__send-button--success': showSendSuccess
-        }"
-        @click.stop="sendReply" 
-        :disabled="!canSendReply"
-        :aria-label="isSending ? 'Sending message' : 'Send message'"
-      >
-        <span v-if="showSendSuccess" class="send-button__icon">✓</span>
-        <span v-else-if="isSending" class="send-button__spinner" aria-hidden="true"></span>
-        <span v-else class="send-button__text">Send</span>
-      </button>
+
     </div>
 
     <!-- Recipients modal moved outside the reply-container but inside the wrapper -->
@@ -1055,6 +1067,7 @@ defineExpose({
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
   background-color: #2A2A2A;
+  position: relative;
 }
 
 .reply-sheet__header-left {
@@ -1068,6 +1081,9 @@ defineExpose({
 }
 
 .reply-sheet__header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   flex-shrink: 0;
 }
 
@@ -1078,7 +1094,7 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 16px 12px;
+  padding: 6px 16px 6px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--color-border);
   background-color: #2A2A2A;
@@ -1163,7 +1179,7 @@ defineExpose({
 /* Textarea container */
 .reply-sheet__textarea-container {
   flex: 1;
-  padding: 0 16px;
+  padding: 16px;
   position: relative;
   min-height: 0;
   background-color: #2A2A2A;
@@ -1199,47 +1215,93 @@ defineExpose({
   cursor: not-allowed;
 }
 
-/* Floating send button */
-.reply-sheet__send-button {
-  position: absolute;
-  bottom: 16px;
-  right: 16px;
-  min-width: 44px;
-  min-height: 44px;
-  background-color: var(--color-primary);
-  color: var(--color-text-inverse);
-  border: none;
-  border-radius: 50%;
+/* Header send button */
+.header-send-button {
+  min-width: 60px;
+  min-height: 32px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
   cursor: pointer;
-  font-weight: 600;
-  font-size: var(--font-size-sm);
+  font-weight: 500;
+  font-size: var(--font-size-xs);
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: all 0.2s ease;
-  z-index: 1;
+  transition: all var(--transition-fast);
+  padding: 8px 12px;
+  margin-right: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
-.reply-sheet__send-button:hover:not(:disabled) {
-  background-color: var(--color-primary-dark);
+.header-send-button:hover:not(:disabled) {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+  color: var(--color-primary);
   transform: scale(1.05);
 }
 
-.reply-sheet__send-button--disabled {
-  background-color: var(--color-border);
-  color: var(--color-text-secondary);
+.header-send-button:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.header-send-button.reply-sheet__send-button--disabled {
+  opacity: 0.5;
   cursor: not-allowed;
   transform: none;
 }
 
-.reply-sheet__send-button--loading {
+.header-send-button.reply-sheet__send-button--disabled:hover {
+  background: transparent;
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
+  transform: none;
+}
+
+.header-send-button.reply-sheet__send-button--loading {
   cursor: wait;
 }
 
-.reply-sheet__send-button--success {
+.header-send-button.reply-sheet__send-button--success {
   background-color: var(--color-success);
-  transform: scale(1.1);
+  border-color: var(--color-success);
+  color: var(--color-text-inverse);
+  transform: scale(1.05);
+}
+
+/* Triangular close button */
+.reply-sheet__close-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 40px;
+  height: 40px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  z-index: 2;
+}
+
+.close-triangle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 40px 40px 0;
+  border-color: transparent #dc3545 transparent transparent;
+  transition: border-color 0.2s ease;
+}
+
+.reply-sheet__close-button:hover .close-triangle {
+  border-color: transparent #c82333 transparent transparent;
+}
+
+.reply-sheet__close-button:active .close-triangle {
+  border-color: transparent #a71e2a transparent transparent;
 }
 
 .send-button__text {
@@ -1277,7 +1339,11 @@ defineExpose({
   }
   
   .reply-sheet__header {
-    padding: 16px;
+    padding: 12px 16px;
+  }
+  
+  .reply-sheet__header-right {
+    gap: 8px;
   }
   
   .reply-sheet__meta {
@@ -1285,7 +1351,7 @@ defineExpose({
   }
   
   .reply-sheet__textarea-container {
-    padding: 0 16px 60px; /* Extra bottom padding for send button */
+    padding: 12px; /* Consistent padding on mobile */
   }
 }
 
@@ -1295,7 +1361,7 @@ defineExpose({
   }
   
   .reply-sheet__toolbar {
-    padding: 0 12px 8px;
+    padding: 4px 12px 4px;
     gap: 8px;
     flex-wrap: wrap;
   }
@@ -1312,11 +1378,21 @@ defineExpose({
     min-height: 32px;
   }
   
-  .reply-sheet__send-button {
-    min-width: 40px;
-    min-height: 40px;
-    bottom: 12px;
-    right: 12px;
+  .header-send-button {
+    min-width: 50px;
+    min-height: 28px;
+    font-size: var(--font-size-xs);
+    padding: 6px 10px;
+    margin-right: 6px;
+  }
+  
+  .reply-sheet__close-button {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .close-triangle {
+    border-width: 0 32px 32px 0;
   }
   
   .reply-sheet__textarea {
