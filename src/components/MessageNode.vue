@@ -186,18 +186,22 @@
       </div>
       
       <div class="message-footer">
+        <!-- Mobile previous navigation button - left side -->
+        <button 
+          v-if="message.parent_id && !inListView && isMobile && canNavigatePrev"
+          @click.stop="navigateSibling('prev')" 
+          class="mobile-nav-button mobile-nav-prev"
+          :class="{ 'disabled': !canNavigatePrev, 'loading': isLoading }"
+          :disabled="!canNavigatePrev || isLoading"
+          title="Previous reply"
+        >
+          <div v-if="isLoading" class="loading-dot"></div>
+          <div v-else class="triangle-icon left-triangle"></div>
+        </button>
+        
         <div class="reply-count">
           {{ totalReplies }} {{ totalReplies === 1 ? 'reply' : 'replies' }}
         </div>
-        
-        <!-- Mobile sibling navigator - only show when mobile and not in list view -->
-        <sibling-navigator
-          v-if="message.parent_id && !inListView && isMobile"
-          :message-id="message.id"
-          :parent-id="message.parent_id"
-          @navigate="handleSiblingNavigation"
-          class="mobile-sibling-navigator"
-        />
         
         <!-- Desktop message actions - hidden on mobile -->
         <div class="message-actions desktop-actions">
@@ -276,6 +280,19 @@
           title="Reply to this message"
         >
           Reply
+        </button>
+        
+        <!-- Mobile next navigation button - right side with other actions -->
+        <button 
+          v-if="message.parent_id && isMobile && canNavigateNext"
+          @click.stop="navigateSibling('next')" 
+          class="mobile-nav-button mobile-nav-next"
+          :class="{ 'disabled': !canNavigateNext, 'loading': isLoading }"
+          :disabled="!canNavigateNext || isLoading"
+          title="Next reply"
+        >
+          <div v-if="isLoading" class="loading-dot"></div>
+          <div v-else class="triangle-icon right-triangle"></div>
         </button>
         
         <!-- Visual Discovery Hint -->
@@ -1510,6 +1527,21 @@ export default {
       return parent.child_ids.length;
     });
     
+    // Loading state for navigation buttons (similar to SiblingNavigator)
+    const isParentLoading = computed(() => {
+      if (!props.message.parent_id) return false;
+      const parent = store.getters['messages/getMessage'](props.message.parent_id);
+      return !parent;
+    });
+    
+    const isSiblingLoading = computed(() => {
+      return store.getters['messages/isLoading'](`sibling_${props.message.parent_id}`);
+    });
+    
+    const isLoading = computed(() => {
+      return isParentLoading.value || isSiblingLoading.value;
+    });
+    
     return {
       currentUser,
       isUserRecipient,
@@ -1565,7 +1597,12 @@ export default {
       handleActionBarTouchStart,
       handleActionBarTouchMove,
       handleActionBarTouchEnd,
-      handleViewportChange
+      handleViewportChange,
+      // Navigation properties
+      canNavigatePrev,
+      canNavigateNext,
+      navigateSibling,
+      isLoading
     };
   },
   
@@ -2049,17 +2086,14 @@ export default {
 /* Ensure proper spacing when mobile navigator is present */
 @media (max-width: 768px) {
   .message-footer {
-    justify-content: center;
+    justify-content: flex-start;
     position: relative;
+    padding-left: 44px; /* Make room for the left navigation button */
   }
   
   .message-footer .reply-count {
-    position: absolute;
-    left: 0;
-  }
-  
-  .message-footer .mobile-sibling-navigator {
-    flex: 0 0 auto;
+    flex: 1;
+    text-align: center;
   }
 }
 
@@ -2883,64 +2917,103 @@ export default {
   }
 }
 
-/* Mobile sibling navigator when placed in footer */
+/* Mobile navigation buttons - styled like action-hint-button */
 @media (max-width: 768px) {
-  .mobile-sibling-navigator {
-    position: static !important;
-    top: auto !important;
-    bottom: auto !important;
-    left: auto !important;
-    width: auto !important;
-    height: auto !important;
-    transform: none !important;
-    z-index: auto !important;
-    display: flex !important;
-    justify-content: center;
+  .mobile-nav-button {
+    display: flex;
     align-items: center;
-    pointer-events: auto;
-    gap: 12px;
-    margin: 0;
-  }
-  
-  .mobile-sibling-navigator .nav-button {
-    position: static !important;
-    top: auto !important;
-    bottom: auto !important;
-    left: auto !important;
-    right: auto !important;
+    justify-content: center;
     background: transparent;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-xs);
-    padding: 6px 8px;
+    padding: 8px;
     transition: all var(--transition-fast);
     color: var(--color-text-secondary);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-    opacity: 0.8;
-    min-width: 32px;
-    min-height: 28px;
-    pointer-events: auto;
-    width: auto;
-    height: auto;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    opacity: 0.7;
+    min-width: 36px;
+    min-height: 36px;
+    cursor: pointer;
   }
   
-  .mobile-sibling-navigator .nav-button:hover:not(:disabled) {
+  .mobile-nav-button:hover:not(:disabled) {
     opacity: 1;
     background-color: var(--color-surface-hover);
     border-color: var(--color-border-hover);
     color: var(--color-primary);
-    transform: scale(1.05);
+    transform: scale(1.1);
   }
   
-  .mobile-sibling-navigator .nav-button.disabled {
+  .mobile-nav-button:active:not(:disabled) {
+    transform: scale(0.95);
+  }
+  
+  .mobile-nav-button.disabled {
     opacity: 0.3;
+    cursor: not-allowed;
+  }
+  
+  .mobile-nav-button.loading {
+    cursor: wait;
+  }
+  
+  /* Previous button positioned on the left */
+  .mobile-nav-prev {
+    position: absolute;
+    left: 0;
+  }
+  
+  /* Next button integrated with mobile action controls */
+  .mobile-nav-next {
+    /* Same styling as action-hint-button */
+  }
+  
+  /* Triangle icons for navigation buttons */
+  .mobile-nav-button .triangle-icon {
+    width: 0;
+    height: 0;
+    border-style: solid;
+  }
+  
+  .mobile-nav-button .left-triangle {
+    border-width: 5px 7px 5px 0;
+    border-color: transparent currentColor transparent transparent;
+  }
+  
+  .mobile-nav-button .right-triangle {
+    border-width: 5px 0 5px 7px;
+    border-color: transparent transparent transparent currentColor;
+  }
+  
+  /* Loading dot animation */
+  .mobile-nav-button .loading-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--color-primary);
+    animation: pulse 1.5s infinite;
+  }
+  
+  @keyframes pulse {
+    0% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.1); }
+    100% { opacity: 0.3; transform: scale(0.8); }
   }
 }
 
 @media (max-width: 480px) {
-  .mobile-sibling-navigator .nav-button {
-    padding: 4px 6px;
-    min-width: 28px;
-    min-height: 24px;
+  .mobile-nav-button {
+    padding: 6px;
+    min-width: 32px;
+    min-height: 32px;
+  }
+  
+  .mobile-nav-button .left-triangle {
+    border-width: 4px 6px 4px 0;
+  }
+  
+  .mobile-nav-button .right-triangle {
+    border-width: 4px 0 4px 6px;
   }
 }
 </style>
