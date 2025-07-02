@@ -20,25 +20,9 @@
       @navigate="handleSiblingNavigation"
     />
     
-    <!-- Deck visualization - only show when siblings exist -->
-    <div 
-      v-if="hasSiblings && !inListView" 
-      class="deck-visualization"
-      :class="{ 'swiping-left': swipeDirection === 'left', 'swiping-right': swipeDirection === 'right' }"
-    >
-      <div 
-        v-for="(_, index) in siblingCount" 
-        :key="index" 
-        class="deck-card"
-        :style="{ 
-          zIndex: index, 
-          transform: `translateX(${index * 2}px)`,
-          opacity: 1 - (index * 0.2)
-        }"
-      ></div>
-    </div>
+
     
-    <div class="message-content" ref="messageContentRef" :style="swipeStyle" @click="handleMessageClick">
+    <div class="message-content" ref="messageContentRef" @click="handleMessageClick">
       <div class="message-header">
         <div class="author-section">
           <div class="author-info">
@@ -373,101 +357,7 @@
       </div>
     </div>
     
-    <!-- Next message preview (shown during left swipe) -->
-    <div 
-      v-if="showNextCard && nextSiblingMessage" 
-      class="sibling-preview next-preview"
-      :style="incomingCardStyle"
-    >
-      <div class="preview-content">
-        <div class="preview-header">
-          <div class="author-section">
-            <div class="author-info">
-              <span class="preview-author">{{ nextSiblingMessage.author_display_name || 'Unknown' }}</span>
-              <span v-if="nextSiblingMessage.author_user_tag" class="preview-author-tag">@{{ nextSiblingMessage.author_user_tag }}</span>
-            </div>
-            
-            <!-- Public badge -->
-            <span v-if="nextSiblingMessage.public === 1 || nextSiblingMessage.public === true" class="visibility-indicator public">
-              Public
-            </span>
-            
-            <!-- Recipients badge -->
-            <span v-if="nextSiblingMessage.recipients && typeof nextSiblingMessage.recipients === 'object' && nextSiblingMessage.recipients.length > 0" 
-                  class="recipients-preview">
-              Recipients ({{ nextSiblingMessage.recipients.length }})
-            </span>
-          </div>
-          <div class="preview-timestamp">
-            {{ formatTimestamp(nextSiblingMessage.timestamp) }}
-          </div>
-        </div>
-        <div class="preview-body">
-          {{ nextSiblingMessage.content ? (nextSiblingMessage.content.substring(0, 280) + (nextSiblingMessage.content.length > 280 ? '...' : '')) : '' }}
-        </div>
-        <div class="preview-footer">
-          <div class="preview-actions">
-            <div class="preview-reply-count">
-              {{ nextSiblingMessage.child_ids?.length || 0 }} {{ nextSiblingMessage.child_ids?.length === 1 ? 'reply' : 'replies' }}
-            </div>
-            <div class="preview-buttons">
-              <button class="preview-button">Reply</button>
-              <!-- <button class="preview-button">Reformat</button> -->
-              <button class="preview-button">Copy Text</button>
-              <button class="preview-button">Save</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Previous message preview (shown during right swipe) -->
-    <div 
-      v-if="showPrevCard && prevSiblingMessage" 
-      class="sibling-preview prev-preview"
-      :style="incomingCardStyle"
-    >
-      <div class="preview-content">
-        <div class="preview-header">
-          <div class="author-section">
-            <div class="author-info">
-              <span class="preview-author">{{ prevSiblingMessage.author_display_name || 'Unknown' }}</span>
-              <span v-if="prevSiblingMessage.author_user_tag" class="preview-author-tag">@{{ prevSiblingMessage.author_user_tag }}</span>
-            </div>
-            
-            <!-- Public badge -->
-            <span v-if="prevSiblingMessage.public === 1 || prevSiblingMessage.public === true" class="visibility-indicator public">
-              Public
-            </span>
-            
-            <!-- Recipients badge -->
-            <span v-if="prevSiblingMessage.recipients && typeof prevSiblingMessage.recipients === 'object' && prevSiblingMessage.recipients.length > 0" 
-                  class="recipients-preview">
-              Recipients ({{ prevSiblingMessage.recipients.length }})
-            </span>
-          </div>
-          <div class="preview-timestamp">
-            {{ formatTimestamp(prevSiblingMessage.timestamp) }}
-          </div>
-        </div>
-        <div class="preview-body">
-          {{ prevSiblingMessage.content ? (prevSiblingMessage.content.substring(0, 280) + (prevSiblingMessage.content.length > 280 ? '...' : '')) : '' }}
-        </div>
-        <div class="preview-footer">
-          <div class="preview-actions">
-            <div class="preview-reply-count">
-              {{ prevSiblingMessage.child_ids?.length || 0 }} {{ prevSiblingMessage.child_ids?.length === 1 ? 'reply' : 'replies' }}
-            </div>
-            <div class="preview-buttons">
-              <button class="preview-button">Reply</button>
-              <!-- <button class="preview-button">Reformat</button> -->
-              <button class="preview-button">Copy Text</button>
-              <button class="preview-button">Save</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+
     
 
   </div>
@@ -597,23 +487,8 @@ export default {
       isMessageSaved.value = newValue === true;
     }, { immediate: true });
     
-    // Add new refs for swipe functionality
-    const touchStartX = ref(0);
-    const touchEndX = ref(0);
-    const touchStartY = ref(0);
-    const currentTouchX = ref(0); // Track current touch position for live effect
-    const isShaking = ref(false);
     const messageContentRef = ref(null);
     const isMobile = ref(false);
-    const isBeingSwiped = ref(false); // Track if currently being swiped
-    const swipeProgress = ref(0); // Track swipe progress (-100 to 100)
-    const swipeDirection = ref(null); // 'left' or 'right'
-    
-    // New references for next/previous sibling data
-    const nextSiblingMessage = ref(null);
-    const prevSiblingMessage = ref(null);
-    const showNextCard = ref(false);
-    const showPrevCard = ref(false);
     
     const openLinksModal = () => {
       // Emit event to parent to handle the modal
@@ -809,311 +684,23 @@ export default {
       return parent.child_ids.length > 1;
     });
     
-    // Determine if message has siblings for swipe navigation
-    const canNavigatePrev = computed(() => {
-      if (!props.message.parent_id) return false;
-      
-      const parent = store.getters['messages/getMessage'](props.message.parent_id);
-      if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) return false;
-      
-      const siblings = parent.child_ids;
-      if (siblings.length <= 1) return false;
-      
-      const branchChild = store.getters['messages/getBranchChild'](props.message.parent_id);
-      const currentPosition = siblings.indexOf(branchChild);
-      
-      return currentPosition > 0;
-    });
+
     
-    const canNavigateNext = computed(() => {
-      if (!props.message.parent_id) return false;
-      
-      const parent = store.getters['messages/getMessage'](props.message.parent_id);
-      if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) return false;
-      
-      const siblings = parent.child_ids;
-      if (siblings.length <= 1) return false;
-      
-      const branchChild = store.getters['messages/getBranchChild'](props.message.parent_id);
-      const currentPosition = siblings.indexOf(branchChild);
-      
-      return currentPosition >= 0 && currentPosition < siblings.length - 1;
-    });
+
     
-    // Method to handle touch start
-    const handleTouchStart = (e) => {
-      // Only process swipe if on mobile and there are siblings to navigate to
-      if (!isMobile.value || !hasSiblings.value) return;
-      
-      // Store both X and Y positions
-      touchStartX.value = e.touches[0].clientX;
-      touchStartY.value = e.touches[0].clientY;
-      currentTouchX.value = touchStartX.value;
-      isBeingSwiped.value = true;
-      swipeProgress.value = 0;
-      swipeDirection.value = null;
-    };
+
     
-    // Enhanced version of handleTouchMove that triggers auto-swipe at edges
-    const handleTouchMove = (e) => {
-      if (!isBeingSwiped.value) return;
-      
-      const touchMoveX = e.touches[0].clientX;
-      const touchMoveY = e.touches[0].clientY;
-      currentTouchX.value = touchMoveX;
-      
-      // Calculate vertical movement to check if we should cancel the swipe
-      const verticalMovement = Math.abs(touchMoveY - touchStartY.value);
-      
-      // If significant vertical movement, cancel swipe effect
-      if (verticalMovement > 50) {
-        resetSwipe();
-        return;
-      }
-      
-      // Calculate horizontal movement
-      const horizontalMovement = touchMoveX - touchStartX.value;
-      
-      // Calculate swipe progress as percentage of screen width (max 50%)
-      const screenWidth = window.innerWidth;
-      swipeProgress.value = (horizontalMovement / screenWidth) * 200; // -100 to 100
-      
-      // Limit swipe progress to prevent excessive movement
-      swipeProgress.value = Math.max(Math.min(swipeProgress.value, 100), -100);
-      
-      // Set swipe direction
-      swipeDirection.value = swipeProgress.value > 0 ? 'right' : 'left';
-      
-      // Check if the direction is valid, if not, reduce the effect
-      const canSwipeLeft = canNavigateNext.value;
-      const canSwipeRight = canNavigatePrev.value;
-      
-      // Preload the next/previous message data for the page turning effect
-      if (swipeDirection.value === 'right' && canSwipeRight && Math.abs(swipeProgress.value) > 15) {
-        // Prepare to show previous (right swipe)
-        preparePrevSibling();
-        showPrevCard.value = true;
-        showNextCard.value = false;
-      } else if (swipeDirection.value === 'left' && canSwipeLeft && Math.abs(swipeProgress.value) > 15) {
-        // Prepare to show next (left swipe)
-        prepareNextSibling();
-        showNextCard.value = true;
-        showPrevCard.value = false;
-      } else {
-        showNextCard.value = false;
-        showPrevCard.value = false;
-      }
-      
-      if ((swipeDirection.value === 'left' && !canSwipeLeft) || 
-          (swipeDirection.value === 'right' && !canSwipeRight)) {
-        // Reduce the effect by 70% if swiping in invalid direction
-        swipeProgress.value = swipeProgress.value * 0.3;
-      }
-      
-      // Auto-swipe once the finger reaches near the edge of the text box
-      const edgeThreshold = 85; // % of progress at which we auto-swipe
-      
-      if (Math.abs(swipeProgress.value) >= edgeThreshold) {
-        // Check if we can navigate in that direction
-        if ((swipeDirection.value === 'left' && canSwipeLeft) || 
-            (swipeDirection.value === 'right' && canSwipeRight)) {
-          // Stop tracking touch to prevent further updates
-          isBeingSwiped.value = false;
-          
-          // Auto-complete the swipe animation and navigate
-          messageContentRef.value?.classList.add('swipe-transition');
-          swipeProgress.value = swipeDirection.value === 'right' ? 100 : -100;
-          
-          // Navigate after a short delay to allow animation to start
-          setTimeout(() => {
-            const direction = swipeDirection.value === 'right' ? 'prev' : 'next';
-            navigateSibling(direction);
-            
-            // Reset after navigation
-            if (messageContentRef.value) {
-              messageContentRef.value.classList.remove('swipe-transition');
-            }
-            swipeProgress.value = 0;
-            swipeDirection.value = null;
-            showNextCard.value = false;
-            showPrevCard.value = false;
-            nextSiblingMessage.value = null;
-            prevSiblingMessage.value = null;
-          }, 300);
-        }
-      }
-    };
+
     
-    // Method to handle touch end
-    const handleTouchEnd = (e) => {
-      if (!isBeingSwiped.value) return;
-      
-      touchEndX.value = e.changedTouches[0].clientX;
-      const touchEndY = e.changedTouches[0].clientY;
-      
-      // Calculate vertical movement
-      const verticalMovement = Math.abs(touchEndY - touchStartY.value);
-      
-      // Only process horizontal swipes with minimal vertical movement
-      if (verticalMovement < 50) {
-        completeSwipe();
-      } else {
-        resetSwipe();
-      }
-    };
+
     
-    // Reset the swipe effect without navigation
-    const resetSwipe = () => {
-      // Add a transition class for smooth reset
-      if (messageContentRef.value) {
-        messageContentRef.value.classList.add('swipe-transition');
-        
-        // Reset the transforms after adding transition class
-        setTimeout(() => {
-          swipeProgress.value = 0;
-          
-          // Remove transition class after animation completes
-          setTimeout(() => {
-            if (messageContentRef.value) {
-              messageContentRef.value.classList.remove('swipe-transition');
-              isBeingSwiped.value = false;
-              swipeDirection.value = null;
-              
-              // Clear sibling preview
-              showNextCard.value = false;
-              showPrevCard.value = false;
-            }
-          }, 300);
-        }, 0);
-      } else {
-        // Fallback if ref is not available
-        swipeProgress.value = 0;
-        isBeingSwiped.value = false;
-        swipeDirection.value = null;
-        showNextCard.value = false;
-        showPrevCard.value = false;
-      }
-    };
+
     
-    // Complete the swipe with navigation if threshold is met
-    const completeSwipe = () => {
-      const swipeThreshold = 70; // % of progress needed to trigger action
-      
-      if (Math.abs(swipeProgress.value) >= swipeThreshold) {
-        // Add a transition class for smooth completion
-        if (messageContentRef.value) {
-          messageContentRef.value.classList.add('swipe-transition');
-          
-          // Animate to full swipe
-          setTimeout(() => {
-            swipeProgress.value = swipeDirection.value === 'right' ? 100 : -100;
-            
-            // Navigate after animation completes
-            setTimeout(() => {
-              const direction = swipeDirection.value === 'right' ? 'prev' : 'next';
-              navigateSibling(direction);
-              
-              // Reset after navigation
-              if (messageContentRef.value) {
-                messageContentRef.value.classList.remove('swipe-transition');
-              }
-              swipeProgress.value = 0;
-              isBeingSwiped.value = false;
-              swipeDirection.value = null;
-              showNextCard.value = false;
-              showPrevCard.value = false;
-              nextSiblingMessage.value = null;
-              prevSiblingMessage.value = null;
-            }, 300);
-          }, 0);
-        } else {
-          // Fallback navigation without animation
-          const direction = swipeDirection.value === 'right' ? 'prev' : 'next';
-          navigateSibling(direction);
-          swipeProgress.value = 0;
-          isBeingSwiped.value = false;
-          swipeDirection.value = null;
-          showNextCard.value = false;
-          showPrevCard.value = false;
-          nextSiblingMessage.value = null;
-          prevSiblingMessage.value = null;
-        }
-      } else {
-        // Not enough progress to trigger action, reset
-        resetSwipe();
-      }
-    };
+
     
-    // Method to navigate between siblings via swipe
-    const navigateSibling = async (direction) => {
-      // Only allow swipe navigation on mobile and when siblings exist
-      if (!isMobile.value || !hasSiblings.value) return false;
-      
-      if (!props.message.parent_id) return false;
-      
-      try {
-        // Check if navigation is possible
-        if (direction === 'prev' && !canNavigatePrev.value) {
-          triggerShakeAnimation();
-          return false;
-        }
-        if (direction === 'next' && !canNavigateNext.value) {
-          triggerShakeAnimation();
-          return false;
-        }
-        
-        // Call the central store action for sibling navigation
-        const success = await store.dispatch('messages/navigateToSibling', {
-          messageId: props.message.parent_id,
-          direction: direction
-        });
-        
-        if (success) {
-          // Get the new branch child after navigation
-          const newBranchChild = store.getters['messages/getBranchChild'](props.message.parent_id);
-          
-          // Handle navigation event
-          handleSiblingNavigation({
-            direction,
-            targetSiblingId: newBranchChild,
-            parentId: props.message.parent_id
-          });
-          
-          return true;
-        }
-        return false;
-      } catch (error) {
-        console.error("Error swiping to sibling:", error);
-        return false;
-      }
-    };
+
     
-    // Process swipe gesture - used for handleTouchEnd
-    const handleSwipe = () => {
-      const swipeThreshold = 150; // Minimum swipe distance in pixels
-      const swipeDistance = touchEndX.value - touchStartX.value;
-      
-      // Only trigger on significant horizontal swipes
-      if (Math.abs(swipeDistance) < swipeThreshold) return;
-      
-      if (swipeDistance > 0) {
-        // Swiped right (previous sibling)
-        navigateSibling('prev');
-      } else {
-        // Swiped left (next sibling)
-        navigateSibling('next');
-      }
-    };
-    
-    // Method to trigger shake animation
-    const triggerShakeAnimation = () => {
-      if (isShaking.value) return; // Prevent multiple shakes
-      
-      isShaking.value = true;
-      setTimeout(() => {
-        isShaking.value = false;
-      }, 820); // Animation duration + small buffer
-    };
+
     
     const isCurrentUser = computed(() => {
       if (!currentUser.value) return false;
@@ -1402,104 +989,9 @@ export default {
       }
     };
     
-    // Computed style for swipe effect - horizontal deck-like movement
-    const swipeStyle = computed(() => {
-      if (!isBeingSwiped.value || swipeProgress.value === 0) {
-        return {};
-      }
-      
-      // Calculate X translation - pure horizontal movement
-      const translateX = swipeProgress.value * 0.8; // 80% of swipe progress for more pronounced effect
-      
-      // Calculate opacity (fade out as it swipes away)
-      const opacity = 1 - (Math.abs(swipeProgress.value) / 150); // Fade slightly
-      
-      // Simple horizontal slide without rotation
-      return {
-        transform: `translateX(${translateX}%)`,
-        opacity: `${opacity + 0.3}`, // Min opacity 0.3
-      };
-    });
+
     
-    // Computed style for the incoming card - horizontal sliding only
-    const incomingCardStyle = computed(() => {
-      if (!isBeingSwiped.value || swipeProgress.value === 0 || 
-          (!showNextCard.value && !showPrevCard.value)) {
-        return { 
-          opacity: 0,
-          transform: 'translateX(0)'
-        };
-      }
-      
-      // Calculate progress for incoming card (reversed)
-      const incomingProgress = -swipeProgress.value; 
-      
-      // Calculate translation for incoming card
-      // Start from off-screen (100% or -100%) and move toward center
-      const startPos = incomingProgress < 0 ? -100 : 100;
-      const endPos = 0;
-      const progress = Math.abs(swipeProgress.value) / 100;
-      const translateX = startPos + (endPos - startPos) * progress;
-      
-      // Calculate opacity based on progress
-      const opacity = Math.min(progress * 1.5, 1); // Fade in faster than fade out
-      
-      return {
-        transform: `translateX(${translateX}%)`,
-        opacity: opacity,
-        zIndex: 0 // Keep behind current card during animation
-      };
-    });
-    
-    // Function to prepare the next sibling message data
-    const prepareNextSibling = async () => {
-      if (!props.message.parent_id || nextSiblingMessage.value) return;
-      
-      const parentId = props.message.parent_id;
-      const parent = store.getters['messages/getMessage'](parentId);
-      
-      if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) return;
-      
-      const siblings = parent.child_ids;
-      if (siblings.length <= 1) return;
-      
-      const branchChild = store.getters['messages/getBranchChild'](parentId);
-      const currentPosition = siblings.indexOf(branchChild);
-      
-      if (currentPosition >= 0 && currentPosition < siblings.length - 1) {
-        const nextSiblingId = siblings[currentPosition + 1];
-        const nextMessage = store.getters['messages/getMessage'](nextSiblingId);
-        
-        if (nextMessage) {
-          nextSiblingMessage.value = nextMessage;
-        }
-      }
-    };
-    
-    // Function to prepare the previous sibling message data
-    const preparePrevSibling = async () => {
-      if (!props.message.parent_id || prevSiblingMessage.value) return;
-      
-      const parentId = props.message.parent_id;
-      const parent = store.getters['messages/getMessage'](parentId);
-      
-      if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) return;
-      
-      const siblings = parent.child_ids;
-      if (siblings.length <= 1) return;
-      
-      const branchChild = store.getters['messages/getBranchChild'](parentId);
-      const currentPosition = siblings.indexOf(branchChild);
-      
-      if (currentPosition > 0) {
-        const prevSiblingId = siblings[currentPosition - 1];
-        const prevMessage = store.getters['messages/getMessage'](prevSiblingId);
-        
-        if (prevMessage) {
-          prevSiblingMessage.value = prevMessage;
-        }
-      }
-    };
+
     
     // Add event listeners
     onMounted(() => {
@@ -1518,12 +1010,7 @@ export default {
       window.addEventListener('resize', checkMobileDevice);
       window.addEventListener('resize', handleViewportChange);
       
-      // Add touch events for mobile swipe navigation - only if we have siblings
-      if (messageContentRef.value) {
-        messageContentRef.value.addEventListener('touchstart', handleTouchStart, { passive: true });
-        messageContentRef.value.addEventListener('touchmove', handleTouchMove, { passive: true });
-        messageContentRef.value.addEventListener('touchend', handleTouchEnd, { passive: true });
-      }
+
     });
     
     onBeforeUnmount(() => {
@@ -1542,26 +1029,12 @@ export default {
         store.dispatch('navigation/hideActionBar', props.message.id);
       }
       
-      // Clean up touch event listeners
-      if (messageContentRef.value) {
-        messageContentRef.value.removeEventListener('touchstart', handleTouchStart);
-        messageContentRef.value.removeEventListener('touchmove', handleTouchMove);
-        messageContentRef.value.removeEventListener('touchend', handleTouchEnd);
-      }
+
     });
     
     // We've simplified the read/unread handling - each message now just shows its own status
     
-    // Compute the total number of siblings for deck visualization
-    const siblingCount = computed(() => {
-      if (!props.message.parent_id) return 0;
-      
-      const parent = store.getters['messages/getMessage'](props.message.parent_id);
-      if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) return 0;
-      
-      // Return the total number of siblings (including current message)
-      return parent.child_ids.length;
-    });
+
     
     // Loading state for navigation buttons (similar to SiblingNavigator)
     const isParentLoading = computed(() => {
@@ -1613,19 +1086,8 @@ export default {
       // isReformatting,
       // handleReformat,
       messageContentRef,
-      isShaking,
       hasSiblings,
       isMobile,
-      swipeStyle,
-      incomingCardStyle,
-      isBeingSwiped,
-      swipeProgress,
-      swipeDirection,
-      showNextCard,
-      showPrevCard,
-      nextSiblingMessage,
-      prevSiblingMessage,
-      siblingCount,
       isJsonCopied,
       isTextCopied,
       isMessageSaved,
@@ -2612,9 +2074,6 @@ export default {
     align-items: center;
     padding: 8px 12px;
     background: transparent;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-xs);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     z-index: 12;
     min-height: 36px;
     white-space: nowrap;
@@ -2783,203 +2242,11 @@ export default {
 
 }
 
-/* Shake animation for invalid swipes */
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-  20%, 40%, 60%, 80% { transform: translateX(5px); }
-}
 
-.shake-animation .message-content {
-  animation: shake 0.8s cubic-bezier(.36,.07,.19,.97) both;
-}
 
-/* Swipe animation effects */
-.swipe-transition {
-  transition: transform 0.3s ease-out, opacity 0.3s ease-out !important;
-}
 
-.being-swiped .message-content {
-  /* Use hardware acceleration */
-  will-change: transform, opacity;
-  /* Add a subtle shadow for depth */
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
 
-/* Sibling preview styles */
-.sibling-preview {
-  display: none; /* Hide the sibling preview to prevent overlap issues */
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
-  overflow: hidden;
-  pointer-events: none;
-  background-color: var(--color-surface);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  will-change: transform, opacity;
-}
 
-.preview-content {
-  padding: var(--space-md);
-}
-
-.preview-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: var(--space-xs);
-}
-
-.preview-author {
-  font-weight: bold;
-}
-
-.preview-timestamp {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-}
-
-.preview-body {
-  color: var(--color-text);
-  font-size: var(--font-size-sm);
-  line-height: 1.4;
-  max-height: 200px;
-  overflow: hidden;
-  word-break: break-word;
-  text-overflow: ellipsis;
-}
-
-.preview-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: var(--space-xs);
-}
-
-.preview-actions {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  gap: 8px;
-}
-
-.preview-reply-count {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-}
-
-.preview-buttons {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  width: 100%;
-}
-
-.preview-button {
-  padding: 4px 2px;
-  border-radius: var(--radius-sm);
-  font-size: calc(var(--font-size-xs) - 1px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  height: 28px;
-}
-
-.preview-author-tag {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-  margin-left: 4px;
-}
-
-.recipients-preview {
-  font-size: var(--font-size-xs);
-  padding: 2px 6px;
-  border-radius: var(--radius-pill);
-  background-color: var(--color-warning);
-  color: var(--color-text-inverse);
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-}
-
-/* Deck visualization styling */
-.deck-visualization {
-  display: none; /* Hide the deck visualization entirely to prevent stacking/overlapping */
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
-  pointer-events: none;
-}
-
-.deck-card {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  bottom: 8px;
-  left: 8px;
-  background-color: var(--color-surface);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  pointer-events: none;
-}
-
-/* When swiping left, show the deck on the right side */
-.deck-visualization.swiping-left .deck-card {
-  right: 0;
-  left: auto;
-  width: 20px;
-  transform-origin: right center;
-}
-
-/* When swiping right, show the deck on the left side */
-.deck-visualization.swiping-right .deck-card {
-  left: 0;
-  right: auto;
-  width: 20px;
-  transform-origin: left center;
-}
-
-/* Mobile-specific deck visualization */
-@media (max-width: 768px) {
-  .deck-visualization {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-  }
-  
-  .deck-card {
-    position: absolute;
-    background-color: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-  }
-  
-  /* Display deck indicator based on swipe direction */
-  .deck-visualization.swiping-left .deck-card {
-    right: -3px;
-    left: auto;
-    width: 8px;
-    height: 80%;
-    box-shadow: 1px 0 3px rgba(0, 0, 0, 0.1);
-  }
-  
-  .deck-visualization.swiping-right .deck-card {
-    left: -3px;
-    right: auto;
-    width: 8px;
-    height: 80%;
-    box-shadow: -1px 0 3px rgba(0, 0, 0, 0.1);
-  }
-}
 
 @media (max-width: 480px) {
   .message-content {
