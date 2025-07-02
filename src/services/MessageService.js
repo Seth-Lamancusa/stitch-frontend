@@ -90,6 +90,45 @@ export default {
     }
   },
   
+  // Add recipients to an existing message
+  async addRecipientsToMessage(messageId, recipients) {
+    console.log('[MessageService] addRecipientsToMessage called with:', {
+      messageId,
+      recipientsCount: recipients?.length || 0
+    });
+    
+    const headers = await getAuthHeaders();
+    
+    const requestData = {
+      recipients
+    };
+    
+    console.log('[MessageService] Sending add recipients request:', {
+      endpoint: `${apiBaseUrl}/messages/${messageId}/recipients`,
+      requestData,
+      hasHeaders: !!headers
+    });
+    
+    try {
+      const response = await axios.post(`${apiBaseUrl}/messages/${messageId}/recipients`, requestData, { headers });
+      console.log('[MessageService] Add recipients request successful:', {
+        status: response.status,
+        addedCount: response.data?.added_recipients?.length || 0,
+        skippedCount: response.data?.skipped_recipients?.length || 0
+      });
+      return response;
+    } catch (error) {
+      console.error('[MessageService] Add recipients request failed:', error);
+      console.error('[MessageService] Error details:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      });
+      throw error;
+    }
+  },
+  
   // Delete a message and all its descendants
   async deleteMessage(id) {
     const headers = await getAuthHeaders();

@@ -2,12 +2,10 @@
   <div 
     class="message-node" 
     :class="{ 
-      'selected': isSelected, 
       'list-view': inListView,
-      'shake-animation': isShaking,
-      'being-swiped': isBeingSwiped,
       'compact': compact,
-      'dropdown-open': showRecipientsDropdown
+      'dropdown-open': showRecipientsDropdown,
+      'selected': inListView ? selected : isMessageSelected
     }"
     :data-message-id="message.id"
     :data-has-siblings="hasSiblings"
@@ -17,6 +15,7 @@
       v-if="message.parent_id && !inListView && !isMobile"
       :message-id="message.id"
       :parent-id="message.parent_id"
+      :class="{ 'selection-mode-disabled': isSelectionMode }"
       @navigate="handleSiblingNavigation"
     />
     
@@ -144,7 +143,7 @@
           </div>
           
           <!-- Admin controls -->
-          <div class="admin-controls" v-if="isAdmin">
+          <div class="admin-controls" v-if="isAdmin && !isSelectionMode">
             <button 
               @click.stop="$emit('delete', message)" 
               class="delete-button"
@@ -156,7 +155,7 @@
           
           <!-- Non-admin author delete button -->
           <button 
-            v-if="isUserAuthor && !isAdmin" 
+            v-if="isUserAuthor && !isAdmin && !isSelectionMode" 
             @click.stop="$emit('delete', message)" 
             class="delete-button"
             title="Delete this message and all replies"
@@ -165,17 +164,17 @@
           </button>
         </div>
         
-        <!-- Right section: checkbox + timestamp -->
+        <!-- Right section: timestamp + checkbox -->
         <div class="header-right">
+          <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
           <input 
-            v-if="selectable"
+            v-if="selectable || !inListView"
             type="checkbox"
-            :checked="selected"
+            :checked="inListView ? selected : isMessageSelected"
             @change="handleSelectionToggle"
             @click.stop
             class="selection-checkbox"
           />
-          <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
         </div>
       </div>
       
@@ -200,11 +199,11 @@
         </button>
         
         <div class="reply-count">
-          {{ totalReplies }} {{ totalReplies === 1 ? 'reply' : 'replies' }}
+          {{ message.child_ids?.length === 0 ? '🍃' : `${message.child_ids?.length} ${message.child_ids?.length === 1 ? 'reply' : 'replies'}` }}
         </div>
         
-        <!-- Desktop message actions - hidden on mobile -->
-        <div class="message-actions desktop-actions">
+        <!-- Desktop message actions - hidden on mobile and in selection mode -->
+        <div v-if="!isSelectionMode" class="message-actions desktop-actions">
           <!-- Add reply button, but hide it in list view -->
           <button 
             v-if="!inListView"
@@ -268,11 +267,22 @@
             <span class="links-icon">🔗</span>
             Links
           </button>
+          
+          <!-- Add Recipients Button - only for message authors -->
+          <button 
+            v-if="!inListView && isUserAuthor"
+            @click.stop="openAddRecipientsModal" 
+            class="add-recipients-button"
+            title="Add recipients to this message"
+          >
+            <span class="add-recipients-icon">👥</span>
+            Add Recipients
+          </button>
         </div>
       </div>
       
-      <!-- Mobile floating action controls - only shown on mobile -->
-      <div v-if="!inListView" class="mobile-action-controls">
+      <!-- Mobile floating action controls - only shown on mobile and not in selection mode -->
+      <div v-if="!inListView && !isSelectionMode" class="mobile-action-controls">
         <!-- Persistent Reply Button -->
         <button 
           @click.stop="$emit('reply', message.id)"
@@ -357,6 +367,16 @@
             <span v-if="isJsonCopied" class="copied-icon">✓</span>
             <span v-else class="json-icon">{ }</span>
           </button>
+          
+          <!-- Add Recipients Button - only for message authors -->
+          <button 
+            v-if="isUserAuthor"
+            @click.stop="openAddRecipientsModal" 
+            class="fab-button add-recipients-button"
+            title="Add recipients to this message"
+          >
+            <span class="add-recipients-icon">👥</span>
+          </button>
         </div>
       </div>
     </div>
@@ -396,7 +416,7 @@
         <div class="preview-footer">
           <div class="preview-actions">
             <div class="preview-reply-count">
-              {{ nextSiblingMessage.child_ids && nextSiblingMessage.child_ids.length ? nextSiblingMessage.child_ids.length : 0 }} {{ nextSiblingMessage.child_ids && nextSiblingMessage.child_ids.length === 1 ? 'reply' : 'replies' }}
+              {{ nextSiblingMessage.child_ids?.length || 0 }} {{ nextSiblingMessage.child_ids?.length === 1 ? 'reply' : 'replies' }}
             </div>
             <div class="preview-buttons">
               <button class="preview-button">Reply</button>
@@ -444,7 +464,7 @@
         <div class="preview-footer">
           <div class="preview-actions">
             <div class="preview-reply-count">
-              {{ prevSiblingMessage.child_ids && prevSiblingMessage.child_ids.length ? prevSiblingMessage.child_ids.length : 0 }} {{ prevSiblingMessage.child_ids && prevSiblingMessage.child_ids.length === 1 ? 'reply' : 'replies' }}
+              {{ prevSiblingMessage.child_ids?.length || 0 }} {{ prevSiblingMessage.child_ids?.length === 1 ? 'reply' : 'replies' }}
             </div>
             <div class="preview-buttons">
               <button class="preview-button">Reply</button>
@@ -466,7 +486,7 @@ import AdaptiveMarker from './AdaptiveMarker.vue';
 import SiblingNavigator from './SiblingNavigator.vue';
 import FormattedContent from './FormattedContent/index.vue';
 import { initFormatters } from './FormattedContent/init';
-import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
+import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch, toRef } from 'vue';
 import { useStore } from 'vuex';
 import { memoize } from 'lodash-es';
 import MessageService from '../services/MessageService.js';
@@ -524,6 +544,10 @@ export default {
     const isAdmin = computed(() => store.getters['auth/isAdmin']);
     const showRecipientsDropdown = ref(false);
     
+    // Selection mode state
+    const isSelectionMode = computed(() => store.getters['navigation/isSelectionMode']);
+    const isMessageSelected = computed(() => store.getters['navigation/isMessageSelected'](props.message.id));
+    
 
     
     // For regular users, just use token info
@@ -561,7 +585,13 @@ export default {
     
     // Handle checkbox selection changes
     const handleSelectionToggle = (event) => {
-      emit('selectionToggled', props.message.id);
+      if (props.inListView) {
+        // In list view, use the existing prop-based system
+        emit('selectionToggled', props.message.id);
+      } else {
+        // In thread view, use the store-based selection system
+        store.dispatch('navigation/toggleMessageSelection', props.message.id);
+      }
     };
     
     // Initialize save state from message data
@@ -596,6 +626,15 @@ export default {
     const openLinksModal = () => {
       // Emit event to parent to handle the modal
       emit('showLinks', props.message);
+    };
+    
+    const openAddRecipientsModal = () => {
+      console.log('[MessageNode] openAddRecipientsModal called for message', props.message.id);
+      // Trigger the ReplyBox with add-recipients mode
+      store.dispatch('navigation/setAddRecipientsMode', {
+        messageId: props.message.id,
+        existingRecipients: props.message.recipients || []
+      });
     };
     
     const isPublic = computed(() => {
@@ -757,6 +796,11 @@ export default {
     
     // New method to handle swipe navigation
     const handleSiblingNavigation = ({ direction, targetSiblingId, parentId }) => {
+      // Don't navigate if in selection mode
+      if (isSelectionMode.value) {
+        return;
+      }
+      
       // No longer automatically select the new target sibling
       // Selection will be handled by the navigateToSibling action
       // based on whether the previous sibling was selected
@@ -1543,13 +1587,21 @@ export default {
     });
     
     return {
+      // Props for template access
+      message: toRef(props, 'message'),
+      displayMode: toRef(props, 'displayMode'),
+      selectable: toRef(props, 'selectable'),
+      selected: toRef(props, 'selected'),
+      inListView: toRef(props, 'inListView'),
+      compact: toRef(props, 'compact'),
+      // Computed and reactive values
       currentUser,
       isUserRecipient,
       isUserAuthor,
       isPublic,
       isAdmin,
       isMessageUnread,
-      hasReplies: computed(() => props.totalReplies > 0),
+      hasReplies: computed(() => props.message.child_ids?.length > 0),
       isEndOfBranch,
       hasRecipients,
       showRecipientsDropdown,
@@ -1588,6 +1640,7 @@ export default {
       isSavingMessage,
       toggleSaveMessage,
       openLinksModal,
+      openAddRecipientsModal,
       handleMessageClick,
       handleSelectionToggle,
       // Mobile floating action bar
@@ -1598,11 +1651,9 @@ export default {
       handleActionBarTouchMove,
       handleActionBarTouchEnd,
       handleViewportChange,
-      // Navigation properties
-      canNavigatePrev,
-      canNavigateNext,
-      navigateSibling,
-      isLoading
+      // Selection mode
+      isSelectionMode,
+      isMessageSelected
     };
   },
   
@@ -1705,10 +1756,45 @@ export default {
 
 .selection-checkbox {
   cursor: pointer;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   accent-color: var(--color-primary);
   flex-shrink: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: transparent;
+  border: 2px solid var(--color-border);
+  border-radius: 4px;
+  position: relative;
+  transition: all var(--transition-fast);
+  margin: 0;
+}
+
+.selection-checkbox:hover {
+  border-color: var(--color-primary);
+  background-color: var(--color-hover-overlay);
+}
+
+.selection-checkbox:checked {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.selection-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--color-text-inverse);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.selection-checkbox:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary-light);
 }
 
 .author-section {
@@ -2418,6 +2504,31 @@ export default {
   line-height: 1;
 }
 
+.add-recipients-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  padding: 5px 8px;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--color-text-secondary);
+}
+
+.add-recipients-button:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+  color: var(--color-primary);
+}
+
+.add-recipients-icon {
+  font-size: var(--font-size-sm);
+  line-height: 1;
+}
+
 @media (max-width: 768px) {
   .message-node {
     width: 100%;
@@ -2917,103 +3028,10 @@ export default {
   }
 }
 
-/* Mobile navigation buttons - styled like action-hint-button */
-@media (max-width: 768px) {
-  .mobile-nav-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-xs);
-    padding: 8px;
-    transition: all var(--transition-fast);
-    color: var(--color-text-secondary);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-    opacity: 0.7;
-    min-width: 36px;
-    min-height: 36px;
-    cursor: pointer;
-  }
-  
-  .mobile-nav-button:hover:not(:disabled) {
-    opacity: 1;
-    background-color: var(--color-surface-hover);
-    border-color: var(--color-border-hover);
-    color: var(--color-primary);
-    transform: scale(1.1);
-  }
-  
-  .mobile-nav-button:active:not(:disabled) {
-    transform: scale(0.95);
-  }
-  
-  .mobile-nav-button.disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-  }
-  
-  .mobile-nav-button.loading {
-    cursor: wait;
-  }
-  
-  /* Previous button positioned on the left */
-  .mobile-nav-prev {
-    position: absolute;
-    left: 0;
-  }
-  
-  /* Next button integrated with mobile action controls */
-  .mobile-nav-next {
-    /* Same styling as action-hint-button */
-  }
-  
-  /* Triangle icons for navigation buttons */
-  .mobile-nav-button .triangle-icon {
-    width: 0;
-    height: 0;
-    border-style: solid;
-  }
-  
-  .mobile-nav-button .left-triangle {
-    border-width: 5px 7px 5px 0;
-    border-color: transparent currentColor transparent transparent;
-  }
-  
-  .mobile-nav-button .right-triangle {
-    border-width: 5px 0 5px 7px;
-    border-color: transparent transparent transparent currentColor;
-  }
-  
-  /* Loading dot animation */
-  .mobile-nav-button .loading-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background-color: var(--color-primary);
-    animation: pulse 1.5s infinite;
-  }
-  
-  @keyframes pulse {
-    0% { opacity: 0.3; transform: scale(0.8); }
-    50% { opacity: 1; transform: scale(1.1); }
-    100% { opacity: 0.3; transform: scale(0.8); }
-  }
-}
-
-@media (max-width: 480px) {
-  .mobile-nav-button {
-    padding: 6px;
-    min-width: 32px;
-    min-height: 32px;
-  }
-  
-  .mobile-nav-button .left-triangle {
-    border-width: 4px 6px 4px 0;
-  }
-  
-  .mobile-nav-button .right-triangle {
-    border-width: 4px 0 4px 6px;
-  }
+/* Selection mode disabled styling for sibling navigator */
+.selection-mode-disabled {
+  opacity: 0.1 !important;
+  pointer-events: none !important;
+  user-select: none !important;
 }
 </style>

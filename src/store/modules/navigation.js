@@ -12,7 +12,14 @@ export default {
       recipients: []  // Will now store objects with {uid, display_name, user_tag} instead of strings
     },
     // Global state for mobile floating action bars
-    activeActionBarMessageId: null // Only one action bar can be open at a time
+    activeActionBarMessageId: null, // Only one action bar can be open at a time
+    // Selection mode state
+    selectionMode: false,
+    selectedMessageIds: [],
+    // Add recipients mode state
+    addRecipientsMode: false,
+    addRecipientsMessageId: null,
+    addRecipientsExisting: []
   },
   
   mutations: {
@@ -64,6 +71,13 @@ export default {
       state.replySettings.recipients.splice(index, 1);
     },
     
+    TOGGLE_RECIPIENT_VISIBILITY(state, index) {
+      if (state.replySettings.recipients[index]) {
+        const recipient = state.replySettings.recipients[index];
+        recipient.visible = recipient.visible !== false ? false : true;
+      }
+    },
+    
     CLEAR_REPLY_RECIPIENTS(state) {
       state.replySettings.recipients = [];
     },
@@ -74,7 +88,54 @@ export default {
     
     CLEAR_ACTIVE_ACTION_BAR(state) {
       state.activeActionBarMessageId = null;
+    },
+    
+    // Selection mode mutations
+    SET_SELECTION_MODE(state, isActive) {
+      state.selectionMode = isActive;
+      // Clear selected messages when exiting selection mode
+      if (!isActive) {
+        state.selectedMessageIds = [];
+      }
+    },
+    
+    ADD_SELECTED_MESSAGE(state, messageId) {
+      if (!state.selectedMessageIds.includes(messageId)) {
+        state.selectedMessageIds.push(messageId);
+      }
+    },
+    
+    REMOVE_SELECTED_MESSAGE(state, messageId) {
+      const index = state.selectedMessageIds.indexOf(messageId);
+      if (index !== -1) {
+        state.selectedMessageIds.splice(index, 1);
+      }
+    },
+    
+    CLEAR_SELECTED_MESSAGES(state) {
+      state.selectedMessageIds = [];
+    },
+    
+    SET_ADD_RECIPIENTS_MODE(state, { messageId, existingRecipients }) {
+      state.addRecipientsMode = true;
+      state.addRecipientsMessageId = messageId;
+      state.addRecipientsExisting = existingRecipients || [];
+      // Also activate replying mode to show the ReplyBox
+      state.isReplying = true;
+      state.replyingToMessageId = messageId;
+    },
+    
+    CLEAR_ADD_RECIPIENTS_MODE(state) {
+      state.addRecipientsMode = false;
+      state.addRecipientsMessageId = null;
+      state.addRecipientsExisting = [];
     }
+  },
+  
+  getters: {
+    isAddRecipientsMode: (state) => state.addRecipientsMode,
+    addRecipientsMessageId: (state) => state.addRecipientsMessageId,
+    addRecipientsExisting: (state) => state.addRecipientsExisting
   },
   
   actions: {
@@ -141,6 +202,10 @@ export default {
     
     removeRecipient({ commit }, index) {
       commit('REMOVE_REPLY_RECIPIENT', index);
+    },
+    
+    toggleRecipientVisibility({ commit }, index) {
+      commit('TOGGLE_RECIPIENT_VISIBILITY', index);
     },
     
     setPreviousRoute({ commit }, route) {
@@ -247,6 +312,46 @@ export default {
         // No specific message - clear any active action bar
         commit('CLEAR_ACTIVE_ACTION_BAR');
       }
+    },
+    
+    // Selection mode actions
+    toggleMessageSelection({ commit, state }, messageId) {
+      if (state.selectedMessageIds.includes(messageId)) {
+        // Remove from selection
+        commit('REMOVE_SELECTED_MESSAGE', messageId);
+        
+        // If no messages left selected, exit selection mode
+        if (state.selectedMessageIds.length === 0) {
+          commit('SET_SELECTION_MODE', false);
+        }
+      } else {
+        // Add to selection
+        commit('ADD_SELECTED_MESSAGE', messageId);
+        
+        // If this is the first selection, enter selection mode
+        if (!state.selectionMode) {
+          commit('SET_SELECTION_MODE', true);
+        }
+      }
+    },
+    
+    exitSelectionMode({ commit }) {
+      commit('SET_SELECTION_MODE', false);
+    },
+    
+    clearSelectedMessages({ commit }) {
+      commit('CLEAR_SELECTED_MESSAGES');
+    },
+    
+    setAddRecipientsMode({ commit, dispatch }, { messageId, existingRecipients }) {
+      commit('SET_ADD_RECIPIENTS_MODE', { messageId, existingRecipients });
+      // Clear existing recipients and set to add-only mode
+      commit('CLEAR_REPLY_RECIPIENTS');
+    },
+    
+    clearAddRecipientsMode({ commit }) {
+      commit('CLEAR_ADD_RECIPIENTS_MODE');
+      commit('SET_REPLYING', false);
     }
   },
   
@@ -277,6 +382,12 @@ export default {
     
     // Global action bar getters
     activeActionBarMessageId: state => state.activeActionBarMessageId,
-    isActionBarOpen: state => messageId => state.activeActionBarMessageId === messageId
+    isActionBarOpen: state => messageId => state.activeActionBarMessageId === messageId,
+    
+    // Selection mode getters
+    isSelectionMode: state => state.selectionMode,
+    selectedMessageIds: state => state.selectedMessageIds,
+    selectedMessageCount: state => state.selectedMessageIds.length,
+    isMessageSelected: state => messageId => state.selectedMessageIds.includes(messageId)
   }
 }
