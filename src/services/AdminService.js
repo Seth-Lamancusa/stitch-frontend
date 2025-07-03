@@ -79,6 +79,23 @@ class AdminService {
     }
   }
 
+  async deleteUser(userId) {
+    try {
+      const response = await this.client.delete(`/users/${userId}`);
+      return {
+        success: true,
+        message: response.data.message || 'User deleted successfully',
+        deletedUser: response.data.deleted_user
+      };
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      return {
+        success: false,
+        error: error.response?.data?.detail || error.message || 'Failed to delete user'
+      };
+    }
+  }
+
   async getStats() {
     try {
       const response = await this.client.get('/stats');
