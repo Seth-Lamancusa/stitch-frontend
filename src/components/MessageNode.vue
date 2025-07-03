@@ -22,13 +22,18 @@
     
 
     
-    <div class="message-content" ref="messageContentRef" @click="handleMessageClick">
-      <div class="message-header">
-        <div class="author-section">
-          <div class="author-info">
-            <span class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ authorDisplayName }}</span>
-            <span v-if="authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
-          </div>
+      <div 
+    class="message-content" 
+    ref="messageContentRef" 
+    @click="handleMessageClick"
+    :class="{ 'selectable': selectable }"
+  >
+    <div class="message-header">
+      <div class="author-section">
+        <div class="author-info">
+          <span class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ authorDisplayName }}</span>
+          <span v-if="authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
+        </div>
           
           <!-- Public badge - shown for all public messages -->
           <span v-if="isPublic" class="visibility-indicator public">
@@ -463,16 +468,13 @@ export default {
     // Global action bar state from store
     const showActionBar = computed(() => store.getters['navigation/isActionBarOpen'](props.message.id));
     
-    // Message click handler - handles selection vs navigation
+    // Message click handler - only handles navigation in preview mode
     const handleMessageClick = () => {
-      if (props.selectable) {
-        // Selection mode - emit selection toggle
-        emit('selectionToggled', props.message.id);
-      } else if (props.displayMode === 'preview') {
+      if (props.displayMode === 'preview' && !props.selectable) {
         // Preview mode without selection - emit navigation
         emit('navigate', props.message.id);
       }
-      // Full mode without selection - do nothing (already on thread)
+      // Full mode or selection mode - do nothing (selection only via checkbox)
     };
     
     // Handle checkbox selection changes
@@ -1166,8 +1168,12 @@ export default {
   max-width: 800px;
   margin-left: auto;
   margin-right: auto;
-  cursor: pointer;
   transition: transform var(--transition-fast), box-shadow var(--transition-normal);
+}
+
+/* Only show pointer cursor in list view when not in selection mode */
+.message-node.list-view .message-content:not(.selectable) {
+  cursor: pointer;
 }
 
 /* Ensure consistent width in list view by overriding sibling-specific styling */
