@@ -267,7 +267,8 @@ const handleSubmit = async () => {
     
     if (response.success) {
       emit('user-created', response.user);
-      closeModal();
+      resetForm();
+      emit('close');
     } else {
       // Handle specific error cases
       if (response.error.toLowerCase().includes('email')) {
@@ -287,9 +288,8 @@ const handleSubmit = async () => {
 };
 
 const closeModal = () => {
-  if (!isSubmitting.value) {
-    emit('close');
-  }
+  resetForm();
+  emit('close');
 };
 </script>
 

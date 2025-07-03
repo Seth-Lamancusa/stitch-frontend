@@ -85,6 +85,7 @@
             :search-query="debouncedSearchQuery"
             @update:loading="handleLoadingUpdate"
             @update:error="handleErrorUpdate"
+            @user-deleted="handleUserDeleted"
             ref="userList"
           />
         </div>
@@ -197,6 +198,15 @@ const handleUserCreated = (newUser) => {
   
   // Reload stats to reflect the new user
   loadUserStats();
+};
+
+const handleUserDeleted = (deletedUser) => {
+  console.log('[UserManagement] User deleted:', deletedUser);
+  
+  // Reload stats to reflect the deleted user
+  loadUserStats();
+  
+  // Note: Success message is already shown by UserList component
 };
 
 // Redirect non-admin users after auth is ready
