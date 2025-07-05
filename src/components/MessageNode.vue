@@ -22,13 +22,18 @@
     
 
     
-    <div class="message-content" ref="messageContentRef" @click="handleMessageClick">
-      <div class="message-header">
-        <div class="author-section">
-          <div class="author-info">
-            <span class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ authorDisplayName }}</span>
-            <span v-if="authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
-          </div>
+      <div 
+    class="message-content" 
+    ref="messageContentRef" 
+    @click="handleMessageClick"
+    :class="{ 'selectable': selectable }"
+  >
+    <div class="message-header">
+      <div class="author-section">
+        <div class="author-info">
+          <span class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ authorDisplayName }}</span>
+          <span v-if="authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
+        </div>
           
           <!-- Public badge - shown for all public messages -->
           <span v-if="isPublic" class="visibility-indicator public">
@@ -182,6 +187,8 @@
           />
         </div>
         
+        <span class="message-id" :title="'Message ID: ' + message.id">ID: {{ message.id }}</span>
+        
         <div class="reply-count" :class="{ 'mobile-hidden': isMobile && !inListView }">
           {{ message.child_ids?.length === 0 ? '🍃' : `${message.child_ids?.length} ${message.child_ids?.length === 1 ? 'reply' : 'replies'}` }}
         </div>
@@ -252,15 +259,15 @@
             Links
           </button>
           
-          <!-- Add Recipients Button - only for message authors -->
+          <!-- Add Recipients Button - available to all users -->
           <button 
-            v-if="!inListView && isUserAuthor"
+            v-if="!inListView"
             @click.stop="openAddRecipientsModal" 
             class="add-recipients-button"
             title="Add recipients to this message"
           >
             <span class="add-recipients-icon">👥</span>
-            Add Recipients
+            Recipients
           </button>
         </div>
         
@@ -356,9 +363,8 @@
             <span v-else class="json-icon">{ }</span>
           </button>
           
-          <!-- Add Recipients Button - only for message authors -->
+          <!-- Add Recipients Button - available to all users -->
           <button 
-            v-if="isUserAuthor"
             @click.stop="openAddRecipientsModal" 
             class="fab-button add-recipients-button"
             title="Add recipients to this message"
@@ -368,9 +374,6 @@
         </div>
       </div>
     </div>
-    
-
-    
 
   </div>
 </template>
@@ -465,16 +468,13 @@ export default {
     // Global action bar state from store
     const showActionBar = computed(() => store.getters['navigation/isActionBarOpen'](props.message.id));
     
-    // Message click handler - handles selection vs navigation
+    // Message click handler - only handles navigation in preview mode
     const handleMessageClick = () => {
-      if (props.selectable) {
-        // Selection mode - emit selection toggle
-        emit('selectionToggled', props.message.id);
-      } else if (props.displayMode === 'preview') {
+      if (props.displayMode === 'preview' && !props.selectable) {
         // Preview mode without selection - emit navigation
         emit('navigate', props.message.id);
       }
-      // Full mode without selection - do nothing (already on thread)
+      // Full mode or selection mode - do nothing (selection only via checkbox)
     };
     
     // Handle checkbox selection changes
@@ -503,16 +503,34 @@ export default {
     const isMobile = ref(false);
     
     const openLinksModal = () => {
+      // Close the ReplyBox if it's open
+      store.dispatch('navigation/clearReplyingTo');
+      
       // Emit event to parent to handle the modal
       emit('showLinks', props.message);
     };
     
     const openAddRecipientsModal = () => {
       console.log('[MessageNode] openAddRecipientsModal called for message', props.message.id);
-      // Trigger the ReplyBox with add-recipients mode
-      store.dispatch('navigation/setAddRecipientsMode', {
+      
+      // Close the ReplyBox if it's open
+      store.dispatch('navigation/clearReplyingTo');
+      
+      // Get existing recipients for this message
+      const existingRecipients = props.message.recipients && Array.isArray(props.message.recipients) 
+        ? props.message.recipients 
+        : [];
+      
+      // Clear the navigation store - we want a fresh start for new recipients
+      store.commit('navigation/CLEAR_REPLY_RECIPIENTS');
+      
+      // Show the global recipients modal
+      store.dispatch('navigation/showRecipientsModal', {
+        isPublic: false, // Adding recipients is always for private messages
+        isAddMode: true,
+        existingRecipients: existingRecipients,
         messageId: props.message.id,
-        existingRecipients: props.message.recipients || []
+        isRecipientRemovalDisabled: false
       });
     };
     
@@ -1150,8 +1168,12 @@ export default {
   max-width: 800px;
   margin-left: auto;
   margin-right: auto;
-  cursor: pointer;
   transition: transform var(--transition-fast), box-shadow var(--transition-normal);
+}
+
+/* Only show pointer cursor in list view when not in selection mode */
+.message-node.list-view .message-content:not(.selectable) {
+  cursor: pointer;
 }
 
 /* Ensure consistent width in list view by overriding sibling-specific styling */
@@ -1627,12 +1649,21 @@ export default {
 
 .message-footer {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.reply-count {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
-  width: 100%;
-  gap: var(--space-sm);
+  margin-right: var(--space-sm);
+  padding: 2px 6px;
+  background-color: var(--color-surface-hover);
+  border-radius: var(--radius-xs);
+  cursor: help;
 }
 
 /* Mobile navigation slot styling */
@@ -2373,5 +2404,15 @@ export default {
   opacity: 0.1 !important;
   pointer-events: none !important;
   user-select: none !important;
+}
+
+.message-id {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin-right: var(--space-sm);
+  padding: 2px 6px;
+  background-color: var(--color-surface-hover);
+  border-radius: var(--radius-xs);
+  cursor: help;
 }
 </style>

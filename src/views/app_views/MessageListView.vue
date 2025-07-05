@@ -12,6 +12,20 @@
     </div>
     
     <MessageList :mode="mode" />
+
+    <!-- Global Recipients Modal -->
+    <RecipientsModal
+      :is-visible="recipientsModalVisible"
+      :is-public="recipientsModalIsPublic"
+      :is-add-mode="recipientsModalIsAddMode"
+      :existing-recipients="recipientsModalExistingRecipients"
+      :message-id="recipientsModalMessageId"
+      :is-recipient-removal-disabled="recipientsModalIsRecipientRemovalDisabled"
+      @close="closeRecipientsModal"
+      @done="closeRecipientsModal"
+      @add-recipients="handleAddRecipients"
+      @recipient-removed="handleRecipientRemoved"
+    />
   </AppViewLayout>
 </template>
 
@@ -21,6 +35,7 @@ import { useStore } from 'vuex';
 import { useRoute } from 'vue-router';
 import AppViewLayout from '../../components/layouts/AppViewLayout.vue';
 import MessageList from '../../components/MessageList.vue';
+import RecipientsModal from '../../components/RecipientsModal.vue';
 
 // Accept mode prop from router
 const props = defineProps({
@@ -62,6 +77,14 @@ const updateActiveTab = () => {
 
 const user = computed(() => store.getters['auth/user']);
 
+// Global recipients modal computed properties
+const recipientsModalVisible = computed(() => store.getters['navigation/recipientsModalVisible']);
+const recipientsModalIsPublic = computed(() => store.getters['navigation/recipientsModalIsPublic']);
+const recipientsModalIsAddMode = computed(() => store.getters['navigation/recipientsModalIsAddMode']);
+const recipientsModalExistingRecipients = computed(() => store.getters['navigation/recipientsModalExistingRecipients']);
+const recipientsModalMessageId = computed(() => store.getters['navigation/recipientsModalMessageId']);
+const recipientsModalIsRecipientRemovalDisabled = computed(() => store.getters['navigation/recipientsModalIsRecipientRemovalDisabled']);
+
 // Check if user was recently rejected due to not being whitelisted
 const wasRejectedForWhitelist = computed(() => {
   // Only show banner if user was explicitly rejected for whitelist
@@ -85,6 +108,37 @@ watch(wasRejectedForWhitelist, (newValue, oldValue) => {
 // Handler to dismiss the rejection notice
 const dismissRejectionNotice = () => {
   isRejectionNoticeDismissed.value = true;
+};
+
+// Global recipients modal methods
+const closeRecipientsModal = () => {
+  store.dispatch('navigation/hideRecipientsModal');
+};
+
+const handleAddRecipients = async (recipients) => {
+  try {
+    const messageId = recipientsModalMessageId.value;
+    if (!messageId) {
+      console.error('[MessageListView] No message ID for adding recipients');
+      return;
+    }
+
+    const MessageService = await import('../../services/MessageService');
+    const response = await MessageService.default.addRecipientsToMessage(messageId, recipients);
+    
+    console.log('[MessageListView] Recipients added successfully', response.data);
+    
+    // Close the modal
+    closeRecipientsModal();
+    
+  } catch (error) {
+    console.error('[MessageListView] Error adding recipients:', error);
+    store.commit('ui/SET_ERROR', 'Failed to add recipients. Please try again.');
+  }
+};
+
+const handleRecipientRemoved = (recipientUid) => {
+  console.log('[MessageListView] handleRecipientRemoved called with', recipientUid);
 };
 </script>
 

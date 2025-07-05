@@ -1,4 +1,4 @@
-emplate>
+<template>
   <div class="thread-view">
     <!-- Loading states -->
     <div v-if="!isAuthReady" class="auth-loading">
@@ -142,6 +142,20 @@ emplate>
       :message="linksModalMessage"
       @close="closeLinksModal"
     />
+
+    <!-- Global Recipients Modal -->
+    <RecipientsModal
+      :is-visible="recipientsModalVisible"
+      :is-public="recipientsModalIsPublic"
+      :is-add-mode="recipientsModalIsAddMode"
+      :existing-recipients="recipientsModalExistingRecipients"
+      :message-id="recipientsModalMessageId"
+      :is-recipient-removal-disabled="recipientsModalIsRecipientRemovalDisabled"
+      @close="closeRecipientsModal"
+      @done="closeRecipientsModal"
+      @add-recipients="handleAddRecipients"
+      @recipient-removed="handleRecipientRemoved"
+    />
   </div>
 </template>
 
@@ -154,6 +168,7 @@ import AdaptiveMarker from '../../components/AdaptiveMarker.vue';
 import ReplyBox from '../../components/ReplyBox.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
 import LinksModal from '../../components/LinksModal.vue';
+import RecipientsModal from '../../components/RecipientsModal.vue';
 import MessageService from '../../services/MessageService';
 import WebSocketService from '../../services/WebSocketService';
 
@@ -255,6 +270,14 @@ const isSelectionMode = computed(() => store.getters['navigation/isSelectionMode
 const selectedMessageIds = computed(() => store.getters['navigation/selectedMessageIds']);
 const selectedMessageCount = computed(() => store.getters['navigation/selectedMessageCount']);
 const isMessageSelected = computed(() => (messageId) => store.getters['navigation/isMessageSelected'](messageId));
+
+// Recipients modal computed properties
+const recipientsModalVisible = computed(() => store.getters['navigation/recipientsModalVisible']);
+const recipientsModalIsPublic = computed(() => store.getters['navigation/recipientsModalIsPublic']);
+const recipientsModalIsAddMode = computed(() => store.getters['navigation/recipientsModalIsAddMode']);
+const recipientsModalExistingRecipients = computed(() => store.getters['navigation/recipientsModalExistingRecipients']);
+const recipientsModalMessageId = computed(() => store.getters['navigation/recipientsModalMessageId']);
+const recipientsModalIsRecipientRemovalDisabled = computed(() => store.getters['navigation/recipientsModalIsRecipientRemovalDisabled']);
 
 // In the script setup section, add refs for the adaptive markers
 const topMarker = ref(null);
@@ -828,8 +851,8 @@ const copySelectedMessages = () => {
     const formattedText = messagesToCopy.reduce((acc, message, index) => {
       // Format the current message
       const userTag = message.author_user_tag ? `(@${message.author_user_tag})` : '';
-      const header = `${message.author_display_name || 'Unknown'} ${userTag}, ${new Date(message.timestamp).toLocaleString()}`;
-      const messageText = `${header}\n${message.content || ''}`;
+      const header = `${message.author_display_name || 'Unknown'} ${userTag}, ${new Date(message.timestamp).toLocaleString()} (stitch.fyi/${message.id})`;
+      const messageText = `${header}\n\n${message.content || ''}`;
       
       // If this is the first message, just add it
       if (index === 0) {
@@ -839,9 +862,9 @@ const copySelectedMessages = () => {
       // Find positions of current and previous messages in the branch
       const currentPos = branchMessages.findIndex(m => m.id === message.id);
       const prevPos = branchMessages.findIndex(m => m.id === messagesToCopy[index - 1].id);
-      
+
       // Add separator based on whether messages are consecutive
-      const separator = currentPos - prevPos > 1 ? '\n\n...\n\n' : '\n\n';
+      const separator = currentPos - prevPos > 1 ? '\n\n---\n\n...\n\n---\n\n' : '\n\n---\n\n';
       return acc + separator + messageText;
     }, '');
     
@@ -873,6 +896,51 @@ const handleShowLinks = (message) => {
 const closeLinksModal = () => {
   showLinksModal.value = false;
   linksModalMessage.value = null;
+};
+
+// Recipients modal methods
+const closeRecipientsModal = () => {
+  store.dispatch('navigation/hideRecipientsModal');
+  // Clear recipients when closing modal
+  store.commit('navigation/CLEAR_REPLY_RECIPIENTS');
+};
+
+const handleAddRecipients = async (recipients) => {
+  console.log('[ThreadView] handleAddRecipients called with', recipients);
+  
+  if (!recipients || recipients.length === 0) {
+    console.log('[ThreadView] No recipients to add');
+    return;
+  }
+
+  try {
+    const messageId = recipientsModalMessageId.value;
+    if (!messageId) {
+      console.error('[ThreadView] No message ID for adding recipients');
+      return;
+    }
+
+    const response = await MessageService.addRecipientsToMessage(messageId, recipients);
+    
+    console.log('[ThreadView] Recipients added successfully', response.data);
+    
+    // Refresh the message data to get updated recipients list
+    await store.dispatch('messages/loadMessageRadius', { 
+      messageId: messageId, 
+      radius: 1 
+    });
+    
+    // Don't close the modal - let it stay open for more additions
+    // The existingRecipients prop will be updated by the parent component
+    
+  } catch (error) {
+    console.error('[ThreadView] Error adding recipients:', error);
+    store.commit('ui/SET_ERROR', 'Failed to add recipients. Please try again.');
+  }
+};
+
+const handleRecipientRemoved = (recipientUid) => {
+  console.log('[ThreadView] handleRecipientRemoved called with', recipientUid);
 };
 
 const deleteMessage = async () => {
@@ -1436,6 +1504,4 @@ const findEndOfBranchMessage = () => {
     font-size: calc(var(--font-size-md) - 1px);
   }
 }
-</style> 
-
-
+</style>

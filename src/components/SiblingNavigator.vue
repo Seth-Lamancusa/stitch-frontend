@@ -230,14 +230,12 @@ const navigate = async (direction) => {
 /* Desktop navigation styles */
 .sibling-navigator {
   position: absolute;
-  top: 50%;
+  top: 0;
   left: 0;
   width: 100%;
-  height: 50px;
+  height: 100%;
   pointer-events: none;
   z-index: 5;
-  transform: translateY(-50%);
-
 }
 
 
@@ -247,33 +245,86 @@ const navigate = async (direction) => {
   top: 0;
   height: 100%;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   width: 38px;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  background-color: transparent;
+  border: none;
   cursor: pointer;
   color: var(--color-text);
   transition: all var(--transition-fast);
   padding: 0;
   line-height: 1;
   pointer-events: auto; /* Re-enable pointer events for buttons */
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  transform: none;
   z-index: 10; /* Ensure buttons are above other content */
+}
+
+.nav-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 38px; /* Match button width */
+  bottom: 0;
+  background-color: transparent;
+  transition: background-color var(--transition-fast);
+  border-radius: var(--radius-md);
+}
+
+/* Position the background for each side */
+.nav-prev::before {
+  left: 0;
+}
+
+.nav-next::before {
+  right: 0;
+}
+
+.nav-button:hover::before {
+  background-color: var(--color-primary-light, rgba(0, 123, 255, 0.1));
+}
+
+.nav-button::after {
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 32px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all var(--transition-fast);
+  z-index: -1;
+}
+
+.nav-button:hover::after {
+  background-color: var(--color-primary-light);
+  border-color: var(--color-primary);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
 }
 
 .nav-prev {
   left: -10px; /* Flush against the left side */
+}
+
+.nav-prev::after {
   border-top-right-radius: 7px;
   border-bottom-right-radius: 7px;
+  border-top-left-radius: var(--radius-md);
+  border-bottom-left-radius: var(--radius-md);
 }
 
 .nav-next {
   right: -10px; /* Flush against the right side */
+}
+
+.nav-next::after {
   border-top-left-radius: 7px;
   border-bottom-left-radius: 7px;
+  border-top-right-radius: var(--radius-md);
+  border-bottom-right-radius: var(--radius-md);
 }
 
 /* Triangle icon styling */
@@ -281,6 +332,9 @@ const navigate = async (direction) => {
   width: 0;
   height: 0;
   border-style: solid;
+  position: relative;
+  top: 20px; /* Position at the top where the visual button is */
+  z-index: 1;
 }
 
 .left-triangle {
@@ -294,13 +348,6 @@ const navigate = async (direction) => {
 }
 
 /* Hover styles - not disabled */
-.nav-button:hover:not(:disabled) {
-  background-color: var(--color-primary-light);
-  border-color: var(--color-primary);
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
-  transform: none;
-}
-
 .nav-button:hover:not(:disabled) .left-triangle {
   border-color: transparent var(--color-primary) transparent transparent;
 }
@@ -310,15 +357,15 @@ const navigate = async (direction) => {
 }
 
 /* Active (non-disabled) styling with gradient connection */
-.nav-button:not(.disabled):not(:disabled) {
+.nav-button:not(.disabled):not(:disabled)::after {
   border-color: var(--color-border);
 }
 
-.nav-button.nav-prev:not(.disabled):not(:disabled) {
+.nav-button.nav-prev:not(.disabled):not(:disabled)::after {
   background: linear-gradient(to right, var(--color-surface), var(--color-primary-light, #e6f0ff));
 }
 
-.nav-button.nav-next:not(.disabled):not(:disabled) {
+.nav-button.nav-next:not(.disabled):not(:disabled)::after {
   background: linear-gradient(to left, var(--color-surface), var(--color-primary-light, #e6f0ff));
 }
 
@@ -336,16 +383,31 @@ const navigate = async (direction) => {
   cursor: not-allowed;
 }
 
+.nav-button.disabled::after {
+  opacity: 0.5;
+}
+
+.nav-button.disabled::before {
+  display: none;
+}
+
 .loading-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background-color: var(--color-primary);
   animation: pulse 1.5s infinite;
+  position: relative;
+  top: 20px; /* Position at the top where the visual button is */
+  z-index: 1;
 }
 
 .nav-button.loading {
   cursor: wait;
+}
+
+.nav-button.loading::before {
+  display: none;
 }
 
 @keyframes pulse {
