@@ -66,9 +66,26 @@
             </div>
             
             <div class="user-actions">
-              <!-- Toggle functionality removed for now -->
-              <div class="actions-placeholder">
-                Actions coming soon
+              <div class="actions-container">
+                <!-- Status update functionality could go here in the future -->
+                <!-- <select class="status-dropdown">
+                  <option value="guest">Guest</option>
+                  <option value="whitelisted">Whitelisted</option>
+                  <option value="admin">Admin</option>
+                </select> -->
+                
+                <!-- Delete user button -->
+                <button 
+                  @click="confirmDeleteUser(user)"
+                  :disabled="isDeleting[user.uid] || isCurrentUser(user.uid)"
+                  class="delete-user-btn"
+                  :class="{ 'deleting': isDeleting[user.uid] }"
+                  :title="isCurrentUser(user.uid) ? 'Cannot delete your own account' : 'Delete user'"
+                >
+                  <span v-if="isDeleting[user.uid]" class="deleting-spinner"></span>
+                  <span v-else>🗑️</span>
+                  {{ isDeleting[user.uid] ? 'Deleting...' : 'Delete' }}
+                </button>
               </div>
             </div>
           </div>
@@ -118,7 +135,7 @@ const props = defineProps({
 });
 
 // Emits
-const emit = defineEmits(['update:loading', 'update:error']);
+const emit = defineEmits(['update:loading', 'update:error', 'user-deleted']);
 
 const store = useStore();
 
@@ -130,10 +147,12 @@ const isLoading = ref(false);
 const isAllLoaded = ref(false);
 const currentPage = ref(1);
 const isUpdating = ref({});
+const isDeleting = ref({});
 const error = ref(null);
 
 // Computed
 const currentUserId = computed(() => store.getters['auth/user']?.id);
+const currentUserUid = computed(() => store.getters['auth/user']?.uid);
 
 const shouldShowLoadingIndicator = computed(() => {
   return isLoading.value || (!isAllLoaded.value && users.value.length > 0);
@@ -141,6 +160,10 @@ const shouldShowLoadingIndicator = computed(() => {
 
 const shouldShowEmptyState = computed(() => {
   return !isLoading.value && isAllLoaded.value && users.value.length === 0;
+});
+
+const isCurrentUser = computed(() => (userUid) => {
+  return userUid === currentUserUid.value;
 });
 
 // Methods
@@ -204,6 +227,46 @@ const loadUsers = async (reset = false) => {
 
 const loadMoreUsers = () => {
   loadUsers(false);
+};
+
+const confirmDeleteUser = (user) => {
+  const confirmMessage = `Are you sure you want to delete user "${user.display_name}" (${user.email})?\n\nThis action cannot be undone and will permanently remove:\n- The user account\n- All messages authored by this user\n- All user relationships and saved data`;
+  
+  if (confirm(confirmMessage)) {
+    deleteUser(user);
+  }
+};
+
+const deleteUser = async (user) => {
+  if (isDeleting.value[user.uid]) return;
+  
+  isDeleting.value[user.uid] = true;
+  
+  try {
+    console.log('[UserList] Deleting user:', user.uid, user.display_name);
+    const response = await AdminService.deleteUser(user.uid);
+    
+    if (response.success) {
+      // Remove user from local list
+      users.value = users.value.filter(u => u.uid !== user.uid);
+      
+      // Show success message
+      store.commit('ui/SET_SUCCESS', response.message || `User ${user.display_name} deleted successfully`);
+      
+      // Emit success to parent for stats refresh
+      emit('user-deleted', user);
+      
+      console.log('[UserList] User deleted successfully:', user.uid);
+    } else {
+      console.error('[UserList] Failed to delete user:', response.error);
+      store.commit('ui/SET_ERROR', response.error || 'Failed to delete user');
+    }
+  } catch (error) {
+    console.error('[UserList] Error deleting user:', error);
+    store.commit('ui/SET_ERROR', 'An unexpected error occurred while deleting the user');
+  } finally {
+    delete isDeleting.value[user.uid];
+  }
 };
 
 // Watch for search query changes
@@ -457,5 +520,54 @@ defineExpose({
   text-align: center;
   font-size: var(--font-size-sm);
   opacity: 0.7;
+}
+
+/* Delete user button styles */
+.actions-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  align-items: flex-end;
+}
+
+.delete-user-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-error, #ef4444);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-error, #ef4444);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  min-width: 80px;
+  justify-content: center;
+}
+
+.delete-user-btn:hover:not(:disabled) {
+  background: var(--color-error, #ef4444);
+  color: var(--color-text-inverse);
+}
+
+.delete-user-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.delete-user-btn.deleting {
+  background: var(--color-error, #ef4444);
+  color: var(--color-text-inverse);
+}
+
+.deleting-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid transparent;
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 </style> 

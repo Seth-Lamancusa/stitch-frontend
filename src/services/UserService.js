@@ -456,5 +456,36 @@ export default {
         console.error('[UserService] Error details:', error.response?.data || error.message);
         throw error;
       }
+    },
+
+    /**
+     * Delete a user (admin-only operation via admin endpoint)
+     * @param {String} userId - The user ID to delete
+     * @returns {Promise<Object>} - Response with success status
+     * @note This calls the admin endpoint and requires admin privileges
+     */
+    async deleteUser(userId) {
+      try {
+        console.log('[UserService] Deleting user:', userId);
+        const token = await getFirebaseToken();
+        
+        if (!token) {
+          throw new Error('No authentication token available');
+        }
+        
+        // Note: This calls the admin endpoint since user deletion is admin-only
+        const response = await apiClient.delete(`/admin/users/${userId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        console.log('[UserService] Delete user response:', response.data);
+        return response.data;
+      } catch (error) {
+        console.error('[UserService] Error deleting user:', error);
+        console.error('[UserService] Error details:', error.response?.data || error.message);
+        throw error;
+      }
     }
 }; 
