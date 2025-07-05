@@ -540,15 +540,9 @@ const handleTextareaBlur = () => {
 
 const handleTextareaKeyDown = (event) => {
   if (event.key === 'Enter') {
-    if (event.shiftKey) {
-      return; // Allow newline
-    }
-    
-    event.preventDefault();
-    
-    if (canSendReply.value) {
-      sendReply();
-    }
+    // Allow Enter key to create new lines (default behavior)
+    // Users must click the Send button to send messages
+    return;
   }
 };
 
