@@ -26,6 +26,24 @@
       @add-recipients="handleAddRecipients"
       @recipient-removed="handleRecipientRemoved"
     />
+
+    <!-- Delete Confirmation Modal -->
+    <div v-if="showDeleteConfirm" class="delete-confirm-modal">
+      <div class="delete-confirm-content">
+        <h3>Confirm Deletion</h3>
+        <p>Are you sure you want to delete this message and all its replies?</p>
+        <p class="warning">This action cannot be undone.</p>
+        <div class="delete-confirm-actions">
+          <button @click="store.dispatch('ui/hideDeleteConfirm')" class="cancel-button" :disabled="isDeleting">
+            Cancel
+          </button>
+          <button @click="deleteMessage" class="delete-button" :disabled="isDeleting">
+            <span v-if="!isDeleting">Delete</span>
+            <div v-else class="button-spinner"></div>
+          </button>
+        </div>
+      </div>
+    </div>
   </AppViewLayout>
 </template>
 
@@ -140,6 +158,41 @@ const handleAddRecipients = async (recipients) => {
 const handleRecipientRemoved = (recipientUid) => {
   console.log('[MessageListView] handleRecipientRemoved called with', recipientUid);
 };
+
+// Add computed properties for delete confirmation modal
+const showDeleteConfirm = computed(() => store.getters['ui/showDeleteConfirm']);
+const messageToDelete = computed(() => store.getters['ui/messageToDelete']);
+const isDeleting = ref(false);
+
+// Add delete message functionality
+const deleteMessage = async () => {
+  if (!messageToDelete.value || isDeleting.value) return;
+  
+  const deletedId = messageToDelete.value.id;
+  
+  try {
+    isDeleting.value = true;
+    await store.dispatch('messages/deleteMessage', deletedId);
+    store.commit('ui/SET_DELETE_CONFIRM', { show: false, message: null });
+  } catch (error) {
+    console.error('Error deleting message:', error);
+    
+    let errorMessage = 'Failed to delete message';
+    
+    if (error.response?.status === 404) {
+      errorMessage = 'This message has already been deleted (likely when its parent was deleted)';
+      store.commit('ui/SET_DELETE_CONFIRM', { show: false, message: null });
+    } else if (error.response?.status === 403) {
+      errorMessage = 'You do not have permission to delete this message';
+    } else if (error.message) {
+      errorMessage = 'Failed to delete message: ' + error.message;
+    }
+    
+    store.commit('ui/SET_ERROR', errorMessage);
+  } finally {
+    isDeleting.value = false;
+  }
+};
 </script>
 
 <style scoped>
@@ -227,5 +280,85 @@ const handleRecipientRemoved = (recipientUid) => {
   border-color: rgba(255, 255, 255, 0.5);
   text-decoration: none;
   color: var(--color-text-inverse, #fff);
+}
+
+/* Add styles for delete confirmation modal */
+.delete-confirm-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.delete-confirm-content {
+  background-color: var(--color-surface);
+  padding: var(--space-lg);
+  border-radius: var(--radius-md);
+  max-width: 400px;
+  width: 90%;
+}
+
+.delete-confirm-content h3 {
+  margin: 0 0 var(--space-md);
+  color: var(--color-error);
+}
+
+.delete-confirm-content p {
+  margin: var(--space-sm) 0;
+}
+
+.warning {
+  color: var(--color-error);
+  font-weight: bold;
+}
+
+.delete-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+}
+
+.cancel-button, .delete-button {
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.cancel-button {
+  background: transparent;
+  border: 1px solid var(--color-border);
+}
+
+.delete-button {
+  background-color: var(--color-error);
+  color: white;
+  border: none;
+}
+
+.delete-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.button-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>

@@ -22,8 +22,6 @@
       @touchmove="handleTouchMove"
       @touchend="handleTouchEnd"
     >
-      <!-- Sheet handle for swipe gesture -->
-      <div class="reply-sheet__handle" aria-hidden="true"></div>
       
       <!-- Header row -->
       <div class="reply-sheet__header" id="reply-header">
@@ -95,25 +93,7 @@
           </button>
         </div>
 
-        <!-- Right side controls -->
-        <div class="toolbar-right">
-          <!-- Send button -->
-          <button 
-            class="header-send-button"
-            :class="{ 
-              'header-send-button--disabled': !canSendReply,
-              'header-send-button--loading': isSending,
-              'header-send-button--success': showSendSuccess
-            }"
-            @click.stop="sendReply" 
-            :disabled="!canSendReply"
-            :aria-label="isSending ? 'Sending message' : 'Send message'"
-          >
-            <span v-if="showSendSuccess" class="send-button__icon">✓</span>
-            <span v-else-if="isSending" class="send-button__spinner" aria-hidden="true"></span>
-            <span v-else class="send-button__text">Send</span>
-          </button>
-        </div>
+
       </div>
       
       <!-- Text area - hidden in add recipients mode -->
@@ -132,6 +112,23 @@
           aria-label="Message content"
           rows="1"
         ></textarea>
+        
+        <!-- Send button -->
+        <button 
+          class="textarea-send-button"
+          :class="{ 
+            'textarea-send-button--disabled': !canSendReply,
+            'textarea-send-button--loading': isSending,
+            'textarea-send-button--success': showSendSuccess
+          }"
+          @click.stop="sendReply" 
+          :disabled="!canSendReply"
+          :aria-label="isSending ? 'Sending message' : 'Send message'"
+        >
+          <span v-if="showSendSuccess" class="send-button__icon">✓</span>
+          <span v-else-if="isSending" class="send-button__spinner" aria-hidden="true"></span>
+          <span v-else class="send-button__arrow">→</span>
+        </button>
       </div>
       
       <!-- Add recipients info - shown only in add recipients mode -->
@@ -899,7 +896,6 @@ defineExpose({
 /* Controls toolbar */
 .reply-sheet__toolbar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   padding: 6px 16px 6px;
   flex-shrink: 0;
@@ -911,13 +907,6 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-left: auto;
 }
 
 /* Toolbar controls */
@@ -1013,18 +1002,21 @@ defineExpose({
 /* Textarea container */
 .reply-sheet__textarea-container {
   flex: none; /* Don't expand to fill space */
-  padding: 0px;
+  padding: 8px 16px 24px 16px;
   position: relative;
   min-height: 0;
   background-color: #2A2A2A;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
 }
 
 .reply-sheet__textarea {
-  width: 90%;
+  flex: 1;
   min-height: 24px; /* Single line height */
   max-height: 40vh;
   padding: 8px 12px;
-  margin: 8px 16px 24px 16px;
+  margin: 0;
   border: 1px solid var(--color-border);
   border-radius: 12px;
   background-color: var(--color-surface);
@@ -1050,60 +1042,67 @@ defineExpose({
   cursor: not-allowed;
 }
 
-/* Header send button */
-.header-send-button {
-  min-width: 60px;
-  min-height: 32px;
-  background: transparent;
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
-  cursor: pointer;
-  font-weight: 500;
-  font-size: var(--font-size-xs);
+/* Textarea send button */
+.textarea-send-button {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 40px;
+  height: 40px;
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 500;
   transition: all var(--transition-fast);
-  padding: 8px 12px;
-  margin-right: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
 }
 
-.header-send-button:hover:not(:disabled) {
-  background-color: var(--color-surface-hover);
-  border-color: var(--color-border-hover);
-  color: var(--color-primary);
+.textarea-send-button:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
   transform: scale(1.05);
 }
 
-.header-send-button:active:not(:disabled) {
+.textarea-send-button:active:not(:disabled) {
   transform: scale(0.95);
 }
 
-.header-send-button--disabled {
-  opacity: 0.5;
+.textarea-send-button--disabled {
+  background-color: var(--color-surface-light);
+  color: var(--color-text-disabled);
   cursor: not-allowed;
   transform: none;
 }
 
-.header-send-button--disabled:hover {
-  background: transparent;
-  border-color: var(--color-border);
-  color: var(--color-text-secondary);
+.textarea-send-button--disabled:hover {
+  background-color: var(--color-surface-light);
   transform: none;
 }
 
-.header-send-button--loading {
+.textarea-send-button--loading {
   cursor: wait;
 }
 
-.header-send-button--success {
+.textarea-send-button--success {
   background-color: var(--color-success);
-  border-color: var(--color-success);
-  color: var(--color-text-inverse);
   transform: scale(1.05);
 }
+
+.send-button__arrow {
+  font-size: 18px;
+  line-height: 1;
+  transform: rotate(0deg);
+  transition: transform var(--transition-fast);
+}
+
+.textarea-send-button:hover:not(:disabled) .send-button__arrow {
+  transform: rotate(15deg);
+}
+
+
 
 /* Close button */
 .reply-sheet__close-button {
@@ -1159,7 +1158,7 @@ defineExpose({
   
   .reply-sheet__textarea-container {
     flex: none; /* Don't expand to fill space on mobile */
-    padding: 16px; /* Consistent padding on mobile */
+    padding: 8px 16px 24px 16px; /* Consistent padding on mobile */
   }
 }
 
@@ -1189,12 +1188,10 @@ defineExpose({
     min-height: 32px;
   }
   
-  .header-send-button {
-    min-width: 50px;
-    min-height: 28px;
-    font-size: var(--font-size-xs);
-    padding: 6px 10px;
-    margin-right: 6px;
+  .textarea-send-button {
+    min-width: 36px;
+    height: 36px;
+    font-size: 16px;
   }
   
   .reply-sheet__close-button {
