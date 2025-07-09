@@ -503,6 +503,11 @@ const showDeleteConfirm = computed(() => store.getters['ui/showDeleteConfirm']);
 const messageToDelete = computed(() => store.getters['ui/messageToDelete']);
 const isDeleting = ref(false);
 
+// Add method to handle delete request from MessageNode
+const handleDeleteRequest = (message) => {
+  store.dispatch('ui/showDeleteConfirm', message);
+};
+
 // Add delete message functionality
 const deleteMessage = async () => {
   if (!messageToDelete.value || isDeleting.value) return;
@@ -518,7 +523,11 @@ const deleteMessage = async () => {
     // Hide confirmation modal after successful deletion
     store.commit('ui/SET_DELETE_CONFIRM', { show: false, message: null });
     
-    // No need to navigate - the message will disappear from the list
+    // For list view, we don't navigate away - the message will disappear from the list
+    // Optionally refresh the list if needed
+    if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
+      await loadMessages();
+    }
   } catch (error) {
     console.error('Error deleting message:', error);
     
@@ -529,6 +538,8 @@ const deleteMessage = async () => {
       errorMessage = 'This message has already been deleted (likely when its parent was deleted)';
       // Hide confirmation modal since the message is already gone
       store.commit('ui/SET_DELETE_CONFIRM', { show: false, message: null });
+      // Refresh the list to remove the deleted message
+      await loadMessages();
     } else if (error.response?.status === 403) {
       errorMessage = 'You do not have permission to delete this message';
     } else if (error.message) {
@@ -789,7 +800,7 @@ const handleLinkDelete = async (linkData) => {
           :can-reply="false"
           :inListView="true"
           :threadMessages="getThreadMessages(thread.id)"
-          @delete="confirmDeleteMessage"
+          @delete="handleDeleteRequest"
           @navigate="viewMessage"
           @selectionToggled="handleMessageSelection"
         />

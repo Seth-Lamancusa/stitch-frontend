@@ -10,18 +10,6 @@
     :data-message-id="message.id"
     :data-has-siblings="hasSiblings"
   >
-    <!-- Desktop sibling navigator - only show when not mobile and not in list view -->
-    <sibling-navigator
-      v-if="message.parent_id && !inListView && !isMobile"
-      :message-id="message.id"
-      :parent-id="message.parent_id"
-      :mobile-mode="false"
-      :class="{ 'selection-mode-disabled': isSelectionMode }"
-      @navigate="handleSiblingNavigation"
-    />
-    
-
-    
       <div 
     class="message-content" 
     ref="messageContentRef" 
@@ -30,6 +18,18 @@
   >
     <div class="message-header">
       <div class="author-section">
+        <!-- Sibling navigator - positioned left of display name -->
+        <div v-if="!inListView" class="header-sibling-nav-slot">
+          <sibling-navigator
+            v-if="message.parent_id"
+            :message-id="message.id"
+            :parent-id="message.parent_id"
+            :mobile-mode="isMobile"
+            :class="{ 'selection-mode-disabled': isSelectionMode }"
+            @navigate="handleSiblingNavigation"
+          />
+        </div>
+        
         <div class="author-info">
           <span class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ authorDisplayName }}</span>
           <span v-if="authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
@@ -175,18 +175,6 @@
       </div>
       
       <div class="message-footer">
-        <!-- Mobile sibling navigation slot - only on mobile -->
-        <div v-if="isMobile && !inListView" class="mobile-nav-slot">
-          <sibling-navigator
-            v-if="message.parent_id"
-            :message-id="message.id"
-            :parent-id="message.parent_id"
-            :mobile-mode="true"
-            :class="{ 'selection-mode-disabled': isSelectionMode }"
-            @navigate="handleSiblingNavigation"
-          />
-        </div>
-        
         <span class="message-id" :title="'Message ID: ' + message.id">ID: {{ message.id }}</span>
         
         <div class="reply-count" :class="{ 'mobile-hidden': isMobile && !inListView }">
@@ -300,6 +288,18 @@
           Reply
         </button>
         
+        <!-- Save/Bookmark Button - moved from floating action bar -->
+        <button 
+          @click.stop="toggleSaveMessage" 
+          class="mobile-save-button"
+          :class="{ 'saved': isMessageSaved }"
+          :disabled="isSavingMessage"
+          :title="isMessageSaved ? 'Remove bookmark' : 'Bookmark this message'"
+        >
+          <span v-if="isSavingMessage" class="loading-indicator"></span>
+          <span v-else class="bookmark-icon">🔖</span>
+        </button>
+        
         <!-- Visual Discovery Hint -->
         <button 
           @click.stop="toggleActionBar"
@@ -328,18 +328,6 @@
           >
             <span v-if="isTextCopied" class="copied-icon">✓</span>
             <span v-else class="text-icon">📝</span>
-          </button>
-          
-          <!-- Save/Bookmark Button -->
-          <button 
-            @click.stop="toggleSaveMessage" 
-            class="fab-button save-button"
-            :class="{ 'saved': isMessageSaved }"
-            :disabled="isSavingMessage"
-            :title="isMessageSaved ? 'Remove bookmark' : 'Bookmark this message'"
-          >
-            <span v-if="isSavingMessage" class="loading-indicator"></span>
-            <span v-else class="bookmark-icon">🔖</span>
           </button>
           
           <!-- Links Button -->
@@ -461,7 +449,6 @@ export default {
     const isSavingMessage = ref(false);
     
     // Mobile floating action bar state - using global store
-    const actionBarTimeout = ref(null);
     const actionBarTouchStartY = ref(0);
     const actionBarTouchMoveY = ref(0);
     
@@ -950,40 +937,13 @@ export default {
     
     // Mobile floating action bar methods
     const toggleActionBar = () => {
-      // Get current state before toggling
-      const wasOpen = showActionBar.value;
-      
       // Use the global store action to toggle this message's action bar
       store.dispatch('navigation/toggleActionBar', props.message.id);
-      
-      // Handle auto-hide timeout based on new state (opposite of what it was)
-      if (!wasOpen) {
-        // Action bar was closed, now it's open - set timeout
-        // Clear any existing timeout first
-        if (actionBarTimeout.value) {
-          clearTimeout(actionBarTimeout.value);
-        }
-        
-        // Set timeout to auto-hide after 4 seconds
-        actionBarTimeout.value = setTimeout(() => {
-          store.dispatch('navigation/hideActionBar', props.message.id);
-        }, 4000);
-      } else {
-        // Action bar was open, now it's closed - clear timeout
-        if (actionBarTimeout.value) {
-          clearTimeout(actionBarTimeout.value);
-          actionBarTimeout.value = null;
-        }
-      }
     };
     
     const hideActionBar = () => {
       // Use the global store action to hide this message's action bar
       store.dispatch('navigation/hideActionBar', props.message.id);
-      if (actionBarTimeout.value) {
-        clearTimeout(actionBarTimeout.value);
-        actionBarTimeout.value = null;
-      }
     };
     
     // Handle touch events for swipe down to dismiss
@@ -1049,10 +1009,6 @@ export default {
       window.removeEventListener('resize', checkMobileDevice);
       window.removeEventListener('resize', handleViewportChange);
       
-      // Clean up action bar timeout
-      if (actionBarTimeout.value) {
-        clearTimeout(actionBarTimeout.value);
-      }
       
       // Close this message's action bar if it's open
       if (showActionBar.value) {
@@ -1151,10 +1107,16 @@ export default {
 
 <style scoped>
 .message-node {
-  margin-bottom: calc(var(--space-xs) * 0.5); /* Reduced gap by 50% */
+  margin-bottom: 0; /* Further reduced vertical gap */
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 100%;
+  padding: 0 8px; /* Add horizontal padding from screen edges */
   transition: all var(--transition-fast);
   position: relative;
   contain: layout style;
+  display: flex;
+  justify-content: center;
 }
 
 /* Elevate z-index when dropdown is open to ensure it appears above subsequent messages */
@@ -1195,25 +1157,7 @@ export default {
   text-overflow: ellipsis;
 }
 
-/* Add extra horizontal margin for messages with siblings - desktop only */
-/* First selector uses :has() which isn't supported in all browsers */
-.message-node:has(> .sibling-navigator) .message-content,
-/* Fallback for browsers that don't support :has() */
-.message-node > .sibling-navigator ~ .message-content {
-  margin-left: 40px;
-  margin-right: 40px;
-  max-width: calc(100% - 80px);
-}
-
-/* On mobile, remove extra margins since navigation is inscribed in corners */
-@media (max-width: 768px) {
-  .message-node:has(> .sibling-navigator) .message-content,
-  .message-node > .sibling-navigator ~ .message-content {
-    margin-left: 0;
-    margin-right: 0;
-    max-width: 100%;
-  }
-}
+/* Sibling navigator is now in the footer, so no extra margins needed */
 
 .message-content {
   background-color: var(--color-surface);
@@ -1223,6 +1167,20 @@ export default {
   width: 100%;
   position: relative;
   z-index: 1;
+}
+
+/* Add space and adjust positioning for sibling navigation on desktop */
+@media (min-width: 769px) {
+  .message-node[data-has-siblings="true"] {
+    width: calc(100% - 76px); /* Subtract space for both nav buttons (38px * 2) */
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .message-node[data-has-siblings="true"] .sibling-navigator {
+    width: calc(100% + 76px); /* Add back the space for nav buttons */
+    left: -38px; /* Move navigator back to align with full width */
+  }
 }
 
 .message-node.selected .message-content {
@@ -1290,12 +1248,16 @@ export default {
   align-items: center;
   gap: var(--space-xs);
   flex-wrap: wrap;
+  justify-content: flex-start;
+  width: 100%;
 }
 
 .author-info {
   display: flex;
   align-items: center;
   gap: 6px;
+  justify-content: flex-start;
+  min-width: 0; /* Ensures proper text truncation */
 }
 
 .message-author {
@@ -1588,7 +1550,7 @@ export default {
 }
 
 .message-body {
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-xs);
   white-space: normal;
   word-wrap: break-word;
   width: 100%;
@@ -1651,8 +1613,8 @@ export default {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  margin-top: var(--space-sm);
-  padding-top: var(--space-sm);
+  margin-top: var(--space-xs);
+  padding-top: var(--space-md);
   border-top: 1px solid var(--color-border);
 }
 
@@ -1666,11 +1628,18 @@ export default {
   cursor: help;
 }
 
-/* Mobile navigation slot styling */
-.mobile-nav-slot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+/* Header sibling navigation slot styling */
+.header-sibling-nav-slot {
+  display: none; /* Hidden on desktop - sibling nav is absolutely positioned */
+}
+
+@media (max-width: 768px) {
+  .header-sibling-nav-slot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-right: var(--space-sm);
+  }
 }
 
 /* Mobile footer layout */
@@ -1685,13 +1654,6 @@ export default {
   .message-footer .reply-count {
     flex: 1;
     text-align: left;
-  }
-  
-  .mobile-nav-slot {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
   }
 }
 
@@ -2046,6 +2008,7 @@ export default {
     width: 100%;
     position: relative;
     perspective: 1000px;
+    padding: 0 5px; /* Slightly less padding on mobile */
   }
   
   .message-content {
@@ -2056,8 +2019,8 @@ export default {
     transition: transform 0.02s linear, opacity 0.02s linear;
     z-index: 1;
     background-color: var(--color-surface);
-    padding: var(--space-sm) var(--space-md); /* Reduce padding for mobile */
-    margin: 0 4px; /* Add small margins */
+    padding: var(--space-xs) var(--space-md); /* Reduce padding for mobile */
+    margin: 0; /* Remove margins since parent now has padding */
   }
   
   /* No extra padding needed - navigation is now inline with action buttons */
@@ -2069,7 +2032,7 @@ export default {
   }
   
   .author-info {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     max-width: 70%; /* Prevent username overflow */
   }
   
@@ -2086,6 +2049,8 @@ export default {
   .author-section {
     flex-wrap: wrap;
     gap: 8px;
+    flex: 1;
+    min-width: 0; /* Allows proper text truncation */
   }
   
   /* Hide desktop actions on mobile */
@@ -2180,6 +2145,65 @@ export default {
   
   .mobile-reply-button:active {
     transform: scale(0.95);
+  }
+  
+  /* Mobile Save Button - Similar styling to reply button */
+  .mobile-save-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xs);
+    padding: 8px 12px;
+    font-size: var(--font-size-xs);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    color: var(--color-text-secondary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 12;
+    min-height: 36px;
+    min-width: 36px;
+  }
+  
+  .mobile-save-button:hover:not(:disabled) {
+    background-color: var(--color-surface-hover);
+    border-color: var(--color-border-hover);
+    color: var(--color-primary);
+    transform: scale(1.05);
+  }
+  
+  .mobile-save-button:active {
+    transform: scale(0.95);
+  }
+  
+  .mobile-save-button.saved {
+    background-color: #6a5942;
+    border-color: black;
+    color: var(--color-text-inverse);
+    transform: scale(1.05);
+  }
+  
+  .mobile-save-button.saved:hover {
+    background-color: #6a5942;
+    border-color: rgb(180, 180, 180);
+    color: var(--color-text-inverse);
+    transform: scale(1.05);
+  }
+  
+  .mobile-save-button:disabled {
+    opacity: 0.7;
+    cursor: wait;
+  }
+  
+  .mobile-save-button .loading-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
   }
   
   /* Visual Discovery Hint Button - Desktop style square */
@@ -2307,7 +2331,7 @@ export default {
   }
   
   /* Ensure message content takes full width */
-  .message-node > .sibling-navigator ~ .message-content {
+  .message-content {
     margin-left: 0;
     margin-right: 0;
     max-width: 100%;
@@ -2370,6 +2394,13 @@ export default {
     padding: 6px 10px;
     font-size: calc(var(--font-size-xs) - 1px);
     min-height: 32px;
+  }
+  
+  .mobile-save-button {
+    padding: 6px 10px;
+    font-size: calc(var(--font-size-xs) - 1px);
+    min-height: 32px;
+    min-width: 32px;
   }
   
   .action-hint-button {

@@ -16,6 +16,10 @@ import MessageListView from './views/app_views/MessageListView.vue';
 const routes = [
   {
     path: '/',
+    redirect: '/new-thread'
+  },
+  {
+    path: '/home',
     component: HomeView
   },
   {
@@ -66,7 +70,18 @@ const routes = [
   {
     path: '/new-thread',
     name: 'new-thread',
-    component: NewThreadView
+    component: NewThreadView,
+    // Add beforeEnter guard to force component refresh
+    beforeEnter: (to, from, next) => {
+      // If we're coming from the root redirect, proceed normally
+      if (from.path === '/') {
+        next();
+        return;
+      }
+      // Force a component refresh by adding a timestamp query parameter
+      to.query = { ...to.query, _: Date.now() };
+      next();
+    }
   },
   {
     path: '/import',
