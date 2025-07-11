@@ -11,7 +11,7 @@
 
           <!-- Existing Recipients Section -->
           <div v-if="isAddMode && existingRecipients && existingRecipients.length > 0" class="existing-recipients-section">
-            <p class="section-header">Current recipients</p>
+            <p class="section-header">Visible recipients</p>
             <div class="recipients-list">
               <div  
               v-for="(recipient, index) in existingRecipients" 
@@ -28,7 +28,10 @@
                   <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
                   <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
                 </div>
+                <div class="recipient-metadata">
                 <span class="recipient-timestamp">{{ recipient.timestamp ? new Date(recipient.timestamp).toLocaleString() : 'creation' }}</span>
+                  <span class="recipient-added-by">Added by: {{ getAddedByText(recipient) }}</span>
+                </div>
               </div>
               <div class="recipient-controls">
                 <span class="visibility-indicator" :title="recipient.visible !== false ? 'Visible (CC)' : 'Hidden (BCC)'">
@@ -77,7 +80,7 @@
               @click.stop="addRecipient" 
               class="add-recipient-btn"
               :disabled="!canAddRecipient"
-            >Add</button>
+            >Stage</button>
           </div>
         
           <div class="search-results-container">
@@ -114,7 +117,9 @@
                     <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
                     <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
                   </div>
-                  <span class="recipient-timestamp">{{ recipient.timestamp ? new Date(recipient.timestamp).toLocaleString() : 'creation' }}</span>
+                  <div class="recipient-metadata">
+                    <span class="recipient-timestamp">staged</span>
+                  </div>
                 </div>
                 <div class="recipient-controls">
                   <button 
@@ -158,7 +163,10 @@
                 <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
                 <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
               </div>
-              <span class="recipient-timestamp">{{ recipient.timestamp ? new Date(recipient.timestamp).toLocaleString() : 'creation' }}</span>
+              <div class="recipient-metadata">
+                <span class="recipient-timestamp">{{ !props.messageId ? 'now' : (recipient.timestamp ? new Date(recipient.timestamp).toLocaleString() : 'creation') }}</span>
+                <span v-if="props.messageId" class="recipient-added-by">Added by: {{ getAddedByText(recipient) }}</span>
+              </div>
             </div>
             <div class="recipient-controls">
               <button 
@@ -186,8 +194,26 @@
       </div>
       
       <div class="modal-footer">
-        <button @click.stop="handleDone" class="done-button">
-          {{ isActuallyAddingToExisting ? 'Add Recipients' : 'Done' }}
+          <!-- Only show Add button for existing message mode, not new message drafts -->
+          <!-- Debug: hasNewRecipients && !isNewMessageMode -->
+          <button 
+            v-if="hasNewRecipients && !isNewMessageMode" 
+            @click.stop="handleDone" 
+            class="add-button" 
+            :disabled="isAddingRecipients"
+          >
+            <div v-if="isAddingRecipients" class="button-loading">
+              <div class="spinner-small"></div>
+              <span>Adding...</span>
+            </div>
+            <span v-else>Add Recipients</span>
+          </button>
+          <button 
+            @click.stop="handleDoneOrCancel" 
+            class="cancel-button" 
+            :disabled="isAddingRecipients"
+          >
+            {{ isNewMessageMode ? 'Done' : 'Cancel' }}
         </button>
       </div>
     </div>
@@ -219,10 +245,6 @@ const props = defineProps({
   messageId: {
     type: [String, Number],
     default: null
-  },
-  isRecipientRemovalDisabled: {
-    type: Boolean,
-    default: false // In add mode, we typically don't allow removing existing recipients
   }
 });
 
@@ -240,6 +262,7 @@ const hasSearched = ref(false);
 const showSearchResults = ref(false);
 const isTagValid = ref(null);
 const removingRecipientIds = ref(new Set()); // Track which recipients are being removed
+const isAddingRecipients = ref(false); // Track if we're adding recipients
 let searchTimeout = null;
 
 // Computed
@@ -297,15 +320,34 @@ const isActuallyAddingToExisting = computed(() => {
   return props.isAddMode && props.existingRecipients && props.existingRecipients.length > 0;
 });
 
+// New computed to distinguish between new message drafts vs existing message additions
+const isNewMessageMode = computed(() => {
+  // If we have a messageId, we're always adding to an existing message
+  // regardless of whether it currently has recipients
+  if (props.messageId) {
+    console.log('[RecipientsModal] isNewMessageMode: false (has messageId)', props.messageId);
+    return false;
+  }
+  
+  // If we're in add mode but have no messageId, it's a new message
+  const result = props.isAddMode && !props.messageId;
+  console.log('[RecipientsModal] isNewMessageMode:', result, {
+    isAddMode: props.isAddMode,
+    messageId: props.messageId,
+    existingRecipientsLength: props.existingRecipients?.length
+  });
+  return result;
+});
+
 const canRemoveRecipient = computed(() => {
   return (recipient) => {
     if (!currentUser.value) return false;
     
     // In add mode, check if it's a new recipient or existing one
     if (props.isAddMode) {
-      // If it's a new recipient being added, allow removal
+      // If it's a new recipient being added, always allow removal
       if (recipient.isNew) {
-        return !props.isRecipientRemovalDisabled;
+        return true;
       }
       // If it's an existing recipient, use existing logic
       return canRemoveExistingRecipient.value(recipient);
@@ -333,6 +375,18 @@ const canRemoveExistingRecipient = computed(() => {
   };
 });
 
+// New computed property to check if there are new recipients staged
+const hasNewRecipients = computed(() => {
+  const newRecipients = store.getters['navigation/replyRecipients'] || [];
+  const result = newRecipients.length > 0;
+  console.log('[RecipientsModal] hasNewRecipients:', result, {
+    newRecipientsLength: newRecipients.length,
+    newRecipients: newRecipients,
+    isNewMessageMode: isNewMessageMode.value
+  });
+  return result;
+});
+
 // Methods
 const getRecipientTitle = (recipient) => {
   if (recipient.isNew) {
@@ -344,6 +398,27 @@ const getRecipientTitle = (recipient) => {
   }
 };
 
+// New method to get the added_by display text
+const getAddedByText = (recipient) => {
+  if (!recipient.added_by) {
+    return 'Message author';
+  }
+  
+  // Try to find the user who added this recipient
+  const currentUser = store.getters['auth/user'];
+  if (currentUser && recipient.added_by === currentUser.uid) {
+    return 'You';
+  }
+  
+  // Use the resolved user tag from backend if available
+  if (recipient.added_by_tag) {
+    return `@${recipient.added_by_tag}`;
+  }
+  
+  // Fallback to UID if user tag is not available
+  return `User ${recipient.added_by}`;
+};
+
 const closeModal = () => {
   console.log('[RecipientsModal] closeModal called');
   clearSearch();
@@ -351,27 +426,70 @@ const closeModal = () => {
 };
 
 const handleDone = async () => {
-  console.log('[RecipientsModal] handleDone called, isAddMode:', props.isAddMode);
-  console.log('[RecipientsModal] isActuallyAddingToExisting:', isActuallyAddingToExisting.value);
+  console.log('[RecipientsModal] handleDone called');
   console.log('[RecipientsModal] Current recipients:', recipients.value);
   
-  if (isActuallyAddingToExisting.value) {
-    console.log('[RecipientsModal] Actually adding to existing message, emitting add-recipients event');
+  // Set loading state
+  isAddingRecipients.value = true;
+  
+  try {
     // Emit add-recipients event with current recipients
-    emit('add-recipients', recipients.value);
+    const recipientsToAdd = [...recipients.value];
+    emit('add-recipients', recipientsToAdd);
     
-    console.log('[RecipientsModal] Clearing navigation store recipients');
-    // Clear the new recipients list after adding them
-    await store.dispatch('navigation/clearRecipients');
+    // Note: The parent component should call onAddRecipientsComplete() when done
+    // The loading state will be cleared by the parent via that method
     
-    console.log('[RecipientsModal] Add mode complete - modal should stay open');
-    // Don't close the modal - let it stay open for more additions
-  } else {
-    console.log('[RecipientsModal] Just managing staged recipients, closing modal');
-    emit('done');
-    closeModal();
+  } catch (error) {
+    console.error('[RecipientsModal] Error adding recipients:', error);
+    // Show user-friendly error message
+    alert('Failed to add recipients. Please try again.');
+    // Reset loading state on error
+    isAddingRecipients.value = false;
   }
 };
+
+const handleDoneOrCancel = () => {
+  console.log('[RecipientsModal] handleDoneOrCancel called');
+  
+  // Only clear recipients if in add mode (not new message mode)
+  if (!isNewMessageMode.value && props.isAddMode) {
+    // Clear any staged recipients
+    store.dispatch('navigation/clearRecipients');
+  }
+  
+  closeModal();
+};
+
+// Methods that parent component can call to signal completion
+const onAddRecipientsComplete = async () => {
+  console.log('[RecipientsModal] onAddRecipientsComplete called');
+  try {
+    // Clear the new recipients list after successful addition
+    await store.dispatch('navigation/clearRecipients');
+    console.log('[RecipientsModal] Add operation complete - modal stays open');
+  } catch (error) {
+    console.error('[RecipientsModal] Error clearing recipients:', error);
+  } finally {
+    // Reset loading state
+    isAddingRecipients.value = false;
+  }
+};
+
+const onAddRecipientsError = (error) => {
+  console.error('[RecipientsModal] onAddRecipientsError called:', error);
+  // Show user-friendly error message
+  const errorMessage = error?.message || 'Failed to add recipients. Please try again.';
+  alert(errorMessage);
+  // Reset loading state
+  isAddingRecipients.value = false;
+};
+
+// Expose methods for parent component to call
+defineExpose({
+  onAddRecipientsComplete,
+  onAddRecipientsError
+});
 
 // Debounce function for search
 const searchUsers = (event) => {
@@ -433,17 +551,23 @@ const clearSearch = () => {
 };
 
 const selectSearchResult = (user) => {
+  console.log('[RecipientsModal] selectSearchResult called with user:', user);
+  
   if (user && user.user_tag) {
     // Use the full user object
     isTagValid.value = true;
     
-    // Add the recipient right away with default visibility
-    store.dispatch('navigation/addRecipient', {
+    const recipientToAdd = {
       uid: user.uid,
       display_name: user.display_name,
       user_tag: user.user_tag,
       visible: true  // Default to visible (CC)
-    });
+    };
+    
+    console.log('[RecipientsModal] Adding recipient to store:', recipientToAdd);
+    
+    // Add the recipient right away with default visibility
+    store.dispatch('navigation/addRecipient', recipientToAdd);
     
     // Clear the input
     newRecipient.value = '';
@@ -473,20 +597,26 @@ const addRecipient = async () => {
 
 const removeRecipient = async (index, recipient) => {
   try {
-    if (props.isAddMode && recipient.isNew) {
-      // Remove new recipient from navigation store
+    // For staged recipients in new message mode
+    if (!props.messageId) {
+      // Simply remove from navigation store
+      store.dispatch('navigation/removeRecipient', index);
+      return;
+    }
+
+    // For staged recipients in add mode
+    if (props.isAddMode && !recipient.isExisting) {
+      // Remove from navigation store
       const newRecipients = store.getters['navigation/replyRecipients'];
       const newIndex = newRecipients.findIndex(r => r.uid === recipient.uid);
       if (newIndex !== -1) {
         store.dispatch('navigation/removeRecipient', newIndex);
       }
-    } else if (props.isAddMode && recipient.isExisting) {
-      // Remove existing recipient via API
-      await removeExistingRecipient(index, recipient);
-    } else {
-      // For non-add mode, use the existing recipient removal logic
-      await removeExistingRecipient(index, recipient);
+      return;
     }
+
+    // For existing recipients, use the API removal logic
+    await removeExistingRecipient(index, recipient);
   } catch (error) {
     console.error('Error removing recipient:', error);
     
@@ -922,9 +1052,25 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   flex-shrink: 0;
 }
 
+.recipient-metadata {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+
 .recipient-timestamp {
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recipient-added-by {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-style: italic;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1088,10 +1234,11 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   border-top: 1px solid var(--color-border);
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
   flex-shrink: 0;
 }
 
-.done-button {
+.add-button {
   padding: 10px 20px;
   background-color: var(--color-primary);
   color: var(--color-text-inverse);
@@ -1103,9 +1250,46 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   transition: all 0.2s ease;
 }
 
-.done-button:hover {
+.add-button:hover:not(:disabled) {
   background-color: var(--color-primary-dark);
   transform: translateY(-1px);
+}
+
+.add-button:disabled {
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.button-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.cancel-button {
+  padding: 10px 20px;
+  background-color: var(--color-border);
+  color: var(--color-text);
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cancel-button:hover:not(:disabled) {
+  background-color: var(--color-hover-overlay);
+}
+
+.cancel-button:disabled {
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+  transform: none;
 }
 
 /* Mobile responsive */

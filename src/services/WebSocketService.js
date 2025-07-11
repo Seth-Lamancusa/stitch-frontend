@@ -9,14 +9,27 @@ const WebSocketService = {
   userId: null,
   messageCallback: null,
   pingInterval: null,
+  heartbeatInterval: null,
   debugMode: true, // Enable debug logging by default
   authToken: null,
+  connectionEstablished: false,
 
   // Global state management
   isInitialized: false,
   unsubscribeFunction: null,
   connectionAttempts: 0,
-  maxReconnectAttempts: 3,
+  maxReconnectAttempts: 5,
+  reconnectDelay: 1000,
+  
+  // Token management
+  tokenRefreshInProgress: false,
+  lastTokenRefresh: null,
+  tokenRefreshThreshold: 30 * 60 * 1000, // 30 minutes
+  
+  // Connection health monitoring
+  lastPingTime: null,
+  pingTimeoutMs: 60000, // 1 minute
+  heartbeatIntervalMs: 30000, // 30 seconds
   
   // Debug logging helper
   log(...messages) {
@@ -25,11 +38,30 @@ const WebSocketService = {
     }
   },
   
+  warn(...messages) {
+    console.warn('[WebSocket]', ...messages);
+  },
+  
+  error(...messages) {
+    console.error('[WebSocket]', ...messages);
+  },
+  
   /**
    * Get a fresh authentication token from Firebase
    * @returns {Promise<string|null>} Fresh token or null if not available
    */
   async getFreshAuthToken() {
+    if (this.tokenRefreshInProgress) {
+      this.log('Token refresh already in progress, waiting...');
+      // Wait for existing refresh to complete
+      while (this.tokenRefreshInProgress) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      return localStorage.getItem('auth_token');
+    }
+    
+    this.tokenRefreshInProgress = true;
+    
     try {
       // Try to get fresh token from Firebase auth
       const { getFirebaseAuth } = await import('../firebase.js');
@@ -42,6 +74,7 @@ const WebSocketService = {
         
         // Update localStorage with fresh token
         localStorage.setItem('auth_token', token);
+        this.lastTokenRefresh = Date.now();
         this.log('Fresh token obtained and stored');
         
         return token;
@@ -50,10 +83,20 @@ const WebSocketService = {
         return null;
       }
     } catch (error) {
-      console.error('[WebSocket] Error getting fresh token:', error);
-      this.log(`Error getting fresh token: ${error.message}`);
+      this.error('Error getting fresh token:', error);
       return null;
+    } finally {
+      this.tokenRefreshInProgress = false;
     }
+  },
+  
+  /**
+   * Check if token needs refresh
+   * @returns {boolean} True if token should be refreshed
+   */
+  shouldRefreshToken() {
+    if (!this.lastTokenRefresh) return true;
+    return (Date.now() - this.lastTokenRefresh) > this.tokenRefreshThreshold;
   },
   
   /**
@@ -97,9 +140,9 @@ const WebSocketService = {
         this.isInitialized = true;
         this.log(`Global connection established for user ${user.uid}`);
       } catch (error) {
-        console.error('[WebSocket] Failed to connect:', error);
-        this.log(`Connection failed: ${error.message}`);
+        this.error('Failed to connect:', error);
         this.cleanup();
+        throw error;
       }
     } else {
       this.log('No authenticated user, skipping initialization');
@@ -111,12 +154,26 @@ const WebSocketService = {
    */
   cleanup() {
     this.log('Cleanup called');
+    
+    // Clear intervals
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+    
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+    
+    // Remove message handler
     if (this.unsubscribeFunction) {
       this.log('Removing message handler');
       this.unsubscribeFunction();
       this.unsubscribeFunction = null;
     }
     
+    // Disconnect WebSocket
     if (this.connection) {
       this.log(`Disconnecting user ${this.userId || 'unknown'}`);
       this.disconnectUser();
@@ -124,8 +181,46 @@ const WebSocketService = {
       this.log('No active connection to clean up');
     }
     
+    // Reset state
     this.isInitialized = false;
+    this.connectionEstablished = false;
     this.log('Cleanup completed');
+  },
+  
+  /**
+   * Start heartbeat monitoring
+   */
+  startHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+    }
+    
+    this.heartbeatInterval = setInterval(() => {
+      if (this.connection && this.connection.readyState === WebSocket.OPEN) {
+        try {
+          this.connection.send(JSON.stringify({
+            type: 'heartbeat',
+            timestamp: Date.now()
+          }));
+          this.log('Sent heartbeat');
+        } catch (error) {
+          this.error('Error sending heartbeat:', error);
+        }
+      }
+    }, this.heartbeatIntervalMs);
+    
+    this.log('Heartbeat monitoring started');
+  },
+  
+  /**
+   * Stop heartbeat monitoring
+   */
+  stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+      this.log('Heartbeat monitoring stopped');
+    }
   },
   
   /**
@@ -137,7 +232,7 @@ const WebSocketService = {
     
     // Skip if no message data
     if (!messageData || !messageData.id) {
-      console.warn('[WebSocket] Received invalid message data');
+      this.warn('Received invalid message data:', messageData);
       return;
     }
     
@@ -155,11 +250,18 @@ const WebSocketService = {
       isFromCurrentUser = messageData.content_author === user.uid || 
                          messageData.author_user_tag === user.user_tag;
       
-      // Check if message is to current user
-      isToCurrentUser = messageData.recipients && 
-                       messageData.recipients.some(r => 
-                         (r.uid && r.uid === user.uid) || 
-                         (r.user_tag && r.user_tag === user.user_tag));
+      // Check if message is to current user (improved logic)
+      isToCurrentUser = messageData.recipients && Array.isArray(messageData.recipients) &&
+                       messageData.recipients.some(r => {
+                         if (typeof r === 'object' && r !== null) {
+                           return (r.uid && r.uid === user.uid) || 
+                                  (r.user_tag && r.user_tag === user.user_tag);
+                         }
+                         // Handle string recipients (backward compatibility)
+                         return r === user.uid || r === user.user_tag;
+                       });
+      
+      this.log(`Message analysis: isFromCurrentUser=${isFromCurrentUser}, isToCurrentUser=${isToCurrentUser}`);
     }
     
     // Trigger notification for messages to current user (but not from current user)
@@ -197,7 +299,7 @@ const WebSocketService = {
       }
     }
     
-    // Get the parent message if it exists
+    // Handle parent-child relationships
     const parentId = messageData.parent_id;
     if (parentId) {
       this.log(`Message ${messageData.id} has parent ${parentId}`);
@@ -226,11 +328,6 @@ const WebSocketService = {
       } else {
         this.log(`Parent ${parentId} not found in store`);
       }
-      
-      // Log message details for debugging
-      if (user) {
-        this.log(`Message to current user: ${isToCurrentUser}, from current user: ${isFromCurrentUser}`);
-      }
     }
   },
 
@@ -240,6 +337,7 @@ const WebSocketService = {
     
     // If already connected with the same token, do nothing
     if (this.connection && 
+        this.connectionEstablished &&
         this.authToken === token && 
         this.connection.readyState === WebSocket.OPEN) {
       this.log(`Already connected with token ${token.substring(0, 10)}...`);
@@ -278,7 +376,7 @@ const WebSocketService = {
         
         this.log(`WebSocket URL constructed: ${wsUrl.replace(token, '[TOKEN]')}`);
       } catch (e) {
-        this.log(`Error constructing WebSocket URL: ${e}`);
+        this.error(`Error constructing WebSocket URL: ${e}`);
         reject(new Error(`Failed to construct WebSocket URL: ${e.message}`));
         return;
       }
@@ -293,8 +391,15 @@ const WebSocketService = {
       socket.onopen = () => {
         this.log(`Connection opened with token ${token.substring(0, 10)}...`);
         this.log('WebSocket connection state: OPEN');
+        this.connectionEstablished = true;
+        
+        // Start heartbeat monitoring
+        this.startHeartbeat();
+        
         // Reset connection attempts on successful connection
         this.connectionAttempts = 0;
+        this.reconnectDelay = 1000; // Reset reconnect delay
+        
         resolve(); // Resolve the connection promise
       };
       
@@ -303,6 +408,13 @@ const WebSocketService = {
           // Handle ping/pong
           if (event.data === 'pong') {
             this.log('Received pong from server');
+            this.lastPingTime = Date.now();
+            return;
+          }
+          
+          if (event.data === 'ping') {
+            this.log('Received ping from server, sending pong');
+            socket.send('pong');
             return;
           }
           
@@ -313,12 +425,16 @@ const WebSocketService = {
           if (data.type === 'connection_established') {
             this.userId = data.user_id;
             this.log(`Connection established for user ${this.userId}`);
+          } else if (data.type === 'heartbeat_ack') {
+            this.log('Received heartbeat acknowledgment');
+            this.lastPingTime = Date.now();
           } else if (data.type === 'new_reply') {
             this.log(`===== NEW REPLY RECEIVED =====`);
             this.log(`Message ID: ${data.data?.id}`);
             this.log(`Parent ID: ${data.data?.parent_id}`);
             this.log(`Author: ${data.data?.author_display_name || data.data?.author_user_tag || data.data?.content_author}`);
             this.log(`Content: "${data.data?.content?.substring(0, 50)}${data.data?.content?.length > 50 ? '...' : ''}"`);
+            this.log(`Recipients: ${data.data?.recipients?.length || 0}`);
             
             // Process all new_reply messages where current user is a recipient
             if (this.messageCallback) {
@@ -327,10 +443,13 @@ const WebSocketService = {
             } else {
               this.log(`No message callback registered`);
             }
+          } else if (data.type === 'error') {
+            this.error('Server error:', data.message);
+          } else {
+            this.log(`Unknown message type: ${data.type}`);
           }
         } catch (error) {
-          console.error('[WebSocket] Error handling message:', error);
-          this.log(`Error handling message: ${error.message}`);
+          this.error('Error handling message:', error);
         }
       };
       
@@ -341,6 +460,10 @@ const WebSocketService = {
         
         this.connection = null;
         this.userId = null;
+        this.connectionEstablished = false;
+        
+        // Stop heartbeat monitoring
+        this.stopHeartbeat();
         
         // Only clear the promise if it's our current one
         if (this.connectionPromise && !event.wasClean) {
@@ -353,29 +476,37 @@ const WebSocketService = {
           this.log(`Connection closed unexpectedly, attempting to reconnect (attempt ${this.connectionAttempts} of ${this.maxReconnectAttempts})`);
           
           // Use exponential backoff for reconnection
-          const backoffTime = Math.min(1000 * Math.pow(2, this.connectionAttempts - 1), 10000);
-          this.log(`Reconnecting in ${backoffTime}ms`);
+          this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000); // Max 30 seconds
+          this.log(`Reconnecting in ${this.reconnectDelay}ms`);
           
           setTimeout(async () => {
             try {
-              // Get fresh token for reconnection
-              const freshToken = await this.getFreshAuthToken();
-              if (freshToken) {
-                this.log(`Attempting reconnection with fresh token`);
-                await this.connectUser(freshToken);
-              } else {
-                this.log(`Cannot reconnect: failed to get fresh token`);
+              // Check if we should refresh token before reconnecting
+              let tokenToUse = this.authToken;
+              if (this.shouldRefreshToken()) {
+                this.log('Refreshing token before reconnection');
+                const freshToken = await this.getFreshAuthToken();
+                if (freshToken) {
+                  tokenToUse = freshToken;
+                } else {
+                  this.error('Cannot reconnect: failed to get fresh token');
+                  return;
+                }
               }
+              
+              this.log(`Attempting reconnection with ${tokenToUse === this.authToken ? 'existing' : 'fresh'} token`);
+              await this.connectUser(tokenToUse);
             } catch (err) {
-              this.log(`Reconnection attempt failed: ${err.message}`);
+              this.error(`Reconnection attempt failed: ${err.message}`);
             }
-          }, backoffTime);
+          }, this.reconnectDelay);
+        } else if (this.connectionAttempts >= this.maxReconnectAttempts) {
+          this.error(`Max reconnection attempts (${this.maxReconnectAttempts}) exceeded`);
         }
       };
       
       socket.onerror = (error) => {
-        console.error(`[WebSocket] Error for user ${this.userId}:`, error);
-        this.log(`WebSocket error: ${error.type || 'unknown error'}`);
+        this.error(`WebSocket error for user ${this.userId}:`, error);
         reject(error);
       };
       
@@ -389,7 +520,7 @@ const WebSocketService = {
   
   // For backward compatibility
   async connectToThread(threadId, messageId) {
-    console.warn('connectToThread is deprecated, use connectUser instead');
+    this.warn('connectToThread is deprecated, use connectUser instead');
     
     // If we have a token, use that to connect
     const token = localStorage.getItem('auth_token');
@@ -398,13 +529,16 @@ const WebSocketService = {
     }
     
     // Otherwise, do nothing - user must be authenticated to receive updates
-    console.warn('Cannot connect to WebSocket: No authentication token available');
+    this.warn('Cannot connect to WebSocket: No authentication token available');
     return Promise.resolve();
   },
   
   // Disconnect from current thread
   disconnectUser() {
     this.log(`DisconnectUser called`);
+    
+    // Stop heartbeat monitoring
+    this.stopHeartbeat();
     
     if (this.connection) {
       this.log(`Disconnecting user ${this.userId}`);
@@ -413,13 +547,13 @@ const WebSocketService = {
         this.log(`Closing WebSocket connection`);
         this.connection.close(1000, "User disconnected intentionally");
       } catch (e) {
-        console.error('[WebSocket] Error closing connection:', e);
-        this.log(`Error closing connection: ${e.message}`);
+        this.error('Error closing connection:', e);
       }
       
       this.connection = null;
       this.userId = null;
       this.authToken = null;
+      this.connectionEstablished = false;
     } else {
       this.log(`No active connection to disconnect`);
     }
@@ -458,8 +592,45 @@ const WebSocketService = {
   async updateSelectedMessage(messageId) {
     // No-op - we're now subscribed to all messages for the user
     this.log(`updateSelectedMessage called but not needed anymore (messageId: ${messageId})`);
-      return;
+    return;
+  },
+  
+  /**
+   * Check connection health and reconnect if needed
+   */
+  async checkConnectionHealth() {
+    if (!this.connection || this.connection.readyState !== WebSocket.OPEN) {
+      this.log('Connection not open, attempting to reconnect');
+      
+      const user = store.getters['auth/user'];
+      if (user) {
+        try {
+          const token = await this.getFreshAuthToken();
+          if (token) {
+            await this.connectUser(token);
+          }
+        } catch (error) {
+          this.error('Failed to reconnect:', error);
+        }
+      }
     }
+  },
+  
+  /**
+   * Get connection status
+   */
+  getConnectionStatus() {
+    const status = {
+      connected: this.connection?.readyState === WebSocket.OPEN,
+      established: this.connectionEstablished,
+      userId: this.userId,
+      connectionAttempts: this.connectionAttempts,
+      lastPingTime: this.lastPingTime,
+      hasAuthToken: !!this.authToken
+    };
+    
+    return status;
+  }
 };
 
 export default WebSocketService;

@@ -264,15 +264,10 @@ const showRecipientSelector = ref(false);
 // Chatbot selector state
 const showChatbotSelector = ref(false);
 
-// Available chatbots (from backend config.py)
-const AVAILABLE_CHATBOTS = [
-  { uid: "chatgpt-system", display_name: "GP", user_tag: "chatgpt", email: "chatgpt@system.ai" },
-  { uid: "claude-system", display_name: "Claude", user_tag: "claude", email: "claude@system.ai" },
-  { uid: "gemini-system", display_name: "Gemini", user_tag: "gemini", email: "gemini@system.ai" },
-  { uid: "grok-system", display_name: "Grok", user_tag: "grok", email: "grok@system.ai" }
-];
+// Import bot configuration
+import AVAILABLE_BOTS from '../config/bots';
 
-const availableChatbots = ref(AVAILABLE_CHATBOTS);
+const availableChatbots = ref(AVAILABLE_BOTS);
 
 // Computed properties from store
 const user = computed(() => store.getters['auth/user']);

@@ -8,7 +8,7 @@
       'selected': inListView ? selected : isMessageSelected
     }"
     :data-message-id="message.id"
-    :data-has-siblings="hasSiblings"
+    :data-has-siblings="!!message.parent_id"
   >
       <div 
     class="message-content" 
@@ -18,15 +18,15 @@
   >
     <div class="message-header">
       <div class="author-section">
-        <!-- Sibling navigator - positioned left of display name -->
-        <div v-if="!inListView" class="header-sibling-nav-slot">
+        <!-- Sibling navigator - positioned left of display name on mobile only -->
+        <div v-if="!inListView && message.parent_id && isMobile" class="header-sibling-nav-slot">
           <sibling-navigator
-            v-if="message.parent_id"
             :message-id="message.id"
             :parent-id="message.parent_id"
             :mobile-mode="isMobile"
             :class="{ 'selection-mode-disabled': isSelectionMode }"
             @navigate="handleSiblingNavigation"
+            :data-debug-has-siblings="hasSiblings"
           />
         </div>
         
@@ -132,23 +132,12 @@
             </div>
           </div>
           
-          <!-- Admin controls -->
-          <div class="admin-controls" v-if="isAdmin && !isSelectionMode">
-            <button 
-              @click.stop="$emit('delete', message)" 
-              class="delete-button"
-              title="Admin: Delete this message and all replies"
-            >
-              Delete
-            </button>
-          </div>
-          
-          <!-- Non-admin author delete button -->
+          <!-- Delete button - shows for admins (all messages) or authors (own messages), but not in list view -->
           <button 
-            v-if="isUserAuthor && !isAdmin && !isSelectionMode" 
+            v-if="(isAdmin || isUserAuthor) && !isSelectionMode && !inListView" 
             @click.stop="$emit('delete', message)" 
             class="delete-button"
-            title="Delete this message and all replies"
+            :title="isAdmin ? 'Admin: Delete this message and all replies' : 'Delete this message and all replies'"
           >
             Delete
           </button>
@@ -249,28 +238,26 @@
           
           <!-- Add Recipients Button - available to all users -->
           <button 
-            v-if="!inListView"
+            v-if="shouldShowAddRecipientsButton"
             @click.stop="openAddRecipientsModal" 
-            class="add-recipients-button"
+            class="fab-button add-recipients-button"
             title="Add recipients to this message"
           >
             <span class="add-recipients-icon">👥</span>
-            Recipients
           </button>
         </div>
-        
-        <!-- Mobile JSON button - Admin only, positioned on the right side -->
-        <button 
-          v-if="isAdmin && isMobile && !inListView && !isSelectionMode"
-          @click.stop="copyMessageJson" 
-          class="mobile-json-button"
-          :class="{ 'copied': isJsonCopied }"
-          title="Copy message JSON to clipboard"
-        >
-          <span v-if="isJsonCopied" class="copied-icon">✓</span>
-          <span v-else class="json-icon">{ }</span>
-        </button>
       </div>
+      
+      <!-- Desktop sibling navigator - absolutely positioned -->
+      <sibling-navigator
+        v-if="!inListView && message.parent_id && !isMobile"
+        :message-id="message.id"
+        :parent-id="message.parent_id"
+        :mobile-mode="false"
+        :class="{ 'selection-mode-disabled': isSelectionMode }"
+        @navigate="handleSiblingNavigation"
+        :data-debug-has-siblings="hasSiblings"
+      />
       
       <!-- Mobile floating action controls - only shown on mobile and not in selection mode -->
       <div v-if="!inListView && !isSelectionMode" class="mobile-action-controls">
@@ -500,25 +487,25 @@ export default {
     const openAddRecipientsModal = () => {
       console.log('[MessageNode] openAddRecipientsModal called for message', props.message.id);
       
-      // Close the ReplyBox if it's open
-      store.dispatch('navigation/clearReplyingTo');
-      
-      // Get existing recipients for this message
+      // Add debug logging for existing recipients
       const existingRecipients = props.message.recipients && Array.isArray(props.message.recipients) 
         ? props.message.recipients 
         : [];
+      console.log('[MessageNode] Existing recipients:', existingRecipients);
       
       // Clear the navigation store - we want a fresh start for new recipients
       store.commit('navigation/CLEAR_REPLY_RECIPIENTS');
+      console.log('[MessageNode] Cleared navigation store recipients');
       
       // Show the global recipients modal
-      store.dispatch('navigation/showRecipientsModal', {
+      const modalConfig = {
         isPublic: false, // Adding recipients is always for private messages
         isAddMode: true,
         existingRecipients: existingRecipients,
-        messageId: props.message.id,
-        isRecipientRemovalDisabled: false
-      });
+        messageId: props.message.id
+      };
+      console.log('[MessageNode] Opening recipients modal with config:', modalConfig);
+      store.dispatch('navigation/showRecipientsModal', modalConfig);
     };
     
     const isPublic = computed(() => {
@@ -693,13 +680,38 @@ export default {
     
     // Check if this message has siblings that can be navigated to
     const hasSiblings = computed(() => {
-      if (!props.message.parent_id) return false;
+      console.log(`[MessageNode] Checking hasSiblings for message ${props.message.id}:`, {
+        parentId: props.message.parent_id,
+        hasParentId: !!props.message.parent_id
+      });
+
+      if (!props.message.parent_id) {
+        console.log(`[MessageNode] No parent_id for message ${props.message.id}`);
+        return false;
+      }
       
       const parent = store.getters['messages/getMessage'](props.message.parent_id);
-      if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) return false;
+      console.log(`[MessageNode] Parent message for ${props.message.id}:`, {
+        parentFound: !!parent,
+        parentChildIds: parent?.child_ids,
+        isArray: parent?.child_ids && Array.isArray(parent.child_ids)
+      });
+
+      if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) {
+        console.log(`[MessageNode] Invalid parent data for message ${props.message.id}`);
+        return false;
+      }
       
-      return parent.child_ids.length > 1;
+      const hasSiblings = parent.child_ids.length > 1;
+      console.log(`[MessageNode] Message ${props.message.id} has siblings: ${hasSiblings} (${parent.child_ids.length} total children)`);
+      return hasSiblings;
     });
+
+
+
+
+    
+
     
 
     
@@ -1037,6 +1049,18 @@ export default {
       return isParentLoading.value || isSiblingLoading.value;
     });
     
+    // Add debug computed property to help diagnose button visibility
+    const shouldShowAddRecipientsButton = computed(() => {
+      const conditions = {
+        inListView: props.inListView,
+        isSelectionMode: isSelectionMode.value,
+        messageId: props.message.id,
+        hasRecipients: hasRecipients.value
+      };
+      console.log('[MessageNode] Add Recipients button visibility conditions:', conditions);
+      return !props.inListView && !isSelectionMode.value;
+    });
+    
     return {
       // Props for template access
       message: toRef(props, 'message'),
@@ -1093,7 +1117,8 @@ export default {
       handleViewportChange,
       // Selection mode
       isSelectionMode,
-      isMessageSelected
+      isMessageSelected,
+      shouldShowAddRecipientsButton,
     };
   },
   
@@ -1117,6 +1142,17 @@ export default {
   contain: layout style;
   display: flex;
   justify-content: center;
+}
+
+/* Root messages (without siblings) should expand to fill container */
+.message-node:not([data-has-siblings="true"]) {
+  width: 100%;
+  justify-content: stretch;
+}
+
+.message-node:not([data-has-siblings="true"]) .message-content {
+  width: 100%;
+  max-width: none;
 }
 
 /* Elevate z-index when dropdown is open to ensure it appears above subsequent messages */
@@ -1491,11 +1527,7 @@ export default {
   font-size: var(--font-size-xs);
 }
 
-.admin-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
+
 
 .delete-button, .title-button {
   font-size: var(--font-size-xs);
@@ -1630,16 +1662,10 @@ export default {
 
 /* Header sibling navigation slot styling */
 .header-sibling-nav-slot {
-  display: none; /* Hidden on desktop - sibling nav is absolutely positioned */
-}
-
-@media (max-width: 768px) {
-  .header-sibling-nav-slot {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-right: var(--space-sm);
-  }
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: var(--space-sm);
 }
 
 /* Mobile footer layout */
@@ -2087,36 +2113,7 @@ export default {
     white-space: nowrap;
   }
   
-  /* Mobile JSON button - positioned on the right side of footer */
-  .mobile-json-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    background: transparent;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-xs);
-    padding: 6px 8px;
-    font-size: var(--font-size-xs);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    color: var(--color-text-secondary);
-    min-height: 32px;
-    min-width: 40px;
-  }
-  
-  .mobile-json-button:hover {
-    background-color: var(--color-surface-hover);
-    border-color: var(--color-border-hover);
-    color: var(--color-primary);
-  }
-  
-  .mobile-json-button.copied {
-    background-color: var(--color-success);
-    border-color: var(--color-success);
-    color: var(--color-text-inverse);
-    transform: scale(1.05);
-  }
+
   
   /* Persistent Reply Button - Desktop style without emoji */
   .mobile-reply-button {
@@ -2422,12 +2419,7 @@ export default {
     font-size: 14px;
   }
   
-  .mobile-json-button {
-    padding: 4px 6px;
-    min-height: 28px;
-    min-width: 36px;
-    font-size: calc(var(--font-size-xs) - 1px);
-  }
+
 }
 
 /* Selection mode disabled styling for sibling navigator */

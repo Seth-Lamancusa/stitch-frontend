@@ -15,12 +15,12 @@
 
     <!-- Global Recipients Modal -->
     <RecipientsModal
+      ref="recipientsModalRef"
       :is-visible="recipientsModalVisible"
       :is-public="recipientsModalIsPublic"
       :is-add-mode="recipientsModalIsAddMode"
       :existing-recipients="recipientsModalExistingRecipients"
       :message-id="recipientsModalMessageId"
-      :is-recipient-removal-disabled="recipientsModalIsRecipientRemovalDisabled"
       @close="closeRecipientsModal"
       @done="closeRecipientsModal"
       @add-recipients="handleAddRecipients"
@@ -28,22 +28,13 @@
     />
 
     <!-- Delete Confirmation Modal -->
-    <div v-if="showDeleteConfirm" class="delete-confirm-modal">
-      <div class="delete-confirm-content">
-        <h3>Confirm Deletion</h3>
-        <p>Are you sure you want to delete this message and all its replies?</p>
-        <p class="warning">This action cannot be undone.</p>
-        <div class="delete-confirm-actions">
-          <button @click="store.dispatch('ui/hideDeleteConfirm')" class="cancel-button" :disabled="isDeleting">
-            Cancel
-          </button>
-          <button @click="deleteMessage" class="delete-button" :disabled="isDeleting">
-            <span v-if="!isDeleting">Delete</span>
-            <div v-else class="button-spinner"></div>
-          </button>
-        </div>
-      </div>
-    </div>
+    <DeleteConfirmModal 
+      :show="showDeleteConfirm"
+      :message="messageToDelete"
+      :is-deleting="isDeleting"
+      @cancel="store.dispatch('ui/hideDeleteConfirm')"
+      @confirm="deleteMessage"
+    />
   </AppViewLayout>
 </template>
 
@@ -54,6 +45,7 @@ import { useRoute } from 'vue-router';
 import AppViewLayout from '../../components/layouts/AppViewLayout.vue';
 import MessageList from '../../components/MessageList.vue';
 import RecipientsModal from '../../components/RecipientsModal.vue';
+import DeleteConfirmModal from '../../components/DeleteConfirmModal.vue';
 
 // Accept mode prop from router
 const props = defineProps({
@@ -101,7 +93,6 @@ const recipientsModalIsPublic = computed(() => store.getters['navigation/recipie
 const recipientsModalIsAddMode = computed(() => store.getters['navigation/recipientsModalIsAddMode']);
 const recipientsModalExistingRecipients = computed(() => store.getters['navigation/recipientsModalExistingRecipients']);
 const recipientsModalMessageId = computed(() => store.getters['navigation/recipientsModalMessageId']);
-const recipientsModalIsRecipientRemovalDisabled = computed(() => store.getters['navigation/recipientsModalIsRecipientRemovalDisabled']);
 
 // Check if user was recently rejected due to not being whitelisted
 const wasRejectedForWhitelist = computed(() => {
@@ -112,6 +103,7 @@ const wasRejectedForWhitelist = computed(() => {
 
 // Track if the rejection notice has been dismissed
 const isRejectionNoticeDismissed = ref(false);
+const recipientsModalRef = ref(null);
 
 // Watch for changes in wasRejectedForWhitelist to reset dismissal state
 watch(wasRejectedForWhitelist, (newValue, oldValue) => {
@@ -138,6 +130,7 @@ const handleAddRecipients = async (recipients) => {
     const messageId = recipientsModalMessageId.value;
     if (!messageId) {
       console.error('[MessageListView] No message ID for adding recipients');
+      recipientsModalRef.value?.onAddRecipientsError(new Error('No message ID provided'));
       return;
     }
 
@@ -146,12 +139,19 @@ const handleAddRecipients = async (recipients) => {
     
     console.log('[MessageListView] Recipients added successfully', response.data);
     
-    // Close the modal
-    closeRecipientsModal();
+    // Refresh the message data to get updated recipients list
+    await store.dispatch('messages/loadMessageRadius', { 
+      messageId: messageId, 
+      radius: 1 
+    });
+    
+    // Signal completion to the modal
+    recipientsModalRef.value?.onAddRecipientsComplete();
     
   } catch (error) {
     console.error('[MessageListView] Error adding recipients:', error);
-    store.commit('ui/SET_ERROR', 'Failed to add recipients. Please try again.');
+    // Signal error to the modal
+    recipientsModalRef.value?.onAddRecipientsError(error);
   }
 };
 
@@ -282,83 +282,5 @@ const deleteMessage = async () => {
   color: var(--color-text-inverse, #fff);
 }
 
-/* Add styles for delete confirmation modal */
-.delete-confirm-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
 
-.delete-confirm-content {
-  background-color: var(--color-surface);
-  padding: var(--space-lg);
-  border-radius: var(--radius-md);
-  max-width: 400px;
-  width: 90%;
-}
-
-.delete-confirm-content h3 {
-  margin: 0 0 var(--space-md);
-  color: var(--color-error);
-}
-
-.delete-confirm-content p {
-  margin: var(--space-sm) 0;
-}
-
-.warning {
-  color: var(--color-error);
-  font-weight: bold;
-}
-
-.delete-confirm-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-md);
-  margin-top: var(--space-lg);
-}
-
-.cancel-button, .delete-button {
-  padding: var(--space-sm) var(--space-md);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.cancel-button {
-  background: transparent;
-  border: 1px solid var(--color-border);
-}
-
-.delete-button {
-  background-color: var(--color-error);
-  color: white;
-  border: none;
-}
-
-.delete-button:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.button-spinner {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  border-top-color: white;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
 </style>
