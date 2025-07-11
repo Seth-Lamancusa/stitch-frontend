@@ -4,6 +4,7 @@ import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
 import { initializeFirebase } from '../firebase';
 import MessageNode from './MessageNode.vue';
+import DeleteConfirmModal from './DeleteConfirmModal.vue';
 import MessageService from '../services/MessageService';
 import AdminService from '../services/AdminService';
 
@@ -833,23 +834,14 @@ const handleLinkDelete = async (linkData) => {
       </div>
     </div>
 
-    <!-- Add the Confirmation Modal -->
-    <div v-if="showDeleteConfirm" class="delete-confirm-modal">
-      <div class="delete-confirm-content">
-        <h3>Confirm Deletion</h3>
-        <p>Are you sure you want to delete this message and all its replies?</p>
-        <p class="warning">This action cannot be undone.</p>
-        <div class="delete-confirm-actions">
-          <button @click="store.dispatch('ui/hideDeleteConfirm')" class="cancel-button" :disabled="isDeleting">
-            Cancel
-          </button>
-          <button @click="deleteMessage" class="delete-button" :disabled="isDeleting">
-            <span v-if="!isDeleting">Delete</span>
-            <div v-else class="button-spinner"></div>
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- Delete Confirmation Modal -->
+    <DeleteConfirmModal 
+      :show="showDeleteConfirm"
+      :message="messageToDelete"
+      :is-deleting="isDeleting"
+      @cancel="store.dispatch('ui/hideDeleteConfirm')"
+      @confirm="deleteMessage"
+    />
   </div>
 </template>
 
@@ -1112,103 +1104,7 @@ const handleLinkDelete = async (linkData) => {
   vertical-align: middle;
 }
 
-/* Add the modal styles */
-.delete-confirm-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.6);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: var(--z-index-modal);
-  backdrop-filter: blur(2px);
-}
 
-.delete-confirm-content {
-  background-color: var(--color-surface);
-  padding: 24px;
-  border-radius: var(--radius-md);
-  max-width: 400px;
-  width: 90%;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--color-border);
-}
-
-.delete-confirm-content h3 {
-  margin-top: 0;
-  color: var(--color-error);
-  font-size: var(--font-size-xl);
-  margin-bottom: 16px;
-}
-
-.warning {
-  color: var(--color-error);
-  font-weight: 600;
-  font-size: var(--font-size-sm);
-  margin-top: 12px;
-}
-
-.delete-confirm-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
-}
-
-.delete-confirm-actions .cancel-button {
-  padding: var(--space-xs) var(--space-md);
-  background-color: transparent;
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-weight: 500;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
-}
-
-.delete-confirm-actions .cancel-button:hover {
-  background-color: var(--color-hover-overlay);
-  border-color: var(--color-border-dark);
-}
-
-.delete-confirm-actions .delete-button {
-  padding: var(--space-xs) var(--space-md);
-  background-color: var(--color-error);
-  color: var(--color-text-inverse);
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-weight: 500;
-  transition: background-color var(--transition-fast);
-  min-width: 80px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.delete-confirm-actions .delete-button:hover:not(:disabled) {
-  background-color: var(--color-error);
-  filter: brightness(90%);
-}
-
-.delete-confirm-actions .delete-button:disabled,
-.delete-confirm-actions .cancel-button:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.button-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top: 2px solid var(--color-text-inverse);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
 
 .header-controls {
   display: flex;

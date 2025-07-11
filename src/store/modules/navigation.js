@@ -26,8 +26,7 @@ export default {
       isPublic: true,
       isAddMode: false,
       existingRecipients: [],
-      messageId: null,
-      isRecipientRemovalDisabled: false
+      messageId: null
     }
   },
   
@@ -141,13 +140,12 @@ export default {
     },
     
     // Global recipients modal mutations
-    SHOW_RECIPIENTS_MODAL(state, { isPublic, isAddMode, existingRecipients, messageId, isRecipientRemovalDisabled }) {
+    SHOW_RECIPIENTS_MODAL(state, { isPublic, isAddMode, existingRecipients, messageId }) {
       state.recipientsModal.isVisible = true;
       state.recipientsModal.isPublic = isPublic !== undefined ? isPublic : true;
       state.recipientsModal.isAddMode = isAddMode !== undefined ? isAddMode : false;
       state.recipientsModal.existingRecipients = existingRecipients || [];
       state.recipientsModal.messageId = messageId || null;
-      state.recipientsModal.isRecipientRemovalDisabled = isRecipientRemovalDisabled !== undefined ? isRecipientRemovalDisabled : false;
     },
     
     HIDE_RECIPIENTS_MODAL(state) {
@@ -156,7 +154,6 @@ export default {
       state.recipientsModal.isAddMode = false;
       state.recipientsModal.existingRecipients = [];
       state.recipientsModal.messageId = null;
-      state.recipientsModal.isRecipientRemovalDisabled = false;
     }
   },
   
@@ -221,8 +218,7 @@ export default {
       });
       return recipients;
     },
-    recipientsModalMessageId: state => state.recipientsModal.messageId,
-    recipientsModalIsRecipientRemovalDisabled: state => state.recipientsModal.isRecipientRemovalDisabled
+    recipientsModalMessageId: state => state.recipientsModal.messageId
   },
   
   actions: {
