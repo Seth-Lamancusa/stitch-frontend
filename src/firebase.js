@@ -75,7 +75,7 @@ export async function getFirebaseToken() {
     const currentUser = auth.currentUser;
     
     if (!currentUser) {
-      console.error("No user is signed in");
+      console.debug("No user is signed in - proceeding as guest");
       return null;
     }
     

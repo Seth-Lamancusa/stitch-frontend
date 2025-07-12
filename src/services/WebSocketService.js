@@ -29,7 +29,7 @@ const WebSocketService = {
   // Connection health monitoring
   lastPingTime: null,
   pingTimeoutMs: 60000, // 1 minute
-  heartbeatIntervalMs: 30000, // 30 seconds
+  heartbeatIntervalMs: 45000, // 45 seconds (avoid conflict with server ping)
   
   // Debug logging helper
   log(...messages) {
@@ -471,8 +471,15 @@ const WebSocketService = {
           reject(new Error(`Connection closed unexpectedly: code ${event.code}, reason: ${event.reason || 'none'}`));
         }
         
-        // Attempt to reconnect if connection closed unexpectedly and we're within retry limits
-        if (!event.wasClean && this.connectionAttempts < this.maxReconnectAttempts) {
+        // Determine if we should reconnect
+        const shouldReconnect = !event.wasClean && 
+                               this.connectionAttempts < this.maxReconnectAttempts &&
+                               event.code !== 1000 && // Normal closure
+                               event.code !== 1001 && // Going away
+                               event.code !== 1008 && // Policy violation (auth failed)
+                               this.isInitialized; // Only reconnect if we're supposed to be connected
+        
+        if (shouldReconnect) {
           this.log(`Connection closed unexpectedly, attempting to reconnect (attempt ${this.connectionAttempts} of ${this.maxReconnectAttempts})`);
           
           // Use exponential backoff for reconnection
@@ -502,6 +509,8 @@ const WebSocketService = {
           }, this.reconnectDelay);
         } else if (this.connectionAttempts >= this.maxReconnectAttempts) {
           this.error(`Max reconnection attempts (${this.maxReconnectAttempts}) exceeded`);
+        } else if (event.code === 1008) {
+          this.error('Authentication failed, not attempting to reconnect');
         }
       };
       
@@ -544,8 +553,13 @@ const WebSocketService = {
       this.log(`Disconnecting user ${this.userId}`);
       
       try {
-        this.log(`Closing WebSocket connection`);
-        this.connection.close(1000, "User disconnected intentionally");
+        // Check if connection is still open before trying to close
+        if (this.connection.readyState === WebSocket.OPEN) {
+          this.log(`Closing WebSocket connection`);
+          this.connection.close(1000, "User disconnected intentionally");
+        } else {
+          this.log(`Connection already closed (state: ${this.connection.readyState})`);
+        }
       } catch (e) {
         this.error('Error closing connection:', e);
       }
