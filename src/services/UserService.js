@@ -124,16 +124,19 @@ export default {
    */
   async getUserIncomingLinks(messageId, skip = 0, limit = 15, showAllLinks = false) {
     try {
-      const token = await getFirebaseToken();
-      
-      if (!token) {
-        throw new Error('No authentication token available');
+      // Get token if user is authenticated, but don't require it
+      let headers = {};
+      try {
+        const token = await getFirebaseToken();
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+      } catch (error) {
+        console.log('No authentication token available - proceeding as guest');
       }
       
       const response = await apiClient.get(`/users/messages/${messageId}/user-incoming-links`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
+        headers,
         params: {
           skip,
           limit,
@@ -158,16 +161,19 @@ export default {
    */
   async getUserOutgoingLinks(messageId, skip = 0, limit = 15, showAllLinks = false) {
     try {
-      const token = await getFirebaseToken();
-      
-      if (!token) {
-        throw new Error('No authentication token available');
+      // Get token if user is authenticated, but don't require it
+      let headers = {};
+      try {
+        const token = await getFirebaseToken();
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+      } catch (error) {
+        console.log('No authentication token available - proceeding as guest');
       }
       
       const response = await apiClient.get(`/users/messages/${messageId}/user-outgoing-links`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
+        headers,
         params: {
           skip,
           limit,

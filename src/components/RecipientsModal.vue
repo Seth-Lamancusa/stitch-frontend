@@ -59,7 +59,10 @@
           <p class="section-header" v-else-if="isActuallyAddingToExisting">Add new recipients</p>
           <p class="section-header" v-else>Recipients</p>
           
-          <div class="recipient-input-container">
+          <!-- Add message for guest users -->
+          <p v-if="isGuestUser" class="guest-message">Please sign in to add recipients</p>
+          
+          <div class="recipient-input-container" v-if="!isGuestUser">
             <div class="input-wrapper" :class="{ 'valid': isTagValid === true, 'invalid': isTagValid === false, 'searching': isSearching }">
               <input 
                 v-model="newRecipient" 
@@ -310,6 +313,11 @@ const canAddRecipient = computed(() => {
 
 const currentUser = computed(() => store.getters['auth/user']);
 
+// Add new computed property to check if user is a guest
+const isGuestUser = computed(() => {
+  return !currentUser.value;
+});
+
 const currentMessage = computed(() => {
   if (!props.messageId) return null;
   return store.getters['messages/getMessage'](props.messageId);
@@ -464,10 +472,21 @@ const handleDoneOrCancel = () => {
 // Methods that parent component can call to signal completion
 const onAddRecipientsComplete = async () => {
   console.log('[RecipientsModal] onAddRecipientsComplete called');
+  console.log('[RecipientsModal] Current existing recipients at completion:', {
+    count: props.existingRecipients?.length || 0,
+    recipients: props.existingRecipients
+  });
+  
   try {
     // Clear the new recipients list after successful addition
     await store.dispatch('navigation/clearRecipients');
     console.log('[RecipientsModal] Add operation complete - modal stays open');
+    
+    // Force a re-check of existing recipients
+    console.log('[RecipientsModal] Existing recipients after clearing staged:', {
+      count: props.existingRecipients?.length || 0,
+      recipients: props.existingRecipients
+    });
   } catch (error) {
     console.error('[RecipientsModal] Error clearing recipients:', error);
   } finally {
@@ -708,12 +727,15 @@ onBeforeUnmount(() => {
 
 // Add logging to watch existing recipients
 watch(() => props.existingRecipients, (newVal, oldVal) => {
-  console.log('[RecipientsModal] existingRecipients changed:', {
-    old: oldVal?.length,
-    new: newVal?.length,
-    recipients: newVal
+  console.log('[RecipientsModal] existingRecipients prop changed:', {
+    old: oldVal?.length || 0,
+    new: newVal?.length || 0,
+    oldRecipients: oldVal,
+    newRecipients: newVal,
+    isAddMode: props.isAddMode,
+    messageId: props.messageId
   });
-}, { deep: true });
+}, { deep: true, immediate: true });
 </script>
 
 <style scoped>
@@ -1226,6 +1248,18 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   .recipient-tag.existing-recipient,
 .recipient-tag.new-recipient {
   opacity: 0.7;
+}
+
+/* Add styles for guest message */
+.guest-message {
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-style: italic;
+  padding: 12px;
+  background-color: var(--color-surface-light);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  font-size: var(--font-size-sm);
 }
 
 /* Modal footer */

@@ -20,9 +20,14 @@ const linkType = ref(null); // 'incoming' or 'outgoing'
 const selectedMessages = ref(new Set());
 
 // Toggle for showing all links vs user's links
-const showAllLinks = ref(false);
+const showAllLinks = ref(true);
 
 const store = useStore();
+
+// Add computed property to check if user is a guest
+const isGuestUser = computed(() => {
+  return !store.getters['auth/user'];
+});
 
 // Reset form whenever modal is opened
 watch(() => props.isOpen, (isOpen) => {
@@ -167,8 +172,8 @@ const addSelectedLinks = async () => {
           </button>
         </div>
         
-        <!-- Add Link Button - only show when not selecting -->
-        <div v-if="!isSelecting" class="add-link-section">
+        <!-- Add Link Button - only show when not selecting and not a guest -->
+        <div v-if="!isSelecting && !isGuestUser" class="add-link-section">
           <button 
             class="add-link-button"
             @click.stop="startAddingLinks(activeTab)"
@@ -177,6 +182,11 @@ const addSelectedLinks = async () => {
           </button>
         </div>
         
+        <!-- Add guest message when guest user tries to view links -->
+        <div v-if="isGuestUser" class="guest-message">
+          <p>Sign in to create message links</p>
+        </div>
+
         <div class="modal-content">
           <div v-if="isLoading" class="loading-state">
             <div class="spinner"></div>
@@ -523,6 +533,22 @@ const addSelectedLinks = async () => {
 
 .toggle-slider.active {
   transform: translateX(20px);
+}
+
+/* Add styles for guest message */
+.guest-message {
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-style: italic;
+  padding: var(--space-md);
+  background-color: var(--color-surface-light);
+  border-radius: var(--radius-md);
+  margin: var(--space-md) var(--space-lg);
+  font-size: var(--font-size-sm);
+}
+
+.guest-message p {
+  margin: 0;
 }
 
 /* Mobile responsive styles */

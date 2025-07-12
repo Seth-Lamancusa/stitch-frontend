@@ -1117,16 +1117,49 @@ export default {
     // setSelectedRecipients
     // setSelectedAuthor
 
-    async loadMessageRadius({ commit }, { messageId, radius, get_replies = true }) {
+    async loadMessageRadius({ commit, state }, { messageId, radius, get_replies = true }) {
       try {
+        console.log('[Messages Store] loadMessageRadius called with:', { messageId, radius, get_replies });
+        
+        // Check current message state before API call
+        const currentMessage = state.messages[messageId];
+        const currentRecipients = currentMessage?.recipients || [];
+        console.log('[Messages Store] Current message recipients BEFORE API call:', {
+          messageId,
+          hasMessage: !!currentMessage,
+          recipientsCount: currentRecipients.length,
+          recipients: currentRecipients
+        });
+        
         const response = await MessageService.loadMessageRadius(messageId, radius, get_replies);
+        console.log('[Messages Store] loadMessageRadius API response:', {
+          messageId,
+          dataLength: response.data?.length || 0,
+          data: response.data
+        });
         
         // Commit all loaded messages to the store
         if (response.data && response.data.length > 0) {
           response.data.forEach(message => {
+            console.log('[Messages Store] Committing message to store:', {
+              id: message.id,
+              recipientsCount: message.recipients?.length || 0,
+              recipients: message.recipients
+            });
             commit('SET_MESSAGE', message);
           });
         }
+        
+        // Check message state after update
+        const updatedMessage = state.messages[messageId];
+        const updatedRecipients = updatedMessage?.recipients || [];
+        console.log('[Messages Store] Message recipients AFTER update:', {
+          messageId,
+          hasMessage: !!updatedMessage,
+          recipientsCount: updatedRecipients.length,
+          recipients: updatedRecipients,
+          changed: updatedRecipients.length !== currentRecipients.length
+        });
         
         return response.data;
       } catch (error) {

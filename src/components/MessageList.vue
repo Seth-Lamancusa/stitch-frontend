@@ -732,30 +732,6 @@ const handleLinkDelete = async (linkData) => {
         </button>
       </div>
     </div>
-    
-    <div v-if="mode !== 'admin' && !hideInfoBox" class="info-box" :class="{ 'collapsed': isInfoBoxCollapsed }">
-      <div class="info-header">
-        <button class="toggle-button" @click.stop="toggleInfoBox">
-          {{ isInfoBoxCollapsed ? 'Show Info' : 'Hide Info' }}
-          <span class="toggle-icon">{{ isInfoBoxCollapsed ? '▼' : '▲' }}</span>
-        </button>
-      </div>
-      <div class="info-content" :class="{ 'hidden': isInfoBoxCollapsed }">
-        <!-- Content for logged-in users -->
-        <template v-if="user">
-          <p class="info-text">Welcome to Stitch! Messages may be public or private, and may have any number of direct recipients, even if public. Below is the last in each thread in which you are author or direct recipient.</p>
-          <p class="info-text">There are three badge types: orange, blue, and green. Orange indicates direct recipients for messages you sent. Blue indicates the number of other direct recipients for messages you received, along with a manual read/unread indicator. Green badges indicate "public".</p>
-          <p class="info-text">You may click on a message to view it in full, along with its ancestors, descendants, and messages linked by you or other users.</p>
-        </template>
-        
-        <!-- Content for guests -->
-        <template v-else>
-          <p class="info-text">Welcome to Stitch! This is a platform for threaded group conversations designed for AI participation. Below are the most recent public leaf messages posted to Stitch.</p>
-          <p class="info-text">As a guest, you can view public messages. To send messages (including to bots) and receive direct messages, you'll need to be whitelisted and log in.</p>
-          <p class="info-text">Click on any message to view the full thread with its conversation history and linked messages.</p>
-        </template>
-      </div>
-    </div>
 
     <!-- Empty state - only shown when logged in but no messages -->
     <div v-if="shouldShowEmptyState" class="empty-state">
@@ -1139,39 +1115,11 @@ const handleLinkDelete = async (linkData) => {
   cursor: not-allowed;
 }
 
-.info-box {
-  background: var(--color-surface-light, #222);
-  border: 1px solid var(--color-border, #333);
-  margin: 0px auto;
-  margin-bottom: 8px;
-  padding: 12px 16px;
-  width: 70%;
-  border-radius: var(--radius-md, 8px);
-  display: flex;
-  flex-direction: column;
-  transition: all 0.3s ease;
-  max-width: 650px;
-}
-
-.info-box.collapsed {
-  padding: 4px 8px;
-  margin: 0px auto;
-  margin-bottom: 8px;
-  width: 100px;
-  min-width: unset;
-  max-width: unset;
-}
-
 .info-header {
   display: flex;
   justify-content: flex-end;
   width: 100%;
   margin-bottom: 8px;
-}
-
-.info-box.collapsed .info-header {
-  margin-bottom: 0;
-  width: auto;
 }
 
 .toggle-button {
@@ -1227,29 +1175,6 @@ const handleLinkDelete = async (linkData) => {
 
 /* Mobile responsive styles for info box */
 @media (max-width: 768px) {
-  .info-box {
-    width: 95%;
-    margin: 0 auto;
-    margin-bottom: 12px;
-    padding: 16px;
-    max-width: none;
-  }
-  
-  .info-box.collapsed {
-    width: 120px;
-    margin: 0 auto;
-    margin-bottom: 8px;
-  }
-  
-  /* Center the toggle button when collapsed on mobile */
-  .info-box.collapsed .info-header {
-    justify-content: center;
-  }
-  
-  .info-text {
-    font-size: var(--font-size-sm, 13px);
-    line-height: 1.4;
-  }
   
   .toggle-button {
     font-size: calc(var(--font-size-sm) - 1px);
@@ -1257,17 +1182,7 @@ const handleLinkDelete = async (linkData) => {
 }
 
 @media (max-width: 480px) {
-  .info-box {
-    width: 98%;
-    padding: 12px;
-    margin-bottom: 16px;
-  }
-  
-  .info-text {
-    font-size: calc(var(--font-size-sm) - 1px);
-    margin-bottom: 10px;
-  }
-  
+
   .toggle-button {
     font-size: calc(var(--font-size-xs));
     padding: 1px 4px;

@@ -4,7 +4,6 @@
     :class="{ 
       'list-view': inListView,
       'compact': compact,
-      'dropdown-open': showRecipientsDropdown,
       'selected': inListView ? selected : isMessageSelected
     }"
     :data-message-id="message.id"
@@ -41,96 +40,31 @@
           </span>
           
           <!-- To You badge (for recipients) with read/unread circle indicator -->
-          <div v-if="isUserRecipient" class="recipients-dropdown-container">
-            <div class="recipients-toggle to-you" :class="{ 'loading': isTogglingReadStatus }">
-              <!-- Read status toggle hitbox (red dot area) -->
-              <button 
-                @click.stop="toggleReadStatus" 
-                class="read-status-button"
-                :title="isMessageUnread ? 'Click to mark as read' : 'Click to mark as unread'"
-                :disabled="isTogglingReadStatus"
-              >
-                <span v-if="isTogglingReadStatus" class="loading-indicator"></span>
-                <span v-else class="read-status-indicator" :class="{ 'unread': isMessageUnread }"></span>
-              </button>
-              
-              <!-- Recipients dropdown hitbox (text area) -->
-              <button 
-                @click.stop="toggleRecipientsDropdown" 
-                class="recipients-text-button"
-                :title="'Click to see all recipients'"
-              >
-                <!-- If only the user is recipient -->
-                <span v-if="recipientsExcludingUser.length === 0">
-                  To You
-                </span>
-                <!-- If there are other recipients -->
-                <span v-else>
-                  To You and {{ recipientsExcludingUser.length }} other{{ recipientsExcludingUser.length > 1 ? 's' : '' }}
-                </span>
-              </button>
-            </div>
-            
-            <!-- Recipients dropdown for to-you badge -->
-            <div v-if="showRecipientsDropdown" class="recipients-dropdown" @click.stop>
-              <div class="dropdown-header">
-                Recipients
-                <button @click.stop="showRecipientsDropdown = false" class="close-dropdown">×</button>
-              </div>
-              <ul class="recipients-list">
-                <li 
-                  v-if="typeof message.recipients === 'object' && message.recipients !== null"
-                  v-for="(recipient, index) in message.recipients" 
-                  :key="recipient.uid || index" 
-                  class="recipient-item"
-                >
-                  <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
-                  <span class="recipient-tag">@{{ recipient.user_tag }}</span>
-                </li>
-                <li v-else-if="typeof message.recipients === 'string'" class="no-recipients">
-                  {{ message.recipients }}
-                </li>
-                <li v-else class="no-recipients">
-                  No specific recipients
-                </li>
-              </ul>
-            </div>
-          </div>
-          
-          <!-- Recipients badge (for authors) -->
-          <div v-if="isUserAuthor && hasRecipients" class="recipients-dropdown-container author-container">
+          <div v-if="isUserRecipient" class="recipients-toggle to-you" :class="{ 'loading': isTogglingReadStatus }">
+            <!-- Read status toggle hitbox (red dot area) -->
             <button 
-              @click.stop="toggleRecipientsDropdown" 
-              class="recipients-toggle author-toggle"
+              @click.stop="toggleReadStatus" 
+              class="read-status-button"
+              :title="isMessageUnread ? 'Click to mark as read' : 'Click to mark as unread'"
+              :disabled="isTogglingReadStatus"
             >
-              Recipients {{ typeof message.recipients === 'object' ? `(${message.recipients.length})` : '' }}
+              <span v-if="isTogglingReadStatus" class="loading-indicator"></span>
+              <span v-else class="read-status-indicator" :class="{ 'unread': isMessageUnread }"></span>
             </button>
             
-            <!-- Recipients dropdown for author badge -->
-            <div v-if="showRecipientsDropdown" class="recipients-dropdown" @click.stop>
-              <div class="dropdown-header">
-                Recipients
-                <button @click.stop="showRecipientsDropdown = false" class="close-dropdown">×</button>
-              </div>
-              <ul class="recipients-list">
-                <li 
-                  v-if="typeof message.recipients === 'object' && message.recipients !== null"
-                  v-for="(recipient, index) in message.recipients" 
-                  :key="recipient.uid || index" 
-                  class="recipient-item"
-                >
-                  <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
-                  <span class="recipient-tag">@{{ recipient.user_tag }}</span>
-                </li>
-                <li v-else-if="typeof message.recipients === 'string'" class="no-recipients">
-                  {{ message.recipients }}
-                </li>
-                <li v-else class="no-recipients">
-                  No specific recipients
-                </li>
-              </ul>
-            </div>
+            <!-- To You text -->
+            <span class="recipients-text">To You</span>
           </div>
+          
+          <!-- Recipients badge -->
+          <button 
+            v-if="hasRecipients"
+            @click.stop="openAddRecipientsModal" 
+            class="recipients-toggle author-toggle"
+            title="Add recipients to this message"
+          >
+            Recipients {{ typeof message.recipients === 'object' ? `(${message.recipients.length})` : '' }}
+          </button>
           
           <!-- Delete button - shows for admins (all messages) or authors (own messages), but not in list view -->
           <button 
@@ -187,14 +121,12 @@
           <button 
             v-if="isAdmin"
             @click.stop="copyMessageJson" 
-            class="json-button"
+            class="fab-button json-button"
             :class="{ 'copied': isJsonCopied }"
             title="Copy message JSON to clipboard"
           >
             <span v-if="isJsonCopied" class="copied-icon">✓</span>
-            <span v-else class="json-icon">{ }</span>
-            <span v-if="isJsonCopied">Copied!</span>
-            <span v-else>Copy JSON</span>
+            <span v-else class="json-icon">{}</span>
           </button>
           
           <!-- Copy Text Button -->
@@ -208,7 +140,7 @@
             <span v-if="isTextCopied" class="copied-icon">✓</span>
             <span v-else class="text-icon">📝</span>
             <span v-if="isTextCopied">Copied!</span>
-            <span v-else>Copy Text</span>
+            <span v-else>Copy</span>
           </button>
           
           <!-- Save/Bookmark Button -->
@@ -216,9 +148,9 @@
             v-if="!inListView || currentTab === 'saved'"
             @click.stop="toggleSaveMessage" 
             class="save-button"
-            :class="{ 'saved': isMessageSaved }"
-            :disabled="isSavingMessage"
-            :title="isMessageSaved ? 'Remove bookmark' : 'Bookmark this message'"
+            :class="{ 'saved': isMessageSaved, 'disabled': !currentUser }"
+            :disabled="isSavingMessage || !currentUser"
+            :title="currentUser ? (isMessageSaved ? 'Remove bookmark' : 'Bookmark this message') : 'Sign in to bookmark messages'"
           >
             <span v-if="isSavingMessage" class="loading-indicator"></span>
             <span v-else class="bookmark-icon">🔖</span>
@@ -234,16 +166,6 @@
           >
             <span class="links-icon">🔗</span>
             Links
-          </button>
-          
-          <!-- Add Recipients Button - available to all users -->
-          <button 
-            v-if="shouldShowAddRecipientsButton"
-            @click.stop="openAddRecipientsModal" 
-            class="fab-button add-recipients-button"
-            title="Add recipients to this message"
-          >
-            <span class="add-recipients-icon">👥</span>
           </button>
         </div>
       </div>
@@ -279,9 +201,9 @@
         <button 
           @click.stop="toggleSaveMessage" 
           class="mobile-save-button"
-          :class="{ 'saved': isMessageSaved }"
-          :disabled="isSavingMessage"
-          :title="isMessageSaved ? 'Remove bookmark' : 'Bookmark this message'"
+          :class="{ 'saved': isMessageSaved, 'disabled': !currentUser }"
+          :disabled="isSavingMessage || !currentUser"
+          :title="currentUser ? (isMessageSaved ? 'Remove bookmark' : 'Bookmark this message') : 'Sign in to bookmark messages'"
         >
           <span v-if="isSavingMessage" class="loading-indicator"></span>
           <span v-else class="bookmark-icon">🔖</span>
@@ -335,7 +257,7 @@
             title="Copy message JSON to clipboard"
           >
             <span v-if="isJsonCopied" class="copied-icon">✓</span>
-            <span v-else class="json-icon">{ }</span>
+            <span v-else class="json-icon">{}</span>
           </button>
           
           <!-- Add Recipients Button - available to all users -->
@@ -345,6 +267,7 @@
             title="Add recipients to this message"
           >
             <span class="add-recipients-icon">👥</span>
+            <span class="fab-button-text">Add</span>
           </button>
         </div>
       </div>
@@ -414,7 +337,6 @@ export default {
     const store = useStore();
     const currentUser = computed(() => store.getters['auth/user']);
     const isAdmin = computed(() => store.getters['auth/isAdmin']);
-    const showRecipientsDropdown = ref(false);
     
     // Selection mode state
     const isSelectionMode = computed(() => store.getters['navigation/isSelectionMode']);
@@ -642,29 +564,6 @@ export default {
       return props.message.recipients && props.message.recipients.length > 0;
     });
     
-    // Toggle recipients dropdown
-    const toggleRecipientsDropdown = () => {
-      showRecipientsDropdown.value = !showRecipientsDropdown.value;
-    };
-    
-    // Click outside handler to close dropdown
-    const handleClickOutside = (event) => {
-      // Check if click is inside any recipients dropdown container
-      const dropdownContainers = document.querySelectorAll('.recipients-dropdown-container');
-      let clickedInside = false;
-      
-      for (const container of dropdownContainers) {
-        if (container.contains(event.target)) {
-          clickedInside = true;
-          break;
-        }
-      }
-      
-      if (!clickedInside && showRecipientsDropdown.value) {
-        showRecipientsDropdown.value = false;
-      }
-    };
-    
     // New method to handle swipe navigation
     const handleSiblingNavigation = ({ direction, targetSiblingId, parentId }) => {
       // Don't navigate if in selection mode
@@ -709,6 +608,26 @@ export default {
 
 
 
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
 
     
 
@@ -1003,8 +922,6 @@ export default {
       // Initialize save state from message data
       initializeSaveState();
       
-      // Listen for clicks to handle dropdown closing and action bar outside clicks
-      document.addEventListener('click', handleClickOutside);
       document.addEventListener('click', handleActionBarOutsideClick);
       
       // Check if we're on mobile
@@ -1016,7 +933,6 @@ export default {
     });
     
     onBeforeUnmount(() => {
-      document.removeEventListener('click', handleClickOutside);
       document.removeEventListener('click', handleActionBarOutsideClick);
       window.removeEventListener('resize', checkMobileDevice);
       window.removeEventListener('resize', handleViewportChange);
@@ -1079,8 +995,6 @@ export default {
       hasReplies: computed(() => props.message.child_ids?.length > 0),
       isEndOfBranch,
       hasRecipients,
-      showRecipientsDropdown,
-      toggleRecipientsDropdown,
       recipientsExcludingUser,
       authorDisplayName,
       authorUserTag,
@@ -1389,24 +1303,9 @@ export default {
 }
 
 /* Recipients text button - right side of the badge */
-.recipients-text-button {
-  background: none;
-  border: none;
+.recipients-text {
   padding: 2px 8px 2px 2px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all var(--transition-fast);
-  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
   flex: 1;
-  height: 22px;
-  color: inherit;
-  font-size: inherit;
-}
-
-.recipients-text-button:hover {
-  background-color: rgba(255, 255, 255, 0.1);
 }
 
 /* Read status indicator - circle that shows if message is read/unread */
@@ -1432,100 +1331,7 @@ export default {
   border: none;
 }
 
-.recipients-dropdown-container {
-  position: relative;
-}
 
-.recipients-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  z-index: var(--z-index-dropdown, 1000);
-  min-width: 180px;
-  max-width: 250px;
-  margin-top: 2px;
-}
-
-.author-container {
-  position: relative;
-}
-
-.dropdown-header {
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--color-border);
-  font-weight: bold;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: var(--font-size-sm);
-}
-
-.close-dropdown {
-  background: none;
-  border: none;
-  font-size: 16px;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-}
-
-.recipients-list {
-  list-style: none;
-  padding: 4px 0;
-  margin: 0;
-  max-height: 100px;
-  overflow-y: auto;
-  scrollbar-width: thin; /* For Firefox */
-  scrollbar-color: var(--color-border) transparent; /* For Firefox */
-  z-index: 1000;
-}
-
-/* Webkit scrollbar styles */
-.recipients-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.recipients-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.recipients-list::-webkit-scrollbar-thumb {
-  background-color: var(--color-border);
-  border-radius: 3px;
-}
-
-.recipients-list::-webkit-scrollbar-thumb:hover {
-  background-color: var(--color-border-hover);
-}
-
-.recipient-item {
-  padding: 4px 10px;
-  line-height: 1.3;
-  display: flex;
-  flex-direction: column;
-}
-
-.recipient-name {
-  font-weight: 500;
-  margin-bottom: 0;
-  font-size: var(--font-size-sm);
-}
-
-.recipient-tag {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-  opacity: 0.8;
-}
-
-.no-recipients {
-  padding: 4px 10px;
-  color: var(--color-text-secondary);
-  font-style: italic;
-  font-size: var(--font-size-xs);
-}
 
 
 
@@ -2029,6 +1835,12 @@ export default {
   line-height: 1;
 }
 
+.fab-button-text {
+  font-size: var(--font-size-xs);
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
 @media (max-width: 768px) {
   .message-node {
     width: 100%;
@@ -2337,10 +2149,19 @@ export default {
 
 }
 
+/* Add disabled state styling for save buttons */
+.save-button.disabled,
+.mobile-save-button.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
-
-
-
+.save-button.disabled:hover,
+.mobile-save-button.disabled:hover {
+  background-color: transparent;
+  border-color: var(--color-border);
+  transform: none;
+}
 
 
 @media (max-width: 480px) {

@@ -203,18 +203,22 @@ export default {
     recipientsModalExistingRecipients: (state, getters, rootState, rootGetters) => {
       // Make this getter dynamic - always return current recipients from the message data
       const messageId = state.recipientsModal.messageId;
+      console.log('[Navigation Store] recipientsModalExistingRecipients getter called with messageId:', messageId);
+      
       if (!messageId) {
-        console.log('[Navigation Store] recipientsModalExistingRecipients: no messageId, returning stored recipients');
+        console.log('[Navigation Store] recipientsModalExistingRecipients: no messageId, returning stored recipients:', state.recipientsModal.existingRecipients);
         return state.recipientsModal.existingRecipients;
       }
       
       const message = rootGetters['messages/getMessage'](messageId);
       const recipients = message && message.recipients ? message.recipients : state.recipientsModal.existingRecipients;
-      console.log('[Navigation Store] recipientsModalExistingRecipients:', {
+      console.log('[Navigation Store] recipientsModalExistingRecipients getter result:', {
         messageId,
         hasMessage: !!message,
-        recipientsCount: recipients?.length || 0,
-        recipients
+        messageRecipients: message?.recipients,
+        storedRecipients: state.recipientsModal.existingRecipients,
+        finalRecipients: recipients,
+        recipientsCount: recipients?.length || 0
       });
       return recipients;
     },

@@ -128,21 +128,50 @@ const closeRecipientsModal = () => {
 const handleAddRecipients = async (recipients) => {
   try {
     const messageId = recipientsModalMessageId.value;
+    console.log('[MessageListView] handleAddRecipients called with:', {
+      messageId,
+      recipients,
+      recipientsCount: recipients?.length
+    });
+    
     if (!messageId) {
       console.error('[MessageListView] No message ID for adding recipients');
       recipientsModalRef.value?.onAddRecipientsError(new Error('No message ID provided'));
       return;
     }
 
+    // Check current recipients before API call
+    const currentRecipients = recipientsModalExistingRecipients.value;
+    console.log('[MessageListView] Current existing recipients BEFORE API call:', {
+      count: currentRecipients?.length || 0,
+      recipients: currentRecipients
+    });
+
     const MessageService = await import('../../services/MessageService');
     const response = await MessageService.default.addRecipientsToMessage(messageId, recipients);
     
     console.log('[MessageListView] Recipients added successfully', response.data);
+    console.log('[MessageListView] API response details:', {
+      addedCount: response.data?.addedCount,
+      skippedCount: response.data?.skippedCount,
+      addedRecipients: response.data?.added_recipients,
+      skippedRecipients: response.data?.skipped_recipients
+    });
     
     // Refresh the message data to get updated recipients list
-    await store.dispatch('messages/loadMessageRadius', { 
+    console.log('[MessageListView] About to call loadMessageRadius for messageId:', messageId);
+    const updatedMessages = await store.dispatch('messages/loadMessageRadius', { 
       messageId: messageId, 
       radius: 1 
+    });
+    console.log('[MessageListView] loadMessageRadius completed, returned:', updatedMessages);
+    
+    // Check recipients after refresh
+    const newRecipients = recipientsModalExistingRecipients.value;
+    console.log('[MessageListView] Existing recipients AFTER API call and refresh:', {
+      count: newRecipients?.length || 0,
+      recipients: newRecipients,
+      changed: newRecipients?.length !== currentRecipients?.length
     });
     
     // Signal completion to the modal
