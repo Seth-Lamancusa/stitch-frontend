@@ -415,10 +415,6 @@ export default {
         : [];
       console.log('[MessageNode] Existing recipients:', existingRecipients);
       
-      // Clear the navigation store - we want a fresh start for new recipients
-      store.commit('navigation/CLEAR_REPLY_RECIPIENTS');
-      console.log('[MessageNode] Cleared navigation store recipients');
-      
       // Show the global recipients modal
       const modalConfig = {
         isPublic: false, // Adding recipients is always for private messages

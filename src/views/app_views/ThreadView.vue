@@ -499,6 +499,91 @@ onMounted(async () => {
     messageList.value.addEventListener('scroll', handleScroll);
   }
   
+  // Set up WebSocket callback for auto-reply detection
+  WebSocketService.handleNewMessage((messageData) => {
+    console.log(`[ThreadView] 🔍 WebSocket callback received message:`, {
+      id: messageData.id,
+      parentId: messageData.parent_id,
+      author: messageData.author_display_name
+    });
+    
+    // Skip if we don't have displayed messages or message ID
+    if (!displayedMessages.value.length || !messageId.value) {
+      console.log(`[ThreadView] 🔍 Skipping - no displayed messages or message ID`);
+      return;
+    }
+    
+    // Check if this message is relevant to the current thread
+    // A message is relevant if its parent is in the currently displayed messages
+    const currentDisplayedMessages = displayedMessages.value;
+    const branchMessageIds = currentDisplayedMessages.map(m => m.id);
+    const isRelevantToThread = messageData.parent_id && branchMessageIds.includes(messageData.parent_id);
+    
+    console.log(`[ThreadView] 🔍 Relevance check:`, {
+      parentId: messageData.parent_id,
+      branchMessageIds: branchMessageIds,
+      isRelevant: isRelevantToThread
+    });
+    
+    if (!isRelevantToThread) {
+      console.log(`[ThreadView] 🔍 Message not relevant to current thread`);
+      return;
+    }
+    
+    // IMPORTANT: Add the message to the store first so it renders automatically
+    // This ensures the message appears in the UI even if auto-reply fails
+    store.commit('messages/SET_MESSAGE', messageData);
+    console.log(`[ThreadView] 🔍 Added message to store: ${messageData.id}`);
+    
+    // Update parent-child relationships
+    if (messageData.parent_id) {
+      const parentMessage = store.getters['messages/getMessage'](messageData.parent_id);
+      if (parentMessage) {
+        store.commit('messages/ADD_CHILD_TO_PARENT', {
+          parentId: messageData.parent_id,
+          childId: messageData.id
+        });
+        
+        // Set as branch child if it's the first reply or if parent has no current branch child
+        if (!parentMessage.branch_child || parentMessage.child_ids?.length === 1) {
+          store.commit('messages/SET_BRANCH_CHILD', {
+            messageId: messageData.parent_id,
+            childId: messageData.id
+          });
+        }
+      }
+    }
+    
+    // SPECIAL CASE: Auto-show reply box if this is a reply to the last visible message
+    const lastVisibleMessage = currentDisplayedMessages[currentDisplayedMessages.length - 1];
+    const isReplyToLastMessage = messageData.parent_id === lastVisibleMessage?.id;
+    
+    console.log(`[ThreadView] 🎯 Last visible message:`, {
+      id: lastVisibleMessage?.id,
+      author: lastVisibleMessage?.author_display_name || lastVisibleMessage?.content_author
+    });
+    
+    if (isReplyToLastMessage) {
+      console.log(`[ThreadView] 🎯 SPECIAL CASE: New message is reply to last visible message!`);
+      
+      // Check if the message is from the current user - don't auto-show reply box for own messages
+      const currentUser = store.getters['auth/user'];
+      const isFromCurrentUser = currentUser && (
+        messageData.content_author === currentUser.uid || 
+        messageData.content_author === currentUser.email
+      );
+      
+      if (!isFromCurrentUser) {
+        console.log(`[ThreadView] 🎯 Auto-showing reply box for message from ${messageData.author_display_name}`);
+        
+        // Set reply target to the NEW incoming message (not its parent)
+        store.dispatch('navigation/setReplyingTo', messageData.id);
+      } else {
+        console.log(`[ThreadView] 🔍 Skipping auto-reply - message is from current user`);
+      }
+    }
+  });
+  
   console.log(`[ThreadView] 🔧 MOUNT onMounted complete`);
 });
 
@@ -562,71 +647,6 @@ watch(replyingToMessageId, () => {
   // Remove call to syncReplySettingsWithSelectedMessage since it's now automatic
   // Settings are synced automatically when selecting a message
 }, { immediate: true });
-
-// Watch for new messages added to the store
-watch(() => store.state.messages.messages, (newMessages, oldMessages) => {
-  // Skip if there aren't any displayed messages or we're not on a thread
-  if (!displayedMessages.value.length || !messageId.value) return;
-  
-  // Find keys of new messages that weren't in the old messages
-  const newKeys = Object.keys(newMessages).filter(
-    key => !oldMessages[key] && !isNaN(Number(key))
-  );
-  
-  if (newKeys.length === 0) return;
-  
-  console.log(`[ThreadView] New messages detected, checking relevance to current thread: ${newKeys.join(', ')}`);
-  
-  // Check if any new message is a reply to a message in our current branch
-  const branchMessageIds = displayedMessages.value.map(m => m.id);
-  
-  console.log(`[ThreadView] Current branch messages: ${branchMessageIds.join(', ')}`);
-  
-  let needsRender = false;
-  let newRelevantMessage = null;
-  
-  for (const key of newKeys) {
-    const newMessage = newMessages[key];
-    
-    // Log detailed information about the new message
-    console.log(`[ThreadView] Examining new message ${key}:`, {
-      parentId: newMessage.parent_id,
-      isParentInBranch: newMessage.parent_id && branchMessageIds.includes(newMessage.parent_id)
-    });
-    
-    // Check if the message is a reply to any message in our branch
-    if (newMessage.parent_id && branchMessageIds.includes(newMessage.parent_id)) {
-      console.log(`[ThreadView] New message ${key} is a reply to message ${newMessage.parent_id} in our branch`);
-      
-      // Always re-render if message belongs to our thread
-      needsRender = true;
-      newRelevantMessage = newMessage;
-      break; // Found a relevant message, no need to check others
-    }
-  }
-  
-  // Re-render the thread if needed, preserving scroll position but NOT branch path
-  if (needsRender && newRelevantMessage) {
-    console.log(`[ThreadView] Re-rendering thread to include new message:`, {
-      messageId: newRelevantMessage.id,
-      parentId: newRelevantMessage.parent_id
-    });
-    
-    // Log the branch path before rendering
-    console.log(`[ThreadView] Current branch path before rendering:`, 
-      store.state.messages.branchPath || 'No branch path set');
-    
-    // Re-render the thread with the new message, preserving scroll but NOT branch path
-    // This ensures the new message is properly incorporated into the thread
-    renderThread(true, false).then(() => {
-      // After rendering, check if the new message is now visible
-      const newDisplayedIds = displayedMessages.value.map(m => m.id);
-      console.log(`[ThreadView] After rendering, displayed messages:`, newDisplayedIds);
-      console.log(`[ThreadView] Is new message visible:`, 
-        newDisplayedIds.includes(newRelevantMessage.id));
-    });
-  }
-}, { deep: true });
 
 // Navigation
 const backToList = async () => {
@@ -893,8 +913,6 @@ const closeLinksModal = () => {
 // Recipients modal methods
 const closeRecipientsModal = () => {
   store.dispatch('navigation/hideRecipientsModal');
-  // Clear recipients when closing modal
-  store.commit('navigation/CLEAR_REPLY_RECIPIENTS');
 };
 
 const handleAddRecipients = async (recipients) => {
