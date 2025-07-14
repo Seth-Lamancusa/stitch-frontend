@@ -2,7 +2,7 @@
   <div v-if="isVisible" class="modal-overlay" @click.self="closeModal">
     <div class="recipient-modal">
       <div class="modal-header">
-        <h3>{{ isActuallyAddingToExisting ? 'Add Recipients' : 'Recipients' }}</h3>
+        <h3>{{ isActuallyAddingToExisting ? 'Add Recipients' : 'Recipients (new message)' }}</h3>
         <button class="close-button" @click.stop="closeModal">×</button>
       </div>
       
@@ -84,6 +84,32 @@
               class="add-recipient-btn"
               :disabled="!canAddRecipient"
             >Stage</button>
+          </div>
+          
+          <!-- Chatbots section -->
+          <div v-if="!isGuestUser" class="chatbots-section">
+            <p class="chatbots-header">Available Chatbots</p>
+            <div class="chatbots-list">
+              <div 
+                v-for="chatbot in availableChatbots" 
+                :key="chatbot.uid" 
+                class="chatbot-card"
+                :class="{ 'chatbot-selected': isChatbotSelected(chatbot) }"
+                @click="toggleChatbot(chatbot)"
+              >
+                <div class="chatbot-info">
+                  <span class="chatbot-name">{{ chatbot.display_name }}</span>
+                  <span class="chatbot-tag">@{{ chatbot.user_tag }}</span>
+                </div>
+                <div class="chatbot-toggle">
+                  <input 
+                    type="checkbox" 
+                    :checked="isChatbotSelected(chatbot)"
+                    @click.stop="toggleChatbot(chatbot)"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         
           <div class="search-results-container">
@@ -197,13 +223,12 @@
       </div>
       
       <div class="modal-footer">
-          <!-- Only show Add button for existing message mode, not new message drafts -->
-          <!-- Debug: hasNewRecipients && !isNewMessageMode -->
+        <!-- Add mode: Show "Add Recipients" button (disabled if no staged recipients) + "Cancel" button -->
+        <div v-if="!isNewMessageMode">
           <button 
-            v-if="hasNewRecipients && !isNewMessageMode" 
             @click.stop="handleDone" 
             class="add-button" 
-            :disabled="isAddingRecipients"
+            :disabled="isAddingRecipients || !hasNewRecipients"
           >
             <div v-if="isAddingRecipients" class="button-loading">
               <div class="spinner-small"></div>
@@ -216,8 +241,20 @@
             class="cancel-button" 
             :disabled="isAddingRecipients"
           >
-            {{ isNewMessageMode ? 'Done' : 'Cancel' }}
-        </button>
+            Cancel
+          </button>
+        </div>
+        
+        <!-- New message mode: Only show "Done" button -->
+        <div v-else>
+          <button 
+            @click.stop="handleDoneOrCancel" 
+            class="done-button" 
+            :disabled="isAddingRecipients"
+          >
+            Done
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -227,6 +264,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import MessageService from '../services/MessageService.js';
+import AVAILABLE_BOTS from '../config/bots.js';
 
 const props = defineProps({
   isVisible: {
@@ -268,13 +306,23 @@ const removingRecipientIds = ref(new Set()); // Track which recipients are being
 const isAddingRecipients = ref(false); // Track if we're adding recipients
 let searchTimeout = null;
 
+// Available chatbots
+const availableChatbots = ref(AVAILABLE_BOTS);
+
 // Computed
 const recipients = computed(() => {
+  console.log('[RecipientsModal] recipients computed - debug:', {
+    propsIsAddMode: props.isAddMode,
+    storeIsAddMode: store.getters['navigation/recipientsModalIsAddMode'],
+    addModeRecipients: store.getters['navigation/addModeRecipients'],
+    replyRecipients: store.getters['navigation/replyRecipients']
+  });
+  
   if (props.isAddMode) {
-    // In add mode, show only the new recipients being added (from navigation store)
-    return store.getters['navigation/replyRecipients'];
+    // In add mode, show only the staged recipients for adding to existing message
+    return store.getters['navigation/addModeRecipients'];
   } else {
-    // In non-add mode, show the current message recipients
+    // In new message mode, show the recipients for the new message draft
     return store.getters['navigation/replyRecipients'];
   }
 });
@@ -283,9 +331,9 @@ const recipients = computed(() => {
 const allRecipientsUnified = computed(() => {
   if (!props.isAddMode) return recipients.value;
   
-  // In add mode, combine existing recipients with new ones
+  // In add mode, combine existing recipients with staged ones
   const existing = props.existingRecipients || [];
-  const newOnes = store.getters['navigation/replyRecipients'] || [];
+  const staged = store.getters['navigation/addModeRecipients'] || [];
   
   // Create a map to avoid duplicates (by uid)
   const recipientMap = new Map();
@@ -297,8 +345,8 @@ const allRecipientsUnified = computed(() => {
     }
   });
   
-  // Add new recipients, marking them as new
-  newOnes.forEach(recipient => {
+  // Add staged recipients, marking them as new
+  staged.forEach(recipient => {
     if (recipient.uid) {
       recipientMap.set(recipient.uid, { ...recipient, isExisting: false, isNew: true });
     }
@@ -330,15 +378,10 @@ const isActuallyAddingToExisting = computed(() => {
 
 // New computed to distinguish between new message drafts vs existing message additions
 const isNewMessageMode = computed(() => {
-  // If we have a messageId, we're always adding to an existing message
-  // regardless of whether it currently has recipients
-  if (props.messageId) {
-    console.log('[RecipientsModal] isNewMessageMode: false (has messageId)', props.messageId);
-    return false;
-  }
-  
-  // If we're in add mode but have no messageId, it's a new message
-  const result = props.isAddMode && !props.messageId;
+  // New message mode is when we're not in add mode
+  // ReplyBox opens with isAddMode: false (new message mode)
+  // MessageNode opens with isAddMode: true (add mode)
+  const result = !props.isAddMode;
   console.log('[RecipientsModal] isNewMessageMode:', result, {
     isAddMode: props.isAddMode,
     messageId: props.messageId,
@@ -351,9 +394,9 @@ const canRemoveRecipient = computed(() => {
   return (recipient) => {
     if (!currentUser.value) return false;
     
-    // In add mode, check if it's a new recipient or existing one
+    // In add mode, check if it's a staged recipient or existing one
     if (props.isAddMode) {
-      // If it's a new recipient being added, always allow removal
+      // If it's a staged recipient being added, always allow removal
       if (recipient.isNew) {
         return true;
       }
@@ -361,8 +404,8 @@ const canRemoveRecipient = computed(() => {
       return canRemoveExistingRecipient.value(recipient);
     }
     
-    // For non-add mode, use the existing recipient removal logic
-    return canRemoveExistingRecipient.value(recipient);
+    // In new message mode, ALL recipients are staged by current user, so always allow removal
+    return true;
   };
 });
 
@@ -385,9 +428,12 @@ const canRemoveExistingRecipient = computed(() => {
 
 // New computed property to check if there are new recipients staged
 const hasNewRecipients = computed(() => {
-  const newRecipients = store.getters['navigation/replyRecipients'] || [];
+  const newRecipients = props.isAddMode 
+    ? store.getters['navigation/addModeRecipients'] 
+    : store.getters['navigation/replyRecipients'];
   const result = newRecipients.length > 0;
   console.log('[RecipientsModal] hasNewRecipients:', result, {
+    isAddMode: props.isAddMode,
     newRecipientsLength: newRecipients.length,
     newRecipients: newRecipients,
     isNewMessageMode: isNewMessageMode.value
@@ -397,6 +443,12 @@ const hasNewRecipients = computed(() => {
 
 // Methods
 const getRecipientTitle = (recipient) => {
+  // In new message mode, all recipients are staged (no "original" recipients yet)
+  if (isNewMessageMode.value) {
+    return 'Staged recipient for new message';
+  }
+  
+  // In add mode, distinguish between new and existing recipients
   if (recipient.isNew) {
     return 'New recipient being added';
   } else if (!recipient.timestamp) {
@@ -615,19 +667,31 @@ const addRecipient = async () => {
 };
 
 const removeRecipient = async (index, recipient) => {
+  console.log('[RecipientsModal] removeRecipient called with:', {
+    index,
+    recipient,
+    'props.messageId': props.messageId,
+    'props.isAddMode': props.isAddMode,
+    'recipient.isNew': recipient.isNew,
+    'recipient.isExisting': recipient.isExisting
+  });
+  
   try {
     // For staged recipients in new message mode
     if (!props.messageId) {
+      console.log('[RecipientsModal] ✅ PATH: Removing staged recipient in new message mode');
       // Simply remove from navigation store
       store.dispatch('navigation/removeRecipient', index);
       return;
     }
 
     // For staged recipients in add mode
-    if (props.isAddMode && !recipient.isExisting) {
-      // Remove from navigation store
-      const newRecipients = store.getters['navigation/replyRecipients'];
-      const newIndex = newRecipients.findIndex(r => r.uid === recipient.uid);
+    if (props.isAddMode && recipient.isNew) {
+      console.log('[RecipientsModal] ✅ PATH: Removing staged recipient in add mode');
+      // Remove from navigation store - the action will handle add mode vs new message mode
+      const addModeRecipients = store.getters['navigation/addModeRecipients'];
+      const newIndex = addModeRecipients.findIndex(r => r.uid === recipient.uid);
+      console.log('[RecipientsModal] Found staged recipient at index:', newIndex, 'in addModeRecipients');
       if (newIndex !== -1) {
         store.dispatch('navigation/removeRecipient', newIndex);
       }
@@ -635,6 +699,7 @@ const removeRecipient = async (index, recipient) => {
     }
 
     // For existing recipients, use the API removal logic
+    console.log('[RecipientsModal] ❌ PATH: Removing existing recipient via API - THIS SHOULD NOT HAPPEN FOR STAGED RECIPIENTS!');
     await removeExistingRecipient(index, recipient);
   } catch (error) {
     console.error('Error removing recipient:', error);
@@ -691,6 +756,29 @@ const toggleRecipientVisibility = (index) => {
   // Since we're now iterating directly over the navigation store recipients,
   // we can pass the index directly
   store.dispatch('navigation/toggleRecipientVisibility', index);
+};
+
+// Chatbot methods
+const isChatbotSelected = (chatbot) => {
+  return recipients.value.some(recipient => recipient.uid === chatbot.uid);
+};
+
+const toggleChatbot = (chatbot) => {
+  if (isChatbotSelected(chatbot)) {
+    // Remove chatbot from recipients
+    const index = recipients.value.findIndex(recipient => recipient.uid === chatbot.uid);
+    if (index !== -1) {
+      store.dispatch('navigation/removeRecipient', index);
+    }
+  } else {
+    // Add chatbot to recipients
+    store.dispatch('navigation/addRecipient', {
+      uid: chatbot.uid,
+      display_name: chatbot.display_name,
+      user_tag: chatbot.user_tag,
+      email: chatbot.email
+    });
+  }
 };
 
 // Handle clicks outside search results
@@ -1272,6 +1360,12 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   flex-shrink: 0;
 }
 
+.modal-footer > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .add-button {
   padding: 10px 20px;
   background-color: var(--color-primary);
@@ -1290,6 +1384,30 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
 }
 
 .add-button:disabled {
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.done-button {
+  padding: 10px 20px;
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.done-button:hover:not(:disabled) {
+  background-color: var(--color-primary-dark);
+  transform: translateY(-1px);
+}
+
+.done-button:disabled {
   background-color: var(--color-border);
   color: var(--color-text-secondary);
   cursor: not-allowed;
@@ -1361,5 +1479,147 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   .add-recipient-btn {
     width: 100%;
   }
+  
+  .chatbots-section {
+    margin-bottom: 12px;
+  }
+  
+  .chatbots-list {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .chatbot-card {
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 4px;
+  }
+  
+  .chatbot-card.chatbot-selected {
+    background-color: var(--color-primary-light);
+    border: 1px solid var(--color-primary);
+  }
+  
+  .chatbot-info {
+    flex-direction: column;
+    gap: 2px;
+  }
+  
+  .chatbot-name {
+    font-size: var(--font-size-sm);
+  }
+  
+  .chatbot-tag {
+    font-size: var(--font-size-xs);
+  }
+}
+
+/* Chatbots section */
+.chatbots-section {
+  margin-bottom: 16px;
+}
+
+.chatbots-header {
+  margin: 0 0 8px 0;
+  color: var(--color-text-tertiary, #666);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+  opacity: 0.8;
+}
+
+.chatbots-list {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chatbot-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: var(--color-surface);
+  min-width: 120px;
+}
+
+.chatbot-card:hover {
+  background-color: var(--color-hover-overlay);
+  border-color: var(--color-border-hover);
+}
+
+.chatbot-card.chatbot-selected {
+  background-color: var(--color-primary-light);
+  border-color: var(--color-primary);
+}
+
+.chatbot-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.chatbot-name {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.chatbot-tag {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.chatbot-toggle {
+  display: flex;
+  align-items: center;
+  margin-left: 8px;
+}
+
+.chatbot-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  position: relative;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: 2px solid var(--color-border);
+  border-radius: 3px;
+  background-color: var(--color-surface);
+  transition: all 0.2s ease;
+  margin: 0;
+  padding: 0;
+  outline: none;
+}
+
+.chatbot-toggle input[type="checkbox"]:checked {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.chatbot-toggle input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: rgb(0, 0, 0);
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 1;
+  display: block;
+}
+
+.chatbot-toggle input[type="checkbox"]:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 </style>

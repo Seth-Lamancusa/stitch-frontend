@@ -80,17 +80,62 @@
             <span class="meta-pill__text">Recipients ({{ recipients.length }})</span>
           </button>
           
-          <!-- Add bots button -->
-          <button 
-            class="toolbar-control meta-pill" 
-            @click="toggleChatbotSelector"
-            :disabled="!canInteract"
-            :aria-expanded="showChatbotSelector"
-            aria-label="Add chatbots"
-          >
-            <span class="meta-pill__icon">🤖</span>
-            <span class="meta-pill__text">+ Add bots</span>
-          </button>
+          <!-- Bot prompt buttons - only shown when replying to a message -->
+          <div v-if="targetId" class="bot-prompt-buttons">
+            <button 
+              v-for="bot in availableBots" 
+              :key="bot.uid"
+              class="toolbar-control meta-pill bot-prompt-button"
+              :class="{ 
+                'loading': botPromptStates[bot.uid] === 'loading',
+                'success': botPromptStates[bot.uid] === 'success',
+                'error': botPromptStates[bot.uid] === 'error'
+              }"
+              @click="showBotPromptConfirmation(bot, $event)"
+              :disabled="!canInteract || botPromptStates[bot.uid] === 'loading'"
+              :aria-label="`Prompt ${bot.display_name} for response`"
+            >
+              <span class="meta-pill__icon">+</span>
+              <span class="meta-pill__text">{{ bot.display_name }}</span>
+              
+              <!-- Loading spinner -->
+              <span v-if="botPromptStates[bot.uid] === 'loading'" class="bot-loading-spinner"></span>
+              <!-- Success checkmark -->
+              <span v-else-if="botPromptStates[bot.uid] === 'success'" class="bot-success-icon">✓</span>
+              <!-- Error X -->
+              <span v-else-if="botPromptStates[bot.uid] === 'error'" class="bot-error-icon">✗</span>
+            </button>
+            
+            <!-- Confirmation popover -->
+            <div 
+              v-if="showBotConfirmation"
+              class="bot-confirmation-popover"
+              :key="showBotConfirmation.uid"
+              :style="{
+                left: showBotConfirmation.popoverPosition ? `${showBotConfirmation.popoverPosition.left}px` : '50%'
+              }"
+            >
+              <div class="confirmation-content">
+                <p>Prompt {{ showBotConfirmation.display_name }} for response?</p>
+                <div class="confirmation-buttons">
+                  <button 
+                    @click.stop="confirmBotPrompt(showBotConfirmation)"
+                    class="confirm-button"
+                    :disabled="botPromptStates[showBotConfirmation.uid] === 'loading'"
+                  >
+                    <span v-if="botPromptStates[showBotConfirmation.uid] === 'loading'" class="button-loading-spinner"></span>
+                    <span v-else>Confirm</span>
+                  </button>
+                  <button 
+                    @click.stop="hideBotPromptConfirmation"
+                    class="cancel-button"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
 
@@ -157,51 +202,10 @@
     <RecipientsModal
       :is-visible="showRecipientSelector"
       :is-public="isPublic"
-      :is-add-mode="true"
+      :is-add-mode="false"
       @close="closeRecipientSelector"
       @done="closeRecipientSelector"
     />
-
-    <!-- Chatbots modal -->
-    <div v-if="showChatbotSelector" class="modal-overlay" @click.self="showChatbotSelector = false">
-      <div class="chatbot-modal">
-        <div class="modal-header">
-          <h3>Add Chatbots</h3>
-          <button class="close-button" @click="showChatbotSelector = false">×</button>
-        </div>
-        
-        <div class="modal-content">
-          <p class="modal-description">Select chatbots to add to your conversation</p>
-          
-          <div class="chatbots-list">
-            <div 
-              v-for="chatbot in availableChatbots" 
-              :key="chatbot.uid" 
-              class="chatbot-item"
-              @click="toggleChatbot(chatbot)"
-            >
-              <div class="chatbot-content">
-                <div class="chatbot-info">
-                  <span class="chatbot-name">{{ chatbot.display_name }}</span>
-                  <span class="chatbot-tag">@{{ chatbot.user_tag }}</span>
-                </div>
-                <div class="chatbot-toggle">
-                  <input 
-                    type="checkbox" 
-                    :checked="isChatbotSelected(chatbot)"
-                    @click.stop="toggleChatbot(chatbot)"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div class="modal-footer">
-          <button @click="closeChatbotSelector" class="done-button">Done</button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -209,6 +213,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import RecipientsModal from './RecipientsModal.vue';
+import AVAILABLE_BOTS from '../config/bots.js';
 
 const props = defineProps({
   targetId: {
@@ -261,13 +266,17 @@ const dragDistance = ref(0);
 // UI state
 const showRecipientSelector = ref(false);
 
-// Chatbot selector state
-const showChatbotSelector = ref(false);
+// Bot prompt state
+const availableBots = ref(AVAILABLE_BOTS);
+const showBotConfirmation = ref(null); // Track which bot's confirmation is showing
+const botPromptStates = ref({}); // Track loading/success/error states for each bot
 
-// Import bot configuration
-import AVAILABLE_BOTS from '../config/bots';
+// Add recipients mode
+const isAddRecipientsMode = computed(() => store.getters['navigation/isAddRecipientsMode']);
+const addRecipientsMessageId = computed(() => store.getters['navigation/addRecipientsMessageId']);
+const addRecipientsExisting = computed(() => store.getters['navigation/addRecipientsExisting']);
 
-const availableChatbots = ref(AVAILABLE_BOTS);
+
 
 // Computed properties from store
 const user = computed(() => store.getters['auth/user']);
@@ -277,13 +286,6 @@ const isPublic = computed({
 });
 const recipients = computed(() => store.getters['navigation/replyRecipients']);
 const isReplying = computed(() => store.getters['navigation/isReplying']);
-
-// Add recipients mode
-const isAddRecipientsMode = computed(() => store.getters['navigation/isAddRecipientsMode']);
-const addRecipientsMessageId = computed(() => store.getters['navigation/addRecipientsMessageId']);
-const addRecipientsExisting = computed(() => store.getters['navigation/addRecipientsExisting']);
-
-
 
 // Centralized validation logic
 const canSendReply = computed(() => {
@@ -440,8 +442,16 @@ const handleTextareaBlur = () => {
 
 const handleTextareaKeyDown = (event) => {
   if (event.key === 'Enter') {
+    if (event.shiftKey && content.value.trim() !== '') {
+      // Prevent the newline from being added
+      event.preventDefault();
+      // Send the message if we can
+      if (canSendReply.value) {
+        sendReply();
+      }
+      return;
+    }
     // Allow Enter key to create new lines (default behavior)
-    // Users must click the Send button to send messages
     return;
   }
 };
@@ -659,40 +669,6 @@ const toggleRecipientSelector = () => {
   showRecipientSelector.value = !showRecipientSelector.value;
 };
 
-// Chatbot selector methods
-const toggleChatbotSelector = () => {
-  showChatbotSelector.value = !showChatbotSelector.value;
-};
-
-const closeChatbotSelector = (event) => {
-  if (event) {
-    event.stopPropagation();
-  }
-  showChatbotSelector.value = false;
-};
-
-const isChatbotSelected = (chatbot) => {
-  return recipients.value.some(recipient => recipient.uid === chatbot.uid);
-};
-
-const toggleChatbot = (chatbot) => {
-  if (isChatbotSelected(chatbot)) {
-    // Remove chatbot from recipients
-    const index = recipients.value.findIndex(recipient => recipient.uid === chatbot.uid);
-    if (index !== -1) {
-      store.dispatch('navigation/removeRecipient', index);
-    }
-  } else {
-    // Add chatbot to recipients
-    store.dispatch('navigation/addRecipient', {
-      uid: chatbot.uid,
-      display_name: chatbot.display_name,
-      user_tag: chatbot.user_tag,
-      email: chatbot.email
-    });
-  }
-};
-
 // Close recipient selector
 const closeRecipientSelector = (event) => {
   if (event) {
@@ -701,10 +677,93 @@ const closeRecipientSelector = (event) => {
   showRecipientSelector.value = false;
 };
 
+// Bot prompt methods
+const showBotPromptConfirmation = (bot, event) => {
+  // Get the button's position relative to its container
+  const button = event.currentTarget;
+  const containerRect = button.parentElement.getBoundingClientRect();
+  const buttonRect = button.getBoundingClientRect();
+  
+  // Calculate position relative to the container
+  const relativeLeft = buttonRect.left - containerRect.left + (buttonRect.width / 2);
+  
+  showBotConfirmation.value = {
+    ...bot,
+    popoverPosition: {
+      left: relativeLeft
+    }
+  };
+};
+
+const hideBotPromptConfirmation = () => {
+  showBotConfirmation.value = null;
+};
+
+const confirmBotPrompt = async (bot) => {
+  // Extract just the bot data without the popoverPosition
+  const { popoverPosition, ...botData } = bot;
+  
+  if (!props.targetId) {
+    console.error('[ReplyBox] Cannot prompt bot: no target message ID');
+    return;
+  }
+  
+  try {
+    // Set loading state
+    botPromptStates.value[botData.uid] = 'loading';
+    
+    // Import MessageService dynamically
+    const MessageService = (await import('../services/MessageService.js')).default;
+    
+    // Add the bot as a recipient to the parent message
+    await MessageService.addRecipientsToMessage(props.targetId, [botData]);
+    
+    console.log(`[ReplyBox] Successfully prompted ${botData.display_name} for response`);
+    
+    // Set success state
+    botPromptStates.value[botData.uid] = 'success';
+    
+    // Hide confirmation popover
+    hideBotPromptConfirmation();
+    
+    // Clear success state after 3 seconds
+    setTimeout(() => {
+      botPromptStates.value[botData.uid] = null;
+    }, 3000);
+    
+  } catch (error) {
+    console.error(`[ReplyBox] Error prompting ${botData.display_name}:`, error);
+    
+    // Set error state
+    botPromptStates.value[botData.uid] = 'error';
+    
+    // Hide confirmation popover
+    hideBotPromptConfirmation();
+    
+    // Clear error state after 3 seconds
+    setTimeout(() => {
+      botPromptStates.value[botData.uid] = null;
+    }, 3000);
+  }
+};
+
 // Handle clicks outside reply box
 const handleClickOutside = (event) => {
   // Don't close if any modal is open
-  if (showRecipientSelector.value || showChatbotSelector.value) {
+  if (showRecipientSelector.value) {
+    return;
+  }
+  
+  // Close bot confirmation popover if clicked outside
+  if (showBotConfirmation.value) {
+    const confirmationPopover = document.querySelector('.bot-confirmation-popover');
+    const botButtons = document.querySelectorAll('.bot-prompt-button');
+    
+    if (confirmationPopover && !confirmationPopover.contains(event.target) &&
+        Array.from(botButtons).every(btn => !btn.contains(event.target))) {
+      hideBotPromptConfirmation();
+    }
+    // Return early to prevent reply box from closing when interacting with bot confirmation
     return;
   }
   
@@ -939,10 +998,6 @@ defineExpose({
 
 .visibility-option:first-child {
   border-right: 1px solid var(--color-border);
-}
-
-.visibility-option:hover:not(:disabled) {
-  background-color: var(--color-hover-overlay);
 }
 
 .visibility-option.active {
@@ -1602,110 +1657,7 @@ defineExpose({
   scrollbar-color: var(--color-border-dark) transparent;
 }
 
-/* Chatbot modal styles */
-.chatbot-modal {
-  position: relative;
-  max-width: 400px;
-  width: 95%;
-  background-color: var(--color-surface);
-  padding: var(--space-lg);
-  border-radius: var(--radius-md);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--color-border);
-  display: flex;
-  flex-direction: column;
-  z-index: 1001;
-  max-height: 80vh;
-  overflow-y: auto;
-}
 
-.chatbots-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-}
-
-.chatbot-item {
-  padding: var(--space-sm);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
-  background-color: var(--color-surface);
-}
-
-.chatbot-item:hover {
-  background-color: var(--color-primary-light);
-  border-color: var(--color-primary);
-}
-
-.chatbot-content {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.chatbot-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.chatbot-name {
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--color-text);
-}
-
-.chatbot-tag {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-}
-
-.chatbot-toggle {
-  display: flex;
-  align-items: center;
-}
-
-.chatbot-toggle input[type="checkbox"] {
-  width: 16px !important;
-  height: 16px !important;
-  cursor: pointer;
-  position: relative !important;
-  appearance: none !important;
-  -webkit-appearance: none !important;
-  -moz-appearance: none !important;
-  border: 2px solid var(--color-border) !important;
-  border-radius: 3px !important;
-  background-color: var(--color-surface) !important;
-  transition: all 0.2s ease !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  outline: none !important;
-}
-
-.chatbot-toggle input[type="checkbox"]:checked {
-  background-color: var(--color-primary) !important;
-  border-color: var(--color-primary) !important;
-}
-
-.chatbot-toggle input[type="checkbox"]:checked::after {
-  content: '✓' !important;
-  position: absolute !important;
-  top: 50% !important;
-  left: 50% !important;
-  transform: translate(-50%, -50%) !important;
-  color: black !important;
-  font-size: 12px !important;
-  font-weight: bold !important;
-  line-height: 1 !important;
-  display: block !important;
-}
-
-.chatbot-toggle input[type="checkbox"]:focus {
-  outline: 2px solid var(--color-primary) !important;
-  outline-offset: 2px !important;
-}
 
 .send-button__text {
   font-size: var(--font-size-sm);
@@ -1728,4 +1680,194 @@ defineExpose({
 
 /* OLD MOBILE STYLES MOVED TO DESKTOP-ONLY SECTION ABOVE */
 /* These styles are now only active on desktop (min-width: 769px) to avoid conflicts with the new bottom sheet */
+
+/* Bot prompt buttons */
+.bot-prompt-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  position: relative; /* Ensure this is relative for absolute positioning of popover */
+}
+
+.bot-prompt-button {
+  position: relative;
+}
+
+.bot-prompt-button.loading {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.bot-prompt-button.success {
+  background-color: var(--color-success);
+  border-color: var(--color-success);
+  color: var(--color-text-inverse);
+}
+
+.bot-prompt-button.error {
+  background-color: var(--color-error);
+  border-color: var(--color-error);
+  color: var(--color-text-inverse);
+}
+
+.bot-loading-spinner,
+.button-loading-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-left: 4px;
+}
+
+.bot-success-icon,
+.bot-error-icon {
+  margin-left: 4px;
+  font-weight: bold;
+  font-size: var(--font-size-sm);
+}
+
+/* Bot confirmation popover */
+.bot-confirmation-popover {
+  position: absolute;
+  top: -88px;
+  transform: translateX(-50%); /* Center horizontally over the button */
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  min-width: 200px;
+  padding: 12px;
+}
+
+/* Remove the arrow pseudo-elements */
+/* .bot-confirmation-popover::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 8px solid var(--color-border);
+}
+
+.bot-confirmation-popover::after {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 7px solid var(--color-surface);
+} */
+
+.confirmation-content p {
+  margin: 0 0 12px 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  text-align: center;
+}
+
+.confirmation-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.confirm-button {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.confirm-button:hover:not(:disabled) {
+  background-color: var(--color-primary-dark);
+}
+
+.confirm-button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.cancel-button {
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.cancel-button:hover {
+  background-color: var(--color-hover-overlay);
+  border-color: var(--color-border-hover);
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+  .bot-prompt-buttons {
+    gap: 6px;
+  }
+  
+  .bot-prompt-button {
+    padding: 6px 8px;
+    font-size: var(--font-size-xs);
+    min-height: 32px;
+  }
+  
+  .bot-confirmation-popover {
+    min-width: 180px;
+    padding: 10px;
+  }
+  
+  .confirmation-content p {
+    font-size: var(--font-size-xs);
+  }
+  
+  .confirm-button,
+  .cancel-button {
+    padding: 4px 8px;
+    font-size: var(--font-size-xs);
+  }
+}
+
+@media (max-width: 480px) {
+  .bot-prompt-buttons {
+    gap: 4px;
+  }
+  
+  .bot-prompt-button {
+    padding: 4px 6px;
+    min-height: 28px;
+  }
+  
+  .bot-confirmation-popover {
+    min-width: 160px;
+    padding: 8px;
+  }
+}
 </style> 
