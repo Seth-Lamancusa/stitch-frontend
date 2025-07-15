@@ -3,7 +3,7 @@
     <div class="app-header">
       <div class="header-left">
         <div class="branding">
-          <router-link to="/" class="logo-link">
+          <router-link to="/home" class="logo-link">
             <span class="logo-text">Stitch</span>
           </router-link>
         </div>
