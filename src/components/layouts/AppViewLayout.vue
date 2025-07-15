@@ -140,6 +140,8 @@ const userTag = computed(() => {
 const handleLogin = async () => {
   isLoggingIn.value = true;
   try {
+    // Clear rejection state before login attempt to ensure fresh state
+    store.commit('auth/SET_REJECTED_FOR_WHITELIST', false);
     await signInWithGoogle();
     
     // Wait a moment for auth state to be processed
@@ -158,8 +160,8 @@ const handleLogin = async () => {
     // the auth store will have already handled the logout and redirect
   } catch (e) {
     console.error("Login error:", e);
-    // On authentication error, redirect to public page
-    router.push('/public');
+    // On authentication error, set rejection state and redirect to public page
+    await store.dispatch('auth/forceLogoutWithMessage', router);
   } finally {
     isLoggingIn.value = false;
   }

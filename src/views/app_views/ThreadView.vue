@@ -34,6 +34,28 @@
             ×
           </button>
         </div>
+        
+        <!-- Login button -->
+        <div v-else class="user-controls">
+          <div class="user-info">
+            <div class="username-container" @click="openProfileModal" v-if="user">
+              <span class="username">{{ userDisplayName }}</span>
+              <span v-if="userTag" class="user-tag">@{{ userTag }}</span>
+              <span class="edit-icon" title="Edit profile">✎</span>
+            </div>
+            <span v-else class="username">Guest</span>
+
+            <!-- Auth status badges -->
+            <span v-if="isAdmin" class="admin-badge" title="Admin">⛊</span>
+            <span v-else-if="isWhitelisted" class="whitelist-badge" title="Whitelisted">✓</span>
+            <span v-else-if="user && !isWhitelisted" class="non-whitelist-badge" title="Not whitelisted">✗</span>
+            <span v-if="!user" class="guest-badge" title="Not logged in">?</span>
+          </div>
+          <button v-if="user" @click="logout" class="logout-btn">Logout</button>
+          <button v-else @click="handleLogin" class="login-btn" :disabled="isLoggingIn">
+            {{ isLoggingIn ? 'Signing in...' : 'Login' }}
+          </button>
+        </div>
       </div>
       
       <!-- Messages container with fixed spacing -->
@@ -147,13 +169,19 @@
       @add-recipients="handleAddRecipients"
       @recipient-removed="handleRecipientRemoved"
     />
+
+    <!-- Profile Edit Modal -->
+    <ProfileEditModal 
+      :isOpen="isProfileModalOpen" 
+      @close="closeProfileModal" 
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
-import { useRoute, useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import MessageNode from '../../components/MessageNode.vue';
 import AdaptiveMarker from '../../components/AdaptiveMarker.vue';
 import ReplyBox from '../../components/ReplyBox.vue';
@@ -161,13 +189,20 @@ import GlobalNotifications from '../../components/GlobalNotifications.vue';
 import LinksModal from '../../components/LinksModal.vue';
 import RecipientsModal from '../../components/RecipientsModal.vue';
 import DeleteConfirmModal from '../../components/DeleteConfirmModal.vue';
+import ProfileEditModal from '../../components/ProfileEditModal.vue';
 import MessageService from '../../services/MessageService';
 import WebSocketService from '../../services/WebSocketService';
+import { useAuthentication } from '../../composables/useAuthentication';
 
 // Setup store and routing
 const store = useStore();
-const route = useRoute();
 const router = useRouter();
+const route = useRoute();
+const { signInWithGoogle, logout } = useAuthentication();
+
+// Add login state
+const isLoggingIn = ref(false);
+const isProfileModalOpen = ref(false);
 
 // Refs
 const messageList = ref(null);
@@ -206,6 +241,20 @@ const messageId = computed(() => {
 const user = computed(() => store.getters['auth/user']);
 const isAuthReady = computed(() => store.getters['auth/authReady']);
 const canInteract = computed(() => store.getters['auth/canInteract']);
+const isAdmin = computed(() => store.getters['auth/isAdmin']);
+const isWhitelisted = computed(() => store.getters['auth/isWhitelisted']);
+
+// User display properties
+const userDisplayName = computed(() => {
+  if (!user.value) return 'Guest';
+  return user.value.displayName || user.value.email || 'Unknown User';
+});
+
+const userTag = computed(() => {
+  if (!user.value) return null;
+  return user.value.user_tag || null;
+});
+
 const error = computed(() => store.getters['ui/error']);
 const showDeleteConfirm = computed(() => store.getters['ui/showDeleteConfirm']);
 const messageToDelete = computed(() => store.getters['ui/messageToDelete']);
@@ -467,6 +516,12 @@ const bottomMarkerState = computed(() => {
 onMounted(async () => {
   console.log(`[ThreadView] 🔧 MOUNT onMounted starting with messageId: ${messageId.value}`);
   
+  // Add reload detection
+  window.addEventListener('beforeunload', () => {
+    console.log('[ThreadView] 🚨 PAGE RELOAD DETECTED!');
+    console.trace('[ThreadView] Reload stack trace:');
+  });
+  
   // Wait for auth to be ready before proceeding - auth store handles initialization
   if (!isAuthReady.value) {
     console.log(`[ThreadView] 🔧 MOUNT Auth not ready, waiting...`);
@@ -558,6 +613,9 @@ onMounted(async () => {
   });
   
   console.log(`[ThreadView] 🔧 MOUNT onMounted complete`);
+  
+  // Log initial rejection state
+  console.log('[ThreadView] Initial rejection state on mount:', store.getters['auth/wasRejectedForWhitelist']);
 });
 
 onBeforeUnmount(() => {
@@ -620,6 +678,19 @@ watch(replyingToMessageId, () => {
   // Remove call to syncReplySettingsWithSelectedMessage since it's now automatic
   // Settings are synced automatically when selecting a message
 }, { immediate: true });
+
+// Watch for rejection state changes and redirect to /public
+console.log('[ThreadView] Setting up rejection state watcher');
+watch(() => store.getters['auth/wasRejectedForWhitelist'], (newValue, oldValue) => {
+  console.log('[ThreadView] Rejection state watcher triggered - oldValue:', oldValue, 'newValue:', newValue);
+  // Always redirect when rejection state is set to true
+  if (newValue) {
+    console.log('[ThreadView] Rejection state is true, redirecting to /public');
+    console.log('[ThreadView] Current route before push:', route.path);
+    router.push('/public');
+    console.log('[ThreadView] router.push(/public) called');
+  }
+});
 
 // Navigation
 const backToList = async () => {
@@ -1119,6 +1190,55 @@ const findEndOfBranchMessage = () => {
   const lastMessage = displayedMessages.value[displayedMessages.value.length - 1];
   return lastMessage;
 };
+
+// Add login handler
+const handleLogin = async () => {
+  isLoggingIn.value = true;
+  try {
+    console.log('[ThreadView] Starting signInWithGoogle');
+    // Clear rejection state before login attempt to ensure fresh state
+    store.commit('auth/SET_REJECTED_FOR_WHITELIST', false);
+    await signInWithGoogle();
+    console.log('[ThreadView] signInWithGoogle completed successfully');
+    
+    // Wait a moment for auth state to be processed
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // Check if user is still logged in and whitelisted
+    const currentUser = store.getters['auth/user'];
+    if (currentUser && ['admin', 'whitelisted', 'import'].includes(currentUser.status)) {
+      console.log('[ThreadView] User logged in successfully, staying on page');
+      // Only redirect if there was a specific redirect requested
+      if (route.query.redirect) {
+        router.push(route.query.redirect);
+      }
+      // Otherwise stay on current page
+    } else {
+      console.log('[ThreadView] User not whitelisted or not logged in after auth');
+    }
+  } catch (e) {
+    console.error("Login error:", e);
+    console.log('[ThreadView] About to call forceLogoutWithMessage');
+    console.log('[ThreadView] Current location before forceLogoutWithMessage:', window.location.href);
+    // On authentication error, set rejection state and redirect to public page
+    await store.dispatch('auth/forceLogoutWithMessage', router);
+    console.log('[ThreadView] forceLogoutWithMessage completed');
+    console.log('[ThreadView] Current location after forceLogoutWithMessage:', window.location.href);
+  } finally {
+    isLoggingIn.value = false;
+  }
+};
+
+// Profile modal methods
+const openProfileModal = () => {
+  if (user.value) {
+    isProfileModalOpen.value = true;
+  }
+};
+
+const closeProfileModal = () => {
+  isProfileModalOpen.value = false;
+};
 </script>
 
 <style scoped>
@@ -1343,6 +1463,153 @@ const findEndOfBranchMessage = () => {
   padding: 0 40px; /* Add horizontal padding to match the design */
 }
 
+.user-controls {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-right: var(--space-sm);
+}
+
+.username-container {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  position: relative;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-fast);
+}
+
+.username-container:hover {
+  background-color: var(--color-hover-overlay);
+}
+
+.username {
+  display: inline-block;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-tag {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  opacity: 0.8;
+}
+
+.edit-icon {
+  font-size: 12px;
+  opacity: 0.7;
+  color: var(--color-text);
+}
+
+.username-container:hover .edit-icon {
+  opacity: 1;
+}
+
+.logout-btn {
+  background-color: transparent;
+  color: var(--color-text);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+}
+
+.logout-btn:hover {
+  background-color: var(--color-hover-overlay);
+}
+
+.login-btn {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  padding: var(--space-xs) var(--space-sm);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  text-decoration: none;
+}
+
+.login-btn:hover {
+  background-color: var(--color-primary-dark);
+}
+
+.login-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.whitelist-badge, .admin-badge, .non-whitelist-badge, .guest-badge {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 18px;
+  font-size: 12px;
+  margin-left: var(--space-xs);
+}
+
+.whitelist-badge {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.admin-badge {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.non-whitelist-badge {
+  background-color: var(--color-warning);
+  color: var(--color-text-inverse);
+}
+
+.guest-badge {
+  background-color: var(--color-text-secondary);
+  color: var(--color-text-inverse);
+}
+
+.auth-loading-badge {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 18px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+  margin-left: var(--space-xs);
+}
+
+.auth-loading-spinner {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 @media (max-width: 768px) {
   .messages-container {
     padding-left: 8px;
@@ -1367,6 +1634,53 @@ const findEndOfBranchMessage = () => {
   
   .thread-title {
     font-size: var(--font-size-md);
+  }
+
+  .user-controls {
+    gap: var(--space-xs);
+    flex-shrink: 0;
+  }
+  
+  .user-info {
+    gap: 2px;
+    margin-right: var(--space-xs);
+    min-width: 0;
+  }
+  
+  .username-container {
+    gap: 2px;
+    padding: 1px 4px;
+    max-width: 100px;
+    min-width: 0;
+  }
+  
+  .username {
+    max-width: 60px;
+    font-size: var(--font-size-xs);
+  }
+  
+  .user-tag {
+    font-size: calc(var(--font-size-xs) - 2px);
+    display: none;
+  }
+  
+  .edit-icon {
+    display: none;
+  }
+  
+  .whitelist-badge, .admin-badge, .non-whitelist-badge, .guest-badge, .auth-loading-badge {
+    width: 14px;
+    height: 14px;
+    line-height: 14px;
+    font-size: 10px;
+    margin-left: 2px;
+  }
+  
+  .logout-btn, .login-btn {
+    padding: var(--space-xs) var(--space-sm);
+    font-size: calc(var(--font-size-xs) - 1px);
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 }
 
@@ -1393,6 +1707,40 @@ const findEndOfBranchMessage = () => {
   
   .thread-title {
     font-size: calc(var(--font-size-md) - 1px);
+  }
+
+  .user-controls {
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  
+  .user-info {
+    margin-right: 4px;
+    min-width: 0;
+  }
+  
+  .username-container {
+    max-width: 80px;
+    padding: 1px 2px;
+  }
+  
+  .username {
+    max-width: 50px;
+    font-size: calc(var(--font-size-xs) - 1px);
+  }
+  
+  .whitelist-badge, .admin-badge, .non-whitelist-badge, .guest-badge, .auth-loading-badge {
+    width: 12px;
+    height: 12px;
+    line-height: 12px;
+    font-size: 8px;
+    margin-left: 1px;
+  }
+  
+  .logout-btn, .login-btn {
+    padding: 4px 6px;
+    font-size: calc(var(--font-size-xs) - 2px);
+    min-width: 50px;
   }
 }
 </style>

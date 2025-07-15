@@ -21,7 +21,10 @@ export default {
       state.authReady = ready;
     },
     SET_REJECTED_FOR_WHITELIST(state, rejected) {
+      console.log('[AUTH STORE] SET_REJECTED_FOR_WHITELIST called with:', rejected);
+      console.log('[AUTH STORE] Previous state:', state.wasRejectedForWhitelist);
       state.wasRejectedForWhitelist = rejected;
+      console.log('[AUTH STORE] New state:', state.wasRejectedForWhitelist);
     }
   },
   
@@ -33,11 +36,14 @@ export default {
         
         return new Promise((resolve) => {
           onAuthStateChanged(auth, async (firebaseUser) => {
+            console.log('[AUTH STORE] Firebase auth state changed, user:', firebaseUser ? firebaseUser.email : 'null');
             if (firebaseUser) {
               // User signed in - validate with backend
+              console.log('[AUTH STORE] User signed in, validating with backend');
               await dispatch('validateUser', firebaseUser);
             } else {
               // No user - clear state
+              console.log('[AUTH STORE] No user, clearing state');
               commit('SET_USER', null);
               
               // Clean up WebSocket connection when user signs out
@@ -57,29 +63,40 @@ export default {
 
     async validateUser({ commit }, firebaseUser) {
       try {
+        console.log('[AUTH STORE] validateUser called for user:', firebaseUser.email);
         const token = await firebaseUser.getIdToken();
+        console.log('[AUTH STORE] Got Firebase token, making API call');
         const response = await fetch('/api/users/login', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         });
 
+        console.log('[AUTH STORE] API response status:', response.status);
         if (response.ok) {
           const userData = await response.json();
+          console.log('[AUTH STORE] User data from API:', userData);
           // Set complete user data
           
           if (userData === null) {
-            // User not in database - auto-logout instead of treating as guest
-            console.log('User not in database, forcing logout');
-            await this.dispatch('auth/forceLogoutWithMessage');
+            // User not in database - sign out and set rejection state
+            console.log('[AUTH STORE] User not in database, signing out and setting rejection state');
+            const auth = getFirebaseAuth();
+            await auth.signOut();
+            commit('SET_USER', null);
+            commit('SET_REJECTED_FOR_WHITELIST', true);
             return;
           } else if (!userData.status || !['whitelisted', 'admin', 'import'].includes(userData.status)) {
-            // User has invalid status - auto-logout
-            console.log('User has invalid status, forcing logout');
-            await this.dispatch('auth/forceLogoutWithMessage');
+            // User has invalid status - sign out and set rejection state
+            console.log('[AUTH STORE] User has invalid status, signing out and setting rejection state');
+            const auth = getFirebaseAuth();
+            await auth.signOut();
+            commit('SET_USER', null);
+            commit('SET_REJECTED_FOR_WHITELIST', true);
             return;
           } else {
             // User exists in database with valid status - use their data
+            console.log('[AUTH STORE] User validated successfully, setting user data');
             commit('SET_USER', {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
@@ -94,17 +111,17 @@ export default {
           
             // Initialize WebSocket connection for authenticated user
             try {
-              console.log('Initializing WebSocket connection for authenticated user');
+              console.log('[AUTH STORE] Initializing WebSocket connection for authenticated user');
               await WebSocketService.initialize();
             } catch (error) {
-              console.error('Failed to initialize WebSocket connection:', error);
+              console.error('[AUTH STORE] Failed to initialize WebSocket connection:', error);
             }
           }
         } else if (response.status === 302) {
           // Silent logout redirect - no error messages
           const responseData = await response.json().catch(() => ({}));
           if (responseData.detail && responseData.detail.includes('SILENT_LOGOUT')) {
-            console.log('Silent logout detected, clearing session');
+            console.log('[AUTH STORE] Silent logout detected, clearing session');
             // Clear session silently
             commit('SET_USER', null);
             commit('SET_AUTH_READY', true);
@@ -114,12 +131,16 @@ export default {
             return;
           }
         } else {
-          // For other errors (like 403), force logout
-          console.log('Backend returned error, forcing logout');
-          await this.dispatch('auth/forceLogoutWithMessage');
+          // For other errors (like 403), sign out and set rejection state
+          console.log('[AUTH STORE] Backend returned error, signing out and setting rejection state');
+          const auth = getFirebaseAuth();
+          await auth.signOut();
+          commit('SET_USER', null);
+          commit('SET_REJECTED_FOR_WHITELIST', true);
         }
       } catch (error) {
-        console.error('User validation failed:', error);
+        console.error('[AUTH STORE] User validation failed:', error);
+        console.log('[AUTH STORE] Signing out and cleaning up due to validation error');
         // On error, sign out to be safe
         const auth = getFirebaseAuth();
         await auth.signOut();
@@ -221,13 +242,17 @@ export default {
       }
     },
 
-    async forceLogoutWithMessage({ commit }) {
+    async forceLogoutWithMessage({ commit, state }, router = null) {
       try {
-        console.log('Force logout with unauthorized message');
+        console.log('[AUTH STORE] Force logout with unauthorized message');
+        console.log('[AUTH STORE] Current rejection state before:', state.wasRejectedForWhitelist);
+        console.log('[AUTH STORE] Router passed:', !!router);
+        console.log('[AUTH STORE] Current location:', window.location.pathname);
         
         // Sign out from Firebase
         const auth = getFirebaseAuth();
         if (auth && auth.currentUser) {
+          console.log('[AUTH STORE] Signing out current Firebase user');
           await auth.signOut();
         }
         
@@ -235,28 +260,27 @@ export default {
         commit('SET_USER', null);
         commit('SET_AUTH_READY', true);
         
-        // Ensure rejection state is properly cycled to trigger watchers
-        // First clear it, then set it to ensure the change is detected
-        commit('SET_REJECTED_FOR_WHITELIST', false);
-        setTimeout(() => {
-          commit('SET_REJECTED_FOR_WHITELIST', true);
-        }, 0);
+        // Set rejection state to trigger the banner
+        commit('SET_REJECTED_FOR_WHITELIST', true);
+        console.log('[AUTH STORE] Set rejection state to true');
+        console.log('[AUTH STORE] Current rejection state after:', state.wasRejectedForWhitelist);
         
         localStorage.removeItem('auth_token');
         
-        // Store the notification message in localStorage to survive the redirect
-        const notificationData = {
-          type: 'error',
-          message: 'Your account is not authorized. Please follow instructions below.',
-          timestamp: Date.now()
-        };
-        localStorage.setItem('pending_notification', JSON.stringify(notificationData));
-        console.log('Stored pending notification:', notificationData);
-        
         // Redirect to the public page to show whitelist rejection banner
         if (window.location.pathname !== '/public') {
-          console.log('Redirecting to /public');
-          window.location.href = '/public';
+          console.log('[AUTH STORE] Redirecting to /public from:', window.location.pathname);
+          console.log('[AUTH STORE] Router available:', !!router);
+          // Use Vue router if available, otherwise fall back to hard redirect
+          if (router) {
+            console.log('[AUTH STORE] Using Vue router to navigate');
+            router.push('/public');
+          } else {
+            console.log('[AUTH STORE] Using hard redirect');
+            window.location.href = '/public';
+          }
+        } else {
+          console.log('[AUTH STORE] Already on /public, no redirect needed');
         }
       } catch (error) {
         console.error('Error during force logout:', error);

@@ -27,13 +27,18 @@ export function useAuthentication() {
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
     try {
+      console.log('[useAuthentication] Starting Google sign in');
       error.value = null;
       const auth = getFirebaseAuth();
+      console.log('[useAuthentication] Got Firebase auth instance');
       const result = await signInWithPopup(auth, provider);
+      console.log('[useAuthentication] signInWithPopup completed, user:', result.user.email);
       
       // The auth store's validateUser will handle the rest
       // including potential logout and redirect for non-whitelisted users
+      console.log('[useAuthentication] Waiting for auth store to validate user');
     } catch (e) {
+      console.log('[useAuthentication] Error in signInWithGoogle:', e);
       error.value = e.message;
       throw e; // Re-throw to let the caller handle it
     }

@@ -6,7 +6,7 @@
       <div class="rejection-content">
         <div class="rejection-icon">❌</div>
         <h4>Oh no! You aren't whitelisted.</h4>
-        <p>You can still view free public messages via direct links, but you don't have an inbox and you can't create messages.</p>
+        <p>You can still view free public messages via direct links, but you don't have an inbox and you can't create, save, or link messages.</p>
         <router-link to="/requests" class="waitlist-link">Join the waitlist here!</router-link>
       </div>
     </div>
@@ -67,6 +67,10 @@ onMounted(async () => {
     console.error('[MessageListView] Error clearing messages store:', error);
   }
   
+  // Check initial rejection state
+  console.log('[MessageListView] Initial rejection state on mount:', store.getters['auth/wasRejectedForWhitelist']);
+  console.log('[MessageListView] Initial dismissal state on mount:', isRejectionNoticeDismissed.value);
+  
   // Set active tab based on route
   updateActiveTab();
 });
@@ -98,7 +102,9 @@ const recipientsModalMessageId = computed(() => store.getters['navigation/recipi
 const wasRejectedForWhitelist = computed(() => {
   // Only show banner if user was explicitly rejected for whitelist
   // (they shouldn't be able to stay logged in if not whitelisted)
-  return store.getters['auth/wasRejectedForWhitelist'];
+  const rejectionState = store.getters['auth/wasRejectedForWhitelist'];
+  console.log('[MessageListView] Rejection state computed:', rejectionState);
+  return rejectionState;
 });
 
 // Track if the rejection notice has been dismissed
@@ -107,6 +113,7 @@ const recipientsModalRef = ref(null);
 
 // Watch for changes in wasRejectedForWhitelist to reset dismissal state
 watch(wasRejectedForWhitelist, (newValue, oldValue) => {
+  console.log('[MessageListView] Watch triggered - oldValue:', oldValue, 'newValue:', newValue);
   if (newValue) {
     // Always reset dismissal state when rejection flag is set
     // This ensures the banner shows for every failed login attempt
