@@ -9,7 +9,7 @@
           </router-link>
         </div>
         <ul class="nav-links" :class="{ active: isMenuOpen }">
-          <li><router-link to="/" :class="{ active: currentRoute === '/' }">Home</router-link></li>
+          <li><router-link to="/home" :class="{ active: currentRoute === '/home' }">Home</router-link></li>
           <li><router-link to="/architecture" :class="{ active: currentRoute === '/architecture' }">Architecture</router-link></li>
           <li><router-link to="/requests" :class="{ active: currentRoute === '/requests' }">Join Waitlist</router-link></li>
           <li><router-link to="/public" class="login-btn">Go to Stitch</router-link></li>
