@@ -554,34 +554,7 @@ onMounted(async () => {
       }
     }
     
-    // SPECIAL CASE: Auto-show reply box if this is a reply to the last visible message
-    const lastVisibleMessage = currentDisplayedMessages[currentDisplayedMessages.length - 1];
-    const isReplyToLastMessage = messageData.parent_id === lastVisibleMessage?.id;
-    
-    console.log(`[ThreadView] 🎯 Last visible message:`, {
-      id: lastVisibleMessage?.id,
-      author: lastVisibleMessage?.author_display_name || lastVisibleMessage?.content_author
-    });
-    
-    if (isReplyToLastMessage) {
-      console.log(`[ThreadView] 🎯 SPECIAL CASE: New message is reply to last visible message!`);
-      
-      // Check if the message is from the current user - don't auto-show reply box for own messages
-      const currentUser = store.getters['auth/user'];
-      const isFromCurrentUser = currentUser && (
-        messageData.content_author === currentUser.uid || 
-        messageData.content_author === currentUser.email
-      );
-      
-      if (!isFromCurrentUser) {
-        console.log(`[ThreadView] 🎯 Auto-showing reply box for message from ${messageData.author_display_name}`);
-        
-        // Set reply target to the NEW incoming message (not its parent)
-        store.dispatch('navigation/setReplyingTo', messageData.id);
-      } else {
-        console.log(`[ThreadView] 🔍 Skipping auto-reply - message is from current user`);
-      }
-    }
+
   });
   
   console.log(`[ThreadView] 🔧 MOUNT onMounted complete`);
