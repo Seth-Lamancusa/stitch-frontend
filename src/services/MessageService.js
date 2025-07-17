@@ -259,4 +259,13 @@ export default {
     return axios.patch(`${apiBaseUrl}/messages/${id}/read-status`, { is_read: isRead }, { headers });
   },
 
+  // Get read out loud audio for a message
+  async getReadOutLoudAudio(messageId) {
+    const headers = await getAuthHeaders();
+    const response = await axios.get(`${apiBaseUrl}/messages/${messageId}/read_out_loud`, {
+      headers,
+      responseType: 'blob',
+    });
+    return response;
+  },
 };

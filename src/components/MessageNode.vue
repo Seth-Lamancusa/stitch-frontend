@@ -167,6 +167,18 @@
             <span class="links-icon">🔗</span>
             Links
           </button>
+          
+          <!-- Read Out Loud Button -->
+          <button
+            @click.stop="toggleReadOutLoud(message.id)"
+            :disabled="isLoading"
+            class="read-out-loud-button"
+            title="Read message out loud"
+          >
+            <i v-if="isLoading" class="fas fa-spinner fa-spin"></i>
+            <i v-else-if="isPlaying" class="fas fa-stop"></i>
+            <i v-else class="fas fa-volume-up"></i>
+          </button>
         </div>
       </div>
       
@@ -286,6 +298,7 @@ import { useStore } from 'vuex';
 import { memoize } from 'lodash-es';
 import MessageService from '../services/MessageService.js';
 import UserService from '../services/UserService.js';
+import { useAudioPlayback } from '../services/AudioPlaybackService.js';
 
 export default {
   name: 'MessageNode',
@@ -338,6 +351,12 @@ export default {
     const currentUser = computed(() => store.getters['auth/user']);
     const isAdmin = computed(() => store.getters['auth/isAdmin']);
     
+    // Audio playback
+    const { playbackState, toggleReadOutLoud } = useAudioPlayback();
+    const isPlaying = computed(() => playbackState.currentlyPlaying === props.message.id && !playbackState.isLoading);
+    const isLoading = computed(() => playbackState.currentlyPlaying === props.message.id && playbackState.isLoading);
+
+
     // Selection mode state
     const isSelectionMode = computed(() => store.getters['navigation/isSelectionMode']);
     const isMessageSelected = computed(() => store.getters['navigation/isMessageSelected'](props.message.id));
@@ -604,6 +623,8 @@ export default {
 
 
 
+
+    
 
     
 
@@ -1029,6 +1050,9 @@ export default {
       isSelectionMode,
       isMessageSelected,
       shouldShowAddRecipientsButton,
+      isPlaying,
+      isLoading,
+      toggleReadOutLoud,
     };
   },
   
@@ -2157,6 +2181,14 @@ export default {
   background-color: transparent;
   border-color: var(--color-border);
   transform: none;
+}
+
+/* Minimal styling for the new button */
+.read-out-loud-button {
+  margin-left: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 
 
