@@ -71,10 +71,12 @@
           <button 
             v-if="(isAdmin || isUserAuthor) && !isSelectionMode && !inListView" 
             @click.stop="$emit('delete', message)" 
-            class="delete-button"
+            class="delete-icon-button"
             :title="isAdmin ? 'Admin: Delete this message and all replies' : 'Delete this message and all replies'"
           >
-            Delete
+            <svg class="delete-icon" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+              <path d="M2.5 1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1H3v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4h.5a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1H2.5zm3 4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 .5-.5zM8 5a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7A.5.5 0 0 1 8 5zm3 .5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 1 0z"/>
+            </svg>
           </button>
         </div>
         
@@ -1438,13 +1440,35 @@ export default {
   color: #d84156; /* Lighter red for hover state */
 }
 
-.delete-button {
-  color: var(--color-error);
-  border-color: #ffcccc;
+/* Delete icon button styling */
+.delete-icon-button {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  border-radius: var(--radius-xs);
+  width: 24px;
+  height: 24px;
 }
 
-.delete-button:hover {
+.delete-icon-button:hover {
   background-color: #fff0f0;
+  transform: scale(1.1);
+}
+
+.delete-icon {
+  width: 16px;
+  height: 16px;
+  fill: var(--color-error);
+  transition: all var(--transition-fast);
+}
+
+.delete-icon-button:hover .delete-icon {
+  fill: #d32f2f;
 }
 
 .message-timestamp {
