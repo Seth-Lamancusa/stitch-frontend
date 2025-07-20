@@ -155,20 +155,9 @@
                 ]"
                 :title="action.text"
               >
-                <span class="action-emoji">{{ action.emoji }}</span>
+                <span v-if="action.loading?.()" class="loading-indicator"></span>
+                <span v-else class="action-emoji">{{ action.emoji }}</span>
                 <span class="action-text">{{ action.text }}</span>
-              </button>
-
-              <!-- Read Out Loud Button -->
-              <button
-                @click.stop="toggleReadOutLoud(message.id)"
-                :disabled="isLoading"
-                class="read-out-loud-button"
-                title="Read message out loud"
-              >
-                <i v-if="isLoading" class="fas fa-spinner fa-spin"></i>
-                <i v-else-if="isPlaying" class="fas fa-stop"></i>
-                <i v-else class="fas fa-volume-up"></i>
               </button>
             </div>
           </div>
@@ -359,20 +348,20 @@ export default {
         handler: () => emit('reply', props.message.id),
         condition: () => !props.inListView
       },
-              {
-          id: 'save',
-          emoji: '🔖',
-          text: isMessageSaved.value ? 'Saved' : 'Save',
-          desktopVisible: true,
-          mobileVisible: true,
-          adminOnly: false,
-          handler: toggleSaveMessage,
-          condition: () => !props.inListView,
-          disabled: () => isSavingMessage.value || !currentUser.value,
-          loading: () => isSavingMessage.value,
-          active: () => isMessageSaved.value,
-          customClass: () => isMessageSaved.value ? 'save-active' : ''
-        },
+      {
+        id: 'save',
+        emoji: '🔖',
+        text: isMessageSaved.value ? 'Saved' : 'Save',
+        desktopVisible: true,
+        mobileVisible: true,
+        adminOnly: false,
+        handler: toggleSaveMessage,
+        condition: () => !props.inListView,
+        disabled: () => isSavingMessage.value || !currentUser.value,
+        loading: () => isSavingMessage.value,
+        active: () => isMessageSaved.value,
+        customClass: () => isMessageSaved.value ? 'save-active' : ''
+      },
       {
         id: 'copy-text',
         emoji: '📝',
@@ -383,6 +372,19 @@ export default {
         handler: copyMessageText,
         condition: () => !props.inListView,
         active: () => isTextCopied.value
+      },
+      {
+        id: 'read-aloud',
+        emoji: isPlaying.value ? '⏹️' : '🔊',
+        text: isPlaying.value ? 'Stop' : 'Read',
+        desktopVisible: false,
+        mobileVisible: false,
+        adminOnly: false,
+        handler: () => toggleReadOutLoud(props.message.id),
+        condition: () => !props.inListView,
+        disabled: () => isLoading.value,
+        loading: () => isLoading.value,
+        active: () => isPlaying.value
       },
       {
         id: 'links',
@@ -680,6 +682,8 @@ export default {
 
 
 
+
+    
 
     
 
