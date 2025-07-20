@@ -33,28 +33,29 @@
           <span class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ authorDisplayName }}</span>
           <span v-if="authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
         </div>
+        
+        <!-- Envelope icon for recipients - unread (closed) / read (open) -->
+        <button 
+          v-if="isUserRecipient"
+          @click.stop="toggleReadStatus" 
+          class="envelope-icon-button"
+          :title="isMessageUnread ? 'Click to mark as read' : 'Click to mark as unread'"
+          :disabled="isTogglingReadStatus"
+          :class="{ 'loading': isTogglingReadStatus }"
+        >
+          <span v-if="isTogglingReadStatus" class="loading-indicator"></span>
+          <svg v-else-if="isMessageUnread" class="envelope-icon unread" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <path d="m84.965 16.363h-69.93c-6.5664 0-11.91 5.3438-11.91 11.91v43.453c0 6.5664 5.3438 11.91 11.91 11.91h69.93c6.5664 0 11.91-5.3438 11.91-11.91v-43.453c0-6.5664-5.3438-11.91-11.91-11.91zm5.6602 11.91v43.453c0 0.55078-0.10547 1.0742-0.25 1.5781l-26.02-23.309 26.02-23.305c0.14844 0.50391 0.25391 1.0273 0.25391 1.5781zm-5.6602-5.6602c0.18359 0 0.35547 0.039063 0.53125 0.054688l-28.926 25.91c-3.75 3.3516-9.3984 3.3516-13.148-0.003906l-28.922-25.906c0.17969-0.015625 0.35156-0.054688 0.53125-0.054688zm-75.34 50.691c-0.14844-0.50391-0.25-1.0273-0.25-1.5781v-43.453c0-0.55078 0.10547-1.0742 0.25-1.5781l26.016 23.309-26.016 23.305zm5.4102 4.082c-0.18359 0-0.35547-0.039063-0.53516-0.054688l25.879-23.184c2.8516 2.1289 6.2344 3.1992 9.6211 3.1992s6.7656-1.0703 9.6172-3.1992l25.879 23.184c-0.17969 0.015625-0.35156 0.054688-0.53516 0.054688z"/>
+          </svg>
+          <svg v-else class="envelope-icon read" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <path d="m91.656 35.066c-0.089844-0.085937-31.234-27.965-31.234-27.965-5.9414-5.3164-14.898-5.3203-20.832-0.003906 0 0-31.391 28.109-31.441 28.164-2.1875 2.1875-3.3906 5.0977-3.3906 8.1914v41.836c0 6.3867 5.1953 11.582 11.582 11.582h67.332c6.3867 0 11.582-5.1953 11.582-11.582v-41.836c0-3.1562-1.3086-6.2109-3.5938-8.3867zm-2.6562 8.3867v41.836c0 0.45703-0.074219 0.89063-0.18359 1.3125l-24.82-22.234 24.82-22.234c0.10938 0.42578 0.18359 0.86328 0.18359 1.3164zm-46.23-30.816 0.98047-0.875c3.5625-3.1914 8.9375-3.1875 12.504 0.003906l28.555 25.574-25.551 22.891c-5.5-4.0586-13.016-4.0586-18.516 0l-25.551-22.891 27.574-24.703zm-31.582 73.969c-0.10938-0.42188-0.18359-0.85938-0.18359-1.3125v-41.836c0-0.45312 0.074219-0.88672 0.18359-1.3164l24.82 22.234zm5.1484 4.0195c-0.082032 0-0.16016-0.019531-0.24219-0.023438l26.676-23.895 0.98047-0.875c3.5625-3.1914 8.9375-3.1875 12.504 0.003907l27.652 24.77c-0.082031 0.003906-0.15625 0.023437-0.24219 0.023437z"/>
+          </svg>
+        </button>
           
           <!-- Public badge - shown for all public messages -->
           <span v-if="isPublic" class="visibility-indicator public">
             Public
           </span>
-          
-          <!-- To You badge (for recipients) with read/unread circle indicator -->
-          <div v-if="isUserRecipient" class="recipients-toggle to-you" :class="{ 'loading': isTogglingReadStatus }">
-            <!-- Read status toggle hitbox (red dot area) -->
-            <button 
-              @click.stop="toggleReadStatus" 
-              class="read-status-button"
-              :title="isMessageUnread ? 'Click to mark as read' : 'Click to mark as unread'"
-              :disabled="isTogglingReadStatus"
-            >
-              <span v-if="isTogglingReadStatus" class="loading-indicator"></span>
-              <span v-else class="read-status-indicator" :class="{ 'unread': isMessageUnread }"></span>
-            </button>
-            
-            <!-- To You text -->
-            <span class="recipients-text">To You</span>
-          </div>
           
           <!-- Recipients badge -->
           <button 
@@ -1341,65 +1342,53 @@ export default {
   color: var(--color-text-secondary);
 }
 
-.recipients-toggle.to-you {
-  background-color: var(--color-info);
-  color: var(--color-text-inverse);
-  border: none;
-  position: relative;
-  transition: all var(--transition-fast);
-  display: flex;
-  align-items: center;
-  gap: 0;
-  padding: 0;
-  border-radius: var(--radius-pill);
-  overflow: hidden;
-}
-
-/* Read status button - left side of the badge */
-.read-status-button {
+/* Envelope icon button for read/unread status */
+.envelope-icon-button {
   background: none;
   border: none;
-  padding: 2px 6px;
+  padding: 4px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all var(--transition-fast);
-  border-radius: var(--radius-pill) 0 0 var(--radius-pill);
-  min-width: 24px;
-  height: 22px;
+  border-radius: var(--radius-xs);
+  width: 24px;
+  height: 24px;
 }
 
-.read-status-button:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 0.1);
+.envelope-icon-button:hover:not(:disabled) {
+  background-color: var(--color-hover-overlay);
+  transform: scale(1.1);
 }
 
-.read-status-button:disabled {
+.envelope-icon-button:disabled {
   cursor: wait;
   opacity: 0.7;
 }
 
-/* Recipients text button - right side of the badge */
-.recipients-text {
-  padding: 2px 8px 2px 2px;
-  flex: 1;
+.envelope-icon-button.loading {
+  opacity: 0.7;
+  cursor: wait;
 }
 
-/* Read status indicator - circle that shows if message is read/unread */
-.read-status-indicator {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: 1px solid var(--color-text-inverse);
-  background-color: transparent;
-  flex-shrink: 0;
+/* Envelope SVG icon styling */
+.envelope-icon {
+  width: 16px;
+  height: 16px;
+  transition: all var(--transition-fast);
 }
 
-/* Unread state - filled red circle */
-.read-status-indicator.unread {
-  background-color: var(--color-error);
-  border-color: var(--color-error);
+.envelope-icon.unread {
+  fill: var(--color-error);
+}
+
+.envelope-icon.read {
+  fill: var(--color-text-secondary);
+}
+
+.envelope-icon-button:hover .envelope-icon {
+  transform: scale(1.1);
 }
 
 .recipients-toggle.author-toggle {
@@ -1759,21 +1748,7 @@ export default {
   font-size: var(--font-size-xs);
 }
 
-.recipients-toggle.to-you.loading {
-  opacity: 0.7;
-  cursor: wait;
-}
 
-.recipients-toggle .loading-indicator {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-top-color: #ffffff;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-right: 4px;
-}
 
 @keyframes spin {
   0% { transform: rotate(0deg); }
