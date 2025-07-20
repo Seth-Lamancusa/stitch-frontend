@@ -366,6 +366,9 @@ export default {
     
     async setActiveTab({ commit, dispatch }, tab) {
       console.log(`[Navigation Store] Setting active tab to: "${tab}"`);
+      
+      // Set the tab immediately for responsive UI
+      commit('SET_ACTIVE_TAB', tab);
      
       // Clear message cache when switching tabs to trigger fresh load
       console.log('[Navigation Store] Clearing message cache for tab switch');

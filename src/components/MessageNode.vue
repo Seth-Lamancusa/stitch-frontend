@@ -104,69 +104,62 @@
           {{ message.child_ids?.length === 0 ? '🍃' : `${message.child_ids?.length} ${message.child_ids?.length === 1 ? 'reply' : 'replies'}` }}
         </div>
         
-        <!-- Desktop message actions - hidden on mobile and in selection mode -->
+        <!-- Unified message actions - desktop layout -->
         <div v-if="!isSelectionMode" class="message-actions desktop-actions">
-          <!-- Add reply button, but hide it in list view -->
+          <!-- Desktop visible actions -->
           <button 
-            v-if="!inListView"
-            @click.stop="$emit('reply', message.id)" 
-            class="reply-button"
-            title="Reply to this message"
+            v-for="action in desktopVisibleActions"
+            :key="action.id"
+            @click.stop="action.handler()"
+            class="action-button"
+            :class="[
+              { 
+                'active': action.active?.(),
+                'disabled': action.disabled?.()
+              },
+              action.customClass?.()
+            ]"
+            :disabled="action.disabled?.()"
+            :title="action.text"
           >
-            <span class="reply-icon">↩️</span>
-            Reply
+            <span v-if="action.loading?.()" class="loading-indicator"></span>
+            <span v-else class="action-emoji">{{ action.emoji }}</span>
+            <span class="action-text">{{ action.text }}</span>
           </button>
           
-          <!-- Copy JSON Button - Admin only -->
-          <button 
-            v-if="isAdmin"
-            @click.stop="copyMessageJson" 
-            class="fab-button json-button"
-            :class="{ 'copied': isJsonCopied }"
-            title="Copy message JSON to clipboard"
-          >
-            <span v-if="isJsonCopied" class="copied-icon">✓</span>
-            <span v-else class="json-icon">{}</span>
-          </button>
-          
-          <!-- Copy Text Button -->
-          <button 
-            v-if="!inListView"
-            @click.stop="copyMessageText" 
-            class="text-button"
-            :class="{ 'copied': isTextCopied }"
-            title="Copy message text with metadata to clipboard"
-          >
-            <span v-if="isTextCopied" class="copied-icon">✓</span>
-            <span v-else class="text-icon">📝</span>
-            <span v-if="isTextCopied">Copied!</span>
-            <span v-else>Copy</span>
-          </button>
-          
-          <!-- Save/Bookmark Button -->
-          <button 
-            v-if="!inListView || currentTab === 'saved'"
-            @click.stop="toggleSaveMessage" 
-            class="save-button"
-            :class="{ 'saved': isMessageSaved, 'disabled': !currentUser }"
-            :disabled="isSavingMessage || !currentUser"
-            :title="currentUser ? (isMessageSaved ? 'Remove bookmark' : 'Bookmark this message') : 'Sign in to bookmark messages'"
-          >
-            <span v-if="isSavingMessage" class="loading-indicator"></span>
-            <span v-else class="bookmark-icon">🔖</span>
-            <span>{{ isMessageSaved ? 'Saved' : 'Save' }}</span>
-          </button>
-          
-          <!-- Links Button -->
-          <button 
-            v-if="!inListView"
-            @click.stop="openLinksModal" 
-            class="links-button"
-            title="View links in this message"
-          >
-            <span class="links-icon">🔗</span>
-            Links
-          </button>
+          <!-- Menu button for desktop with relative positioning for menu -->
+          <div v-if="shouldShowMenuButton" class="desktop-menu-container">
+            <button 
+              @click.stop="toggleActionBar"
+              class="action-button menu-button"
+              :class="{ 'active': showActionBar }"
+              title="More actions"
+            >
+              <span class="action-emoji">⋯</span>
+            </button>
+            
+            <!-- Desktop dropdown menu -->
+            <div 
+              v-if="showActionBar && !isMobile"
+              class="desktop-action-menu"
+              @click.stop
+            >
+              <button 
+                v-for="action in menuActions"
+                :key="action.id"
+                @click.stop="action.handler()"
+                class="desktop-menu-button"
+                :class="[
+                  { 'active': action.active?.() },
+                  action.customClass?.()
+                ]"
+                :title="action.text"
+              >
+                <span class="action-emoji">{{ action.emoji }}</span>
+                <span class="action-text">{{ action.text }}</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
       
@@ -181,46 +174,48 @@
         :data-debug-has-siblings="hasSiblings"
       />
       
-      <!-- Mobile floating action controls - only shown on mobile and not in selection mode -->
+      <!-- Unified mobile action controls -->
       <div v-if="!inListView && !isSelectionMode" class="mobile-action-controls">
         <!-- Reply count for mobile - positioned next to reply button -->
         <div v-if="isMobile" class="mobile-reply-count">
           {{ message.child_ids?.length === 0 ? '🍃' : `${message.child_ids?.length} ${message.child_ids?.length === 1 ? 'reply' : 'replies'}` }}
         </div>
         
-        <!-- Persistent Reply Button -->
+        <!-- Mobile visible actions -->
         <button 
-          @click.stop="$emit('reply', message.id)"
-          class="mobile-reply-button"
-          title="Reply to this message"
+          v-for="action in mobileVisibleActions"
+          :key="action.id"
+          @click.stop="action.handler()"
+          class="mobile-action-button"
+          :class="[
+            { 
+              'active': action.active?.(),
+              'disabled': action.disabled?.()
+            },
+            action.customClass?.()
+          ]"
+          :disabled="action.disabled?.()"
+          :title="action.text"
         >
-          Reply
+          <span v-if="action.loading?.()" class="loading-indicator"></span>
+          <span v-else class="action-emoji">{{ action.emoji }}</span>
+          <span class="action-text">{{ action.text }}</span>
         </button>
         
-        <!-- Save/Bookmark Button - moved from floating action bar -->
+        <!-- Menu button for mobile -->
         <button 
-          @click.stop="toggleSaveMessage" 
-          class="mobile-save-button"
-          :class="{ 'saved': isMessageSaved, 'disabled': !currentUser }"
-          :disabled="isSavingMessage || !currentUser"
-          :title="currentUser ? (isMessageSaved ? 'Remove bookmark' : 'Bookmark this message') : 'Sign in to bookmark messages'"
-        >
-          <span v-if="isSavingMessage" class="loading-indicator"></span>
-          <span v-else class="bookmark-icon">🔖</span>
-        </button>
-        
-        <!-- Visual Discovery Hint -->
-        <button 
+          v-if="shouldShowMenuButton"
           @click.stop="toggleActionBar"
-          class="action-hint-button"
+          class="mobile-action-button menu-button"
           :class="{ 'active': showActionBar }"
           title="More actions"
         >
-          <span class="hint-icon">⋯</span>
+          <span class="action-emoji">⋯</span>
         </button>
         
-        <!-- Floating Action Bar -->
+        <!-- Unified floating action menu -->
         <div 
+          v-if="shouldShowMenuButton"
           class="floating-action-bar" 
           :class="{ 'active': showActionBar }"
           @click.stop
@@ -228,46 +223,19 @@
           @touchmove.stop="handleActionBarTouchMove"
           @touchend.stop="handleActionBarTouchEnd"
         >
-          <!-- Copy Text Button -->
           <button 
-            @click.stop="copyMessageText" 
-            class="fab-button text-button"
-            :class="{ 'copied': isTextCopied }"
-            title="Copy message text with metadata to clipboard"
+            v-for="action in menuActions"
+            :key="action.id"
+            @click.stop="action.handler()"
+            class="fab-button"
+            :class="[
+              { 'active': action.active?.() },
+              action.customClass?.()
+            ]"
+            :title="action.text"
           >
-            <span v-if="isTextCopied" class="copied-icon">✓</span>
-            <span v-else class="text-icon">📝</span>
-          </button>
-          
-          <!-- Links Button -->
-          <button 
-            @click.stop="openLinksModal" 
-            class="fab-button links-button"
-            title="View links in this message"
-          >
-            <span class="links-icon">🔗</span>
-          </button>
-          
-          <!-- Copy JSON Button - Admin only -->
-          <button 
-            v-if="isAdmin"
-            @click.stop="copyMessageJson" 
-            class="fab-button json-button"
-            :class="{ 'copied': isJsonCopied }"
-            title="Copy message JSON to clipboard"
-          >
-            <span v-if="isJsonCopied" class="copied-icon">✓</span>
-            <span v-else class="json-icon">{}</span>
-          </button>
-          
-          <!-- Add Recipients Button - available to all users -->
-          <button 
-            @click.stop="openAddRecipientsModal" 
-            class="fab-button add-recipients-button"
-            title="Add recipients to this message"
-          >
-            <span class="add-recipients-icon">👥</span>
-            <span class="fab-button-text">Add</span>
+            <span class="action-emoji">{{ action.emoji }}</span>
+            <span class="action-text">{{ action.text }}</span>
           </button>
         </div>
       </div>
@@ -342,12 +310,8 @@ export default {
     const isSelectionMode = computed(() => store.getters['navigation/isSelectionMode']);
     const isMessageSelected = computed(() => store.getters['navigation/isMessageSelected'](props.message.id));
     
-
-    
     // For regular users, just use token info
     const isTogglingReadStatus = ref(false);
-    
-    // const isReformatting = ref(false);
     
     // Add refs for copy button states
     const isJsonCopied = ref(false);
@@ -363,6 +327,99 @@ export default {
     
     // Global action bar state from store
     const showActionBar = computed(() => store.getters['navigation/isActionBarOpen'](props.message.id));
+    
+    // Define unified message actions with standardized attributes
+    const messageActions = computed(() => [
+      {
+        id: 'reply',
+        emoji: '↩️',
+        text: 'Reply',
+        desktopVisible: true,
+        mobileVisible: true,
+        adminOnly: false,
+        handler: () => emit('reply', props.message.id),
+        condition: () => !props.inListView
+      },
+              {
+          id: 'save',
+          emoji: '🔖',
+          text: isMessageSaved.value ? 'Saved' : 'Save',
+          desktopVisible: true,
+          mobileVisible: true,
+          adminOnly: false,
+          handler: toggleSaveMessage,
+          condition: () => !props.inListView,
+          disabled: () => isSavingMessage.value || !currentUser.value,
+          loading: () => isSavingMessage.value,
+          active: () => isMessageSaved.value,
+          customClass: () => isMessageSaved.value ? 'save-active' : ''
+        },
+      {
+        id: 'copy-text',
+        emoji: '📝',
+        text: isTextCopied.value ? 'Copied!' : 'Copy',
+        desktopVisible: true,
+        mobileVisible: false,
+        adminOnly: false,
+        handler: copyMessageText,
+        condition: () => !props.inListView,
+        active: () => isTextCopied.value
+      },
+      {
+        id: 'links',
+        emoji: '🔗',
+        text: 'Links',
+        desktopVisible: false,
+        mobileVisible: false,
+        adminOnly: false,
+        handler: openLinksModal,
+        condition: () => !props.inListView
+      },
+      {
+        id: 'copy-json',
+        emoji: '📋',
+        text: isJsonCopied.value ? 'Copied!' : 'JSON',
+        desktopVisible: false,
+        mobileVisible: false,
+        adminOnly: true,
+        handler: copyMessageJson,
+        condition: () => !props.inListView,
+        active: () => isJsonCopied.value
+      }
+    ]);
+    
+    // Get visible actions for desktop
+    const desktopVisibleActions = computed(() => 
+      messageActions.value.filter(action => 
+        action.desktopVisible && 
+        (!action.adminOnly || isAdmin.value) &&
+        (!action.condition || action.condition())
+      )
+    );
+    
+    // Get visible actions for mobile
+    const mobileVisibleActions = computed(() => 
+      messageActions.value.filter(action => 
+        action.mobileVisible && 
+        (!action.adminOnly || isAdmin.value) &&
+        (!action.condition || action.condition())
+      )
+    );
+    
+    // Get menu actions (not visible on desktop/mobile)
+    const menuActions = computed(() => 
+      messageActions.value.filter(action => 
+        !action.desktopVisible && 
+        !action.mobileVisible &&
+        (!action.adminOnly || isAdmin.value) &&
+        (!action.condition || action.condition())
+      )
+    );
+    
+    // Check if we need to show menu button
+    const shouldShowMenuButton = computed(() => 
+      menuActions.value.length > 0 && !props.inListView && !isSelectionMode.value
+    );
     
     // Message click handler - only handles navigation in preview mode
     const handleMessageClick = () => {
@@ -604,6 +661,8 @@ export default {
 
 
 
+
+    
 
     
 
@@ -1014,7 +1073,6 @@ export default {
       isSavingMessage,
       toggleSaveMessage,
       openLinksModal,
-      openAddRecipientsModal,
       handleMessageClick,
       handleSelectionToggle,
       // Mobile floating action bar
@@ -1028,7 +1086,12 @@ export default {
       // Selection mode
       isSelectionMode,
       isMessageSelected,
-      shouldShowAddRecipientsButton,
+      // Unified message actions
+      messageActions,
+      desktopVisibleActions,
+      mobileVisibleActions,
+      menuActions,
+      shouldShowMenuButton,
     };
   },
   
@@ -1433,12 +1496,9 @@ export default {
   gap: 12px;
 }
 
-  .message-node.compact .reply-button,
-  /* .message-node.compact .reformat-button, */
-  .message-node.compact .text-button,
-  .message-node.compact .json-button,
-  .message-node.compact .save-button,
-  .message-node.compact .links-button {
+  .message-node.compact .action-button,
+  .message-node.compact .mobile-action-button,
+  .message-node.compact .desktop-menu-button {
     font-size: calc(var(--font-size-xs) - 1px);
     padding: 4px 6px;
   }
@@ -1490,6 +1550,7 @@ export default {
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
+  position: relative;
 }
 
 /* Mobile action controls - hidden on desktop */
@@ -1623,7 +1684,10 @@ export default {
   background-color: var(--card-background-error, #ffcccc);
 }
 
-.json-button, .text-button {
+/* Unified action button styling */
+.action-button,
+.mobile-action-button,
+.desktop-menu-button {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1637,27 +1701,44 @@ export default {
   color: var(--color-text-secondary);
 }
 
-.json-button:hover, .text-button:hover {
+.action-button:hover,
+.mobile-action-button:hover,
+.desktop-menu-button:hover {
   background-color: var(--color-surface-hover);
   border-color: var(--color-border-hover);
+  color: var(--color-primary);
 }
 
-.json-button.copied, .text-button.copied {
+.action-button.active,
+.mobile-action-button.active,
+.desktop-menu-button.active {
   background-color: var(--color-success);
   border-color: var(--color-success);
   color: var(--color-text-inverse);
   transform: scale(1.05);
 }
 
-.json-icon, .text-icon {
+.action-button.disabled,
+.mobile-action-button.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-button.disabled:hover,
+.mobile-action-button.disabled:hover {
+  background-color: transparent;
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
+  transform: none;
+}
+
+.action-emoji {
   font-size: var(--font-size-sm);
   line-height: 1;
 }
 
-.copied-icon {
-  font-size: var(--font-size-sm);
-  font-weight: bold;
-  line-height: 1;
+.action-text {
+  font-size: var(--font-size-xs);
 }
 
 .recipients-toggle.to-you.loading {
@@ -1681,31 +1762,42 @@ export default {
   100% { transform: rotate(360deg); }
 }
 
-/* .reply-button, .reformat-button, .text-button, .json-button { */
-.reply-button, .text-button, .json-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
+/* Desktop menu container for relative positioning */
+.desktop-menu-container {
+  position: relative;
+}
+
+/* Desktop action menu styling */
+.desktop-action-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
-  padding: 5px 8px;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  z-index: 20;
+  min-width: 120px;
+  overflow: hidden;
 }
 
-/* .reply-button:hover, .reformat-button:hover:not(:disabled), .text-button:hover, .json-button:hover { */
-.reply-button:hover, .text-button:hover, .json-button:hover {
-  background-color: var(--color-surface-hover);
-  border-color: var(--color-border-hover);
-  color: var(--color-primary);
+.desktop-menu-button {
+  width: 100%;
+  justify-content: flex-start;
+  border: none;
+  border-radius: 0;
+  padding: 8px 12px;
 }
 
-.reply-icon {
-  font-size: var(--font-size-sm);
-  line-height: 1;
+.desktop-menu-button:hover {
+  background-color: var(--color-hover-overlay);
+  border: none;
+}
+
+.desktop-menu-button.active {
+  background-color: var(--color-success);
+  border: none;
 }
 
 /* .reformat-icon {
@@ -1728,113 +1820,19 @@ export default {
   animation: spin 1s linear infinite;
 } */
 
-.save-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
-  padding: 5px 8px;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  color: var(--color-text-secondary);
-}
-
-.save-button:hover:not(:disabled) {
-  background-color: var(--color-surface-hover);
-  border-color: var(--color-border-hover);
-}
-
-.save-button.saved {
+/* Save button special styling for active state */
+.action-button.save-active,
+.mobile-action-button.save-active {
   background-color: #6a5942;
   border-color: black;
   color: var(--color-text-inverse);
-  transform: scale(1.05);
 }
 
-.save-button.saved:hover {
+.action-button.save-active:hover,
+.mobile-action-button.save-active:hover {
   background-color: #6a5942;
   border-color: rgb(180, 180, 180);
   color: var(--color-text-inverse);
-  transform: scale(1.05);
-}
-
-.save-button.loading {
-  opacity: 0.7;
-  cursor: wait;
-}
-
-.save-button .loading-indicator {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-top-color: #ffffff;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.bookmark-icon {
-  font-size: var(--font-size-sm);
-  line-height: 1;
-}
-
-.links-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
-  padding: 5px 8px;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  color: var(--color-text-secondary);
-}
-
-.links-button:hover {
-  background-color: var(--color-surface-hover);
-  border-color: var(--color-border-hover);
-  color: var(--color-primary);
-}
-
-.links-icon {
-  font-size: var(--font-size-sm);
-  line-height: 1;
-}
-
-.add-recipients-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
-  padding: 5px 8px;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  color: var(--color-text-secondary);
-}
-
-.add-recipients-button:hover {
-  background-color: var(--color-surface-hover);
-  border-color: var(--color-border-hover);
-  color: var(--color-primary);
-}
-
-.add-recipients-icon {
-  font-size: var(--font-size-sm);
-  line-height: 1;
-}
-
-.fab-button-text {
-  font-size: var(--font-size-xs);
-  margin-left: 4px;
-  white-space: nowrap;
 }
 
 @media (max-width: 768px) {
@@ -1888,8 +1886,10 @@ export default {
   }
   
   /* Hide desktop actions on mobile */
-  .desktop-actions {
-    display: none;
+  .desktop-actions,
+  .desktop-action-menu,
+  .desktop-menu-container {
+    display: none !important;
   }
   
   /* Hide reply count in footer on mobile when not in list view */
@@ -1923,138 +1923,39 @@ export default {
   
 
   
-  /* Persistent Reply Button - Desktop style without emoji */
-  .mobile-reply-button {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: transparent;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-xs);
-    padding: 8px 12px;
-    font-size: var(--font-size-xs);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    color: var(--color-text-secondary);
+  /* Mobile action button specific styling */
+  .mobile-action-button {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     z-index: 12;
     min-height: 36px;
+    padding: 8px 12px;
   }
   
-  .mobile-reply-button:hover {
-    background-color: var(--color-surface-hover);
-    border-color: var(--color-border-hover);
-    color: var(--color-primary);
+  .mobile-action-button:hover {
     transform: scale(1.05);
   }
   
-  .mobile-reply-button:active {
+  .mobile-action-button:active {
     transform: scale(0.95);
   }
   
-  /* Mobile Save Button - Similar styling to reply button */
-  .mobile-save-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-xs);
-    padding: 8px 12px;
-    font-size: var(--font-size-xs);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    color: var(--color-text-secondary);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    z-index: 12;
-    min-height: 36px;
+  .mobile-action-button.menu-button {
     min-width: 36px;
-  }
-  
-  .mobile-save-button:hover:not(:disabled) {
-    background-color: var(--color-surface-hover);
-    border-color: var(--color-border-hover);
-    color: var(--color-primary);
-    transform: scale(1.05);
-  }
-  
-  .mobile-save-button:active {
-    transform: scale(0.95);
-  }
-  
-  .mobile-save-button.saved {
-    background-color: #6a5942;
-    border-color: black;
-    color: var(--color-text-inverse);
-    transform: scale(1.05);
-  }
-  
-  .mobile-save-button.saved:hover {
-    background-color: #6a5942;
-    border-color: rgb(180, 180, 180);
-    color: var(--color-text-inverse);
-    transform: scale(1.05);
-  }
-  
-  .mobile-save-button:disabled {
-    opacity: 0.7;
-    cursor: wait;
-  }
-  
-  .mobile-save-button .loading-indicator {
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    border-top-color: #ffffff;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-  }
-  
-  /* Visual Discovery Hint Button - Desktop style square */
-  .action-hint-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-xs);
     padding: 8px;
-    font-size: var(--font-size-xs);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    color: var(--color-text-secondary);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-    z-index: 11;
     opacity: 0.7;
-    min-width: 36px;
-    min-height: 36px;
   }
   
-  .action-hint-button:hover {
+  .mobile-action-button.menu-button:hover {
     opacity: 1;
-    background-color: var(--color-surface-hover);
-    border-color: var(--color-border-hover);
-    color: var(--color-primary);
     transform: scale(1.1);
   }
   
-  .action-hint-button.active {
+  .mobile-action-button.menu-button.active {
     background-color: var(--color-primary);
     color: var(--color-text-inverse);
     border-color: var(--color-primary);
     opacity: 1;
     transform: rotate(90deg);
-  }
-  
-  .action-hint-button .hint-icon {
-    line-height: 1;
-    transform: rotate(90deg);
-    transition: transform var(--transition-fast);
-  }
-  
-  .action-hint-button.active .hint-icon {
-    transform: rotate(0deg);
   }
   
   /* Floating Action Bar */
@@ -2145,18 +2046,15 @@ export default {
 
 }
 
-/* Add disabled state styling for save buttons */
-.save-button.disabled,
-.mobile-save-button.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.save-button.disabled:hover,
-.mobile-save-button.disabled:hover {
-  background-color: transparent;
-  border-color: var(--color-border);
-  transform: none;
+/* Loading indicator styling */
+.loading-indicator {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
 
@@ -2204,22 +2102,14 @@ export default {
     min-height: 32px;
   }
   
-  .mobile-reply-button {
+  .mobile-action-button {
     padding: 6px 10px;
     font-size: calc(var(--font-size-xs) - 1px);
     min-height: 32px;
   }
   
-  .mobile-save-button {
-    padding: 6px 10px;
-    font-size: calc(var(--font-size-xs) - 1px);
-    min-height: 32px;
-    min-width: 32px;
-  }
-  
-  .action-hint-button {
+  .mobile-action-button.menu-button {
     padding: 6px;
-    font-size: calc(var(--font-size-xs) - 1px);
     min-width: 32px;
     min-height: 32px;
   }
@@ -2256,3 +2146,4 @@ export default {
   cursor: help;
 }
 </style>
+
