@@ -974,14 +974,6 @@ export default {
       return !parent;
     });
     
-    const isSiblingLoading = computed(() => {
-      return store.getters['messages/isLoading'](`sibling_${props.message.parent_id}`);
-    });
-    
-    const isLoading = computed(() => {
-      return isParentLoading.value || isSiblingLoading.value;
-    });
-    
     // Add debug computed property to help diagnose button visibility
     const shouldShowAddRecipientsButton = computed(() => {
       const conditions = {
