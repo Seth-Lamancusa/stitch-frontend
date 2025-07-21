@@ -77,65 +77,20 @@
             aria-label="Manage recipients"
           >
             <span class="meta-pill__icon">👥</span>
-            <span class="meta-pill__text">Recipients ({{ recipients.length }})</span>
+            <span class="meta-pill__text">Draft Recipients ({{ recipients.length }})</span>
           </button>
           
-          <!-- Bot prompt buttons - only shown when replying to a message -->
-          <div v-if="targetId" class="bot-prompt-buttons">
-            <button 
-              v-for="bot in availableBots" 
-              :key="bot.uid"
-              class="toolbar-control meta-pill bot-prompt-button"
-              :class="{ 
-                'loading': botPromptStates[bot.uid] === 'loading',
-                'success': botPromptStates[bot.uid] === 'success',
-                'error': botPromptStates[bot.uid] === 'error'
-              }"
-              @click="showBotPromptConfirmation(bot, $event)"
-              :disabled="!canInteract || botPromptStates[bot.uid] === 'loading'"
-              :aria-label="`Prompt ${bot.display_name} for response`"
-            >
-              <span class="meta-pill__icon">+</span>
-              <span class="meta-pill__text">{{ bot.display_name }}</span>
-              
-              <!-- Loading spinner -->
-              <span v-if="botPromptStates[bot.uid] === 'loading'" class="bot-loading-spinner"></span>
-              <!-- Success checkmark -->
-              <span v-else-if="botPromptStates[bot.uid] === 'success'" class="bot-success-icon">✓</span>
-              <!-- Error X -->
-              <span v-else-if="botPromptStates[bot.uid] === 'error'" class="bot-error-icon">✗</span>
-            </button>
-            
-            <!-- Confirmation popover -->
-            <div 
-              v-if="showBotConfirmation"
-              class="bot-confirmation-popover"
-              :key="showBotConfirmation.uid"
-              :style="{
-                left: showBotConfirmation.popoverPosition ? `${showBotConfirmation.popoverPosition.left}px` : '50%'
-              }"
-            >
-              <div class="confirmation-content">
-                <p>Prompt {{ showBotConfirmation.display_name }} for response?</p>
-                <div class="confirmation-buttons">
-                  <button 
-                    @click.stop="confirmBotPrompt(showBotConfirmation)"
-                    class="confirm-button"
-                    :disabled="botPromptStates[showBotConfirmation.uid] === 'loading'"
-                  >
-                    <span v-if="botPromptStates[showBotConfirmation.uid] === 'loading'" class="button-loading-spinner"></span>
-                    <span v-else>Confirm</span>
-                  </button>
-                  <button 
-                    @click.stop="hideBotPromptConfirmation"
-                    class="cancel-button"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <!-- Prompt Bot Response button - only shown when replying to a message -->
+          <button 
+            v-if="targetId"
+            class="toolbar-control meta-pill" 
+            @click="showBotPromptModal"
+            :disabled="!canInteract"
+            aria-label="Prompt bot for response"
+          >
+            <span class="meta-pill__icon">🤖</span>
+            <span class="meta-pill__text">Prompt Bot Response</span>
+          </button>
         </div>
 
 
@@ -206,6 +161,62 @@
       @close="closeRecipientSelector"
       @done="closeRecipientSelector"
     />
+    
+    <!-- Bot Prompt Modal -->
+    <div 
+      v-if="showBotModal" 
+      class="modal-overlay"
+      @click="closeBotPromptModal"
+    >
+      <div 
+        class="bot-prompt-modal"
+        @click.stop
+      >
+        <div class="modal-header">
+          <h3>Prompt Bot Response</h3>
+          <button 
+            class="close-button"
+            @click="closeBotPromptModal"
+            aria-label="Close bot prompt modal"
+          >
+            ×
+          </button>
+        </div>
+        
+        <div class="modal-content">
+          <p class="modal-description">
+            Select a bot to prompt for a response to this message.
+          </p>
+          
+          <div class="bot-options">
+            <button 
+              v-for="bot in availableBots" 
+              :key="bot.uid"
+              class="bot-option-button"
+              :class="{ 
+                'confirm-state': botConfirmStates[bot.uid] === 'confirm',
+                'loading': botPromptStates[bot.uid] === 'loading',
+                'success': botPromptStates[bot.uid] === 'success',
+                'error': botPromptStates[bot.uid] === 'error'
+              }"
+              @click="handleBotSelection(bot)"
+              :disabled="botPromptStates[bot.uid] === 'loading'"
+            >
+              <span class="bot-option-icon">
+                <span v-if="botPromptStates[bot.uid] === 'loading'" class="bot-loading-spinner"></span>
+                <span v-else-if="botPromptStates[bot.uid] === 'success'">✓</span>
+                <span v-else-if="botPromptStates[bot.uid] === 'error'">✗</span>
+                <span v-else-if="botConfirmStates[bot.uid] === 'confirm'">?</span>
+                <span v-else>+</span>
+              </span>
+              <span class="bot-option-text">
+                {{ botConfirmStates[bot.uid] === 'confirm' ? 'Confirm?' : bot.display_name }}
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -268,7 +279,8 @@ const showRecipientSelector = ref(false);
 
 // Bot prompt state
 const availableBots = ref(AVAILABLE_BOTS);
-const showBotConfirmation = ref(null); // Track which bot's confirmation is showing
+const showBotModal = ref(false); // Track if bot selection modal is open
+const botConfirmStates = ref({}); // Track which bots are in confirm state
 const botPromptStates = ref({}); // Track loading/success/error states for each bot
 
 // Add recipients mode
@@ -678,31 +690,36 @@ const closeRecipientSelector = (event) => {
 };
 
 // Bot prompt methods
-const showBotPromptConfirmation = (bot, event) => {
-  // Get the button's position relative to its container
-  const button = event.currentTarget;
-  const containerRect = button.parentElement.getBoundingClientRect();
-  const buttonRect = button.getBoundingClientRect();
-  
-  // Calculate position relative to the container
-  const relativeLeft = buttonRect.left - containerRect.left + (buttonRect.width / 2);
-  
-  showBotConfirmation.value = {
-    ...bot,
-    popoverPosition: {
-      left: relativeLeft
-    }
-  };
+const showBotPromptModal = () => {
+  showBotModal.value = true;
+  // Reset all confirm states when opening modal
+  botConfirmStates.value = {};
 };
 
-const hideBotPromptConfirmation = () => {
-  showBotConfirmation.value = null;
+const closeBotPromptModal = () => {
+  showBotModal.value = false;
+  // Reset all confirm states when closing modal
+  botConfirmStates.value = {};
+};
+
+const handleBotSelection = async (bot) => {
+  // If bot is in loading state, ignore clicks
+  if (botPromptStates.value[bot.uid] === 'loading') {
+    return;
+  }
+  
+  // If bot is already in confirm state, execute the prompt
+  if (botConfirmStates.value[bot.uid] === 'confirm') {
+    await confirmBotPrompt(bot);
+    return;
+  }
+  
+  // Otherwise, reset all other confirm states and set this one to confirm
+  botConfirmStates.value = {};
+  botConfirmStates.value[bot.uid] = 'confirm';
 };
 
 const confirmBotPrompt = async (bot) => {
-  // Extract just the bot data without the popoverPosition
-  const { popoverPosition, ...botData } = bot;
-  
   if (!props.targetId) {
     console.error('[ReplyBox] Cannot prompt bot: no target message ID');
     return;
@@ -710,39 +727,38 @@ const confirmBotPrompt = async (bot) => {
   
   try {
     // Set loading state
-    botPromptStates.value[botData.uid] = 'loading';
+    botPromptStates.value[bot.uid] = 'loading';
+    // Clear confirm state
+    botConfirmStates.value[bot.uid] = null;
     
     // Import MessageService dynamically
     const MessageService = (await import('../services/MessageService.js')).default;
     
     // Add the bot as a recipient to the parent message
-    await MessageService.addRecipientsToMessage(props.targetId, [botData]);
+    await MessageService.addRecipientsToMessage(props.targetId, [bot]);
     
-    console.log(`[ReplyBox] Successfully prompted ${botData.display_name} for response`);
+    console.log(`[ReplyBox] Successfully prompted ${bot.display_name} for response`);
     
-    // Set success state
-    botPromptStates.value[botData.uid] = 'success';
+    // Clear loading state on success
+    botPromptStates.value[bot.uid] = null;
     
-    // Hide confirmation popover
-    hideBotPromptConfirmation();
+    // Close the bot prompt modal immediately
+    closeBotPromptModal();
     
-    // Clear success state after 3 seconds
-    setTimeout(() => {
-      botPromptStates.value[botData.uid] = null;
-    }, 3000);
+    // Also close the reply box if not in new thread mode
+    if (!props.isNewThread) {
+      hideBottomSheet();
+    }
     
   } catch (error) {
-    console.error(`[ReplyBox] Error prompting ${botData.display_name}:`, error);
+    console.error(`[ReplyBox] Error prompting ${bot.display_name}:`, error);
     
     // Set error state
-    botPromptStates.value[botData.uid] = 'error';
-    
-    // Hide confirmation popover
-    hideBotPromptConfirmation();
+    botPromptStates.value[bot.uid] = 'error';
     
     // Clear error state after 3 seconds
     setTimeout(() => {
-      botPromptStates.value[botData.uid] = null;
+      botPromptStates.value[bot.uid] = null;
     }, 3000);
   }
 };
@@ -750,20 +766,7 @@ const confirmBotPrompt = async (bot) => {
 // Handle clicks outside reply box
 const handleClickOutside = (event) => {
   // Don't close if any modal is open
-  if (showRecipientSelector.value) {
-    return;
-  }
-  
-  // Close bot confirmation popover if clicked outside
-  if (showBotConfirmation.value) {
-    const confirmationPopover = document.querySelector('.bot-confirmation-popover');
-    const botButtons = document.querySelectorAll('.bot-prompt-button');
-    
-    if (confirmationPopover && !confirmationPopover.contains(event.target) &&
-        Array.from(botButtons).every(btn => !btn.contains(event.target))) {
-      hideBotPromptConfirmation();
-    }
-    // Return early to prevent reply box from closing when interacting with bot confirmation
+  if (showRecipientSelector.value || showBotModal.value) {
     return;
   }
   
@@ -1681,193 +1684,138 @@ defineExpose({
 /* OLD MOBILE STYLES MOVED TO DESKTOP-ONLY SECTION ABOVE */
 /* These styles are now only active on desktop (min-width: 769px) to avoid conflicts with the new bottom sheet */
 
-/* Bot prompt buttons */
-.bot-prompt-buttons {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  position: relative; /* Ensure this is relative for absolute positioning of popover */
-}
 
-.bot-prompt-button {
+
+/* Bot prompt modal styles */
+.bot-prompt-modal {
   position: relative;
+  max-width: 450px;
+  width: 95%;
+  background-color: var(--color-surface);
+  padding: var(--space-lg);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  z-index: 1001;
+  max-height: 80vh;
+  overflow-y: auto;
 }
 
-.bot-prompt-button.loading {
+.bot-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: var(--space-md);
+}
+
+.bot-option-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-size: var(--font-size-md);
+  width: 100%;
+  text-align: left;
+}
+
+.bot-option-button:hover:not(:disabled) {
+  background-color: var(--color-hover-overlay);
+  border-color: var(--color-border-hover);
+}
+
+.bot-option-button:disabled {
   opacity: 0.7;
   cursor: wait;
 }
 
-.bot-prompt-button.success {
+.bot-option-button.confirm-state {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.bot-option-button.confirm-state:hover:not(:disabled) {
+  background-color: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+}
+
+.bot-option-button.loading {
+  background-color: var(--color-surface-light);
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: wait;
+}
+
+.bot-option-button.success {
   background-color: var(--color-success);
   border-color: var(--color-success);
   color: var(--color-text-inverse);
 }
 
-.bot-prompt-button.error {
+.bot-option-button.error {
   background-color: var(--color-error);
   border-color: var(--color-error);
   color: var(--color-text-inverse);
 }
 
-.bot-loading-spinner,
-.button-loading-spinner {
+.bot-option-icon {
+  font-size: var(--font-size-lg);
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+}
+
+.bot-option-text {
+  font-weight: 500;
+  flex: 1;
+}
+
+.bot-loading-spinner {
   display: inline-block;
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   border: 2px solid rgba(255, 255, 255, 0.3);
   border-top: 2px solid currentColor;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin-left: 4px;
 }
 
-.bot-success-icon,
-.bot-error-icon {
-  margin-left: 4px;
-  font-weight: bold;
-  font-size: var(--font-size-sm);
-}
-
-/* Bot confirmation popover */
-.bot-confirmation-popover {
-  position: absolute;
-  top: -88px;
-  transform: translateX(-50%); /* Center horizontally over the button */
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 1000;
-  min-width: 200px;
-  padding: 12px;
-}
-
-/* Remove the arrow pseudo-elements */
-/* .bot-confirmation-popover::before {
-  content: '';
-  position: absolute;
-  top: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-bottom: 8px solid var(--color-border);
-}
-
-.bot-confirmation-popover::after {
-  content: '';
-  position: absolute;
-  top: -7px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-bottom: 7px solid var(--color-surface);
-} */
-
-.confirmation-content p {
-  margin: 0 0 12px 0;
-  font-size: var(--font-size-sm);
-  color: var(--color-text);
-  text-align: center;
-}
-
-.confirmation-buttons {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-}
-
-.confirm-button {
-  background-color: var(--color-primary);
-  color: var(--color-text-inverse);
-  border: none;
-  border-radius: var(--radius-sm);
-  padding: 6px 12px;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.confirm-button:hover:not(:disabled) {
-  background-color: var(--color-primary-dark);
-}
-
-.confirm-button:disabled {
-  opacity: 0.7;
-  cursor: wait;
-}
-
-.cancel-button {
-  background-color: transparent;
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: 6px 12px;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.cancel-button:hover {
-  background-color: var(--color-hover-overlay);
-  border-color: var(--color-border-hover);
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Mobile responsive adjustments */
+/* Mobile responsive adjustments for bot modal */
 @media (max-width: 768px) {
-  .bot-prompt-buttons {
-    gap: 6px;
+  .bot-prompt-modal {
+    max-width: 95%;
+    padding: var(--space-md);
   }
   
-  .bot-prompt-button {
-    padding: 6px 8px;
-    font-size: var(--font-size-xs);
-    min-height: 32px;
+  .bot-option-button {
+    padding: 10px 12px;
+    font-size: var(--font-size-sm);
   }
   
-  .bot-confirmation-popover {
-    min-width: 180px;
-    padding: 10px;
-  }
-  
-  .confirmation-content p {
-    font-size: var(--font-size-xs);
-  }
-  
-  .confirm-button,
-  .cancel-button {
-    padding: 4px 8px;
-    font-size: var(--font-size-xs);
+  .bot-option-icon {
+    font-size: var(--font-size-md);
+    min-width: 18px;
   }
 }
 
 @media (max-width: 480px) {
-  .bot-prompt-buttons {
-    gap: 4px;
+  .bot-prompt-modal {
+    padding: var(--space-sm);
   }
   
-  .bot-prompt-button {
-    padding: 4px 6px;
-    min-height: 28px;
-  }
-  
-  .bot-confirmation-popover {
-    min-width: 160px;
-    padding: 8px;
+  .bot-option-button {
+    padding: 8px 10px;
+    gap: 8px;
   }
 }
 </style> 

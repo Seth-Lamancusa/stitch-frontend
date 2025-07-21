@@ -54,7 +54,7 @@ watch(success, (newSuccess) => {
   if (newSuccess) {
     setTimeout(() => {
       store.commit('ui/SET_SUCCESS', null);
-    }, 8000);
+    }, 3000);
   }
 });
 
@@ -91,13 +91,7 @@ const handleMessageClick = () => {
     clearMessageNotification();
     
     // Navigate to the message
-    if (messageData.parent_id) {
-      // If it's a reply, navigate to the parent thread
-      router.push(`/messages/${messageData.parent_id}`);
-    } else {
-      // If it's a top-level message, navigate to it directly
-      router.push(`/messages/${messageData.id}`);
-    }
+    router.push(`/${messageData.id}`);
   }
 };
 </script>

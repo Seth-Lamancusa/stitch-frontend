@@ -554,63 +554,8 @@ onMounted(async () => {
     messageList.value.addEventListener('scroll', handleScroll);
   }
   
-  // Set up WebSocket callback for auto-reply detection
-  WebSocketService.handleNewMessage((messageData) => {
-    console.log(`[ThreadView] 🔍 WebSocket callback received message:`, {
-      id: messageData.id,
-      parentId: messageData.parent_id,
-      author: messageData.author_display_name
-    });
-    
-    // Skip if we don't have displayed messages or message ID
-    if (!displayedMessages.value.length || !messageId.value) {
-      console.log(`[ThreadView] 🔍 Skipping - no displayed messages or message ID`);
-      return;
-    }
-    
-    // Check if this message is relevant to the current thread
-    // A message is relevant if its parent is in the currently displayed messages
-    const currentDisplayedMessages = displayedMessages.value;
-    const branchMessageIds = currentDisplayedMessages.map(m => m.id);
-    const isRelevantToThread = messageData.parent_id && branchMessageIds.includes(messageData.parent_id);
-    
-    console.log(`[ThreadView] 🔍 Relevance check:`, {
-      parentId: messageData.parent_id,
-      branchMessageIds: branchMessageIds,
-      isRelevant: isRelevantToThread
-    });
-    
-    if (!isRelevantToThread) {
-      console.log(`[ThreadView] 🔍 Message not relevant to current thread`);
-      return;
-    }
-    
-    // IMPORTANT: Add the message to the store first so it renders automatically
-    // This ensures the message appears in the UI even if auto-reply fails
-    store.commit('messages/SET_MESSAGE', messageData);
-    console.log(`[ThreadView] 🔍 Added message to store: ${messageData.id}`);
-    
-    // Update parent-child relationships
-    if (messageData.parent_id) {
-      const parentMessage = store.getters['messages/getMessage'](messageData.parent_id);
-      if (parentMessage) {
-        store.commit('messages/ADD_CHILD_TO_PARENT', {
-          parentId: messageData.parent_id,
-          childId: messageData.id
-        });
-        
-        // Set as branch child if it's the first reply or if parent has no current branch child
-        if (!parentMessage.branch_child || parentMessage.child_ids?.length === 1) {
-          store.commit('messages/SET_BRANCH_CHILD', {
-            messageId: messageData.parent_id,
-            childId: messageData.id
-          });
-        }
-      }
-    }
-    
-
-  });
+  // Note: WebSocket callback is handled globally by WebSocketService.initialize()
+  // No need to register a component-specific callback here
   
   console.log(`[ThreadView] 🔧 MOUNT onMounted complete`);
   
