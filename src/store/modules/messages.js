@@ -101,11 +101,31 @@ export default {
         // Default branch_child to last child if there are children and no previous selection (most recent)
         const hasChildren = mergedChildIds.length > 0;
         if (hasChildren && currentBranchChild === undefined) {
-          mergedMessage.branch_child = mergedChildIds[mergedChildIds.length - 1];
+          // Find the most recent child by timestamp
+          const childMessages = mergedChildIds
+            .map(childId => state.messages[childId])
+            .filter(child => child)
+            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+          
+          mergedMessage.branch_child = childMessages.length > 0 ? 
+            childMessages[childMessages.length - 1].id : 
+            mergedChildIds[mergedChildIds.length - 1]; // Fallback to array order
         } else if (hasChildren) {
           // Keep existing selection if it's still valid
           const isBranchChildValid = mergedChildIds.includes(currentBranchChild);
-          mergedMessage.branch_child = isBranchChildValid ? currentBranchChild : mergedChildIds[mergedChildIds.length - 1];
+          if (isBranchChildValid) {
+            mergedMessage.branch_child = currentBranchChild;
+          } else {
+            // Find the most recent child by timestamp as fallback
+            const childMessages = mergedChildIds
+              .map(childId => state.messages[childId])
+              .filter(child => child)
+              .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            
+            mergedMessage.branch_child = childMessages.length > 0 ? 
+              childMessages[childMessages.length - 1].id : 
+              mergedChildIds[mergedChildIds.length - 1]; // Fallback to array order
+          }
         } else {
           mergedMessage.branch_child = null;
         }
@@ -114,9 +134,12 @@ export default {
         state.messages[message.id] = mergedMessage;
       } else {
         // New message, not in store yet
-        // Default branch_child to last child if there are children (most recent)
+        // Default branch_child to most recent child if there are children
         const hasChildren = message.child_ids && message.child_ids.length > 0;
         if (hasChildren) {
+          // For new messages, child_ids should already be sorted by timestamp from backend
+          // but we can't verify timestamps since child messages might not be in store yet
+          // So we trust the backend ordering (timestamp ASC, so last = most recent)
           message.branch_child = message.child_ids[message.child_ids.length - 1];
         } else {
           message.branch_child = null;
@@ -358,17 +381,30 @@ export default {
       
       // Trace downward, ensuring each node has a branch_child if it has children
       while (true) {
-        // If message has no branch child but has child_ids, set last child as branch_child (most recent)
+        // If message has no branch child but has child_ids, set most recent child as branch_child
         if (!currentMessage.branch_child && currentMessage.child_ids && currentMessage.child_ids.length > 0) {
-          console.log(`[prepareBranchPath] 🌳 PREPARE_PATH setting branch_child for ${currentMessage.id} to last child ${currentMessage.child_ids[currentMessage.child_ids.length - 1]} (most recent)`);
+          // Get all child messages and sort by timestamp to find the most recent
+          const childMessages = currentMessage.child_ids
+            .map(childId => state.messages[childId])
+            .filter(child => child) // Remove any undefined children
+            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)); // Sort by timestamp ascending
           
-          commit('SET_BRANCH_CHILD', { 
-            messageId: currentMessage.id, 
-            childId: currentMessage.child_ids[currentMessage.child_ids.length - 1] 
-          });
-          
-          // Get updated message reference
-          currentMessage = state.messages[currentMessage.id];
+          if (childMessages.length > 0) {
+            // Take the most recent child (last in sorted array)
+            const mostRecentChild = childMessages[childMessages.length - 1];
+            console.log(`[prepareBranchPath] 🌳 PREPARE_PATH setting branch_child for ${currentMessage.id} to most recent child ${mostRecentChild.id} (timestamp: ${mostRecentChild.timestamp})`);
+            
+            commit('SET_BRANCH_CHILD', { 
+              messageId: currentMessage.id, 
+              childId: mostRecentChild.id
+            });
+            
+            // Get updated message reference
+            currentMessage = state.messages[currentMessage.id];
+          } else {
+            console.log(`[prepareBranchPath] 🌳 PREPARE_PATH no valid children found for ${currentMessage.id}`);
+            break;
+          }
         }
         
         // If message has no branch child (even after trying to set one), break
@@ -596,11 +632,21 @@ export default {
           // Get updated parent after REMOVE_MESSAGE_CASCADE might have modified it
           const updatedParent = state.messages[parentId];
           
-          // If parent has remaining children, set the last one as branch_child (most recent)
+          // If parent has remaining children, set the most recent one as branch_child
           if (updatedParent && updatedParent.child_ids && updatedParent.child_ids.length > 0) {
+            // Find the most recent child by timestamp
+            const childMessages = updatedParent.child_ids
+              .map(childId => state.messages[childId])
+              .filter(child => child)
+              .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            
+            const newBranchChildId = childMessages.length > 0 ? 
+              childMessages[childMessages.length - 1].id : 
+              updatedParent.child_ids[updatedParent.child_ids.length - 1]; // Fallback to array order
+            
             commit('SET_BRANCH_CHILD', { 
               messageId: parentId, 
-              childId: updatedParent.child_ids[updatedParent.child_ids.length - 1] 
+              childId: newBranchChildId
             });
             
             // Prepare branch path with the new branch_child
@@ -973,10 +1019,19 @@ export default {
       const currentIndex = message.child_ids.indexOf(currentChildId);
       
       if (currentIndex === -1) {
-        // If no valid current child, default to last (most recent)
+        // If no valid current child, default to most recent by timestamp
+        const childMessages = message.child_ids
+          .map(childId => state.messages[childId])
+          .filter(child => child)
+          .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        
+        const mostRecentChildId = childMessages.length > 0 ? 
+          childMessages[childMessages.length - 1].id : 
+          message.child_ids[message.child_ids.length - 1]; // Fallback to array order
+        
         commit('SET_BRANCH_CHILD', { 
           messageId: messageId, 
-          childId: message.child_ids[message.child_ids.length - 1] 
+          childId: mostRecentChildId
         });
         return true;
       }
@@ -1279,19 +1334,16 @@ export default {
     
     // Modified getter - PURE GETTER with no state modifications
     // Get the visible branch - follows the path from root where each message is in branch_path
-    getVisibleBranchMessages: (state) => (threadRootId = null) => {
+    getVisibleBranchMessages: (state) => (messageId) => {
       const result = [];
       
-      // First try to use the explicitly provided threadRootId if available
-      let startingMessage = threadRootId ? state.messages[threadRootId] : null;
+      // Get the starting message using the provided ID
+      const startingMessage = state.messages[messageId];
       
-      // If no explicit ID provided or message not found, fall back to finding the first root
       if (!startingMessage) {
-        startingMessage = Object.values(state.messages)
-          .find(msg => !msg.parent_id || (msg.parent_id && !state.messages[msg.parent_id]));
+        console.warn(`[getVisibleBranchMessages] Message ${messageId} not found in store`);
+        return [];
       }
-      
-      if (!startingMessage) return [];
       
       console.log(`[getVisibleBranchMessages] Starting with message ID: ${startingMessage.id}`);
       

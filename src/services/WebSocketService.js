@@ -224,12 +224,46 @@ const WebSocketService = {
   },
   
   /**
+   * Check if incoming message is next in the currently visible branch
+   * @param {Object} messageData - The incoming message data
+   * @returns {boolean} True if the message is a direct reply to the last visible message
+   */
+  isNextInVisibleBranch(messageData) {
+    try {
+      // Extract message ID from current route
+      const currentRoute = window.location.pathname;
+      const messageIdMatch = currentRoute.match(/\/([^\/\?]+)$/);
+      if (!messageIdMatch) {
+        return false;
+      }
+      
+      const urlMessageId = messageIdMatch[1];
+      
+      // Get visible branch messages for this thread
+      const visibleMessages = store.getters['messages/getVisibleBranchMessages'](urlMessageId);
+      if (!visibleMessages || visibleMessages.length === 0) {
+        return false;
+      }
+      
+      // Get the last message in the visible branch
+      const lastVisibleMessage = visibleMessages[visibleMessages.length - 1];
+      
+      // Check if incoming message is a direct reply to the last visible message
+      return messageData.parent_id === lastVisibleMessage.id;
+    } catch (error) {
+      this.error('Error checking if message is next in visible branch:', error);
+      return false;
+    }
+  },
+
+  /**
    * Handle incoming WebSocket messages and update store
    * @param {Object} messageData - The message data from the WebSocket
    */
   handleIncomingMessage(messageData) {
     this.log('Received message:', messageData?.id ? `ID: ${messageData.id}` : 'Invalid message');
-    
+    console.log('!!!!! messageData', messageData);
+
     // Skip if no message data
     if (!messageData || !messageData.id) {
       this.warn('Received invalid message data:', messageData);
@@ -242,6 +276,7 @@ const WebSocketService = {
     
     // Get current user for notification logic
     const user = store.getters['auth/user'];
+    console.log('!!!!! user', user);
     let isFromCurrentUser = false;
     let isToCurrentUser = false;
     
@@ -266,14 +301,13 @@ const WebSocketService = {
     
     // Trigger notification for messages to current user (but not from current user)
     if (isToCurrentUser && !isFromCurrentUser) {
-      // Check if user is currently viewing this thread/message
-      const currentRoute = store.getters['navigation/currentRoute'] || window.location.pathname;
-      const isViewingThisThread = currentRoute.includes('/messages/') && 
-                                 (currentRoute.includes(messageData.id) || 
-                                  (messageData.parent_id && currentRoute.includes(messageData.parent_id)));
+      // Simple branch-based notification logic:
+      // Only skip notification if message is next in the currently visible branch
+      const isNextInBranch = this.isNextInVisibleBranch(messageData);
+      const shouldNotify = !isNextInBranch;
+      console.log('!!!!! shouldNotify', shouldNotify);
       
-      // Only show notification if not currently viewing this thread
-      if (!isViewingThisThread) {
+      if (shouldNotify) {
         const authorName = messageData.author_display_name || 
                           messageData.author_user_tag || 
                           'Someone';
@@ -295,8 +329,10 @@ const WebSocketService = {
         this.log(`Triggering notification for message from ${authorName}`);
         store.dispatch('ui/setMessageNotification', notificationData);
       } else {
-        this.log(`Skipping notification - user is viewing this thread`);
+        this.log(`Skipping notification - message is next in visible branch`);
       }
+    } else {
+      this.log(`No notification needed (isToCurrentUser=${isToCurrentUser}, isFromCurrentUser=${isFromCurrentUser})`);
     }
     
     // Handle parent-child relationships

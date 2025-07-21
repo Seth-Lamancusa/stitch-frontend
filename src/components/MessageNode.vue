@@ -489,6 +489,9 @@ export default {
     
     const openAddRecipientsModal = () => {
       console.log('[MessageNode] openAddRecipientsModal called for message', props.message.id);
+      console.log('[MessageNode] hasRecipients computed value:', hasRecipients.value);
+      console.log('[MessageNode] message.recipients:', props.message.recipients);
+      console.log('[MessageNode] typeof message.recipients:', typeof props.message.recipients);
       
       // Add debug logging for existing recipients
       const existingRecipients = props.message.recipients && Array.isArray(props.message.recipients) 
@@ -504,7 +507,19 @@ export default {
         messageId: props.message.id
       };
       console.log('[MessageNode] Opening recipients modal with config:', modalConfig);
-      store.dispatch('navigation/showRecipientsModal', modalConfig);
+      
+      try {
+        store.dispatch('navigation/showRecipientsModal', modalConfig);
+        console.log('[MessageNode] Successfully dispatched showRecipientsModal action');
+        
+        // Check if modal state changed
+        setTimeout(() => {
+          const modalVisible = store.getters['navigation/recipientsModalVisible'];
+          console.log('[MessageNode] Modal visibility after dispatch:', modalVisible);
+        }, 100);
+      } catch (error) {
+        console.error('[MessageNode] Error dispatching showRecipientsModal:', error);
+      }
     };
     
     const isPublic = computed(() => {
@@ -1091,6 +1106,7 @@ export default {
       isSavingMessage,
       toggleSaveMessage,
       openLinksModal,
+      openAddRecipientsModal,
       handleMessageClick,
       handleSelectionToggle,
       // Mobile floating action bar
