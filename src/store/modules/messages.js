@@ -1167,9 +1167,9 @@ export default {
           console.log(`[navigateToSibling] Not changing selection state`);
         }
         
-        // Auto-mark newly visible branch as read after sibling navigation
-        console.log(`[navigateToSibling] 🔄 SIBLING NAVIGATION triggering auto-mark for visible branch starting with ${newChildId}`);
-        dispatch('markVisibleBranchAsRead', newChildId);
+        // Auto-mark only the specific sibling as read (not entire branch)
+        console.log(`[navigateToSibling] 🔄 SIBLING NAVIGATION triggering auto-mark for sibling ${newChildId}`);
+        dispatch('batchMarkAsRead', [newChildId]);
         
         return true;
       }
