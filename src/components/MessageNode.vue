@@ -29,6 +29,11 @@
           />
         </div>
         
+        <!-- Unread thread count badge - only shown in inbox/list view -->
+        <span v-if="inListView && message.unread_count_in_thread && message.unread_count_in_thread > 0" class="unread-thread-badge">
+          {{ message.unread_count_in_thread }}
+        </span>
+        
         <div class="author-info">
           <span class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ authorDisplayName }}</span>
           <span v-if="authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
@@ -39,11 +44,11 @@
           v-if="isUserRecipient"
           @click.stop="toggleReadStatus" 
           class="envelope-icon-button"
-          :title="isMessageUnread ? 'Click to mark as read' : 'Click to mark as unread'"
-          :disabled="isTogglingReadStatus"
-          :class="{ 'loading': isTogglingReadStatus }"
+          :title="isAutoMarkingAsRead ? 'Auto-marking as read...' : (isMessageUnread ? 'Click to mark as read' : 'Click to mark as unread')"
+          :disabled="isTogglingReadStatus || isAutoMarkingAsRead"
+          :class="{ 'loading': isTogglingReadStatus || isAutoMarkingAsRead }"
         >
-          <span v-if="isTogglingReadStatus" class="loading-indicator"></span>
+          <span v-if="isTogglingReadStatus || isAutoMarkingAsRead" class="loading-indicator"></span>
           <svg v-else-if="isMessageUnread" class="envelope-icon unread" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
             <path d="m84.965 16.363h-69.93c-6.5664 0-11.91 5.3438-11.91 11.91v43.453c0 6.5664 5.3438 11.91 11.91 11.91h69.93c6.5664 0 11.91-5.3438 11.91-11.91v-43.453c0-6.5664-5.3438-11.91-11.91-11.91zm5.6602 11.91v43.453c0 0.55078-0.10547 1.0742-0.25 1.5781l-26.02-23.309 26.02-23.305c0.14844 0.50391 0.25391 1.0273 0.25391 1.5781zm-5.6602-5.6602c0.18359 0 0.35547 0.039063 0.53125 0.054688l-28.926 25.91c-3.75 3.3516-9.3984 3.3516-13.148-0.003906l-28.922-25.906c0.17969-0.015625 0.35156-0.054688 0.53125-0.054688zm-75.34 50.691c-0.14844-0.50391-0.25-1.0273-0.25-1.5781v-43.453c0-0.55078 0.10547-1.0742 0.25-1.5781l26.016 23.309-26.016 23.305zm5.4102 4.082c-0.18359 0-0.35547-0.039063-0.53516-0.054688l25.879-23.184c2.8516 2.1289 6.2344 3.1992 9.6211 3.1992s6.7656-1.0703 9.6172-3.1992l25.879 23.184c-0.17969 0.015625-0.35156 0.054688-0.53516 0.054688z"/>
           </svg>
@@ -323,6 +328,11 @@ export default {
     
     // For regular users, just use token info
     const isTogglingReadStatus = ref(false);
+    
+    // Check if message is being auto-marked as read (from store)
+    const isAutoMarkingAsRead = computed(() => {
+      return store.getters['messages/isMessageMarkingAsRead'](props.message.id);
+    });
     
     // Add refs for copy button states
     const isJsonCopied = ref(false);
@@ -1091,6 +1101,7 @@ export default {
       isCurrentUser,
       isCurrentUserRecipient,
       isTogglingReadStatus,
+      isAutoMarkingAsRead,
       toggleReadStatus,
       copyMessageJson,
       copyMessageText,
@@ -1296,6 +1307,24 @@ export default {
   flex-wrap: wrap;
   justify-content: flex-start;
   width: 100%;
+}
+
+.unread-thread-badge {
+  background-color: #dc3545;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .author-info {
