@@ -54,6 +54,10 @@
                 @click="handleTabClick('inbox')"
               >
                 Inbox
+                <span v-if="isUnreadCountLoading" class="unread-inline-badge">
+                  <span class="loading-spinner"></span>
+                </span>
+                <span v-else-if="unreadCount > 0" class="unread-inline-badge">{{ unreadCount }}</span>
               </router-link>
             </template>
           </template>
@@ -102,7 +106,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useStore } from 'vuex';
 import { useAuthentication } from '../../composables/useAuthentication';
@@ -119,6 +123,8 @@ const isWhitelisted = computed(() => store.getters['auth/isWhitelisted']);
 const isAdmin = computed(() => store.getters['auth/isAdmin']);
 const authReady = computed(() => store.getters['auth/authReady']);
 const activeTab = computed(() => store.getters['navigation/activeTab']);
+const unreadCount = computed(() => store.getters['messages/getUnreadMessageCount']);
+const isUnreadCountLoading = computed(() => store.getters['messages/isLoading']('fetchingUnreadCount'));
 const isLoggingIn = ref(false);
 const isProfileModalOpen = ref(false);
 
@@ -135,6 +141,28 @@ const userDisplayName = computed(() => {
 const userTag = computed(() => {
   if (!user.value) return null;
   return user.value.user_tag || null;
+});
+
+// Fetch unread count when user authentication state changes
+watch(
+  () => user.value,
+  (newUser) => {
+    if (newUser) {
+      // User is authenticated, fetch unread count
+      store.dispatch('messages/fetchUnreadMessageCount');
+    } else {
+      // User logged out, reset count to 0
+      store.commit('messages/SET_UNREAD_MESSAGE_COUNT', 0);
+    }
+  },
+  { immediate: true }
+);
+
+// Also fetch on mount if user is already authenticated
+onMounted(() => {
+  if (user.value) {
+    store.dispatch('messages/fetchUnreadMessageCount');
+  }
 });
 
 const handleLogin = async () => {
@@ -250,6 +278,46 @@ const handleTabClick = (tab) => {
 .nav-tab.active {
   background-color: var(--color-primary, #4f8cff);
   color: var(--color-text-inverse, #fff);
+}
+
+.unread-inline-badge {
+  background-color: #dc2626; /* Red color */
+  color: white;
+  border-radius: 12px;
+  height: 16px;
+  font-size: 10px;
+  font-weight: bold;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  min-width: 16px;
+  padding: 0 6px;
+  margin-left: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+  vertical-align: middle;
+  overflow: hidden; /* Ensure spinner stays within bounds */
+  position: relative; /* Create containing block */
+}
+
+.loading-spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  border-top: 1.5px solid white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: block;
+  flex-shrink: 0;
+  margin: 0;
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .user-controls {
@@ -430,6 +498,19 @@ const handleTabClick = (tab) => {
     flex-shrink: 0; /* Don't shrink tabs */
   }
   
+  .unread-inline-badge {
+    height: 14px;
+    font-size: 9px;
+    min-width: 14px;
+    padding: 0 4px;
+    margin-left: 4px;
+  }
+  
+  .loading-spinner {
+    width: 8px;
+    height: 8px;
+  }
+  
   .user-controls {
     gap: var(--space-xs, 8px); /* Reduce gap */
     flex-shrink: 0; /* Never shrink user controls */
@@ -511,6 +592,19 @@ const handleTabClick = (tab) => {
     padding: 4px 6px; /* Minimal tab padding */
     font-size: calc(var(--font-size-xs) - 2px); /* Very small font */
     min-width: fit-content; /* Only take needed space */
+  }
+  
+  .unread-inline-badge {
+    height: 12px;
+    font-size: 8px;
+    min-width: 12px;
+    padding: 0 3px;
+    margin-left: 3px;
+  }
+  
+  .loading-spinner {
+    width: 7px;
+    height: 7px;
   }
   
   .user-controls {
@@ -600,6 +694,19 @@ const handleTabClick = (tab) => {
     padding: 6px 10px; /* Better padding with vertical layout */
     font-size: calc(var(--font-size-xs)); /* Restore normal size */
     min-width: fit-content;
+  }
+  
+  .unread-inline-badge {
+    height: 15px;
+    font-size: 9px;
+    min-width: 15px;
+    padding: 0 5px;
+    margin-left: 5px;
+  }
+  
+  .loading-spinner {
+    width: 9px;
+    height: 9px;
   }
 }
 </style> 

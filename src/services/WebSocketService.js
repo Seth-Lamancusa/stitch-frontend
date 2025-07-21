@@ -301,11 +301,21 @@ const WebSocketService = {
     
     // Trigger notification for messages to current user (but not from current user)
     if (isToCurrentUser && !isFromCurrentUser) {
+      // Increment unread count for any message to current user (regardless of notifications)
+      this.log('Incrementing unread count for message to current user');
+      store.dispatch('messages/incrementUnreadCount');
+      
       // Simple branch-based notification logic:
       // Only skip notification if message is next in the currently visible branch
       const isNextInBranch = this.isNextInVisibleBranch(messageData);
       const shouldNotify = !isNextInBranch;
       console.log('!!!!! shouldNotify', shouldNotify);
+      
+      // Auto-mark as read if message is next in visible branch (user is actively viewing this thread)
+      if (isNextInBranch) {
+        this.log('Message is next in visible branch - auto-marking as read');
+        store.dispatch('messages/batchMarkAsRead', [messageData.id]);
+      }
       
       if (shouldNotify) {
         const authorName = messageData.author_display_name || 

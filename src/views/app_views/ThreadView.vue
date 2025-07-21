@@ -516,6 +516,10 @@ const bottomMarkerState = computed(() => {
 onMounted(async () => {
   console.log(`[ThreadView] 🔧 MOUNT onMounted starting with messageId: ${messageId.value}`);
   
+  // Enable thread view mode for auto-marking messages as read
+  store.commit('messages/SET_THREAD_VIEW_MODE', true);
+  console.log('[ThreadView] 🔧 MOUNT Thread view mode enabled');
+  
   // Add reload detection
   window.addEventListener('beforeunload', () => {
     console.log('[ThreadView] 🚨 PAGE RELOAD DETECTED!');
@@ -564,6 +568,10 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  // Disable thread view mode to stop auto-marking
+  store.commit('messages/SET_THREAD_VIEW_MODE', false);
+  console.log('[ThreadView] 🔧 UNMOUNT Thread view mode disabled');
+  
   // Clean up listeners
   if (unsubscribeMessages) {
     unsubscribeMessages();
@@ -612,9 +620,31 @@ watch(messageId, async (newId, oldId) => {
 // Watch for branch changes (sibling navigation) - removed selection mode clearing to preserve selections
 // when navigating up/down branches
 watch(() => displayedMessages.value.length > 0 ? displayedMessages.value[0].id : null, (newFirstMessageId, oldFirstMessageId) => {
+  console.log('[ThreadView] 🔄 BRANCH WATCHER fired:', {
+    newFirstMessageId,
+    oldFirstMessageId,
+    displayedMessagesLength: displayedMessages.value.length,
+    hasMessages: displayedMessages.value.length > 0,
+    willTriggerAutoMark: newFirstMessageId && oldFirstMessageId && newFirstMessageId !== oldFirstMessageId
+  });
+  
   if (newFirstMessageId && oldFirstMessageId && newFirstMessageId !== oldFirstMessageId) {
     // Branch changed (sibling navigation) - no longer clearing selection mode
-    console.log('[ThreadView] Branch changed, preserving selection mode');
+    console.log('[ThreadView] ✅ Branch changed detected!', {
+      from: oldFirstMessageId,
+      to: newFirstMessageId,
+      threadViewMode: store.getters['messages/isThreadViewMode']
+    });
+    
+    // Auto-mark newly visible branch as read after sibling navigation
+    console.log('[ThreadView] 🔄 BRANCH CHANGE triggering auto-mark for visible branch');
+    store.dispatch('messages/markVisibleBranchAsRead', newFirstMessageId);
+  } else {
+    console.log('[ThreadView] ❌ Branch change conditions not met:', {
+      hasNewId: !!newFirstMessageId,
+      hasOldId: !!oldFirstMessageId,
+      idsAreDifferent: newFirstMessageId !== oldFirstMessageId
+    });
   }
 });
 
@@ -691,6 +721,12 @@ const loadInitialContent = async (targetMessageId) => {
     
     // Handle scroll positioning after content is rendered
     await ensureCorrectScroll();
+    
+    // Auto-mark visible branch messages as read after initial load
+    if (targetMessageId) {
+      console.log('[ThreadView] 🔄 INITIAL LOAD triggering auto-mark for visible branch');
+      store.dispatch('messages/markVisibleBranchAsRead', targetMessageId);
+    }
   }
 };
 
@@ -1066,6 +1102,12 @@ const loadMoreParents = async () => {
     // Render thread but preserve scroll position AND branch path
     await renderThread(true, true);
     
+    // Auto-mark newly visible messages as read (only new messages from parent loading)
+    if (firstMessageId && displayedMessages.value.length > 0) {
+      console.log('[ThreadView] 🔄 LOAD PARENTS triggering auto-mark for visible branch');
+      store.dispatch('messages/markVisibleBranchAsRead', displayedMessages.value[0].id);
+    }
+    
     // After rendering, if we had a reference message, restore its relative position
     if (messageList.value && referenceMessage) {
       // Wait for DOM to settle
@@ -1115,6 +1157,12 @@ const loadMoreChildren = async () => {
     
     // Render thread but preserve scroll position AND branch path
     await renderThread(true, true);
+    
+    // Auto-mark newly visible messages as read (only new messages from children loading)
+    if (lastMessageId && displayedMessages.value.length > 0) {
+      console.log('[ThreadView] 🔄 LOAD CHILDREN triggering auto-mark for visible branch');
+      store.dispatch('messages/markVisibleBranchAsRead', displayedMessages.value[0].id);
+    }
     
     // After rendering, restore scroll position - no adjustment needed for bottom loading
     if (messageList.value) {

@@ -238,7 +238,7 @@ export default {
           throw new Error('No authentication token available');
         }
         
-        const response = await apiClient.get('/users/unread-count', {
+        const response = await apiClient.get('/users/unread-total', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -276,6 +276,34 @@ export default {
         return response;
       } catch (error) {
         console.error('Error marking message as read:', error);
+        throw error;
+      }
+    },
+
+    /**
+     * Mark multiple messages as read for the current user
+     * @param {Array<String>} messageIds - Array of message IDs to mark as read
+     * @returns {Promise<Object>} - Response with success status and counts
+     */
+    async batchMarkAsRead(messageIds) {
+      try {
+        console.log('[UserService] Batch marking messages as read:', messageIds.length, 'messages');
+        const token = await getFirebaseToken();
+        
+        if (!token) {
+          throw new Error('No authentication token available');
+        }
+        
+        const response = await apiClient.post('/users/messages/batch-mark-read', messageIds, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        console.log('[UserService] Batch mark as read response:', response.data);
+        return response;
+      } catch (error) {
+        console.error('Error batch marking messages as read:', error);
         throw error;
       }
     },
