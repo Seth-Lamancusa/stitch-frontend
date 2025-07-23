@@ -539,34 +539,34 @@ export default {
         // Use the current user if content_author is not provided
         const effectiveAuthor = content_author || rootState.user?.email;
         
-        // Process recipients to extract UIDs
-        let recipientUids = [];
+        // Process recipients - keep full objects to preserve visibility settings
+        let processedRecipients = [];
         if (recipients && recipients.length > 0) {
           console.log('[Messages Store] Processing recipients:', recipients);
           
-          recipientUids = recipients.map(recipient => {
-            // If recipient is already an object with a uid
+          processedRecipients = recipients.map(recipient => {
+            // If recipient is already an object with a uid - keep the full object
             if (typeof recipient === 'object' && recipient.uid) {
-              console.log('[Messages Store] Using recipient UID from object:', recipient.uid);
-              return recipient.uid;
+              console.log('[Messages Store] Using full recipient object:', recipient);
+              return recipient; // Keep entire object including visible property
             }
-            // If recipient is a string (backward compatibility)
+            // If recipient is a string, convert to object (backward compatibility)
             else if (typeof recipient === 'string') {
-              console.log('[Messages Store] Using recipient as string:', recipient);
-              return recipient; // Will be resolved by server
+              console.log('[Messages Store] Converting string recipient to object:', recipient);
+              return { uid: recipient, visible: true }; // Default visible for string recipients
             }
             console.log('[Messages Store] Invalid recipient format:', recipient);
             return null;
-          }).filter(uid => uid !== null); // Remove any nulls
+          }).filter(recipient => recipient !== null); // Remove any nulls
           
-          console.log('[Messages Store] Final recipient UIDs:', recipientUids);
+          console.log('[Messages Store] Final processed recipients:', processedRecipients);
         }
         
         // Only add the author as recipient in private messages with no recipients
         // to ensure they can see their own message
-        if (isPrivate && recipientUids.length === 0 && effectiveAuthor) {
-          // If effectiveAuthor is an email, it will be resolved to UID by server
-          recipientUids.push(effectiveAuthor);
+        if (isPrivate && processedRecipients.length === 0 && effectiveAuthor) {
+          // Add author as full recipient object
+          processedRecipients.push({ uid: effectiveAuthor, visible: true });
           console.log('[Messages Store] Added author as recipient:', effectiveAuthor);
         }
         
@@ -575,7 +575,7 @@ export default {
           parentId, 
           contentLength: content?.length || 0,
           isPrivate,
-          recipientUids,
+          processedRecipients,
           effectiveAuthor 
         });
         
@@ -583,7 +583,7 @@ export default {
           parentId, 
           content, 
           isPrivate, 
-          recipientUids, 
+          processedRecipients, 
           effectiveAuthor
         );
         
@@ -622,16 +622,16 @@ export default {
     },
     
     // Delete a message
-    async deleteMessage({ commit, state, dispatch }, messageId) {
+    async deleteMessage({ commit, state, dispatch }, { messageId, deleteDescendants = false }) {
       try {
-        console.log(`Deleting message: ${messageId}`);
+        console.log(`Deleting message: ${messageId}, deleteDescendants: ${deleteDescendants}`);
         
         // Save reference to the message before deletion
         const messageToDelete = state.messages[messageId];
         
         // If message doesn't exist in frontend state, check if it might have been cascade-deleted
         if (!messageToDelete) {
-          console.log(`[deleteMessage] Message ${messageId} not found in frontend state - may have been cascade deleted`);
+          console.log(`Message ${messageId} not found in frontend state - may have been cascade deleted`);
           return true;
         }
         
@@ -639,9 +639,9 @@ export default {
         const parentId = messageToDelete.parent_id;
         
         try {
-          // API call to delete the message
-          await MessageService.deleteMessage(messageId);
-          console.log(`[deleteMessage] Successfully deleted message ${messageId} via API`);
+          // API call to delete the message with deleteDescendants flag
+          await MessageService.deleteMessage(messageId, deleteDescendants);
+          console.log(`Successfully deleted message ${messageId}`);
         } catch (error) {
           // Handle 404 case - message might have been cascade deleted already
           if (error.response && error.response.status === 404) {

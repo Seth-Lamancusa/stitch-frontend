@@ -186,12 +186,11 @@ import MessageNode from '../../components/MessageNode.vue';
 import AdaptiveMarker from '../../components/AdaptiveMarker.vue';
 import ReplyBox from '../../components/ReplyBox.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
+import MessageService from '../../services/MessageService.js';
 import LinksModal from '../../components/LinksModal.vue';
 import RecipientsModal from '../../components/RecipientsModal.vue';
 import DeleteConfirmModal from '../../components/DeleteConfirmModal.vue';
 import ProfileEditModal from '../../components/ProfileEditModal.vue';
-import MessageService from '../../services/MessageService';
-import WebSocketService from '../../services/WebSocketService';
 import { useAuthentication } from '../../composables/useAuthentication';
 
 // Setup store and routing
@@ -940,8 +939,8 @@ const closeRecipientsModal = () => {
   store.dispatch('navigation/hideRecipientsModal');
 };
 
-const handleAddRecipients = async (recipients) => {
-  console.log('[ThreadView] handleAddRecipients called with', recipients);
+const handleAddRecipients = async (recipients, propagateToDescendants = false) => {
+  console.log('[ThreadView] handleAddRecipients called with', recipients, 'propagate:', propagateToDescendants);
   
   if (!recipients || recipients.length === 0) {
     console.log('[ThreadView] No recipients to add');
@@ -957,7 +956,7 @@ const handleAddRecipients = async (recipients) => {
       return;
     }
 
-    const response = await MessageService.addRecipientsToMessage(messageId, recipients);
+    const response = await MessageService.addRecipientsToMessage(messageId, recipients, propagateToDescendants);
     
     console.log('[ThreadView] Recipients added successfully', response.data);
     
@@ -981,16 +980,17 @@ const handleRecipientRemoved = (recipientUid) => {
   console.log('[ThreadView] handleRecipientRemoved called with', recipientUid);
 };
 
-const deleteMessage = async () => {
+const deleteMessage = async (options) => {
   if (!messageToDelete.value || isDeleting.value) return;
   
   const deletedId = messageToDelete.value.id;
+  const deleteDescendants = options?.deleteDescendants || false;
   
   try {
     // Set deleting state to true
     isDeleting.value = true;
     
-    await store.dispatch('messages/deleteMessage', deletedId);
+    await store.dispatch('messages/deleteMessage', { messageId: deletedId, deleteDescendants });
     
     // Get the previous route to return to
     const prevRoute = store.getters['navigation/previousRoute'];

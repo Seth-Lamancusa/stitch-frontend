@@ -47,7 +47,7 @@ export default {
     const messageData = {
       content,
       public: !isPrivate,
-      recipients // Now expects an array of UIDs
+      recipients // Expects array of recipient objects with {uid, visible, etc}
     };
     
     // Only include parent_id if this is a reply
@@ -91,7 +91,7 @@ export default {
   },
   
   // Add recipients to an existing message
-  async addRecipientsToMessage(messageId, recipients) {
+  async addRecipientsToMessage(messageId, recipients, propagateToDescendants = false) {
     console.log('[MessageService] addRecipientsToMessage called with:', {
       messageId,
       recipientsCount: recipients?.length || 0
@@ -106,11 +106,13 @@ export default {
     console.log('[MessageService] Sending add recipients request:', {
       endpoint: `${apiBaseUrl}/messages/${messageId}/recipients`,
       requestData,
+      propagateToDescendants,
       hasHeaders: !!headers
     });
     
     try {
-      const response = await axios.post(`${apiBaseUrl}/messages/${messageId}/recipients`, requestData, { headers });
+      const url = `${apiBaseUrl}/messages/${messageId}/recipients${propagateToDescendants ? '?propagate_to_descendants=true' : ''}`;
+      const response = await axios.post(url, requestData, { headers });
       console.log('[MessageService] Add recipients request successful:', {
         status: response.status,
         addedCount: response.data?.added_recipients?.length || 0,
@@ -130,21 +132,24 @@ export default {
   },
   
   // Remove a recipient from an existing message
-  async removeRecipientFromMessage(messageId, recipientUid) {
+  async removeRecipientFromMessage(messageId, recipientUid, propagateToDescendants = false) {
     console.log('[MessageService] removeRecipientFromMessage called with:', {
       messageId,
-      recipientUid
+      recipientUid,
+      propagateToDescendants
     });
     
     const headers = await getAuthHeaders();
     
     console.log('[MessageService] Sending remove recipient request:', {
       endpoint: `${apiBaseUrl}/messages/${messageId}/recipients/${recipientUid}`,
+      propagateToDescendants,
       hasHeaders: !!headers
     });
     
     try {
-      const response = await axios.delete(`${apiBaseUrl}/messages/${messageId}/recipients/${recipientUid}`, { headers });
+      const url = `${apiBaseUrl}/messages/${messageId}/recipients/${recipientUid}${propagateToDescendants ? '?propagate_to_descendants=true' : ''}`;
+      const response = await axios.delete(url, { headers });
       console.log('[MessageService] Remove recipient request successful:', {
         status: response.status,
         removed: response.data?.removed_recipient
@@ -162,10 +167,11 @@ export default {
     }
   },
   
-  // Delete a message and all its descendants
-  async deleteMessage(id) {
+  // Delete a message and optionally its descendants
+  async deleteMessage(id, deleteDescendants = false) {
     const headers = await getAuthHeaders();
-    return axios.delete(`${apiBaseUrl}/messages/${id}`, { headers });
+    const params = { delete_descendants: deleteDescendants };
+    return axios.delete(`${apiBaseUrl}/messages/${id}`, { headers, params });
   },
   
   // Pin a message (admin only)

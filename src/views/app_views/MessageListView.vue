@@ -132,13 +132,14 @@ const closeRecipientsModal = () => {
   store.dispatch('navigation/hideRecipientsModal');
 };
 
-const handleAddRecipients = async (recipients) => {
+const handleAddRecipients = async (recipients, propagateToDescendants = false) => {
   try {
     const messageId = recipientsModalMessageId.value;
     console.log('[MessageListView] handleAddRecipients called with:', {
       messageId,
       recipients,
-      recipientsCount: recipients?.length
+      recipientsCount: recipients?.length,
+      propagateToDescendants
     });
     
     if (!messageId) {
@@ -155,7 +156,7 @@ const handleAddRecipients = async (recipients) => {
     });
 
     const MessageService = await import('../../services/MessageService');
-    const response = await MessageService.default.addRecipientsToMessage(messageId, recipients);
+    const response = await MessageService.default.addRecipientsToMessage(messageId, recipients, propagateToDescendants);
     
     console.log('[MessageListView] Recipients added successfully', response.data);
     console.log('[MessageListView] API response details:', {
@@ -201,14 +202,15 @@ const messageToDelete = computed(() => store.getters['ui/messageToDelete']);
 const isDeleting = ref(false);
 
 // Add delete message functionality
-const deleteMessage = async () => {
+const deleteMessage = async (options) => {
   if (!messageToDelete.value || isDeleting.value) return;
   
   const deletedId = messageToDelete.value.id;
+  const deleteDescendants = options?.deleteDescendants || false;
   
   try {
     isDeleting.value = true;
-    await store.dispatch('messages/deleteMessage', deletedId);
+    await store.dispatch('messages/deleteMessage', { messageId: deletedId, deleteDescendants });
     store.commit('ui/SET_DELETE_CONFIRM', { show: false, message: null });
   } catch (error) {
     console.error('Error deleting message:', error);

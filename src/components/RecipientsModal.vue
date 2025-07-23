@@ -14,7 +14,7 @@
             <p class="section-header">Visible recipients</p>
             <div class="recipients-list">
               <div  
-              v-for="(recipient, index) in existingRecipients" 
+              v-for="(recipient, index) in deduplicatedExistingRecipients" 
               :key="recipient.uid" 
               class="recipient-tag existing-recipient"
               :class="{
@@ -30,13 +30,14 @@
                 </div>
                 <div class="recipient-metadata">
                 <span class="recipient-timestamp">{{ recipient.timestamp ? new Date(recipient.timestamp).toLocaleString() : 'creation' }}</span>
-                  <span class="recipient-added-by">Added by: {{ getAddedByText(recipient) }}</span>
+                  <span class="recipient-added-by">Added by: {{ recipient.added_by_display }}</span>
                 </div>
               </div>
               <div class="recipient-controls">
-                <span class="visibility-indicator" :title="recipient.visible !== false ? 'Visible (CC)' : 'Hidden (BCC)'">
-                  {{ recipient.visible !== false ? '👁️' : '🙈' }}
-                </span>
+                <div class="visibility-indicators" :title="getVisibilityTitle(recipient)">
+                  <span v-if="recipient.has_visible" class="visibility-indicator visible">👁️</span>
+                  <span v-if="recipient.has_hidden" class="visibility-indicator hidden">🙈</span>
+                </div>
                 <button 
                   v-if="canRemoveExistingRecipient(recipient)"
                   @click.stop="() => removeExistingRecipient(index, recipient)" 
@@ -225,24 +226,39 @@
       <div class="modal-footer">
         <!-- Add mode: Show "Add Recipients" button (disabled if no staged recipients) + "Cancel" button -->
         <div v-if="!isNewMessageMode">
-          <button 
-            @click.stop="handleDone" 
-            class="add-button" 
-            :disabled="isAddingRecipients || !hasNewRecipients"
-          >
-            <div v-if="isAddingRecipients" class="button-loading">
-              <div class="spinner-small"></div>
-              <span>Adding...</span>
-            </div>
-            <span v-else>Add Recipients</span>
-          </button>
-          <button 
-            @click.stop="handleDoneOrCancel" 
-            class="cancel-button" 
-            :disabled="isAddingRecipients"
-          >
-            Cancel
-          </button>
+          <!-- Descendant propagation toggle -->
+          <div class="descendants-toggle-container">
+            <label class="descendants-toggle">
+              <input 
+                type="checkbox" 
+                v-model="addToDescendants"
+                :disabled="isAddingRecipients"
+              />
+              <span class="descendants-toggle-text">Add to all descendants</span>
+              <span class="descendants-toggle-hint" title="Also add recipients to all replies/children of this message">ⓘ</span>
+            </label>
+          </div>
+          
+          <div class="modal-actions">
+            <button 
+              @click.stop="handleDone" 
+              class="add-button" 
+              :disabled="isAddingRecipients || !hasNewRecipients"
+            >
+              <div v-if="isAddingRecipients" class="button-loading">
+                <div class="spinner-small"></div>
+                <span>Adding...</span>
+              </div>
+              <span v-else>Add Recipients</span>
+            </button>
+            <button 
+              @click.stop="handleDoneOrCancel" 
+              class="cancel-button" 
+              :disabled="isAddingRecipients"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
         
         <!-- New message mode: Only show "Done" button -->
@@ -253,6 +269,57 @@
             :disabled="isAddingRecipients"
           >
             Done
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Remove recipient confirmation dialog -->
+    <div v-if="showRemoveConfirm" class="modal-overlay remove-confirm-overlay" @click.self="handleOverlayClick">
+      <div class="remove-confirm-modal">
+        <div class="remove-confirm-header">
+          <h4>Remove Recipient</h4>
+        </div>
+        
+        <div class="remove-confirm-content">
+          <p>Remove <strong>{{ recipientToRemove?.recipient?.display_name || recipientToRemove?.recipient?.user_tag }}</strong> from this message?</p>
+          
+          <div class="remove-options">
+            <button 
+              @click="confirmRemoveRecipient(false)"
+              class="remove-option-btn remove-single"
+              :disabled="isRemovingFromSingle || isRemovingFromDescendants"
+              :class="{ 'removing': isRemovingFromSingle }"
+            >
+              <div v-if="isRemovingFromSingle" class="button-loading">
+                <div class="spinner-small"></div>
+                <span>Removing...</span>
+              </div>
+              <span v-else>Remove from this message only</span>
+            </button>
+            
+            <button 
+              @click="confirmRemoveRecipient(true)"
+              class="remove-option-btn remove-descendants"
+              :disabled="isRemovingFromSingle || isRemovingFromDescendants"
+              :class="{ 'removing': isRemovingFromDescendants }"
+            >
+              <div v-if="isRemovingFromDescendants" class="button-loading">
+                <div class="spinner-small"></div>
+                <span>Removing from all...</span>
+              </div>
+              <span v-else>Remove from this message and all descendants</span>
+            </button>
+          </div>
+        </div>
+        
+        <div class="remove-confirm-footer">
+          <button 
+            @click="cancelRemoveRecipient"
+            class="cancel-remove-btn"
+            :disabled="isRemovingFromSingle || isRemovingFromDescendants"
+          >
+            Cancel
           </button>
         </div>
       </div>
@@ -304,10 +371,78 @@ const showSearchResults = ref(false);
 const isTagValid = ref(null);
 const removingRecipientIds = ref(new Set()); // Track which recipients are being removed
 const isAddingRecipients = ref(false); // Track if we're adding recipients
+const addToDescendants = ref(false); // Track if we should add to descendants
+const showRemoveConfirm = ref(false); // Track remove confirmation dialog
+const recipientToRemove = ref(null); // Track which recipient is being removed
+const isRemovingFromSingle = ref(false); // Track if removing from single message
+const isRemovingFromDescendants = ref(false); // Track if removing from descendants
 let searchTimeout = null;
 
 // Available chatbots
 const availableChatbots = ref(AVAILABLE_BOTS);
+
+// Helper function to deduplicate and reconcile recipient data
+const deduplicateRecipients = (recipientEdges, currentUserUid) => {
+  if (!recipientEdges || !Array.isArray(recipientEdges)) return [];
+  
+  // Group edges by recipient UID
+  const recipientGroups = {};
+  recipientEdges.forEach(recipient => {
+    const uid = recipient.uid;
+    if (!recipientGroups[uid]) {
+      recipientGroups[uid] = [];
+    }
+    recipientGroups[uid].push(recipient);
+  });
+  
+  // Reconcile each group into a single recipient entry
+  return Object.entries(recipientGroups).map(([uid, edges]) => {
+    // Get basic user info from first edge
+    const firstEdge = edges[0];
+    const reconciled = {
+      uid: uid,
+      display_name: firstEdge.display_name,
+      user_tag: firstEdge.user_tag
+    };
+    
+    // Reconcile added_by: collect all unique adders
+    const adders = [...new Set(edges.map(e => e.added_by).filter(Boolean))];
+    const addedByTags = [...new Set(edges.map(e => e.added_by_tag).filter(Boolean))];
+    reconciled.added_by_list = adders;
+    reconciled.added_by_tags = addedByTags;
+    reconciled.added_by_display = addedByTags.length > 0 
+      ? addedByTags.map(tag => `@${tag}`).join(', ')
+      : (adders.length > 0 ? adders.join(', ') : 'Unknown');
+    
+    // Reconcile timestamp: use most recent non-null timestamp
+    const timestamps = edges.map(e => e.timestamp).filter(t => t !== null && t !== undefined);
+    reconciled.timestamp = timestamps.length > 0 
+      ? timestamps.reduce((latest, current) => {
+          return new Date(current) > new Date(latest) ? current : latest;
+        })
+      : null;
+    
+    // Reconcile visibility: determine what symbols to show
+    const visibleEdges = edges.filter(e => e.visible === true || e.visible === null);
+    const hiddenEdges = edges.filter(e => e.visible === false);
+    
+    // Check if current user can see hidden edges (they added them or they are the recipient)
+    const canSeeHidden = currentUserUid && (
+      hiddenEdges.some(e => e.added_by === currentUserUid) || 
+      uid === currentUserUid
+    );
+    
+    reconciled.has_visible = visibleEdges.length > 0;
+    reconciled.has_hidden = hiddenEdges.length > 0 && canSeeHidden;
+    reconciled.visible = reconciled.has_visible; // For backwards compatibility
+    
+    // Keep original first edge data for backwards compatibility
+    reconciled.added_by = firstEdge.added_by;
+    reconciled.added_by_tag = firstEdge.added_by_tag;
+    
+    return reconciled;
+  });
+};
 
 // Computed
 const recipients = computed(() => {
@@ -325,6 +460,22 @@ const recipients = computed(() => {
     // In new message mode, show the recipients for the new message draft
     return store.getters['navigation/replyRecipients'];
   }
+});
+
+// Computed property for deduplicated existing recipients
+const deduplicatedExistingRecipients = computed(() => {
+  if (!props.isAddMode || !props.existingRecipients) return [];
+  
+  const deduplicated = deduplicateRecipients(props.existingRecipients, currentUser.value?.uid);
+  
+  console.log('[RecipientsModal] Recipient deduplication:', {
+    original: props.existingRecipients.length,
+    deduplicated: deduplicated.length,
+    originalData: props.existingRecipients,
+    deduplicatedData: deduplicated
+  });
+  
+  return deduplicated;
 });
 
 // New computed property for unified display in add mode
@@ -415,14 +566,13 @@ const canRemoveExistingRecipient = computed(() => {
     
     const currentUserUid = currentUser.value.uid;
     
-    // For existing recipients, check permissions based on added_by field
-    if (recipient.added_by !== undefined && recipient.added_by !== null) {
-      // Recipient was added later - only the user who added them can remove
-      return recipient.added_by === currentUserUid;
-    } else {
-      // Original recipient (added_by is null) - only message author can remove
-      return currentMessage.value && currentMessage.value.content_author === currentUserUid;
-    }
+    // For deduplicated recipients, check if current user has any removable edges
+    // Either they added the recipient themselves, or they're the message author for original recipients
+    const hasRemovableEdge = recipient.added_by_list && recipient.added_by_list.includes(currentUserUid);
+    const isMessageAuthor = currentMessage.value && currentMessage.value.content_author === currentUserUid;
+    const hasOriginalRecipient = recipient.timestamp === null; // Has original recipient edge
+    
+    return hasRemovableEdge || (isMessageAuthor && hasOriginalRecipient);
   };
 });
 
@@ -441,6 +591,11 @@ const hasNewRecipients = computed(() => {
   return result;
 });
 
+// Computed property to check if any removal operation is in progress
+const isAnyRemovalInProgress = computed(() => {
+  return isRemovingFromSingle.value || isRemovingFromDescendants.value;
+});
+
 // Methods
 const getRecipientTitle = (recipient) => {
   // In new message mode, all recipients are staged (no "original" recipients yet)
@@ -451,6 +606,20 @@ const getRecipientTitle = (recipient) => {
   // In add mode, distinguish between new and existing recipients
   if (recipient.isNew) {
     return 'New recipient being added';
+  } else if (recipient.isExisting) {
+    // For deduplicated existing recipients, show combined info
+    const parts = [];
+    if (!recipient.timestamp) {
+      parts.push('Original recipient (added when message was created)');
+    } else {
+      parts.push('Added after message creation');
+    }
+    
+    if (recipient.added_by_list && recipient.added_by_list.length > 1) {
+      parts.push(`Added by ${recipient.added_by_list.length} different users`);
+    }
+    
+    return parts.join(' • ');
   } else if (!recipient.timestamp) {
     return 'Original recipient (added when message was created)';
   } else {
@@ -479,23 +648,44 @@ const getAddedByText = (recipient) => {
   return `User ${recipient.added_by}`;
 };
 
+// Method to get visibility tooltip text
+const getVisibilityTitle = (recipient) => {
+  const parts = [];
+  
+  if (recipient.has_visible && recipient.has_hidden) {
+    parts.push('Mixed visibility: Some additions are visible (CC), others are hidden (BCC)');
+  } else if (recipient.has_visible) {
+    parts.push('Visible (CC)');
+  } else if (recipient.has_hidden) {
+    parts.push('Hidden (BCC) - visible to you');
+  }
+  
+  return parts.join('. ');
+};
+
 const closeModal = () => {
   console.log('[RecipientsModal] closeModal called');
   clearSearch();
+  // Reset any loading states
+  isRemovingFromSingle.value = false;
+  isRemovingFromDescendants.value = false;
+  showRemoveConfirm.value = false;
+  recipientToRemove.value = null;
   emit('close');
 };
 
 const handleDone = async () => {
   console.log('[RecipientsModal] handleDone called');
   console.log('[RecipientsModal] Current recipients:', recipients.value);
+  console.log('[RecipientsModal] Add to descendants:', addToDescendants.value);
   
   // Set loading state
   isAddingRecipients.value = true;
   
   try {
-    // Emit add-recipients event with current recipients
+    // Emit add-recipients event with current recipients and descendant flag
     const recipientsToAdd = [...recipients.value];
-    emit('add-recipients', recipientsToAdd);
+    emit('add-recipients', recipientsToAdd, addToDescendants.value);
     
     // Note: The parent component should call onAddRecipientsComplete() when done
     // The loading state will be cleared by the parent via that method
@@ -716,12 +906,27 @@ const removeExistingRecipient = async (index, recipient) => {
     return;
   }
   
-  // Add to loading set
+  // Store recipient to remove and show confirmation dialog
+  recipientToRemove.value = { index, recipient };
+  showRemoveConfirm.value = true;
+};
+
+const confirmRemoveRecipient = async (propagateToDescendants) => {
+  const { index, recipient } = recipientToRemove.value;
+  
+  // Set specific loading states
   removingRecipientIds.value.add(recipient.uid);
+  if (propagateToDescendants) {
+    isRemovingFromDescendants.value = true;
+  } else {
+    isRemovingFromSingle.value = true;
+  }
   
   try {
+    console.log('[RecipientsModal] Removing recipient with propagation:', propagateToDescendants);
+    
     // Call API to remove recipient from the actual message
-    await MessageService.removeRecipientFromMessage(props.messageId, recipient.uid);
+    await MessageService.removeRecipientFromMessage(props.messageId, recipient.uid, propagateToDescendants);
     
     // Refresh the message data to get updated recipients list
     await store.dispatch('messages/loadMessageRadius', { 
@@ -747,8 +952,28 @@ const removeExistingRecipient = async (index, recipient) => {
     const errorMessage = error.response?.data?.detail || 'Failed to remove recipient';
     alert(errorMessage);
   } finally {
-    // Remove from loading set
+    // Reset loading states
     removingRecipientIds.value.delete(recipient.uid);
+    isRemovingFromSingle.value = false;
+    isRemovingFromDescendants.value = false;
+    // Close confirmation dialog
+    showRemoveConfirm.value = false;
+    recipientToRemove.value = null;
+  }
+};
+
+const cancelRemoveRecipient = () => {
+  // Reset loading states
+  isRemovingFromSingle.value = false;
+  isRemovingFromDescendants.value = false;
+  showRemoveConfirm.value = false;
+  recipientToRemove.value = null;
+};
+
+const handleOverlayClick = () => {
+  // Only allow closing if no removal is in progress
+  if (!isAnyRemovalInProgress.value) {
+    cancelRemoveRecipient();
   }
 };
 
@@ -1257,15 +1482,29 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   opacity: 1;
 }
 
+.visibility-indicators {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
 .visibility-indicator {
   font-size: 16px;
   opacity: 0.7;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
+  width: 20px;
   height: 28px;
   cursor: default;
+}
+
+.visibility-indicator.visible {
+  opacity: 0.8;
+}
+
+.visibility-indicator.hidden {
+  opacity: 0.6;
 }
 
 .remove-recipient-btn {
@@ -1354,13 +1593,47 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
 .modal-footer {
   padding: 16px 24px 20px;
   border-top: 1px solid var(--color-border);
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
   flex-shrink: 0;
 }
 
-.modal-footer > div {
+.descendants-toggle-container {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.descendants-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+}
+
+.descendants-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+.descendants-toggle-text {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.descendants-toggle-hint {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  cursor: help;
+  opacity: 0.7;
+}
+
+.descendants-toggle-hint:hover {
+  opacity: 1;
+}
+
+.modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
@@ -1621,5 +1894,157 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
 .chatbot-toggle input[type="checkbox"]:focus {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+}
+
+/* Remove confirmation dialog */
+.remove-confirm-overlay {
+  z-index: 1002; /* Above the main modal */
+}
+
+.remove-confirm-modal {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 0;
+  min-width: 400px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+.remove-confirm-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.remove-confirm-header h4 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.remove-confirm-content {
+  padding: 20px 24px;
+  flex: 1;
+}
+
+.remove-confirm-content p {
+  margin: 0 0 20px 0;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+
+.remove-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.remove-option-btn {
+  padding: 12px 16px;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.remove-option-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.05));
+}
+
+.remove-option-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.remove-option-btn.removing {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.1));
+}
+
+.remove-option-btn .button-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.remove-option-btn.remove-single {
+  border-color: var(--color-warning, #f59e0b);
+}
+
+.remove-option-btn.remove-single:hover:not(:disabled) {
+  border-color: var(--color-warning, #f59e0b);
+  background-color: rgba(245, 158, 11, 0.1);
+}
+
+.remove-option-btn.remove-descendants {
+  border-color: var(--color-error);
+}
+
+.remove-option-btn.remove-descendants:hover:not(:disabled) {
+  border-color: var(--color-error);
+  background-color: var(--color-error-light, rgba(220, 38, 38, 0.1));
+}
+
+.remove-confirm-footer {
+  padding: 12px 24px 20px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.cancel-remove-btn {
+  padding: 10px 20px;
+  background-color: var(--color-border);
+  color: var(--color-text);
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cancel-remove-btn:hover:not(:disabled) {
+  background-color: var(--color-hover-overlay);
+}
+
+.cancel-remove-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .remove-confirm-modal {
+    min-width: unset;
+    max-width: 90vw;
+  }
+  
+  .descendants-toggle-container {
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+  }
+  
+  .modal-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .add-button, .cancel-button {
+    width: 100%;
+  }
 }
 </style>

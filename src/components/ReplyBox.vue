@@ -739,6 +739,13 @@ const confirmBotPrompt = async (bot) => {
     
     console.log(`[ReplyBox] Successfully prompted ${bot.display_name} for response`);
     
+    // Refresh the message data so RecipientsModal shows the new recipient if open
+    await store.dispatch('messages/loadMessageRadius', { 
+      messageId: props.targetId, 
+      radius: 1 
+    });
+    console.log(`[ReplyBox] Refreshed message data after adding ${bot.display_name} as recipient`);
+    
     // Clear loading state on success
     botPromptStates.value[bot.uid] = null;
     

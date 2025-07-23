@@ -510,16 +510,17 @@ const handleDeleteRequest = (message) => {
 };
 
 // Add delete message functionality
-const deleteMessage = async () => {
+const deleteMessage = async (options) => {
   if (!messageToDelete.value || isDeleting.value) return;
   
   const deletedId = messageToDelete.value.id;
+  const deleteDescendants = options?.deleteDescendants || false;
   
   try {
     // Set deleting state to true
     isDeleting.value = true;
     
-    await store.dispatch('messages/deleteMessage', deletedId);
+    await store.dispatch('messages/deleteMessage', { messageId: deletedId, deleteDescendants });
     
     // Hide confirmation modal after successful deletion
     store.commit('ui/SET_DELETE_CONFIRM', { show: false, message: null });

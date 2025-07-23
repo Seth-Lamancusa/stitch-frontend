@@ -69,7 +69,7 @@
             class="recipients-toggle author-toggle"
             title="Add recipients to this message"
           >
-            Recipients {{ typeof message.recipients === 'object' ? `(${message.recipients.length})` : '' }}
+            Recipients {{ typeof message.recipients === 'object' ? `(${deduplicatedRecipients.length})` : '' }}
           </button>
           
           <!-- Delete button - shows for admins (all messages) or authors (own messages), but not in list view -->
@@ -657,13 +657,37 @@ export default {
       return store.getters['messages/isLoading'](props.message.parent_id, 'children');
     });
     
+    // Helper function to deduplicate recipients (same logic as RecipientsModal)
+    const deduplicateRecipients = (recipientEdges) => {
+      if (!recipientEdges || !Array.isArray(recipientEdges)) return [];
+      
+      // Group recipients by UID
+      const recipientGroups = {};
+      recipientEdges.forEach(edge => {
+        if (!recipientGroups[edge.uid]) {
+          recipientGroups[edge.uid] = [];
+        }
+        recipientGroups[edge.uid].push(edge);
+      });
+      
+      // Return one entry per unique recipient UID
+      return Object.keys(recipientGroups).map(uid => recipientGroups[uid][0]);
+    };
+    
+    const deduplicatedRecipients = computed(() => {
+      if (typeof props.message.recipients === 'string') {
+        return []; // Can't deduplicate string message
+      }
+      return deduplicateRecipients(props.message.recipients || []);
+    });
+    
     const hasRecipients = computed(() => {
       // If recipients is a string (access message), display it anyway
       if (typeof props.message.recipients === 'string') {
         return true;
       }
-      // Otherwise check if we have recipients array with items
-      return props.message.recipients && props.message.recipients.length > 0;
+      // Otherwise check if we have deduplicated recipients
+      return deduplicatedRecipients.value.length > 0;
     });
     
     // New method to handle swipe navigation
@@ -1093,6 +1117,7 @@ export default {
       hasReplies: computed(() => props.message.child_ids?.length > 0),
       isEndOfBranch,
       hasRecipients,
+      deduplicatedRecipients,
       recipientsExcludingUser,
       authorDisplayName,
       authorUserTag,
@@ -1183,11 +1208,12 @@ export default {
 
 /* Add styling for list view mode */
 .message-node.list-view {
-  width: 100%;
+  width: 100% !important;
   max-width: 800px;
   margin-left: auto;
   margin-right: auto;
   transition: transform var(--transition-fast), box-shadow var(--transition-normal);
+  justify-content: stretch !important;
 }
 
 /* Only show pointer cursor in list view when not in selection mode */
@@ -1200,7 +1226,26 @@ export default {
   margin-left: 0 !important;
   margin-right: 0 !important;
   max-width: 100% !important;
+  width: 100% !important;
   z-index: 1;
+}
+
+/* Override root node expansion specifically in list view */
+.message-node.list-view:not([data-has-siblings="true"]) {
+  width: 100% !important;
+  justify-content: stretch !important;
+}
+
+.message-node.list-view:not([data-has-siblings="true"]) .message-content {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Override sibling-specific styling in list view */
+.message-node.list-view[data-has-siblings="true"] {
+  width: 100% !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
 }
 
 .message-node.list-view:hover {
