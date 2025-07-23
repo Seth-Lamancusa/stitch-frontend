@@ -480,7 +480,7 @@ const WebSocketService = {
             this.log(`Parent ID: ${data.data?.parent_id}`);
             this.log(`Author: ${data.data?.author_display_name || data.data?.author_user_tag || data.data?.content_author}`);
             this.log(`Content: "${data.data?.content?.substring(0, 50)}${data.data?.content?.length > 50 ? '...' : ''}"`);
-            this.log(`Recipients: ${data.data?.recipients?.length || 0}`);
+            this.log(`Recipients: ${data.data?.recipients?.length || 0} - ${data.data?.recipients?.map(r => r.user_tag || r.uid || r).join(', ') || 'none'}`);
             
             // Process all new_reply messages where current user is a recipient
             if (this.messageCallback) {
