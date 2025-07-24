@@ -7,6 +7,7 @@ import UserManagementView from './views/app_views/UserManagementView.vue';
 import MessageManagementView from './views/app_views/MessageManagementView.vue';
 import NewThreadView from './views/app_views/NewThreadView.vue';
 import ImportView from './views/app_views/ImportView.vue';
+import GraphView from './views/app_views/GraphView.vue';
 import HomeView from './views/info_views/HomeView.vue';
 import ArchitectureView from './views/info_views/ArchitectureView.vue';
 import RequestAccessView from './views/info_views/RequestAccessView.vue';
@@ -87,6 +88,11 @@ const routes = [
     path: '/import',
     name: 'import',
     component: ImportView
+  },
+  {
+    path: '/:messageId/graph',
+    name: 'graph-view',
+    component: GraphView
   },
   {
     path: '/:id',
