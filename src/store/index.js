@@ -4,6 +4,7 @@ import auth from './modules/auth'
 import ui from './modules/ui'
 import navigation from './modules/navigation'
 import bots from './modules/bots'
+import graphView from './modules/graphView'
 
 /**
  * Vuex store for the Stitch Thread application.
@@ -11,6 +12,7 @@ import bots from './modules/bots'
  * - User authentication state
  * - Public and private threads
  * - Thread navigation and viewing
+ * - Graph view visualization
  */
 const store = createStore({
   modules: {
@@ -18,7 +20,8 @@ const store = createStore({
     messages,
     navigation,
     ui,
-    bots
+    bots,
+    graphView
   }
 })
 
