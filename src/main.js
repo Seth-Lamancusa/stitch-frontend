@@ -20,6 +20,10 @@ const initApp = async () => {
     await store.dispatch('auth/initAuth');
     console.log("Auth initialized");
     
+    // Fetch available bots
+    await store.dispatch('bots/fetchBots');
+    console.log("Bots loaded");
+    
     // Initialize formatters (for rich text)
     initFormatters();
     console.log("Formatters initialized");

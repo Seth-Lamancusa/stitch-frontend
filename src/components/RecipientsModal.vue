@@ -90,9 +90,11 @@
           <!-- Chatbots section -->
           <div v-if="!isGuestUser" class="chatbots-section">
             <p class="chatbots-header">Available Chatbots</p>
+            
+            <!-- Main chatbots -->
             <div class="chatbots-list">
               <div 
-                v-for="chatbot in availableChatbots" 
+                v-for="chatbot in mainChatbots" 
                 :key="chatbot.uid" 
                 class="chatbot-card"
                 :class="{ 'chatbot-selected': isChatbotSelected(chatbot) }"
@@ -108,6 +110,40 @@
                     :checked="isChatbotSelected(chatbot)"
                     @click.stop="toggleChatbot(chatbot)"
                   />
+                </div>
+              </div>
+            </div>
+            
+            <!-- Advanced chatbots dropdown -->
+            <div v-if="advancedChatbots.length > 0" class="advanced-chatbots">
+              <button 
+                class="advanced-toggle-button"
+                @click="showAdvancedBots = !showAdvancedBots"
+                :aria-expanded="showAdvancedBots"
+              >
+                <span class="advanced-toggle-text">Advanced Bots ({{ advancedChatbots.length }})</span>
+                <span class="advanced-toggle-icon" :class="{ 'expanded': showAdvancedBots }">▼</span>
+              </button>
+              
+              <div v-if="showAdvancedBots" class="advanced-chatbots-list">
+                <div 
+                  v-for="chatbot in advancedChatbots" 
+                  :key="chatbot.uid" 
+                  class="chatbot-card advanced-chatbot-card"
+                  :class="{ 'chatbot-selected': isChatbotSelected(chatbot) }"
+                  @click="toggleChatbot(chatbot)"
+                >
+                  <div class="chatbot-info">
+                    <span class="chatbot-name">{{ chatbot.display_name }}</span>
+                    <span class="chatbot-tag">@{{ chatbot.user_tag }}</span>
+                  </div>
+                  <div class="chatbot-toggle">
+                    <input 
+                      type="checkbox" 
+                      :checked="isChatbotSelected(chatbot)"
+                      @click.stop="toggleChatbot(chatbot)"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -331,7 +367,6 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import MessageService from '../services/MessageService.js';
-import AVAILABLE_BOTS from '../config/bots.js';
 
 const props = defineProps({
   isVisible: {
@@ -379,7 +414,14 @@ const isRemovingFromDescendants = ref(false); // Track if removing from descenda
 let searchTimeout = null;
 
 // Available chatbots
-const availableChatbots = ref(AVAILABLE_BOTS);
+const availableChatbots = computed(() => store.getters['bots/bots']);
+
+// Separate main and advanced bots
+const mainChatbots = computed(() => availableChatbots.value.filter(bot => !bot.advanced));
+const advancedChatbots = computed(() => availableChatbots.value.filter(bot => bot.advanced));
+
+// Advanced bots dropdown state
+const showAdvancedBots = ref(false);
 
 // Helper function to deduplicate and reconcile recipient data
 const deduplicateRecipients = (recipientEdges, currentUserUid) => {
@@ -1894,6 +1936,62 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
 .chatbot-toggle input[type="checkbox"]:focus {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+}
+
+/* Advanced chatbots dropdown styles */
+.advanced-chatbots {
+  margin-top: 8px;
+}
+
+.advanced-toggle-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 0.8;
+}
+
+.advanced-toggle-button:hover {
+  background-color: var(--color-hover-overlay);
+  border-color: var(--color-border-hover);
+  opacity: 1;
+}
+
+.advanced-toggle-text {
+  font-weight: 400;
+}
+
+.advanced-toggle-icon {
+  font-size: 10px;
+  transition: transform 0.2s ease;
+}
+
+.advanced-toggle-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.advanced-chatbots-list {
+  margin-top: 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--color-border);
+}
+
+.advanced-chatbot-card {
+  margin-bottom: 6px;
+  opacity: 0.8;
+  transform: scale(0.95);
+}
+
+.advanced-chatbot-card:last-child {
+  margin-bottom: 0;
 }
 
 /* Remove confirmation dialog */
