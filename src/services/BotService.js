@@ -5,7 +5,7 @@
 import axios from 'axios';
 
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://stitch-1076063929633.us-central1.run.app/api'
+  ? 'https://stitch-backend-659986757275.us-central1.run.app/api'
   : 'http://localhost:8081/api';
 
 class BotService {
