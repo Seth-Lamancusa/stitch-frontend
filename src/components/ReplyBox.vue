@@ -189,30 +189,72 @@
           </p>
           
           <div class="bot-options">
-            <button 
-              v-for="bot in availableBots" 
-              :key="bot.uid"
-              class="bot-option-button"
-              :class="{ 
-                'confirm-state': botConfirmStates[bot.uid] === 'confirm',
-                'loading': botPromptStates[bot.uid] === 'loading',
-                'success': botPromptStates[bot.uid] === 'success',
-                'error': botPromptStates[bot.uid] === 'error'
-              }"
-              @click="handleBotSelection(bot)"
-              :disabled="botPromptStates[bot.uid] === 'loading'"
-            >
-              <span class="bot-option-icon">
-                <span v-if="botPromptStates[bot.uid] === 'loading'" class="bot-loading-spinner"></span>
-                <span v-else-if="botPromptStates[bot.uid] === 'success'">✓</span>
-                <span v-else-if="botPromptStates[bot.uid] === 'error'">✗</span>
-                <span v-else-if="botConfirmStates[bot.uid] === 'confirm'">?</span>
-                <span v-else>+</span>
-              </span>
-              <span class="bot-option-text">
-                {{ botConfirmStates[bot.uid] === 'confirm' ? 'Confirm?' : bot.display_name }}
-              </span>
-            </button>
+            <!-- Main bots -->
+            <div class="main-bot-options">
+              <button 
+                v-for="bot in mainBots" 
+                :key="bot.uid"
+                class="bot-option-button"
+                :class="{ 
+                  'confirm-state': botConfirmStates[bot.uid] === 'confirm',
+                  'loading': botPromptStates[bot.uid] === 'loading',
+                  'success': botPromptStates[bot.uid] === 'success',
+                  'error': botPromptStates[bot.uid] === 'error'
+                }"
+                @click="handleBotSelection(bot)"
+                :disabled="botPromptStates[bot.uid] === 'loading'"
+              >
+                <span class="bot-option-icon">
+                  <span v-if="botPromptStates[bot.uid] === 'loading'" class="bot-loading-spinner"></span>
+                  <span v-else-if="botPromptStates[bot.uid] === 'success'">✓</span>
+                  <span v-else-if="botPromptStates[bot.uid] === 'error'">✗</span>
+                  <span v-else-if="botConfirmStates[bot.uid] === 'confirm'">?</span>
+                  <span v-else>+</span>
+                </span>
+                <span class="bot-option-text">
+                  {{ botConfirmStates[bot.uid] === 'confirm' ? 'Confirm?' : bot.display_name }}
+                </span>
+              </button>
+            </div>
+            
+            <!-- Advanced bots dropdown -->
+            <div v-if="advancedBots.length > 0" class="advanced-bot-options">
+              <button 
+                class="advanced-bots-toggle"
+                @click="showAdvancedBotsModal = !showAdvancedBotsModal"
+                :aria-expanded="showAdvancedBotsModal"
+              >
+                <span class="advanced-bots-text">Advanced Bots ({{ advancedBots.length }})</span>
+                <span class="advanced-bots-icon" :class="{ 'expanded': showAdvancedBotsModal }">▼</span>
+              </button>
+              
+              <div v-if="showAdvancedBotsModal" class="advanced-bot-list">
+                <button 
+                  v-for="bot in advancedBots" 
+                  :key="bot.uid"
+                  class="bot-option-button advanced-bot-button"
+                  :class="{ 
+                    'confirm-state': botConfirmStates[bot.uid] === 'confirm',
+                    'loading': botPromptStates[bot.uid] === 'loading',
+                    'success': botPromptStates[bot.uid] === 'success',
+                    'error': botPromptStates[bot.uid] === 'error'
+                  }"
+                  @click="handleBotSelection(bot)"
+                  :disabled="botPromptStates[bot.uid] === 'loading'"
+                >
+                  <span class="bot-option-icon">
+                    <span v-if="botPromptStates[bot.uid] === 'loading'" class="bot-loading-spinner"></span>
+                    <span v-else-if="botPromptStates[bot.uid] === 'success'">✓</span>
+                    <span v-else-if="botPromptStates[bot.uid] === 'error'">✗</span>
+                    <span v-else-if="botConfirmStates[bot.uid] === 'confirm'">?</span>
+                    <span v-else>+</span>
+                  </span>
+                  <span class="bot-option-text">
+                    {{ botConfirmStates[bot.uid] === 'confirm' ? 'Confirm?' : bot.display_name }}
+                  </span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -224,7 +266,6 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import RecipientsModal from './RecipientsModal.vue';
-import AVAILABLE_BOTS from '../config/bots.js';
 
 const props = defineProps({
   targetId: {
@@ -278,7 +319,15 @@ const dragDistance = ref(0);
 const showRecipientSelector = ref(false);
 
 // Bot prompt state
-const availableBots = ref(AVAILABLE_BOTS);
+const availableBots = computed(() => store.getters['bots/bots']);
+
+// Separate main and advanced bots
+const mainBots = computed(() => availableBots.value.filter(bot => !bot.advanced));
+const advancedBots = computed(() => availableBots.value.filter(bot => bot.advanced));
+
+// Advanced bots dropdown state
+const showAdvancedBotsModal = ref(false);
+
 const showBotModal = ref(false); // Track if bot selection modal is open
 const botConfirmStates = ref({}); // Track which bots are in confirm state
 const botPromptStates = ref({}); // Track loading/success/error states for each bot
@@ -1731,6 +1780,7 @@ defineExpose({
   font-size: var(--font-size-md);
   width: 100%;
   text-align: left;
+  margin-bottom: 6px;
 }
 
 .bot-option-button:hover:not(:disabled) {
@@ -1771,6 +1821,62 @@ defineExpose({
   background-color: var(--color-error);
   border-color: var(--color-error);
   color: var(--color-text-inverse);
+}
+
+/* Advanced bots dropdown styles */
+.advanced-bot-options {
+  margin-top: 8px;
+}
+
+.advanced-bots-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-size: var(--font-size-sm);
+  opacity: 0.8;
+}
+
+.advanced-bots-toggle:hover {
+  background-color: var(--color-hover-overlay);
+  border-color: var(--color-border-hover);
+  opacity: 1;
+}
+
+.advanced-bots-text {
+  font-weight: 400;
+}
+
+.advanced-bots-icon {
+  font-size: var(--font-size-xs);
+  transition: transform var(--transition-fast);
+}
+
+.advanced-bots-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.advanced-bot-list {
+  margin-top: 6px;
+  padding-left: 12px;
+  border-left: 1px solid var(--color-border);
+}
+
+.advanced-bot-button {
+  margin-bottom: 6px;
+  opacity: 0.8;
+  transform: scale(0.95);
+}
+
+.advanced-bot-button:last-child {
+  margin-bottom: 0;
 }
 
 .bot-option-icon {

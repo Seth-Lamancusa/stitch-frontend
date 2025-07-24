@@ -10,7 +10,7 @@
         <form @submit.prevent="handleSubmit">
           <!-- Email Field -->
           <div class="form-group">
-            <label for="email">Email Address <span class="required">*</span></label>
+            <label for="email">Email Address</label>
             <input 
               id="email" 
               v-model="formData.email" 
@@ -18,7 +18,6 @@
               placeholder="user@example.com"
               :class="{ 'error': emailError }"
               @blur="validateEmail"
-              required
             />
             <div v-if="emailError" class="field-error">{{ emailError }}</div>
             <div v-else class="field-hint">The user's email address</div>
@@ -136,8 +135,7 @@ watch(() => props.isOpen, (isOpen) => {
 
 // Computed properties
 const canSubmit = computed(() => {
-  return formData.value.email && 
-         formData.value.display_name && 
+  return formData.value.display_name && 
          formData.value.user_tag && 
          formData.value.status && 
          !emailError.value && 
@@ -163,20 +161,6 @@ const resetForm = () => {
 };
 
 const validateEmail = () => {
-  emailError.value = '';
-  const email = formData.value.email.trim();
-  
-  if (!email) {
-    emailError.value = 'Email is required';
-    return false;
-  }
-  
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    emailError.value = 'Please enter a valid email address';
-    return false;
-  }
-  
   return true;
 };
 
