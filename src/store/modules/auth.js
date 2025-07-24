@@ -103,6 +103,7 @@ export default {
               displayName: userData.display_name || firebaseUser.displayName,
               photoURL: firebaseUser.photoURL,
               user_tag: userData.user_tag || '',
+              phone_number: userData.phone_number || null,
               status: userData.status
             });
             
@@ -231,7 +232,8 @@ export default {
           commit('SET_USER', {
             ...currentUser,
             displayName: result.profile.display_name,
-            user_tag: result.profile.user_tag
+            user_tag: result.profile.user_tag,
+            phone_number: result.profile.phone_number || null
           });
         }
 

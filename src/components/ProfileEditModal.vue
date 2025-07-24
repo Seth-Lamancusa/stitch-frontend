@@ -13,10 +13,12 @@ const user = computed(() => store.getters['auth/user']);
 
 const displayName = ref('');
 const tag = ref('');
+const phoneNumber = ref('');
 const isSubmitting = ref(false);
 const errorMessage = ref('');
 const tagError = ref('');
 const displayNameError = ref('');
+const phoneNumberError = ref('');
 const noChangesMessage = ref('');
 
 // Reset form whenever modal is opened
@@ -29,9 +31,11 @@ watch(() => props.isOpen, (isOpen) => {
 const resetForm = () => {
   displayName.value = user.value?.displayName || '';
   tag.value = user.value?.user_tag || '';
+  phoneNumber.value = user.value?.phone_number || '';
   errorMessage.value = '';
   tagError.value = '';
   displayNameError.value = '';
+  phoneNumberError.value = '';
   noChangesMessage.value = '';
 };
 
@@ -62,15 +66,43 @@ const validateTag = () => {
   return true;
 };
 
+const validatePhoneNumber = () => {
+  phoneNumberError.value = '';
+  
+  // If empty, it's valid (phone number is optional)
+  if (!phoneNumber.value.trim()) {
+    return true;
+  }
+  
+  // Remove all non-digit characters for validation
+  const digitsOnly = phoneNumber.value.replace(/\D/g, '');
+  
+  // Check if it's a valid US phone number (10 or 11 digits)
+  if (digitsOnly.length < 10 || digitsOnly.length > 11) {
+    phoneNumberError.value = 'Please enter a valid phone number';
+    return false;
+  }
+  
+  // If 11 digits, first digit should be 1 (US country code)
+  if (digitsOnly.length === 11 && digitsOnly[0] !== '1') {
+    phoneNumberError.value = 'Please enter a valid US phone number';
+    return false;
+  }
+  
+  return true;
+};
+
 // Function to check if the form has any changes from the original user data
 const hasFormChanges = computed(() => {
   if (!user.value) return false;
   
   const originalDisplayName = user.value.displayName || '';
   const originalTag = user.value.user_tag || '';
+  const originalPhoneNumber = user.value?.phone_number || '';
   
   return displayName.value !== originalDisplayName || 
-         tag.value !== originalTag;
+         tag.value !== originalTag ||
+         phoneNumber.value !== originalPhoneNumber;
 });
 
 // Function to determine if the update button should be enabled
@@ -78,12 +110,14 @@ const canSubmit = computed(() => {
   // Only check for validation errors and submission state
   return !tagError.value && 
          !displayNameError.value && 
+         !phoneNumberError.value &&
          !isSubmitting.value;
 });
 
 const validateForm = () => {
   let isValid = true;
   displayNameError.value = '';
+  phoneNumberError.value = '';
   noChangesMessage.value = '';
   
   // Check if there are any changes
@@ -92,8 +126,11 @@ const validateForm = () => {
     return false;
   }
   
-  // Check if at least one field is filled
-  if (!displayName.value.trim() && !tag.value.trim()) {
+  // Check if at least one field is filled OR if we're clearing the phone number
+  const originalPhoneNumber = user.value?.phone_number || '';
+  const isPhoneNumberBeingCleared = originalPhoneNumber && !phoneNumber.value.trim();
+  
+  if (!displayName.value.trim() && !tag.value.trim() && !phoneNumber.value.trim() && !isPhoneNumberBeingCleared) {
     errorMessage.value = 'Please fill at least one field';
     return false;
   }
@@ -106,6 +143,11 @@ const validateForm = () => {
   
   // Validate tag
   if (!validateTag()) {
+    isValid = false;
+  }
+  
+  // Validate phone number
+  if (!validatePhoneNumber()) {
     isValid = false;
   }
   
@@ -140,10 +182,23 @@ const updateProfile = async () => {
     errorMessage.value = '';
     noChangesMessage.value = '';
     
-    await store.dispatch('auth/updateProfile', {
-      display_name: displayName.value.trim() || undefined,
-      user_tag: tag.value.trim() || undefined
-    });
+    const profileUpdate = {};
+    
+    if (displayName.value.trim()) {
+      profileUpdate.display_name = displayName.value.trim();
+    }
+    
+    if (tag.value.trim()) {
+      profileUpdate.user_tag = tag.value.trim();
+    }
+    
+    // Always include phone_number if the form has changes to it
+    const originalPhoneNumber = user.value?.phone_number || '';
+    if (phoneNumber.value !== originalPhoneNumber) {
+      profileUpdate.phone_number = phoneNumber.value.trim() || null;
+    }
+    
+    await store.dispatch('auth/updateProfile', profileUpdate);
     
     emit('close');
   } catch (error) {
@@ -193,6 +248,24 @@ const closeModal = () => {
             />
             <div v-if="tagError" class="field-error">{{ tagError }}</div>
             <div v-else class="field-hint">A unique identifier for your account (letters, numbers, underscores, and hyphens only)</div>
+          </div>
+          
+          <div class="form-group">
+            <label for="phoneNumber">Phone Number (Optional)</label>
+            <input 
+              id="phoneNumber" 
+              v-model="phoneNumber" 
+              type="tel" 
+              placeholder="(555) 123-4567"
+              @keydown="handleKeydown"
+              @blur="validatePhoneNumber"
+            />
+            <div v-if="phoneNumberError" class="field-error">{{ phoneNumberError }}</div>
+            <div v-else class="field-hint">Receive SMS notifications for new messages</div>
+          </div>
+          
+          <div v-if="phoneNumber.trim()" class="consent-message">
+            <p>By providing your phone number, you agree to receive text messages from Stitch at the number provided. Message and data rates may apply. Message frequency varies. To opt-out, remove your phone number here. View our Terms of Service and Privacy Policy at <a href="https://stitch.fyi/terms" target="_blank" rel="noopener noreferrer">stitch.fyi/terms</a>.</p>
           </div>
           
           <div v-if="errorMessage" class="error-message">
@@ -253,9 +326,12 @@ const closeModal = () => {
   border-radius: var(--radius-md);
   width: 90%;
   max-width: 450px;
+  max-height: 75vh;
   box-shadow: var(--color-card-shadow);
   overflow: hidden;
   animation: modal-appear var(--transition-normal);
+  display: flex;
+  flex-direction: column;
 }
 
 @keyframes modal-appear {
@@ -306,6 +382,8 @@ const closeModal = () => {
 
 .modal-content {
   padding: var(--space-lg);
+  overflow-y: auto;
+  flex: 1;
 }
 
 .form-group {
@@ -347,6 +425,30 @@ const closeModal = () => {
   font-size: var(--font-size-xs);
   color: var(--color-error);
   margin-top: 4px;
+}
+
+.consent-message {
+  background-color: rgba(52, 152, 219, 0.1);
+  border: 1px solid rgba(52, 152, 219, 0.2);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.consent-message p {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.consent-message a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.consent-message a:hover {
+  text-decoration: underline;
 }
 
 .error-message {
