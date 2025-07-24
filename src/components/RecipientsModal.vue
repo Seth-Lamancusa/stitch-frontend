@@ -116,14 +116,16 @@
             
             <!-- Advanced chatbots dropdown -->
             <div v-if="advancedChatbots.length > 0" class="advanced-chatbots">
-              <button 
-                class="advanced-toggle-button"
-                @click="showAdvancedBots = !showAdvancedBots"
-                :aria-expanded="showAdvancedBots"
-              >
-                <span class="advanced-toggle-text">Advanced Bots ({{ advancedChatbots.length }})</span>
-                <span class="advanced-toggle-icon" :class="{ 'expanded': showAdvancedBots }">▼</span>
-              </button>
+              <span class="advanced-toggle-inline">
+                <button 
+                  class="advanced-toggle-button"
+                  @click="showAdvancedBots = !showAdvancedBots"
+                  :aria-expanded="showAdvancedBots"
+                >
+                  <span class="advanced-toggle-text">Advanced ({{ advancedChatbots.length }})</span>
+                  <span class="advanced-toggle-icon" :class="{ 'expanded': showAdvancedBots }">▼</span>
+                </button>
+              </span>
               
               <div v-if="showAdvancedBots" class="advanced-chatbots-list">
                 <div 
@@ -1943,25 +1945,27 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   margin-top: 8px;
 }
 
+.advanced-toggle-inline {
+  display: inline-block;
+}
+
 .advanced-toggle-button {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 6px 10px;
+  gap: 4px;
+  padding: 2px 4px;
   background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border: none;
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   cursor: pointer;
   transition: all 0.2s ease;
-  opacity: 0.8;
+  opacity: 0.7;
 }
 
 .advanced-toggle-button:hover {
   background-color: var(--color-hover-overlay);
-  border-color: var(--color-border-hover);
+  border-radius: var(--radius-sm);
   opacity: 1;
 }
 
@@ -1970,7 +1974,7 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
 }
 
 .advanced-toggle-icon {
-  font-size: 10px;
+  font-size: 9px;
   transition: transform 0.2s ease;
 }
 
@@ -1980,8 +1984,7 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
 
 .advanced-chatbots-list {
   margin-top: 6px;
-  padding-left: 8px;
-  border-left: 1px solid var(--color-border);
+  padding-left: 0;
 }
 
 .advanced-chatbot-card {

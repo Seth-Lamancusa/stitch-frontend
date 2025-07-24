@@ -219,14 +219,16 @@
             
             <!-- Advanced bots dropdown -->
             <div v-if="advancedBots.length > 0" class="advanced-bot-options">
-              <button 
-                class="advanced-bots-toggle"
-                @click="showAdvancedBotsModal = !showAdvancedBotsModal"
-                :aria-expanded="showAdvancedBotsModal"
-              >
-                <span class="advanced-bots-text">Advanced Bots ({{ advancedBots.length }})</span>
-                <span class="advanced-bots-icon" :class="{ 'expanded': showAdvancedBotsModal }">▼</span>
-              </button>
+              <span class="advanced-bots-inline">
+                <button 
+                  class="advanced-bots-toggle"
+                  @click="showAdvancedBotsModal = !showAdvancedBotsModal"
+                  :aria-expanded="showAdvancedBotsModal"
+                >
+                  <span class="advanced-bots-text">Advanced ({{ advancedBots.length }})</span>
+                  <span class="advanced-bots-icon" :class="{ 'expanded': showAdvancedBotsModal }">▼</span>
+                </button>
+              </span>
               
               <div v-if="showAdvancedBotsModal" class="advanced-bot-list">
                 <button 
@@ -1828,25 +1830,27 @@ defineExpose({
   margin-top: 8px;
 }
 
+.advanced-bots-inline {
+  display: inline-block;
+}
+
 .advanced-bots-toggle {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 8px 12px;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  gap: 4px;
+  padding: 2px 4px;
+  background: transparent;
+  border: none;
   color: var(--color-text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
-  font-size: var(--font-size-sm);
-  opacity: 0.8;
+  font-size: var(--font-size-xs);
+  opacity: 0.7;
 }
 
 .advanced-bots-toggle:hover {
   background-color: var(--color-hover-overlay);
-  border-color: var(--color-border-hover);
+  border-radius: var(--radius-sm);
   opacity: 1;
 }
 
@@ -1855,7 +1859,7 @@ defineExpose({
 }
 
 .advanced-bots-icon {
-  font-size: var(--font-size-xs);
+  font-size: 9px;
   transition: transform var(--transition-fast);
 }
 
@@ -1865,8 +1869,7 @@ defineExpose({
 
 .advanced-bot-list {
   margin-top: 6px;
-  padding-left: 12px;
-  border-left: 1px solid var(--color-border);
+  padding-left: 0;
 }
 
 .advanced-bot-button {
