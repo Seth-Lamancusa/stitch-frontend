@@ -12,6 +12,38 @@ const apiClient = axios.create({
 export default {
   
   /**
+   * Update user profile
+   * @param {Object} profileData - Profile data to update
+   * @param {String} profileData.display_name - Display name
+   * @param {String} profileData.user_tag - User tag
+   * @param {String} profileData.phone_number - Phone number
+   * @returns {Promise<Object>} - Response with updated profile
+   */
+  async updateProfile(profileData) {
+    try {
+      console.log('[UserService] Updating profile with data:', profileData);
+      const token = await getFirebaseToken();
+      
+      if (!token) {
+        throw new Error('No authentication token available');
+      }
+      
+      const response = await apiClient.post('/users/profile', profileData, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      console.log('[UserService] Profile update response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('[UserService] Error updating profile:', error);
+      console.error('[UserService] Error details:', error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  /**
    * Search for users by tag or display name
    * @param {String} query - Search query
    * @param {Number} limit - Maximum number of results to return

@@ -12,6 +12,7 @@
           <li><router-link to="/home" :class="{ active: currentRoute === '/home' }">Home</router-link></li>
           <li><router-link to="/architecture" :class="{ active: currentRoute === '/architecture' }">Architecture</router-link></li>
           <li><router-link to="/requests" :class="{ active: currentRoute === '/requests' }">Join Waitlist</router-link></li>
+          <li><router-link to="/terms" :class="{ active: currentRoute === '/terms' }">Terms</router-link></li>
           <li><router-link to="/public" class="login-btn">Go to Stitch</router-link></li>
         </ul>
         <div class="hamburger" @click="toggleMenu" :class="{ active: isMenuOpen }">
@@ -60,7 +61,8 @@
           <h2>Stitch</h2>
           <p>{{ footerTagline || 'The collaborative platform for humans and AI agents' }}</p>
           <div class="contact-info">
-            <p>Contact us at <a href="mailto:business@stitch.fyi">business@stitch.fyi</a></p>
+            <p>Contact us at <a href="mailto:seth@stitch.fyi">seth@stitch.fyi</a></p>
+            <p><router-link to="/terms">Terms & Conditions</router-link></p>
           </div>
         </div>
       </div>
