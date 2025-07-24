@@ -23,7 +23,7 @@
         </button>
         <h2 class="thread-title">{{ threadTitle }}</h2>
         
-        <!-- Graph view toggle -->
+        <!-- Graph view toggle
         <button @click="openGraphView" class="graph-view-button" title="Switch to graph view">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M1 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h4.5a1 1 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5H1zm7 0a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h4.5a1 1 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5H8zm-7 1h3v6H1V4zm7 0h3v6H8V4z"/>
@@ -33,7 +33,7 @@
             <path d="M4 6h2.5M9 6h1.5"/>
           </svg>
           Graph View
-        </button>
+        </button> -->
         
         <!-- Selection mode controls -->
         <div v-if="isSelectionMode" class="selection-controls">
