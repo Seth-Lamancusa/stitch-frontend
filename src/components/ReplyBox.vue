@@ -590,8 +590,8 @@ const sendReply = async () => {
       content: content.value,
       isPrivate: !isPublic.value,
       recipients: recipients.value,
-      // Ensure the author is explicitly set to the user's email
-      content_author: currentUser.email
+      // Ensure the author is explicitly set to the user's UID (not email)
+      content_author: currentUser.uid
     });
     
     console.log('[ReplyBox] Message sent successfully', {

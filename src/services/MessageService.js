@@ -58,8 +58,11 @@ export default {
     // Handle special case for ChatGPT
     if (content_author === 'chatgpt') {
       messageData.content_author = 'chatgpt';
+    } else {
+      // For regular users, use the authenticated user's UID
+      // The backend requires content_author to match the authenticated user's UID
+      messageData.content_author = auth.currentUser?.uid;
     }
-    // For regular users, backend will use the authenticated user's UID from token
     
     console.log('[MessageService] Sending API request with data:', {
       endpoint: `${apiBaseUrl}/messages`,

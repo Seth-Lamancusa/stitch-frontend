@@ -7,330 +7,132 @@
       <h2 class="import-title">Import Conversation</h2>
     </div>
 
-    <!-- Service selector dropdown -->
-    <div class="service-selector-container">
-      <label class="service-selector-label">Import from:</label>
-      <select 
-        v-model="activeImportTab" 
-        class="service-dropdown"
-      >
-        <option 
-          v-for="tab in importTabs" 
-          :key="tab.id" 
-          :value="tab.id"
-        >
-          {{ tab.name }}
-        </option>
-      </select>
-    </div>
-
     <!-- Main content area -->
     <div class="import-content">
-      <div v-if="activeImportTab === 'chatgpt'" class="import-panel">
-        <h3>Import from ChatGPT</h3>
+      <div class="import-panel">
+        <h3>Import AI Conversation</h3>
         
-        <textarea 
-          v-model="importText"
-          class="import-textarea"
-          placeholder="To import a ChatGPT conversation:
-
-Copy your entire ChatGPT conversation (ctrl+a)
-Paste it in the text area below - no formatting needed
-Click &quot;Import Conversation&quot;
-
-Notes: There is currently no easy way to copy full conversations on mobile. Please use a desktop browser to import. Import from screen recording coming soon."
-          :disabled="isImporting"
-        />
-        
-        <div v-if="parsedMessages.length > 0 || formatDetection.hint" class="import-content-container">
-          <div v-if="parsedMessages.length > 0" class="import-preview">
-            <div class="preview-header">
-              <h4>Preview ({{ parsedMessages.length }} messages)</h4>
-              <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
-                <span class="format-icon">{{ getFormatIcon() }}</span>
-                <span class="format-hint">{{ formatDetection.hint }}</span>
-              </div>
-            </div>
-                          <div class="preview-messages">
-                <div v-for="(msg, index) in parsedMessages" :key="index" class="preview-message">
-                  <span class="preview-role">{{ msg.role === 'user' ? 'You' : 'ChatGPT' }}:</span>
-                  <span class="preview-content">{{ truncateContent(msg.content) }}</span>
-                </div>
-              </div>
-          </div>
-          
-          <div v-else-if="formatDetection.hint" class="format-detection standalone" :class="formatDetection.format">
-            <span class="format-icon">{{ getFormatIcon() }}</span>
-            <span class="format-hint">{{ formatDetection.hint }}</span>
-          </div>
-        </div>
-        
-        <div v-if="importErrors.length > 0" class="import-errors">
-          <p class="error-title">Please fix the following issues:</p>
-          <ul>
-            <li v-for="(error, index) in importErrors" :key="index">{{ error }}</li>
-          </ul>
-        </div>
-        
-        <div class="import-button-container">
-          <button 
-            @click="importChatGPT"
-            :disabled="!canImport || isImporting"
-            class="import-button"
-            :class="{ 'importing': isImporting, 'disabled': !hasImportPermissions }"
-          >
-            <span v-if="!isImporting">Import Conversation</span>
-            <span v-else>Importing...</span>
-          </button>
-          <p v-if="!hasImportPermissions" class="permission-message">
-            {{ importPermissionMessage }}
-          </p>
-        </div>
-      </div>
-
-      <div v-else-if="activeImportTab === 'cursor'" class="import-panel">
-        <h3>Import from Cursor</h3>
-        
-        <div class="import-instructions">
-          <p>To import a Cursor conversation:</p>
-          <ol>
-            <li>Select which AI model was used in your Cursor conversation</li>
-            <li>Export your Cursor chat conversation as a markdown file</li>
-            <li>Select the markdown file below</li>
-            <li>Click "Import Conversation"</li>
-          </ol>
-          <p class="import-warning">Only markdown (.md) files are supported</p>
-        </div>
-        
-        <div class="model-selection-container">
-          <label class="model-selection-label">AI Model Used:</label>
-          <select 
-            v-model="selectedCursorModel"
-            class="model-selection-dropdown"
+        <!-- Bot Selection -->
+        <div class="bot-selection-container">
+          <label class="bot-selection-label">Select AI Assistant:</label>
+      <select 
+            v-model="selectedBot" 
+            class="bot-selection-dropdown"
             :disabled="isImporting"
-          >
-            <option value="chatgpt">ChatGPT</option>
-            <option value="claude">Claude</option>
-            <option value="gemini">Gemini</option>
-          </select>
+      >
+            <option value="">Choose an AI assistant...</option>
+        <option 
+              v-for="bot in availableBots" 
+              :key="bot.uid" 
+              :value="bot"
+            >
+              {{ bot.display_name }}
+        </option>
+      </select>
+          <p v-if="!selectedBot" class="bot-selection-hint">
+            Select the AI assistant that was used in your conversation
+          </p>
+    </div>
+
+        <!-- Input Method Selection -->
+        <div class="input-method-container">
+          <div class="input-method-tabs">
+          <button 
+              @click="inputMethod = 'text'" 
+              :class="{ active: inputMethod === 'text' }"
+              class="input-method-tab"
+            >
+              Paste Text
+          </button>
+            <button 
+              @click="inputMethod = 'file'" 
+              :class="{ active: inputMethod === 'file' }"
+              class="input-method-tab"
+            >
+              Upload File
+            </button>
         </div>
         
+          <!-- Text Input -->
+          <div v-if="inputMethod === 'text'" class="text-input-container">
         <textarea 
           v-model="importText"
           class="import-textarea"
-          placeholder="To import a Cursor conversation:
+              placeholder="Paste your conversation here...
 
-Select which AI model was used in your Cursor conversation
-Export your Cursor chat conversation as a markdown file or copy text
-Select the markdown file below or paste text
-Click &quot;Import Conversation&quot;"
+Supported formats:
+• ChatGPT conversations (copy from web interface)
+• Claude conversations (copy from web interface)  
+• Gemini conversations (copy from web interface)
+• Cursor markdown exports (.md files)
+• Plain text conversations
+
+The format will be auto-detected once you paste your conversation."
           :disabled="isImporting"
         />
-        
-        <div class="import-or-divider">
-          <span>OR</span>
         </div>
         
-        <div class="file-upload-container">
+          <!-- File Upload -->
+          <div v-if="inputMethod === 'file'" class="file-upload-container">
           <input 
             type="file" 
-            ref="cursorFileInput"
-            accept=".md,.markdown"
-            @change="handleCursorFileUpload"
+              ref="fileInput"
+              accept=".md,.txt,.markdown"
+              @change="handleFileUpload"
             :disabled="isImporting"
             class="file-input"
-            id="cursor-file-input"
-          />
-          <label for="cursor-file-input" class="file-upload-label" :class="{ 'disabled': isImporting }">
-            <span v-if="!cursorFileName">Choose Markdown File</span>
-            <span v-else>{{ cursorFileName }}</span>
+              id="file-input"
+            />
+            <label for="file-input" class="file-upload-label" :class="{ 'disabled': isImporting }">
+              <span v-if="!uploadedFileName">Choose File (.md, .txt, .markdown)</span>
+              <span v-else>{{ uploadedFileName }}</span>
             <span class="file-icon">📁</span>
           </label>
-        </div>
-        
-        <div v-if="parsedMessages.length > 0 || formatDetection.hint" class="import-content-container">
-          <div v-if="parsedMessages.length > 0" class="import-preview">
-            <div class="preview-header">
-              <h4>Preview ({{ parsedMessages.length }} messages)</h4>
-              <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
-                <span class="format-icon">{{ getFormatIcon() }}</span>
-                <span class="format-hint">{{ formatDetection.hint }}</span>
-              </div>
-            </div>
-                          <div class="preview-messages">
-                <div v-for="(msg, index) in parsedMessages" :key="index" class="preview-message">
-                  <span class="preview-role">{{ msg.role === 'user' ? 'You' : 'Cursor' }}:</span>
-                  <span class="preview-content">{{ truncateContent(msg.content) }}</span>
-                </div>
+            <p class="file-upload-hint">
+              Upload markdown files from Cursor or plain text conversation files
+            </p>
               </div>
           </div>
           
-          <div v-else-if="formatDetection.hint" class="format-detection standalone" :class="formatDetection.format">
-            <span class="format-icon">{{ getFormatIcon() }}</span>
-            <span class="format-hint">{{ formatDetection.hint }}</span>
+        <!-- Conversation Settings -->
+        <div v-if="parsedMessages.length > 0" class="conversation-settings">
+          <h4>Conversation Settings</h4>
+          
+          <!-- Public/Private Toggle -->
+          <div class="setting-group">
+            <label class="setting-label">Visibility:</label>
+            <div class="visibility-toggle">
+              <button 
+                @click="isPublic = !isPublic"
+                class="visibility-toggle-button"
+                :class="{ 'public': isPublic, 'private': !isPublic }"
+                :disabled="isImporting"
+              >
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">{{ isPublic ? 'Public' : 'Private' }}</span>
+              </button>
+            </div>
           </div>
-        </div>
-        
-        <div v-if="importErrors.length > 0" class="import-errors">
-          <p class="error-title">Please fix the following issues:</p>
-          <ul>
-            <li v-for="(error, index) in importErrors" :key="index">{{ error }}</li>
-          </ul>
-        </div>
-        
-        <div class="import-button-container">
+
+          <!-- Recipients -->
+          <div class="setting-group">
+            <label class="setting-label">Recipients:</label>
           <button 
-            @click="importCursor"
-            :disabled="!canImport || isImporting"
-            class="import-button"
-            :class="{ 'importing': isImporting, 'disabled': !hasImportPermissions }"
-          >
-            <span v-if="!isImporting">Import Conversation</span>
-            <span v-else>Importing...</span>
+              class="recipients-button" 
+              @click="showRecipientSelector = true"
+              :disabled="isImporting"
+            >
+              👥 Add Recipients ({{ recipients.length }})
           </button>
-          <p v-if="!hasImportPermissions" class="permission-message">
-            {{ importPermissionMessage }}
+            <p class="setting-hint">
+              Add users who should have access to this imported conversation
           </p>
         </div>
       </div>
 
-      <div v-else-if="activeImportTab === 'claude'" class="import-panel">
-        <h3>Import from Claude</h3>
-        
-        <textarea 
-          v-model="importText"
-          class="import-textarea"
-          placeholder="To import a Claude conversation:
-
-Copy your entire Claude conversation
-Paste it in the text area below - no formatting needed
-Click &quot;Import Conversation&quot;"
-          :disabled="isImporting"
-        />
-        
-        <div v-if="parsedMessages.length > 0 || formatDetection.hint" class="import-content-container">
-          <div v-if="parsedMessages.length > 0" class="import-preview">
-            <div class="preview-header">
-              <h4>Preview ({{ parsedMessages.length }} messages)</h4>
-              <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
-                <span class="format-icon">{{ getFormatIcon() }}</span>
-                <span class="format-hint">{{ formatDetection.hint }}</span>
-              </div>
-            </div>
-                          <div class="preview-messages">
-                <div v-for="(msg, index) in parsedMessages" :key="index" class="preview-message">
-                  <span class="preview-role">{{ msg.role === 'user' ? 'You' : 'Claude' }}:</span>
-                  <span class="preview-content">{{ truncateContent(msg.content) }}</span>
-                </div>
-              </div>
-          </div>
-          
-          <div v-else-if="formatDetection.hint" class="format-detection standalone" :class="formatDetection.format">
-            <span class="format-icon">{{ getFormatIcon() }}</span>
-            <span class="format-hint">{{ formatDetection.hint }}</span>
-          </div>
-        </div>
-        
-        <div v-if="importErrors.length > 0" class="import-errors">
-          <p class="error-title">Please fix the following issues:</p>
-          <ul>
-            <li v-for="(error, index) in importErrors" :key="index">{{ error }}</li>
-          </ul>
-        </div>
-        
-        <div class="import-button-container">
-          <button 
-            @click="importClaude"
-            :disabled="!canImport || isImporting"
-            class="import-button"
-            :class="{ 'importing': isImporting, 'disabled': !hasImportPermissions }"
-          >
-            <span v-if="!isImporting">Import Conversation</span>
-            <span v-else>Importing...</span>
-          </button>
-          <p v-if="!hasImportPermissions" class="permission-message">
-            {{ importPermissionMessage }}
-          </p>
-        </div>
-      </div>
-
-      <div v-else-if="activeImportTab === 'gemini'" class="import-panel">
-        <h3>Import from Gemini</h3>
-        
-        <textarea 
-          v-model="importText"
-          class="import-textarea"
-          placeholder="To import a Gemini conversation:
-
-Copy your entire Gemini conversation
-Paste it in the text area below - no formatting needed
-Click &quot;Import Conversation&quot;"
-          :disabled="isImporting"
-        />
-        
-        <div v-if="parsedMessages.length > 0 || formatDetection.hint" class="import-content-container">
-          <div v-if="parsedMessages.length > 0" class="import-preview">
-            <div class="preview-header">
-              <h4>Preview ({{ parsedMessages.length }} messages)</h4>
-              <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
-                <span class="format-icon">{{ getFormatIcon() }}</span>
-                <span class="format-hint">{{ formatDetection.hint }}</span>
-              </div>
-            </div>
-                          <div class="preview-messages">
-                <div v-for="(msg, index) in parsedMessages" :key="index" class="preview-message">
-                  <span class="preview-role">{{ msg.role === 'user' ? 'You' : 'Gemini' }}:</span>
-                  <span class="preview-content">{{ truncateContent(msg.content) }}</span>
-                </div>
-              </div>
-          </div>
-          
-          <div v-else-if="formatDetection.hint" class="format-detection standalone" :class="formatDetection.format">
-            <span class="format-icon">{{ getFormatIcon() }}</span>
-            <span class="format-hint">{{ formatDetection.hint }}</span>
-          </div>
-        </div>
-        
-        <div v-if="importErrors.length > 0" class="import-errors">
-          <p class="error-title">Please fix the following issues:</p>
-          <ul>
-            <li v-for="(error, index) in importErrors" :key="index">{{ error }}</li>
-          </ul>
-        </div>
-        
-        <div class="import-button-container">
-          <button 
-            @click="importGemini"
-            :disabled="!canImport || isImporting"
-            class="import-button"
-            :class="{ 'importing': isImporting, 'disabled': !hasImportPermissions }"
-          >
-            <span v-if="!isImporting">Import Conversation</span>
-            <span v-else>Importing...</span>
-          </button>
-          <p v-if="!hasImportPermissions" class="permission-message">
-            {{ importPermissionMessage }}
-          </p>
-        </div>
-      </div>
-
-      <!-- Temporarily disabled - no reliable way to distinguish messages -->
-      <!-- <div v-else-if="activeImportTab === 'grok'" class="import-panel">
-        <h3>Import from Grok</h3>
-        
-        <textarea 
-          v-model="importText"
-          class="import-textarea"
-          placeholder="To import a Grok conversation:
-
-Copy your entire Grok conversation
-Paste it in the text area below - no formatting needed
-Click &quot;Import Conversation&quot;"
-          :disabled="isImporting"
-        />
-        
-        <div v-if="parsedMessages.length > 0 || formatDetection.hint" class="import-content-container">
-          <div v-if="parsedMessages.length > 0" class="import-preview">
+        <!-- Format Detection & Preview -->
+        <div v-if="parsedMessages.length > 0" class="import-content-container">
+          <div class="import-preview">
             <div class="preview-header">
               <h4>Preview ({{ parsedMessages.length }} messages)</h4>
               <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
@@ -340,18 +142,14 @@ Click &quot;Import Conversation&quot;"
             </div>
             <div class="preview-messages">
               <div v-for="(msg, index) in parsedMessages" :key="index" class="preview-message">
-                <span class="preview-role">{{ msg.role === 'user' ? 'You' : 'Grok' }}:</span>
+                <span class="preview-role">{{ msg.role === 'user' ? 'You' : selectedBot?.display_name || 'AI' }}:</span>
                 <span class="preview-content">{{ truncateContent(msg.content) }}</span>
               </div>
             </div>
           </div>
-          
-          <div v-else-if="formatDetection.hint" class="format-detection standalone" :class="formatDetection.format">
-            <span class="format-icon">{{ getFormatIcon() }}</span>
-            <span class="format-hint">{{ formatDetection.hint }}</span>
-          </div>
         </div>
         
+        <!-- Import Errors -->
         <div v-if="importErrors.length > 0" class="import-errors">
           <p class="error-title">Please fix the following issues:</p>
           <ul>
@@ -359,25 +157,21 @@ Click &quot;Import Conversation&quot;"
           </ul>
         </div>
         
+        <!-- Import Button -->
         <div class="import-button-container">
           <button 
-            @click="importGrok"
+            @click="importConversation"
             :disabled="!canImport || isImporting"
             class="import-button"
             :class="{ 'importing': isImporting, 'disabled': !hasImportPermissions }"
           >
-            <span v-if="!isImporting">Import Conversation</span>
+            <span v-if="!isImporting">Import {{ parsedMessages.length }} Messages</span>
             <span v-else>Importing...</span>
           </button>
           <p v-if="!hasImportPermissions" class="permission-message">
             {{ importPermissionMessage }}
           </p>
         </div>
-      </div> -->
-
-      <div v-else class="import-panel">
-        <h3>Import from {{ getActiveTabName() }}</h3>
-        <p class="under-development">This feature is under development</p>
       </div>
     </div>
     
@@ -402,23 +196,32 @@ Click &quot;Import Conversation&quot;"
       </div>
     </div>
 
+    <!-- Recipients Modal -->
+    <RecipientsModal
+      :is-visible="showRecipientSelector"
+      :is-public="isPublic"
+      :is-add-mode="false"
+      @close="closeRecipientSelector"
+      @done="closeRecipientSelector"
+    />
+
     <!-- Global Notifications component -->
     <GlobalNotifications />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { useStore } from 'vuex';
-import { useRouter, useRoute } from 'vue-router';
+import { useRouter } from 'vue-router';
 import ImportService from '../../services/ImportService';
+import RecipientsModal from '../../components/RecipientsModal.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
 import { useBrowserCapabilities } from '../../composables/useBrowserCapabilities.js';
 
 // Setup store and routing
 const store = useStore();
 const router = useRouter();
-const route = useRoute();
 
 // Browser capabilities detection
 const { 
@@ -429,24 +232,19 @@ const {
   getRecommendedQuality 
 } = useBrowserCapabilities();
 
-// Import tabs configuration
-const importTabs = [
-  { id: 'chatgpt', name: 'ChatGPT' },
-  { id: 'claude', name: 'Claude' },
-  { id: 'gemini', name: 'Gemini' },
-  { id: 'cursor', name: 'Cursor' }
-  // { id: 'grok', name: 'Grok' }  // Temporarily disabled - no reliable way to distinguish messages
-];
-
 // Refs
-const cursorFileInput = ref(null);
+const fileInput = ref(null);
 
-// Import-specific refs
-const activeImportTab = ref('chatgpt');
+// UI State
+const inputMethod = ref('text');
 const importText = ref('');
-const cursorFileName = ref('');
-const cursorFileContent = ref('');
-const selectedCursorModel = ref('chatgpt');
+const uploadedFileName = ref('');
+const selectedBot = ref('');
+const isPublic = ref(true);
+const recipients = ref([]);
+const showRecipientSelector = ref(false);
+
+// Import State
 const isImporting = ref(false);
 const parsedMessages = ref([]);
 const importErrors = ref([]);
@@ -457,51 +255,21 @@ const formatDetection = ref({ format: 'unknown', confidence: 0, hint: '' });
 
 // Computed properties from store
 const user = computed(() => store.getters['auth/user']);
-const canInteract = computed(() => {
-  if (user.value?.status === 'admin' || user.value?.status === 'whitelisted' || user.value?.status === 'import') {
-    return true;
-  }
-  
-  if (store.getters['auth/isAdmin'] || store.getters['auth/isWhitelisted']) {
-    return true;
-  }
-  
-  return false;
-});
+const availableBots = computed(() => store.getters['bots/bots']);
 
 // Computed property for import permissions
 const hasImportPermissions = computed(() => {
-  // First check if user is logged in
-  if (!user.value) {
-    return false;
-  }
-  
-  // Check if user has import or admin status
-  if (user.value.status === 'import' || user.value.status === 'admin') {
-    return true;
-  }
-  
-  return false;
+  if (!user.value) return false;
+  return user.value.status === 'import' || user.value.status === 'admin';
 });
 
 // Computed property for import button state
 const canImport = computed(() => {
-  // First check import permissions
-  if (!hasImportPermissions.value) {
-    return false;
-  }
-  
-  // Then check content validation
-  if (activeImportTab.value === 'cursor') {
-    const hasContent = cursorFileContent.value.trim().length > 0 || importText.value.trim().length > 0;
-    return hasContent && 
+  return hasImportPermissions.value && 
+         selectedBot.value && 
            parsedMessages.value.length > 0 && 
+         parsedMessages.value.length <= 30 &&
            importErrors.value.length === 0;
-  } else {
-    return importText.value.trim().length > 0 && 
-           parsedMessages.value.length > 0 && 
-           importErrors.value.length === 0;
-  }
 });
 
 // Computed property for permission error message
@@ -515,130 +283,130 @@ const importPermissionMessage = computed(() => {
   }
 });
 
-// Function to get active tab name
-const getActiveTabName = () => {
-  const tab = importTabs.find(tab => tab.id === activeImportTab.value);
-  return tab ? tab.name : '';
+// Methods
+const cancelImport = () => {
+  router.back();
 };
 
-// Function to get format icon
+const truncateContent = (content) => {
+  // Clean up content first - remove extra whitespace and normalize line breaks
+  const cleanContent = content.replace(/\s+/g, ' ').trim();
+  
+  // If content is short enough, return as-is
+  if (cleanContent.length <= 120) return cleanContent;
+  
+  // Split into words for better truncation
+  const words = cleanContent.split(' ');
+  
+  // If we have few words, just truncate by character
+  if (words.length <= 8) {
+    return cleanContent.substring(0, 100) + '...';
+  }
+  
+  // Take first 6 words and last 4 words
+  const firstWords = words.slice(0, 6).join(' ');
+  const lastWords = words.slice(-4).join(' ');
+  
+  // Make sure we're not showing too much
+  const maxFirstLength = 60;
+  const maxLastLength = 40;
+  
+  const truncatedFirst = firstWords.length > maxFirstLength 
+    ? firstWords.substring(0, maxFirstLength).trim() 
+    : firstWords;
+    
+  const truncatedLast = lastWords.length > maxLastLength 
+    ? lastWords.substring(-maxLastLength).trim() 
+    : lastWords;
+  
+  return `${truncatedFirst}...${truncatedLast}`;
+};
+
 const getFormatIcon = () => {
   switch (formatDetection.value.format) {
-    case 'standard':
-    case 'openai':
-    case 'anthropic':
-    case 'chatgpt-web':
-    case 'explicit-markers':
-    case 'cursor':
     case 'cursor-markdown':
+      return '✅';
+    case 'chatgpt':
     case 'claude':
     case 'gemini':
-    case 'grok':
       return '✅';
-    case 'partial':
+    case 'detected':
+      return '✅';
+    case 'no-bot-selected':
       return '⚠️';
-    case 'unstructured':
+    case 'generic':
+      return '⚠️';
+    case 'unknown':
       return '❓';
     default:
       return '💬';
   }
 };
 
-// Methods
-const cancelImport = () => {
-  // Navigate back to the previous route or home
-  router.back();
+// Auto-detection and parsing logic
+const parseConversation = (text) => {
+  if (!text.trim()) {
+    return { format: 'unknown', messages: [], hint: 'No text provided' };
+  }
+
+  if (!selectedBot.value) {
+    return { 
+      format: 'no-bot-selected', 
+      messages: [], 
+      hint: 'Please select an AI assistant first, then upload your conversation file.' 
+    };
+  }
+
+  // Use the consolidated parsing method
+  const botName = selectedBot.value.display_name || '';
+  const messages = ImportService.parseConversation(text, botName);
+  
+  if (messages.length > 0) {
+    return { 
+      format: 'detected', 
+      messages, 
+      hint: `Conversation format detected (${messages.length} messages)` 
+    };
+  }
+
+  return { 
+    format: 'unknown', 
+    messages: [], 
+    hint: 'No conversation format detected. Please check your input.' 
+  };
 };
 
-const truncateContent = (content) => {
-  const maxLength = 100;
-  const endChars = 50;
-  
-  if (content.length <= maxLength) return content;
-  
-  const start = content.substring(0, maxLength);
-  const end = content.substring(content.length - endChars);
-  return `${start}... ${end}`;
-};
-
-// Watch for tab changes to clear inputs
-watch(activeImportTab, () => {
-  importText.value = '';
-  cursorFileName.value = '';
-  cursorFileContent.value = '';
-  parsedMessages.value = [];
-  importErrors.value = [];
-  formatDetection.value = { format: 'unknown', confidence: 0, hint: '' };
-  if (cursorFileInput.value) {
-    cursorFileInput.value.value = '';
-  }
-});
-
-// Watch for changes in import text
-watch(importText, (newText) => {
-  if (!['chatgpt', 'claude', 'gemini', 'grok', 'cursor'].includes(activeImportTab.value)) {
-    return;
-  }
-  
-  if (newText.trim()) {
-    if (activeImportTab.value === 'cursor') {
-      cursorFileName.value = '';
-      cursorFileContent.value = '';
-      if (cursorFileInput.value) {
-        cursorFileInput.value.value = '';
-      }
-    }
-    
-    formatDetection.value = ImportService.detectConversationFormat(newText, activeImportTab.value);
-    
-    if (activeImportTab.value === 'chatgpt') {
-      parsedMessages.value = ImportService.parseChatGPTConversation(newText);
-    } else if (activeImportTab.value === 'claude') {
-      parsedMessages.value = ImportService.parseClaudeConversation(newText);
-    } else if (activeImportTab.value === 'gemini') {
-      parsedMessages.value = ImportService.parseGeminiConversation(newText);
-    } else if (activeImportTab.value === 'grok') {
-      parsedMessages.value = ImportService.parseGrokConversation(newText);
-    } else if (activeImportTab.value === 'cursor') {
-      parsedMessages.value = ImportService.parseCursorConversation(newText);
-    }
-    
-    const validation = ImportService.validateMessages(parsedMessages.value);
-    importErrors.value = validation.errors;
-  } else {
-    parsedMessages.value = [];
-    importErrors.value = [];
-    formatDetection.value = { format: 'unknown', confidence: 0, hint: '' };
-  }
-});
-
-// Add these methods to the script section
-const handleCursorFileUpload = async (event) => {
+// File upload handler
+const handleFileUpload = async (event) => {
   const file = event.target.files[0];
   if (!file) {
-    cursorFileName.value = '';
-    cursorFileContent.value = '';
+    uploadedFileName.value = '';
+    importText.value = '';
     parsedMessages.value = [];
     importErrors.value = [];
     formatDetection.value = { format: 'unknown', confidence: 0, hint: '' };
     return;
   }
   
+  // Clear text input when file is uploaded
   importText.value = '';
   
-  if (!file.name.toLowerCase().endsWith('.md') && !file.name.toLowerCase().endsWith('.markdown')) {
-    importErrors.value = ['Please select a markdown (.md) file'];
-    cursorFileName.value = '';
-    cursorFileContent.value = '';
+  // Validate file type
+  const validExtensions = ['.md', '.txt', '.markdown'];
+  const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+  
+  if (!validExtensions.includes(fileExtension)) {
+    importErrors.value = ['Please select a .md, .txt, or .markdown file'];
+    uploadedFileName.value = '';
     parsedMessages.value = [];
     formatDetection.value = { format: 'unknown', confidence: 0, hint: 'Invalid file type' };
     return;
   }
   
+  // Validate file size (10MB limit)
   if (file.size > 10 * 1024 * 1024) {
     importErrors.value = ['File is too large (max 10MB)'];
-    cursorFileName.value = '';
-    cursorFileContent.value = '';
+    uploadedFileName.value = '';
     parsedMessages.value = [];
     formatDetection.value = { format: 'unknown', confidence: 0, hint: 'File too large' };
     return;
@@ -652,30 +420,39 @@ const handleCursorFileUpload = async (event) => {
       reader.readAsText(file);
     });
     
-    cursorFileName.value = file.name;
-    cursorFileContent.value = content;
+    uploadedFileName.value = file.name;
     
-    if (content.trim()) {
-      formatDetection.value = ImportService.detectConversationFormat(content, activeImportTab.value);
-      parsedMessages.value = ImportService.parseCursorConversation(content);
-      const validation = ImportService.validateMessages(parsedMessages.value);
-      importErrors.value = validation.errors;
-    } else {
-      parsedMessages.value = [];
-      importErrors.value = ['File is empty'];
-      formatDetection.value = { format: 'unknown', confidence: 0, hint: 'Empty file' };
+    // Parse the file content
+    const result = parseConversation(content);
+    formatDetection.value = result;
+    parsedMessages.value = result.messages;
+    
+    // Handle specific error cases
+    if (result.format === 'no-bot-selected') {
+      importErrors.value = ['Please select an AI assistant from the dropdown above before uploading your conversation file.'];
+      return;
     }
+    
+    // Validate messages
+    const validation = ImportService.validateMessages(result.messages);
+    importErrors.value = validation.errors;
+    
   } catch (error) {
-    console.error('Error reading file:', error);
+    console.error('[DEBUG ImportView] Error reading file:', error);
     importErrors.value = ['Failed to read file'];
-    cursorFileName.value = '';
-    cursorFileContent.value = '';
+    uploadedFileName.value = '';
     parsedMessages.value = [];
     formatDetection.value = { format: 'unknown', confidence: 0, hint: 'Read error' };
   }
 };
 
-const importChatGPT = async () => {
+// Recipients modal handlers
+const closeRecipientSelector = () => {
+  showRecipientSelector.value = false;
+};
+
+// Main import function
+const importConversation = async () => {
   if (!canImport.value || isImporting.value) return;
   
   try {
@@ -688,16 +465,19 @@ const importChatGPT = async () => {
     if (capabilities.isLowBandwidth) {
       loadingSubmessage.value = 'Processing conversation (this may take longer on slow connections)';
     } else if (isLowEnd()) {
-      loadingSubmessage.value = 'Processing your ChatGPT conversation (optimizing for your device)';
-    } else if (messageCount > 50) {
+      loadingSubmessage.value = 'Processing your conversation (optimizing for your device)';
+    } else if (messageCount > 20) {
       loadingSubmessage.value = 'Processing large conversation - this may take a moment';
     } else {
-      loadingSubmessage.value = 'Processing your ChatGPT conversation';
+      loadingSubmessage.value = `Processing your ${selectedBot.value.display_name} conversation`;
     }
     
-    const result = await ImportService.importChatGPTConversation(
+    // Use the unified import method
+    const result = await ImportService.importConversation(
       parsedMessages.value,
-      null
+      selectedBot.value,
+      recipients.value,
+      isPublic.value
     );
     
     if (result.success && result.thread_id) {
@@ -708,7 +488,17 @@ const importChatGPT = async () => {
       await new Promise(resolve => setTimeout(resolve, 1500));
       
       router.push({ path: `/${result.thread_id}` });
-      store.commit('ui/SET_SUCCESS', `Successfully imported ${result.message_count} messages`);
+      
+      // Show appropriate success message
+      if (result.partial_success) {
+        store.commit('ui/SET_WARNING', 
+          `Imported ${result.message_count} of ${result.total_requested} messages. Some messages failed to import.`
+        );
+      } else {
+        store.commit('ui/SET_SUCCESS', 
+          `Successfully imported ${result.message_count} messages`
+        );
+      }
     } else {
       throw new Error('Import returned unexpected result');
     }
@@ -720,7 +510,7 @@ const importChatGPT = async () => {
     if (error.response?.status === 429) {
       errorMessage = error.response.data?.detail || 'You have exceeded the import rate limit. Please try again later.';
     } else if (error.response?.status === 403) {
-      errorMessage = 'You do not have permission to import conversations. Only whitelisted users, admins, and import users can import.';
+      errorMessage = 'You do not have permission to import conversations. Only users with import permissions can import.';
     } else if (error.response?.status === 400) {
       errorMessage = error.response.data?.detail || 'Invalid conversation format.';
     } else if (error.response?.data?.detail) {
@@ -736,128 +526,56 @@ const importChatGPT = async () => {
   }
 };
 
-// Add these import methods to the script section
-const importCursor = async () => {
-  if (!canImport.value || isImporting.value) return;
-  
-  try {
-    isImporting.value = true;
-    importSuccess.value = false;
-    
-    loadingMessage.value = `Importing ${parsedMessages.value.length} messages...`;
-    loadingSubmessage.value = 'Processing your Cursor conversation';
-    
-    const result = await ImportService.importCursorConversation(
-      parsedMessages.value,
-      null,
-      selectedCursorModel.value
-    );
-    
-    if (result.success && result.thread_id) {
-      importSuccess.value = true;
-      loadingMessage.value = 'Import Successful!';
-      loadingSubmessage.value = 'Redirecting to your imported conversation...';
-      
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      router.push({ path: `/${result.thread_id}` });
-      store.commit('ui/SET_SUCCESS', `Successfully imported ${result.message_count} messages`);
-    } else {
-      throw new Error('Import returned unexpected result');
+// Watch for input changes
+watch([importText, selectedBot], () => {
+  if (importText.value.trim() && selectedBot.value) {
+    // Clear file upload when typing
+    if (uploadedFileName.value) {
+      uploadedFileName.value = '';
+      if (fileInput.value) {
+        fileInput.value.value = '';
+      }
     }
-  } catch (error) {
-    console.error('Import failed:', error);
-    handleImportError(error);
+    
+    const result = parseConversation(importText.value);
+    formatDetection.value = result;
+    parsedMessages.value = result.messages;
+    
+    const validation = ImportService.validateMessages(result.messages);
+    importErrors.value = validation.errors;
+  } else {
+    parsedMessages.value = [];
+    importErrors.value = [];
+    formatDetection.value = { format: 'unknown', confidence: 0, hint: '' };
   }
-};
+});
 
-const importClaude = async () => {
-  if (!canImport.value || isImporting.value) return;
-  
+// Watch for input method changes
+watch(inputMethod, () => {
+  // Clear data when switching input methods
+  importText.value = '';
+  uploadedFileName.value = '';
+  parsedMessages.value = [];
+  importErrors.value = [];
+  formatDetection.value = { format: 'unknown', confidence: 0, hint: '' };
+  if (fileInput.value) {
+    fileInput.value.value = '';
+  }
+});
+
+// Load bots on mount
+onMounted(async () => {
   try {
-    isImporting.value = true;
-    importSuccess.value = false;
-    
-    loadingMessage.value = `Importing ${parsedMessages.value.length} messages...`;
-    loadingSubmessage.value = 'Processing your Claude conversation';
-    
-    const result = await ImportService.importClaudeConversation(
-      parsedMessages.value,
-      null
-    );
-    
-    if (result.success && result.thread_id) {
-      importSuccess.value = true;
-      loadingMessage.value = 'Import Successful!';
-      loadingSubmessage.value = 'Redirecting to your imported conversation...';
-      
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      router.push({ path: `/${result.thread_id}` });
-      store.commit('ui/SET_SUCCESS', `Successfully imported ${result.message_count} messages`);
-    } else {
-      throw new Error('Import returned unexpected result');
-    }
+    await store.dispatch('bots/fetchBots');
   } catch (error) {
-    console.error('Import failed:', error);
-    handleImportError(error);
+    console.error('Failed to load bots:', error);
   }
-};
+});
 
-const importGemini = async () => {
-  if (!canImport.value || isImporting.value) return;
-  
-  try {
-    isImporting.value = true;
-    importSuccess.value = false;
-    
-    loadingMessage.value = `Importing ${parsedMessages.value.length} messages...`;
-    loadingSubmessage.value = 'Processing your Gemini conversation';
-    
-    const result = await ImportService.importGeminiConversation(
-      parsedMessages.value,
-      null
-    );
-    
-    if (result.success && result.thread_id) {
-      importSuccess.value = true;
-      loadingMessage.value = 'Import Successful!';
-      loadingSubmessage.value = 'Redirecting to your imported conversation...';
-      
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      router.push({ path: `/${result.thread_id}` });
-      store.commit('ui/SET_SUCCESS', `Successfully imported ${result.message_count} messages`);
-    } else {
-      throw new Error('Import returned unexpected result');
-    }
-  } catch (error) {
-    console.error('Import failed:', error);
-    handleImportError(error);
-  }
-};
-
-// Helper function to handle import errors
-const handleImportError = (error) => {
-  let errorMessage = 'Failed to import conversation';
-  
-  if (error.response?.status === 429) {
-    errorMessage = error.response.data?.detail || 'You have exceeded the import rate limit. Please try again later.';
-  } else if (error.response?.status === 403) {
-    errorMessage = 'You do not have permission to import conversations. Only whitelisted users, admins, and import users can import.';
-  } else if (error.response?.status === 400) {
-    errorMessage = error.response.data?.detail || 'Invalid conversation format.';
-  } else if (error.response?.data?.detail) {
-    errorMessage = error.response.data.detail;
-  } else if (error.message) {
-    errorMessage = error.message;
-  }
-  
-  store.commit('ui/SET_ERROR', errorMessage);
-  
-  isImporting.value = false;
-  importSuccess.value = false;
-};
+// Connect recipients to store
+watch(() => store.getters['navigation/replyRecipients'], (newRecipients) => {
+  recipients.value = newRecipients;
+}, { immediate: true });
 </script>
 
 <style scoped>
@@ -1170,7 +888,7 @@ const handleImportError = (error) => {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  max-height: 300px;
+  max-height: 400px;
   overflow-y: auto;
   padding-right: var(--space-sm);
 }
@@ -1480,124 +1198,364 @@ const handleImportError = (error) => {
   flex: 1;
 }
 
-/* Responsive styles */
+/* Bot Selection */
+.bot-selection-container {
+  margin-bottom: var(--space-lg);
+  padding: var(--space-md);
+  background-color: var(--color-surface-light);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.bot-selection-label {
+  display: block;
+  margin-bottom: var(--space-xs);
+  font-weight: 600;
+  color: var(--color-text);
+  font-size: var(--font-size-md);
+}
+
+.bot-selection-dropdown {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-md);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right var(--space-sm) center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: calc(var(--space-xl) + var(--space-sm));
+}
+
+.bot-selection-dropdown:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.2);
+}
+
+.bot-selection-dropdown:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: var(--color-border-light);
+}
+
+.bot-selection-hint {
+  margin-top: var(--space-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+/* Input Method Tabs */
+.input-method-container {
+  margin-bottom: var(--space-lg);
+}
+
+.input-method-tabs {
+  display: flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: var(--space-md);
+  background-color: var(--color-surface);
+}
+
+.input-method-tab {
+  flex: 1;
+  padding: var(--space-sm) var(--space-md);
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+    font-size: var(--font-size-md);
+  font-weight: 500;
+  position: relative;
+}
+
+.input-method-tab:not(:last-child) {
+  border-right: 1px solid var(--color-border);
+}
+
+.input-method-tab.active {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  font-weight: 600;
+}
+
+.input-method-tab:hover:not(.active) {
+  background-color: var(--color-hover-overlay);
+  color: var(--color-text);
+}
+
+/* Text Input Container */
+.text-input-container {
+  width: 100%;
+}
+
+/* File Upload Container */
+.file-upload-container {
+  width: 100%;
+}
+
+.file-upload-hint {
+  margin-top: var(--space-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  text-align: center;
+  font-style: italic;
+}
+
+/* Conversation Settings */
+.conversation-settings {
+  margin-bottom: var(--space-lg);
+  padding: var(--space-md);
+  background-color: var(--color-surface-light);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.conversation-settings h4 {
+  margin: 0 0 var(--space-md) 0;
+  color: var(--color-primary);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+.setting-group {
+  margin-bottom: var(--space-md);
+}
+
+.setting-group:last-child {
+  margin-bottom: 0;
+}
+
+.setting-label {
+  display: block;
+  margin-bottom: var(--space-xs);
+  font-weight: 600;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+}
+
+.setting-hint {
+  margin-top: var(--space-xs);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+/* Visibility Toggle */
+.visibility-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.visibility-toggle-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  background: transparent;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-weight: 500;
+  min-width: 120px;
+  justify-content: center;
+}
+
+.visibility-toggle-button:hover:not(:disabled) {
+  background-color: var(--color-hover-overlay);
+  border-color: var(--color-border-hover);
+}
+
+.visibility-toggle-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.visibility-toggle-button.public {
+  background-color: rgba(16, 163, 127, 0.1);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.visibility-toggle-button.private {
+  background-color: rgba(108, 117, 125, 0.1);
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.toggle-slider {
+  position: relative;
+  width: 20px;
+  height: 12px;
+  background-color: var(--color-border);
+  border-radius: 6px;
+  transition: all var(--transition-fast);
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 8px;
+  height: 8px;
+  background-color: var(--color-surface);
+  border-radius: 50%;
+  transition: all var(--transition-fast);
+}
+
+.visibility-toggle-button.public .toggle-slider {
+  background-color: var(--color-primary);
+}
+
+.visibility-toggle-button.public .toggle-slider::before {
+  transform: translateX(8px);
+}
+
+.toggle-label {
+  font-weight: 600;
+}
+
+/* Recipients Button */
+.recipients-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-weight: 500;
+}
+
+.recipients-button:hover:not(:disabled) {
+  background-color: var(--color-hover-overlay);
+  border-color: var(--color-border-hover);
+}
+
+.recipients-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+
+
+/* Updated Import Button */
+.import-button-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  align-items: center;
+  margin-top: var(--space-lg);
+  margin-bottom: 50px;
+}
+
+.import-button {
+  padding: var(--space-md) var(--space-xl);
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  border: none;
+  border-radius: var(--radius-sm);
+    font-size: var(--font-size-lg);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  min-width: 200px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.import-button:hover:not(:disabled) {
+  background-color: var(--color-primary-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.import-button:disabled {
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.import-button.importing {
+  background-color: var(--color-accent);
+  cursor: wait;
+}
+
+.import-button.disabled {
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+/* Mobile Responsive */
 @media (max-width: 768px) {
-  .import-content {
-    padding: var(--space-sm);
-    max-width: 100%;
+  .input-method-tabs {
+    flex-direction: column;
   }
   
-  .service-selector-container {
-    padding: var(--space-sm);
+  .input-method-tab:not(:last-child) {
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
   }
   
-  .service-dropdown {
-    max-width: 100%;
+  .bot-selection-dropdown {
+    font-size: var(--font-size-sm);
+    padding: var(--space-xs) var(--space-sm);
+    padding-right: calc(var(--space-lg) + var(--space-sm));
   }
   
-  .import-textarea {
-    min-height: 120px;
-    max-height: 200px;
+  .conversation-settings {
     padding: var(--space-sm);
-    font-size: calc(var(--font-size-sm));
   }
   
   .import-button {
     width: 100%;
-    margin-top: var(--space-md);
-    padding: var(--space-sm);
-  }
-  
-  .preview-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  
-  .import-header {
-    padding: var(--space-xs) var(--space-sm);
-  }
-  
-  .back-button {
-    padding: 4px 8px;
-    font-size: calc(var(--font-size-sm) - 1px);
-  }
-  
-  .import-title {
     font-size: var(--font-size-md);
-  }
-  
-  .import-preview {
-    padding: var(--space-sm);
-  }
-  
-  .preview-messages {
-    max-height: 200px;
-  }
-  
-  .file-upload-label {
-    padding: var(--space-sm);
-    min-height: 50px;
+    padding: var(--space-sm) var(--space-lg);
   }
 }
 
 @media (max-width: 480px) {
-  .import-content {
+  .bot-selection-container {
+    padding: var(--space-sm);
+  }
+  
+  .conversation-settings {
     padding: var(--space-xs);
   }
   
-  .service-selector-container {
-    padding: var(--space-xs) var(--space-sm);
+  .setting-group {
+    margin-bottom: var(--space-sm);
   }
   
-  .import-textarea {
-    min-height: 100px;
-    max-height: 150px;
-    padding: var(--space-xs);
-    font-size: calc(var(--font-size-sm) - 1px);
+  .recipients-button {
+    width: 100%;
+    justify-content: center;
+    padding: var(--space-sm);
   }
   
-  .import-header {
-    padding: 6px 8px;
-  }
-  
-  .back-button {
-    padding: 3px 6px;
-    font-size: calc(var(--font-size-xs));
-  }
-  
-  .import-title {
-    font-size: calc(var(--font-size-md) - 1px);
-  }
-  
-  .import-panel h3 {
-    font-size: var(--font-size-lg);
-  }
-  
-  .import-preview {
-    padding: var(--space-xs);
-  }
-  
-  .preview-messages {
-    max-height: 150px;
-  }
-  
-  .format-detection {
-    flex-direction: column;
-    gap: 4px;
-    text-align: center;
-  }
-  
-  .loading-content {
-    width: 96%;
-    padding: var(--space-md);
-  }
-  
-  .loading-message {
-    font-size: var(--font-size-md);
-  }
-  
-  .loading-submessage {
-    font-size: calc(var(--font-size-sm) - 1px);
+  .import-button {
+    font-size: var(--font-size-sm);
+    padding: var(--space-xs) var(--space-md);
   }
 }
 
