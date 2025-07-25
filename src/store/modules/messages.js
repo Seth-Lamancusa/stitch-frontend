@@ -537,7 +537,7 @@ export default {
         });
 
         // Use the current user if content_author is not provided
-        const effectiveAuthor = content_author || rootState.user?.email;
+        const effectiveAuthor = content_author || rootState.auth?.user?.uid;
         
         // Process recipients - keep full objects to preserve visibility settings
         let processedRecipients = [];

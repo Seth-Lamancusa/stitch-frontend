@@ -23,25 +23,85 @@ const getAuthHeaders = async () => {
 
 class ImportService {
   /**
-   * Import a ChatGPT conversation
-   * @param {Array} messages - Array of message objects with role and content
+   * Get current user UID from Firebase auth
+   * @returns {string|null} Current user UID
+   */
+  getCurrentUserUid() {
+    const auth = getFirebaseAuth();
+    return auth?.currentUser?.uid || null;
+  }
+
+  /**
+   * Import a conversation using the batch endpoint
+   * @param {Array} messages - Array of parsed message objects with role and content
+   * @param {Object} selectedBot - Selected bot object with uid, display_name, etc.
+   * @param {Array} recipients - Array of recipient objects (optional)
+   * @param {boolean} isPublic - Whether messages should be public (optional)
    * @returns {Promise} - API response with thread_id
    */
-  async importChatGPTConversation(messages) {
+  async importConversation(messages, selectedBot, recipients = [], isPublic = true) {
+    if (!selectedBot || !selectedBot.uid) {
+      throw new Error('Bot selection is required for imports');
+    }
+
     const headers = await getAuthHeaders();
+    const currentUserUid = this.getCurrentUserUid();
     
-    const importData = {
-      messages: messages
+    if (!currentUserUid) {
+      throw new Error('User must be authenticated to import conversations');
+    }
+    
+    // Transform messages to include proper content_author and recipients
+    const transformedMessages = messages.map((msg, index) => {
+      
+      if (msg.role === 'user') {
+        // For user messages: add the bot as a recipient so bot can see the message
+        const messageRecipients = [
+          ...recipients, // Include any additional recipients specified
+          { uid: selectedBot.uid, visible: true } // Add bot as recipient
+        ];
+        
+        return {
+          content: msg.content,
+          content_author: currentUserUid,
+          public: isPublic,
+          recipients: messageRecipients,
+          attachments: []
+        };
+      } else {
+        // For bot messages: add the user as a recipient so user can see the message
+        // Skip adding user as recipient for the last message if it's a bot message (incomplete conversation)
+        const messageRecipients = [
+          ...recipients // Include any additional recipients specified
+        ];
+
+        messageRecipients.push({ uid: currentUserUid, visible: true });
+        
+        return {
+          content: msg.content,
+          content_author: selectedBot.uid,
+          public: isPublic,
+          recipients: messageRecipients,
+          attachments: []
+        };
+      }
+    });
+    
+    const batchData = {
+      messages: transformedMessages
     };
     
-    console.log('[ImportService] Importing ChatGPT conversation:', {
-      messageCount: messages.length
+    console.log('[ImportService] Importing conversation:', {
+      messageCount: messages.length,
+      selectedBot: selectedBot.display_name,
+      recipientsCount: recipients.length,
+      isPublic
     });
     
     try {
       const response = await axios.post(
-        `${apiBaseUrl}/messages/import/chatgpt`,
-        importData,
+        `${apiBaseUrl}/messages/batch`,
+        batchData,
         { headers }
       );
       
@@ -52,7 +112,74 @@ class ImportService {
       throw error;
     }
   }
-  
+
+  /**
+   * Parse conversation text based on detected format
+   * @param {String} text - The conversation text to parse
+   * @param {String} botName - The selected bot name to help with format detection
+   * @returns {Array} - Array of message objects with role and content
+   */
+  parseConversation(text, botName = '') {
+    if (!text.trim()) {
+      return [];
+    }
+
+    // Priority 1: Check for Cursor markdown format
+    if (this.hasMarkdownHeaders && this.hasMarkdownHeaders(text)) {
+      try {
+        const messages = this.parseCursorConversation(text);
+        if (messages.length > 0) {
+          return messages;
+        }
+      } catch (e) {
+        console.warn('Cursor markdown parsing failed:', e);
+      }
+    }
+
+    // Priority 2: Use bot-specific parsing based on selected bot name
+    const lowerBotName = botName.toLowerCase();
+    
+    try {
+      let messages = [];
+      
+      if (lowerBotName.includes('chatgpt') || lowerBotName.includes('gpt')) {
+        messages = this.parseChatGPTConversation(text);
+      } else if (lowerBotName.includes('claude')) {
+        messages = this.parseClaudeConversation(text);
+      } else if (lowerBotName.includes('gemini')) {
+        messages = this.parseGeminiConversation(text);
+      } else {
+        // Fallback: try all parsers and use the one with most messages
+        const parsers = [
+          { name: 'chatgpt', parser: this.parseChatGPTConversation },
+          { name: 'claude', parser: this.parseClaudeConversation },
+          { name: 'gemini', parser: this.parseGeminiConversation },
+          { name: 'cursor', parser: this.parseCursorConversation }
+        ];
+
+        let bestResult = [];
+        
+        for (const { parser } of parsers) {
+          try {
+            const result = parser.call(this, text);
+            if (result.length > bestResult.length) {
+              bestResult = result;
+            }
+          } catch (e) {
+            continue;
+          }
+        }
+        
+        messages = bestResult;
+      }
+
+      return messages;
+    } catch (e) {
+      console.warn('Format-specific parsing failed:', e);
+      return [];
+    }
+  }
+
   /**
    * Parse ChatGPT conversation text into message objects
    * @param {String} text - The conversation text to parse
@@ -428,34 +555,23 @@ class ImportService {
   }
   
   /**
-   * Detect the format of the conversation text
+   * Detect the format of the conversation text and return format info
    * @param {String} text - The conversation text to analyze
-   * @param {String} activeImportTab - The active import tab
+   * @param {String} botName - The selected bot name to help with format detection
    * @returns {Object} - Detection result with format and confidence
    */
-  detectConversationFormat(text, activeImportTab) {
-    const lines = text.split('\n').filter(line => line.trim());
-    if (lines.length === 0) {
+  detectConversationFormat(text, botName = '') {
+    if (!text.trim()) {
       return { format: 'unknown', confidence: 0, hint: 'Paste your conversation text to begin' };
     }
 
     // Try to parse the conversation and see if we get any messages
-    let messages = [];
-    
-    if (activeImportTab === 'chatgpt') {
-      messages = this.parseChatGPTConversation(text);
-    } else if (activeImportTab === 'cursor') {
-      messages = this.parseCursorConversation(text);
-    } else if (activeImportTab === 'claude') {
-      messages = this.parseClaudeConversation(text);
-    } else if (activeImportTab === 'gemini') {
-      messages = this.parseGeminiConversation(text);
-    }
+    const messages = this.parseConversation(text, botName);
 
     // If we got any messages, the conversation was detected
     if (messages.length > 0) {
       return {
-        format: activeImportTab,
+        format: 'detected',
         confidence: 1.0,
         hint: 'Ready to import!'
       };
@@ -467,130 +583,6 @@ class ImportService {
       confidence: 0,
       hint: 'No conversation detected.'
     };
-  }
-  
-  /**
-   * Import a Claude conversation
-   * @param {Array} messages - Array of message objects with role and content
-   * @returns {Promise} - API response with thread_id
-   */
-  async importClaudeConversation(messages) {
-    const headers = await getAuthHeaders();
-    
-    const importData = {
-      messages: messages
-    };
-    
-    console.log('[ImportService] Importing Claude conversation:', {
-      messageCount: messages.length
-    });
-    
-    try {
-      const response = await axios.post(
-        `${apiBaseUrl}/messages/import/claude`,
-        importData,
-        { headers }
-      );
-      
-      console.log('[ImportService] Import successful:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('[ImportService] Import failed:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Import a Gemini conversation
-   * @param {Array} messages - Array of message objects with role and content
-   * @returns {Promise} - API response with thread_id
-   */
-  async importGeminiConversation(messages) {
-    const headers = await getAuthHeaders();
-    
-    const importData = {
-      messages: messages
-    };
-    
-    console.log('[ImportService] Importing Gemini conversation:', {
-      messageCount: messages.length
-    });
-    
-    try {
-      const response = await axios.post(
-        `${apiBaseUrl}/messages/import/gemini`,
-        importData,
-        { headers }
-      );
-      
-      console.log('[ImportService] Import successful:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('[ImportService] Import failed:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Import a Grok conversation
-   * @param {Array} messages - Array of message objects with role and content
-   * @returns {Promise} - API response with thread_id
-   */
-  async importGrokConversation(messages) {
-    const headers = await getAuthHeaders();
-    
-    const importData = {
-      messages: messages
-    };
-    
-    console.log('[ImportService] Importing Grok conversation:', {
-      messageCount: messages.length
-    });
-    
-    try {
-      const response = await axios.post(
-        `${apiBaseUrl}/messages/import/grok`,
-        importData,
-        { headers }
-      );
-      
-      console.log('[ImportService] Import successful:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('[ImportService] Import failed:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Import a Cursor conversation
-   * @param {Array} messages - Array of message objects with role and content
-   * @returns {Promise} - API response with thread_id
-   */
-  async importCursorConversation(messages) {
-    const headers = await getAuthHeaders();
-    
-    const importData = {
-      messages: messages
-    };
-    
-    console.log('[ImportService] Importing Cursor conversation:', {
-      messageCount: messages.length
-    });
-    
-    try {
-      const response = await axios.post(
-        `${apiBaseUrl}/messages/import/cursor`,
-        importData,
-        { headers }
-      );
-      
-      console.log('[ImportService] Import successful:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('[ImportService] Import failed:', error);
-      throw error;
-    }
   }
   
   /**
@@ -1306,315 +1298,6 @@ class ImportService {
   }
 
   /**
-   * Parse Grok conversation text into message objects
-   * @param {String} text - The conversation text to parse
-   * @returns {Array} - Array of message objects
-   */
-  // parseGrokConversation(text) {  // Commented out entire Grok parsing
-  //   // Check if this uses explicit "You:" / "Grok:" format
-  //   if (text.includes('You:') && text.includes('Grok:')) {
-  //     return this.parseGrokExplicitFormat(text);
-  //   }
-  //   
-  //   // Check if this uses "User:" / "Assistant:" format
-  //   if (text.includes('User:') && text.includes('Assistant:')) {
-  //     return this.parseStandardFormat(text);
-  //   }
-  //   
-  //   // Otherwise use simple format parsing (most common for Grok)
-  //   return this.parseGrokSimpleFormat(text);
-  // }
-
-  /**
-   * Parse Grok conversation with explicit "You:" / "Grok:" markers
-   * @param {String} text - The conversation text to parse
-   * @returns {Array} - Array of message objects
-   */
-  // parseGrokExplicitFormat(text) {  // Commented out Grok explicit format parsing
-  //   const messages = [];
-  //   const lines = text.split('\n');
-  //   
-  //   const cleanContent = (line, patterns) => {
-  //     let cleaned = line;
-  //     patterns.forEach(pattern => {
-  //       cleaned = cleaned.replace(new RegExp(`^${pattern}\\s*`, 'i'), '');
-  //     });
-  //     return cleaned.trim();
-  //   };
-  //   
-  //   let currentMessage = null;
-  //   
-  //   for (const line of lines) {
-  //     const trimmed = line.trim();
-  //     if (!trimmed) {
-  //       if (currentMessage && currentMessage.content) {
-  //         currentMessage.content += '\n';
-  //       }
-  //       continue;
-  //     }
-  //     
-  //     // Check for user message start
-  //     if (trimmed.startsWith('You:') || trimmed.startsWith('User:')) {
-  //       if (currentMessage) {
-  //         messages.push(currentMessage);
-  //       }
-  //       currentMessage = {
-  //         role: 'user',
-  //         content: cleanContent(trimmed, ['You:', 'User:'])
-  //       };
-  //       continue;
-  //     }
-  //     
-  //     // Check for Grok message start
-  //     if (trimmed.startsWith('Grok:') || trimmed.startsWith('Assistant:')) {
-  //       if (currentMessage) {
-  //         messages.push(currentMessage);
-  //       }
-  //       currentMessage = {
-  //         role: 'assistant',
-  //         content: cleanContent(trimmed, ['Grok:', 'Assistant:'])
-  //       };
-  //       continue;
-  //     }
-  //     
-  //     // Add line to current message if exists
-  //     if (currentMessage) {
-  //       if (currentMessage.content) {
-  //         currentMessage.content += '\n';
-  //       }
-  //       currentMessage.content += trimmed;
-  //     }
-  //   }
-  //   
-  //   // Add final message
-  //   if (currentMessage) {
-  //     messages.push(currentMessage);
-  //   }
-  //   
-  //   return messages;
-  // }
-
-  /**
-   * Parse simple Grok conversation format (no explicit markers)
-   * @param {String} text - The conversation text to parse
-   * @returns {Array} - Array of message objects
-   */
-  // parseGrokSimpleFormat(text) {  // Commented out Grok simple format parsing
-  //   const messages = [];
-  //   
-  //   // Use a more direct approach for Grok conversations
-  //   // Split the text into paragraphs and then intelligently group them
-  //   const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
-  //   
-  //   if (paragraphs.length === 0) {
-  //     return [];
-  //   }
-  //   
-  //   // If only one paragraph, treat as user message
-  //   if (paragraphs.length === 1) {
-  //     return [{
-  //       role: 'user',
-  //       content: paragraphs[0].trim()
-  //     }];
-  //   }
-  //   
-  //   // Group paragraphs into conversation blocks
-  //   const conversationBlocks = [];
-  //   let currentBlock = '';
-  //   let isInLongResponse = false;
-  //   
-  //   for (let i = 0; i < paragraphs.length; i++) {
-  //     const paragraph = paragraphs[i].trim();
-  //     if (!paragraph) continue;
-  //     
-  //     const lowerParagraph = paragraph.toLowerCase();
-  //     
-  //     // Check for metadata markers that indicate Grok responses
-  //     if (lowerParagraph.includes('web pages') || 
-  //         lowerParagraph.includes('search results') ||
-  //         lowerParagraph.includes('sources:')) {
-  //       
-  //       // If we were building a block, save it
-  //       if (currentBlock.trim()) {
-  //         conversationBlocks.push(currentBlock.trim());
-  //         currentBlock = '';
-  //       }
-  //       
-  //       // Start a new response block
-  //       isInLongResponse = true;
-  //       currentBlock = paragraph;
-  //       continue;
-  //     }
-  //     
-  //     // Check for likely question/command starts
-  //     const looksLikeQuestion = 
-  //       /^(what|how|why|when|where|who|can you|could you|please|help|i want|i need)/i.test(lowerParagraph) ||
-  //       paragraph.includes('?') ||
-  //       paragraph.length < 200;
-  //     
-  //     if (looksLikeQuestion && !isInLongResponse) {
-  //       // If we were building a block, save it
-  //       if (currentBlock.trim()) {
-  //         conversationBlocks.push(currentBlock.trim());
-  //       }
-  //       currentBlock = paragraph;
-  //     } else {
-  //       // Add to current block
-  //       if (currentBlock) {
-  //         currentBlock += '\n\n';
-  //       }
-  //       currentBlock += paragraph;
-  //       
-  //       // If this was a long paragraph, mark as potential response
-  //       if (paragraph.length > 200) {
-  //         isInLongResponse = true;
-  //       }
-  //     }
-  //     
-  //     // Reset long response flag if we see likely question markers
-  //     if (looksLikeQuestion) {
-  //       isInLongResponse = false;
-  //     }
-  //   }
-  //   
-  //   // Don't forget the last block
-  //   if (currentBlock.trim()) {
-  //     conversationBlocks.push(currentBlock.trim());
-  //   }
-  //   
-  //   // Now convert blocks to messages, alternating roles
-  //   let currentRole = 'user'; // Start with user
-  //   
-  //   for (let i = 0; i < conversationBlocks.length; i++) {
-  //     const content = conversationBlocks[i].trim();
-  //     if (!content) continue;
-  //     
-  //     const lowerContent = content.toLowerCase();
-  //     
-  //     // Determine role based on content analysis
-  //     let blockRole = currentRole;
-  //     
-  //     if (i === 0) {
-  //       // First block - check if it's a short question or long response
-  //       const isShortQuestion = content.length < 300 && 
-  //         (/\b(i want|help me|lets?|what|how|where|when|why|can you|should i|tell me)\b/i.test(lowerContent) || 
-  //          content.includes('?'));
-  //       blockRole = isShortQuestion ? 'user' : 'assistant';
-  //     } else {
-  //       // For subsequent blocks, use more sophisticated detection
-  //       const hasMetadata = lowerContent.includes('web pages') || 
-  //                          lowerContent.includes('search results') ||
-  //                          lowerContent.includes('sources:');
-  //                          
-  //       const looksLikeQuestion = content.length < 300 && 
-  //         (/\b(i want|help me|lets?|what|how|where|when|why|can you|should i|tell me)\b/i.test(lowerContent) || 
-  //          content.includes('?'));
-  //          
-  //       const looksLikeResponse = content.length > 300 ||
-  //         hasMetadata ||
-  //         /\b(here's|based on|according to|i found|the answer|to answer)\b/i.test(lowerContent);
-  //       
-  //       if (looksLikeQuestion && !looksLikeResponse) {
-  //         blockRole = 'user';
-  //       } else if (looksLikeResponse && !looksLikeQuestion) {
-  //         blockRole = 'assistant';
-  //       } else {
-  //         // If ambiguous, alternate roles
-  //         blockRole = currentRole === 'user' ? 'assistant' : 'user';
-  //       }
-  //     }
-  //     
-  //     messages.push({
-  //       role: blockRole,
-  //       content: content
-  //     });
-  //     
-  //     currentRole = blockRole === 'user' ? 'assistant' : 'user';
-  //   }
-  //   
-  //   return messages;
-  // }
-
-  /**
-   * Split Grok conversation by pattern recognition when normal splitting fails
-   * @param {String} text - The conversation text to split
-   * @returns {Array} - Array of conversation blocks
-   */
-  splitGrokConversationByPattern(text) {
-    // Simplified fallback method - just split by paragraphs
-    const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
-    return paragraphs.length > 1 ? paragraphs : [text];
-  }
-
-  /**
-   * Detect if text contains Gemini-specific content patterns
-   * @param {String} text - The text to analyze
-   * @returns {Boolean} - True if Gemini patterns are detected
-   */
-  detectGeminiContent(text) {
-    const lowerText = text.toLowerCase();
-    
-    // Gemini-specific patterns
-    const geminiPatterns = [
-      'here\'s a breakdown',
-      'important note on pricing',
-      'estimated cost:',
-      'description:',
-      'why it\'s important:',
-      'sources',
-      'remember, these are ballpark figures',
-      'always get specific quotes',
-      'good luck with your',
-      'you\'re hitting on a key',
-      'manufacturers like',
-      'benefits:'
-    ];
-    
-    // Count how many patterns match
-    const matchCount = geminiPatterns.filter(pattern => 
-      lowerText.includes(pattern)
-    ).length;
-    
-    // If we find multiple Gemini-specific patterns, it's likely Gemini
-    return matchCount >= 2;
-  }
-
-  /**
-   * Detect if text contains Grok-specific content patterns
-   * @param {String} text - The text to analyze
-   * @returns {Boolean} - True if Grok patterns are detected
-   */
-  detectGrokContent(text) {
-    const lowerText = text.toLowerCase();
-    
-    // Grok-specific patterns
-    const grokPatterns = [
-      'deciding whether',
-      'overview of the',
-      'pros of choosing',
-      'cons and challenges',
-      'key considerations',
-      'recommendations',
-      'wear characteristics:',
-      'lifespan:',
-      'failure cost:',
-      'mileage concern:',
-      'would you like me to search',
-      'alternatively, i can generate',
-      'data is drawn from',
-      'web pages'
-    ];
-    
-    // Count how many patterns match
-    const matchCount = grokPatterns.filter(pattern => 
-      lowerText.includes(pattern)
-    ).length;
-    
-    // If we find multiple Grok-specific patterns, it's likely Grok
-    return matchCount >= 2;
-  }
-
-  /**
    * Parse Cursor conversation text into message objects
    * Enhanced for markdown file content
    * @param {String} text - The conversation text to parse
@@ -1624,10 +1307,17 @@ class ImportService {
     const messages = [];
     
     // First try to parse as markdown with headers
-    if (this.hasMarkdownHeaders(text)) {
-      return this.parseMarkdownFormat(text);
+    if (this.hasMarkdownHeaders && this.hasMarkdownHeaders(text)) {
+      try {
+        const messages = this.parseMarkdownFormat(text);
+        if (messages.length > 0) {
+          return messages;
+        }
+      } catch (e) {
+        console.warn('Cursor markdown parsing failed:', e);
+      }
     }
-    
+
     // Check if this uses "You:" / "Cursor:" format or similar patterns
     if (text.includes('You:') || text.includes('Cursor:')) {
       return this.parseCursorStandardFormat(text);
@@ -1648,6 +1338,11 @@ class ImportService {
    * @returns {Boolean} - True if markdown headers are present
    */
   hasMarkdownHeaders(text) {
+    // First check for Cursor export format with export header
+    if (this.isCursorExportFormat && this.isCursorExportFormat(text)) {
+      return true;
+    }
+    
     // Look for common patterns in Cursor markdown exports
     const markdownPatterns = [
       /^#{1,6}\s+(You|User|Human)$/im,
@@ -1660,15 +1355,131 @@ class ImportService {
       /^\*\*(Cursor)\*\*$/im
     ];
     
-    return markdownPatterns.some(pattern => pattern.test(text));
+    const hasPatterns = markdownPatterns.some(pattern => pattern.test(text));
+    return hasPatterns;
   }
-  
+
+  /**
+   * Check if text is in the specific Cursor export format
+   * @param {String} text - The text to check
+   * @returns {Boolean} - True if it matches Cursor export format
+   */
+  isCursorExportFormat(text) {
+    // Look for the export header pattern anywhere in the first few lines
+    const lines = text.split('\n');
+    
+    if (lines.length < 3) {
+      return false;
+    }
+    
+    // Check for export pattern in first 3 lines
+    const exportPattern = /^_Exported on .+ from Cursor \(.+\)_$/;
+    const hasExportHeader = lines.slice(0, 3).some(line => 
+      exportPattern.test(line.trim())
+    );
+    
+    if (hasExportHeader) {
+      // Also check if we have --- separators and role markers
+      const hasMarkers = text.includes('**User**') || text.includes('**Cursor**');
+      const hasSeparators = text.includes('\n---\n') || text.includes('\n---') || text.includes('---\n');
+      return hasMarkers && hasSeparators;
+    }
+    
+    return false;
+  }
+
   /**
    * Parse markdown format with headers for conversation structure
    * @param {String} text - The markdown text to parse
    * @returns {Array} - Array of message objects
    */
   parseMarkdownFormat(text) {
+    // Check if this is the specific Cursor export format
+    if (this.isCursorExportFormat && this.isCursorExportFormat(text)) {
+      return this.parseCursorExportFormat(text);
+    }
+    
+    // Fall back to the original markdown parsing for other formats
+    return this.parseGenericMarkdownFormat(text);
+  }
+
+  /**
+   * Parse the specific Cursor export format with --- separators
+   * @param {String} text - The Cursor export text to parse
+   * @returns {Array} - Array of message objects
+   */
+  parseCursorExportFormat(text) {
+    const messages = [];
+    
+    // Split by --- separators (handle various formats)
+    const blocks = text.split(/\n---\n?|\n?---\n|\n?--- \n?/).map(block => block.trim()).filter(block => block);
+    
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+      
+      if (!block) {
+        continue;
+      }
+      
+      // Skip blocks that are just metadata (title, export info)
+      const lines = block.split('\n').map(line => line.trim()).filter(line => line);
+      
+      // Skip if this looks like metadata
+      if (lines.length <= 2) {
+        const blockText = lines.join(' ').toLowerCase();
+        if (blockText.includes('exported on') || 
+            blockText.startsWith('#') || 
+            blockText.includes('from cursor')) {
+          continue;
+        }
+      }
+      
+      // Look for role markers
+      let role = null;
+      let contentStartIndex = 0;
+      
+      for (let j = 0; j < lines.length; j++) {
+        const line = lines[j];
+        
+        if (line === '**User**') {
+          role = 'user';
+          contentStartIndex = j + 1;
+          break;
+        } else if (line === '**Cursor**') {
+          role = 'assistant';
+          contentStartIndex = j + 1;
+          break;
+        }
+      }
+      
+      // If no role marker found, try to infer from content or skip
+      if (!role) {
+        continue;
+      }
+      
+      // Extract content after the role marker
+      const contentLines = lines.slice(contentStartIndex).filter(line => line);
+      
+      if (contentLines.length > 0) {
+        const content = contentLines.join('\n').trim();
+        if (content) {
+          messages.push({
+            role: role,
+            content: content
+          });
+        }
+      }
+    }
+    
+    return messages;
+  }
+
+  /**
+   * Parse generic markdown format (original implementation)
+   * @param {String} text - The markdown text to parse
+   * @returns {Array} - Array of message objects
+   */
+  parseGenericMarkdownFormat(text) {
     const messages = [];
     let currentMessage = null;
     
