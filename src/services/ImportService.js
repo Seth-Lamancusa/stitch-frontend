@@ -33,17 +33,13 @@ class ImportService {
 
   /**
    * Import a conversation using the batch endpoint
-   * @param {Array} messages - Array of parsed message objects with role and content
-   * @param {Object} selectedBot - Selected bot object with uid, display_name, etc.
+   * @param {Array} messages - Array of parsed message objects with role and content, or admin-built messages with authorUid
+   * @param {Object} selectedBot - Selected bot object with uid, display_name, etc. (not required for admin mode)
    * @param {Array} recipients - Array of recipient objects (optional)
    * @param {boolean} isPublic - Whether messages should be public (optional)
    * @returns {Promise} - API response with thread_id
    */
   async importConversation(messages, selectedBot, recipients = [], isPublic = true) {
-    if (!selectedBot || !selectedBot.uid) {
-      throw new Error('Bot selection is required for imports');
-    }
-
     const headers = await getAuthHeaders();
     const currentUserUid = this.getCurrentUserUid();
     
@@ -51,52 +47,96 @@ class ImportService {
       throw new Error('User must be authenticated to import conversations');
     }
     
-    // Transform messages to include proper content_author and recipients
-    const transformedMessages = messages.map((msg, index) => {
+    // Detect admin mode: check if messages have authorUid (admin-built messages)
+    const isAdminMode = messages.length > 0 && messages[0].authorUid;
+    
+    let transformedMessages;
+    
+    if (isAdminMode) {
+      // ADMIN MODE: Use specified authors and add previous message author as recipient
+      console.log('[ImportService] Using admin mode - custom authors detected');
       
-      if (msg.role === 'user') {
-        // For user messages: add the bot as a recipient so bot can see the message
-        const messageRecipients = [
-          ...recipients, // Include any additional recipients specified
-          { uid: selectedBot.uid, visible: true } // Add bot as recipient
-        ];
+      transformedMessages = messages.map((msg, index) => {
+        // Start with base recipients
+        const messageRecipients = [...recipients];
+        
+        // Add previous message's author as recipient (so they can see the reply)
+        if (index > 0) {
+          const previousAuthorUid = messages[index - 1].authorUid;
+          // Only add if not already in recipients
+          if (!messageRecipients.some(r => r.uid === previousAuthorUid)) {
+            messageRecipients.push({ uid: previousAuthorUid, visible: true });
+          }
+        }
         
         return {
           content: msg.content,
-          content_author: currentUserUid,
+          content_author: msg.authorUid,
           public: isPublic,
           recipients: messageRecipients,
           attachments: []
         };
-      } else {
-        // For bot messages: add the user as a recipient so user can see the message
-        // Skip adding user as recipient for the last message if it's a bot message (incomplete conversation)
-        const messageRecipients = [
-          ...recipients // Include any additional recipients specified
-        ];
-
-        messageRecipients.push({ uid: currentUserUid, visible: true });
-        
-        return {
-          content: msg.content,
-          content_author: selectedBot.uid,
-          public: isPublic,
-          recipients: messageRecipients,
-          attachments: []
-        };
+      });
+    } else {
+      // NORMAL MODE: Use traditional user/bot alternating logic
+      if (!selectedBot || !selectedBot.uid) {
+        throw new Error('Bot selection is required for normal imports');
       }
-    });
+
+      transformedMessages = messages.map((msg, index) => {
+        
+        if (msg.role === 'user') {
+          // For user messages: add the bot as a recipient so bot can see the message
+          const messageRecipients = [
+            ...recipients, // Include any additional recipients specified
+            { uid: selectedBot.uid, visible: true } // Add bot as recipient
+          ];
+          
+          return {
+            content: msg.content,
+            content_author: currentUserUid,
+            public: isPublic,
+            recipients: messageRecipients,
+            attachments: []
+          };
+        } else {
+          // For bot messages: add the user as a recipient so user can see the message
+          const messageRecipients = [
+            ...recipients // Include any additional recipients specified
+          ];
+
+          messageRecipients.push({ uid: currentUserUid, visible: true });
+          
+          return {
+            content: msg.content,
+            content_author: selectedBot.uid,
+            public: isPublic,
+            recipients: messageRecipients,
+            attachments: []
+          };
+        }
+      });
+    }
     
     const batchData = {
       messages: transformedMessages
     };
     
-    console.log('[ImportService] Importing conversation:', {
-      messageCount: messages.length,
-      selectedBot: selectedBot.display_name,
-      recipientsCount: recipients.length,
-      isPublic
-    });
+    if (isAdminMode) {
+      console.log('[ImportService] Importing admin-built conversation:', {
+        messageCount: messages.length,
+        uniqueAuthors: [...new Set(messages.map(m => m.authorTag))].join(', '),
+        recipientsCount: recipients.length,
+        isPublic
+      });
+    } else {
+      console.log('[ImportService] Importing parsed conversation:', {
+        messageCount: messages.length,
+        selectedBot: selectedBot.display_name,
+        recipientsCount: recipients.length,
+        isPublic
+      });
+    }
     
     try {
       const response = await axios.post(
@@ -1821,4 +1861,5 @@ class ImportService {
   }
 }
 
-export default new ImportService(); 
+const importService = new ImportService();
+export default importService; 
