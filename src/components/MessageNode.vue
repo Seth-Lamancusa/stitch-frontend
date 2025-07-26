@@ -261,8 +261,8 @@
         </div>
       </div>
     </div>
-
   </div>
+
 </template>
 
 <script>
@@ -10561,4 +10561,15 @@ export default {
   color: black;
   border: none;
   padding: 8px 16px;
-  border-radius: 6
+  border-radius: 6px;
+}
+
+.save-btn:hover:not(:disabled) {
+  background-color: var(--primary-color-dark, #0069d9);
+}
+
+.save-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+</style>
