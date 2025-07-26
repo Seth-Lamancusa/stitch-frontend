@@ -1,57 +1,40 @@
 <script setup>
 import { onMounted, onBeforeUnmount } from 'vue';
+import AppHeader from './components/AppHeader.vue';
+import RecipientsModal from './components/RecipientsModal.vue';
+import LinksModal from './components/LinksModal.vue';
+import EditMessageModal from './components/EditMessageModal.vue';
 
 // More robust height calculation for the entire app
-const updateAppHeight = () => {
-  // Get the window's inner height
-  const vh = window.innerHeight;
-  // Set it as a CSS variable (minus 1px for safety margin)
-  document.documentElement.style.setProperty('--app-height', `${vh - 1}px`);
+const setAppHeight = () => {
+  const doc = document.documentElement;
+  doc.style.setProperty('--app-height', `${window.innerHeight}px`);
 };
 
 onMounted(() => {
-  // Set initial height
-  updateAppHeight();
-  
-  // Update height on resize and orientation change
-  window.addEventListener('resize', updateAppHeight);
-  window.addEventListener('orientationchange', updateAppHeight);
-  
-  // Special handling for mobile browsers
-  if ('virtualKeyboard' in navigator) {
-    // Modern browsers with virtual keyboard API
-    window.addEventListener('virtualKeyboardDidShow', updateAppHeight);
-    window.addEventListener('virtualKeyboardDidHide', updateAppHeight);
-  } else {
-    // Fallback for browsers without virtual keyboard API
-    window.addEventListener('focusin', () => {
-      // Add small delay to account for keyboard opening
-      setTimeout(updateAppHeight, 200);
-    });
-    window.addEventListener('focusout', updateAppHeight);
-  }
+  window.addEventListener('resize', setAppHeight);
+  setAppHeight();
 });
 
 onBeforeUnmount(() => {
-  // Clean up all event listeners
-  window.removeEventListener('resize', updateAppHeight);
-  window.removeEventListener('orientationchange', updateAppHeight);
-  
-  if ('virtualKeyboard' in navigator) {
-    window.removeEventListener('virtualKeyboardDidShow', updateAppHeight);
-    window.removeEventListener('virtualKeyboardDidHide', updateAppHeight);
-  } else {
-    window.removeEventListener('focusin', updateAppHeight);
-    window.removeEventListener('focusout', updateAppHeight);
-  }
+  window.removeEventListener('resize', setAppHeight);
 });
 </script>
 
 <template>
-  <router-view />
+  <div>
+    <AppHeader />
+    <main>
+      <router-view/>
+    </main>
+    <RecipientsModal />
+    <LinksModal />
+    <EditMessageModal />
+  </div>
 </template>
 
 <style>
+/* Base application styles */
 :root {
   --app-height: 100vh;
 }

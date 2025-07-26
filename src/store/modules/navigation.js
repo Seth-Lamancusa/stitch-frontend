@@ -29,7 +29,12 @@ export default {
       isAddMode: false,
       existingRecipients: [],
       messageId: null
-    }
+    },
+    recipientsModalConfig: null, // Holds { isPublic, isAddMode, existingRecipients, messageId }
+    linksModalVisible: false,
+    messageForLinks: null,
+    editMessageModalVisible: false,
+    messageToEdit: null,
   },
   
   mutations: {
@@ -179,7 +184,19 @@ export default {
       state.recipientsModal.isAddMode = false;
       state.recipientsModal.existingRecipients = [];
       state.recipientsModal.messageId = null;
-    }
+    },
+    SET_LINKS_MODAL_VISIBLE(state, visible) {
+      state.linksModalVisible = visible;
+    },
+    SET_MESSAGE_FOR_LINKS(state, message) {
+      state.messageForLinks = message;
+    },
+    SET_EDIT_MESSAGE_MODAL_VISIBLE(state, visible) {
+      state.editMessageModalVisible = visible;
+    },
+    SET_MESSAGE_TO_EDIT(state, message) {
+      state.messageToEdit = message;
+    },
   },
   
   getters: {
@@ -250,7 +267,11 @@ export default {
       });
       return recipients;
     },
-    recipientsModalMessageId: state => state.recipientsModal.messageId
+    recipientsModalMessageId: state => state.recipientsModal.messageId,
+    linksModalVisible: (state) => state.linksModalVisible,
+    messageForLinks: (state) => state.messageForLinks,
+    editMessageModalVisible: (state) => state.editMessageModalVisible,
+    messageToEdit: (state) => state.messageToEdit,
   },
   
   actions: {
@@ -516,6 +537,22 @@ export default {
     
     hideRecipientsModal({ commit }) {
       commit('HIDE_RECIPIENTS_MODAL');
-    }
+    },
+    showLinksModal({ commit }, message) {
+      commit('SET_MESSAGE_FOR_LINKS', message);
+      commit('SET_LINKS_MODAL_VISIBLE', true);
+    },
+    hideLinksModal({ commit }) {
+      commit('SET_LINKS_MODAL_VISIBLE', false);
+      commit('SET_MESSAGE_FOR_LINKS', null);
+    },
+    showEditMessageModal({ commit }, message) {
+      commit('SET_MESSAGE_TO_EDIT', message);
+      commit('SET_EDIT_MESSAGE_MODAL_VISIBLE', true);
+    },
+    hideEditMessageModal({ commit }) {
+      commit('SET_EDIT_MESSAGE_MODAL_VISIBLE', false);
+      commit('SET_MESSAGE_TO_EDIT', null);
+    },
   }
 };

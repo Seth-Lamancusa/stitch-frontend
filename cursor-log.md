@@ -1,14 +1,10 @@
 # Cursor Log
 
-## 2023-10-27
+## Admin Message Editing Feature
 
-### "Read Out Loud" Feature
-
--   **New Branch:** `feature/read-out-loud`
--   **`src/services/MessageService.js`**: Added `getReadOutLoudAudio` function to fetch MP3 audio data from the new `/api/messages/{message_id}/read_out_loud` endpoint.
--   **`src/services/AudioPlaybackService.js`**: Created a new service to manage audio playback state globally. This service ensures that only one message can be played at a time and tracks loading/playing states.
--   **`src/components/MessageNode.vue`**:
-    -   Added a "Read Out Loud" button to the message footer.
-    -   Integrated the component with the `AudioPlaybackService` to handle button clicks, and update the UI to reflect the current playback state (loading, playing, stopped).
-    -   The button uses Font Awesome icons (`fa-volume-up`, `fa-stop`, `fa-spinner`) to indicate the current state.
--   **`index.html`**: Added a link to the Font Awesome stylesheet to support the new icons. 
+- **Added `EditMessageModal.vue`**: Created a modal for editing message content and author.
+- **Modified `MessageNode.vue`**: Added an "Edit" button for admins, which opens the `EditMessageModal`.
+- **Modified `navigation.js` Vuex store**: Ensured the store handles the visibility of the edit modal.
+- **Modified `MessageService.js`**: Added `adminUpdateMessage` to send a `PUT` request to the admin endpoint.
+- **Modified `EditMessageModal.vue`**: Implemented the logic to call `adminUpdateMessage` and update the local state.
+- **Created `UserSearchInput.vue`**: Implemented a reusable component for searching and selecting users. 
