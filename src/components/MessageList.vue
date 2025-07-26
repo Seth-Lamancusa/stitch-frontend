@@ -829,7 +829,6 @@ const handleLinkDelete = async (linkData) => {
   flex: 1;
   gap: var(--space-md);
   overflow-y: auto;
-  height: 100%;
 }
 
 .login-message {

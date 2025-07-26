@@ -1257,10 +1257,9 @@ const closeProfileModal = () => {
 .thread-view {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: var(--app-height, 100vh);
   width: 100%;
   position: relative;
-  overflow: hidden;
 }
 
 .thread-header {
@@ -1402,7 +1401,6 @@ const closeProfileModal = () => {
   padding-right: 80px;
   padding-bottom: 100px; /* Add space at bottom for the reply box */
   gap: 20px; /* Consistent gap between elements */
-  height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;

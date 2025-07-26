@@ -214,7 +214,7 @@ const handleTabClick = (tab) => {
 .app-layout {
   display: grid;
   grid-template-rows: 56px 1fr;
-  min-height: 100vh;
+  height: var(--app-height, 100vh);
   background: var(--color-background, #fff);
 }
 
@@ -465,6 +465,7 @@ const handleTabClick = (tab) => {
 .main-content {
   padding: 6px;
   overflow-y: auto;
+  height: 100%;
 }
 
 /* Mobile responsive styles */
