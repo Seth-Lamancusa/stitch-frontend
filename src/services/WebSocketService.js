@@ -489,6 +489,10 @@ const WebSocketService = {
             } else {
               this.log(`No message callback registered`);
             }
+          } else if (data.type === 'message_updated') {
+            this.log(`===== MESSAGE UPDATED =====`);
+            this.log(`Message ID: ${data.data?.id}`);
+            store.commit('messages/SET_MESSAGE', data.data);
           } else if (data.type === 'error') {
             this.error('Server error:', data.message);
           } else {
