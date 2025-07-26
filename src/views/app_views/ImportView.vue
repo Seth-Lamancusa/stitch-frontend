@@ -5,60 +5,76 @@
         &larr; Cancel
       </button>
       <h2 class="import-title">Import Conversation</h2>
+      
+      <!-- Admin Mode Toggle (only visible to admins) -->
+      <div v-if="isAdmin" class="admin-mode-toggle">
+        <button 
+          @click="toggleAdminMode"
+          class="admin-toggle-button"
+          :class="{ 'active': adminMode }"
+          :disabled="isImporting"
+        >
+          <span class="toggle-icon">⚙️</span>
+          <span class="toggle-text">{{ adminMode ? 'Admin Mode' : 'Admin Mode' }}</span>
+        </button>
+      </div>
     </div>
 
     <!-- Main content area -->
     <div class="import-content">
       <div class="import-panel">
-        <h3>Import AI Conversation</h3>
         
-        <!-- Bot Selection -->
-        <div class="bot-selection-container">
-          <label class="bot-selection-label">Select AI Assistant:</label>
-      <select 
-            v-model="selectedBot" 
-            class="bot-selection-dropdown"
-            :disabled="isImporting"
-      >
-            <option value="">Choose an AI assistant...</option>
-        <option 
-              v-for="bot in availableBots" 
-              :key="bot.uid" 
-              :value="bot"
+        <!-- Normal Import Mode -->
+        <div v-if="!adminMode" class="normal-import-mode">
+          <h3>Import AI Conversation</h3>
+          
+          <!-- Bot Selection -->
+          <div class="bot-selection-container">
+            <label class="bot-selection-label">Select AI Assistant:</label>
+            <select 
+              v-model="selectedBot" 
+              class="bot-selection-dropdown"
+              :disabled="isImporting"
             >
-              {{ bot.display_name }}
-        </option>
-      </select>
-          <p v-if="!selectedBot" class="bot-selection-hint">
-            Select the AI assistant that was used in your conversation
-          </p>
-    </div>
+              <option value="">Choose an AI assistant...</option>
+              <option 
+                v-for="bot in availableBots" 
+                :key="bot.uid" 
+                :value="bot"
+              >
+                {{ bot.display_name }}
+              </option>
+            </select>
+            <p v-if="!selectedBot" class="bot-selection-hint">
+              Select the AI assistant that was used in your conversation
+            </p>
+          </div>
 
-        <!-- Input Method Selection -->
-        <div class="input-method-container">
-          <div class="input-method-tabs">
-          <button 
-              @click="inputMethod = 'text'" 
-              :class="{ active: inputMethod === 'text' }"
-              class="input-method-tab"
-            >
-              Paste Text
-          </button>
-            <button 
-              @click="inputMethod = 'file'" 
-              :class="{ active: inputMethod === 'file' }"
-              class="input-method-tab"
-            >
-              Upload File
-            </button>
-        </div>
-        
-          <!-- Text Input -->
-          <div v-if="inputMethod === 'text'" class="text-input-container">
-        <textarea 
-          v-model="importText"
-          class="import-textarea"
-              placeholder="Paste your conversation here...
+          <!-- Input Method Selection -->
+          <div class="input-method-container">
+            <div class="input-method-tabs">
+              <button 
+                @click="inputMethod = 'text'" 
+                :class="{ active: inputMethod === 'text' }"
+                class="input-method-tab"
+              >
+                Paste Text
+              </button>
+              <button 
+                @click="inputMethod = 'file'" 
+                :class="{ active: inputMethod === 'file' }"
+                class="input-method-tab"
+              >
+                Upload File
+              </button>
+            </div>
+          
+            <!-- Text Input -->
+            <div v-if="inputMethod === 'text'" class="text-input-container">
+              <textarea 
+                v-model="importText"
+                class="import-textarea"
+                placeholder="Paste your conversation here...
 
 Supported formats:
 • ChatGPT conversations (copy from web interface)
@@ -68,83 +84,228 @@ Supported formats:
 • Plain text conversations
 
 The format will be auto-detected once you paste your conversation."
-          :disabled="isImporting"
-        />
-        </div>
-        
-          <!-- File Upload -->
-          <div v-if="inputMethod === 'file'" class="file-upload-container">
-          <input 
-            type="file" 
-              ref="fileInput"
-              accept=".md,.txt,.markdown"
-              @change="handleFileUpload"
-            :disabled="isImporting"
-            class="file-input"
-              id="file-input"
-            />
-            <label for="file-input" class="file-upload-label" :class="{ 'disabled': isImporting }">
-              <span v-if="!uploadedFileName">Choose File (.md, .txt, .markdown)</span>
-              <span v-else>{{ uploadedFileName }}</span>
-            <span class="file-icon">📁</span>
-          </label>
-            <p class="file-upload-hint">
-              Upload markdown files from Cursor or plain text conversation files
-            </p>
-              </div>
+                :disabled="isImporting"
+              />
+            </div>
+          
+            <!-- File Upload -->
+            <div v-if="inputMethod === 'file'" class="file-upload-container">
+              <input 
+                type="file" 
+                ref="fileInput"
+                accept=".md,.txt,.markdown"
+                @change="handleFileUpload"
+                :disabled="isImporting"
+                class="file-input"
+                id="file-input"
+              />
+              <label for="file-input" class="file-upload-label" :class="{ 'disabled': isImporting }">
+                <span v-if="!uploadedFileName">Choose File (.md, .txt, .markdown)</span>
+                <span v-else>{{ uploadedFileName }}</span>
+                <span class="file-icon">📁</span>
+              </label>
+              <p class="file-upload-hint">
+                Upload markdown files from Cursor or plain text conversation files
+              </p>
+            </div>
           </div>
           
-        <!-- Conversation Settings -->
-        <div v-if="parsedMessages.length > 0" class="conversation-settings">
-          <h4>Conversation Settings</h4>
-          
-          <!-- Public/Private Toggle -->
-          <div class="setting-group">
-            <label class="setting-label">Visibility:</label>
-            <div class="visibility-toggle">
+          <!-- Conversation Settings -->
+          <div v-if="parsedMessages.length > 0" class="conversation-settings">
+            <h4>Conversation Settings</h4>
+            
+            <!-- Public/Private Toggle -->
+            <div class="setting-group">
+              <label class="setting-label">Visibility:</label>
+              <div class="visibility-toggle">
+                <button 
+                  @click="isPublic = !isPublic"
+                  class="visibility-toggle-button"
+                  :class="{ 'public': isPublic, 'private': !isPublic }"
+                  :disabled="isImporting"
+                >
+                  <span class="toggle-slider"></span>
+                  <span class="toggle-label">{{ isPublic ? 'Public' : 'Private' }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Recipients -->
+            <div class="setting-group">
+              <label class="setting-label">Recipients:</label>
               <button 
-                @click="isPublic = !isPublic"
-                class="visibility-toggle-button"
-                :class="{ 'public': isPublic, 'private': !isPublic }"
+                class="recipients-button" 
+                @click="showRecipientSelector = true"
                 :disabled="isImporting"
               >
-                <span class="toggle-slider"></span>
-                <span class="toggle-label">{{ isPublic ? 'Public' : 'Private' }}</span>
+                👥 Add Recipients ({{ recipients.length }})
+              </button>
+              <p class="setting-hint">
+                Add users who should have access to this imported conversation
+              </p>
+            </div>
+          </div>
+
+          <!-- Format Detection & Preview -->
+          <div v-if="parsedMessages.length > 0" class="import-content-container">
+            <div class="import-preview">
+              <div class="preview-header">
+                <h4>Preview ({{ parsedMessages.length }} messages)</h4>
+                <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
+                  <span class="format-icon">{{ getFormatIcon() }}</span>
+                  <span class="format-hint">{{ formatDetection.hint }}</span>
+                </div>
+              </div>
+              <div class="preview-messages">
+                <div v-for="(msg, index) in parsedMessages" :key="index" class="preview-message">
+                  <span class="preview-role">{{ msg.role === 'user' ? 'You' : selectedBot?.display_name || 'AI' }}:</span>
+                  <span class="preview-content">{{ truncateContent(msg.content) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Admin Conversation Builder Mode -->
+        <div v-else class="admin-builder-mode">
+          <h3>Custom Conversation Builder</h3>
+          <p class="admin-mode-description">
+            Build a conversation message by message. Select a user as the author for each message.
+          </p>
+
+          <!-- Message Builder -->
+          <div class="message-builder">
+            <h4>Add Message</h4>
+            
+            <!-- Author Selection -->
+            <div class="author-selection-container">
+              <label class="author-selection-label">Message Author:</label>
+              <div class="author-input-wrapper">
+                <div class="input-wrapper" :class="{ 'valid': isAuthorValid === true, 'invalid': isAuthorValid === false, 'searching': isSearchingAuthor }">
+                  <input 
+                    v-model="newMessageAuthor" 
+                    @input="searchAuthors"
+                    @keydown.enter.prevent="selectFirstAuthor" 
+                    @keydown.escape="clearAuthorSearch"
+                    placeholder="Search users by username or tag..." 
+                    class="author-input"
+                    ref="authorInput"
+                    :disabled="isImporting"
+                  />
+                  <div v-if="isSearchingAuthor" class="search-indicator" title="Searching...">
+                    <div class="spinner"></div>
+                  </div>
+                  <div v-else-if="isAuthorValid === true" class="valid-indicator" title="Valid user">✓</div>
+                  <div v-else-if="isAuthorValid === false" class="invalid-indicator" title="Invalid user">✗</div>
+                </div>
+                
+                <!-- Author Search Results -->
+                <div v-if="showAuthorResults && authorSearchResults.length > 0" class="author-search-results">
+                  <div 
+                    v-for="user in authorSearchResults" 
+                    :key="user.uid" 
+                    class="author-search-result"
+                    @click="selectAuthor(user)"
+                  >
+                    <span class="author-name">{{ user.display_name }}</span>
+                    <span class="author-tag">@{{ user.user_tag }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Message Content -->
+            <div class="message-content-container">
+              <label class="message-content-label">Message Content:</label>
+              <textarea 
+                v-model="newMessageContent"
+                class="message-content-textarea"
+                placeholder="Enter the message content..."
+                rows="4"
+                :disabled="isImporting"
+              />
+            </div>
+
+            <!-- Add Message Button -->
+            <div class="add-message-container">
+              <button 
+                @click="addBuilderMessage"
+                :disabled="!canAddBuilderMessage || isImporting"
+                class="add-message-button"
+              >
+                <span class="add-icon">➕</span>
+                Add Message
               </button>
             </div>
           </div>
 
-          <!-- Recipients -->
-          <div class="setting-group">
-            <label class="setting-label">Recipients:</label>
-          <button 
-              class="recipients-button" 
-              @click="showRecipientSelector = true"
-              :disabled="isImporting"
-            >
-              👥 Add Recipients ({{ recipients.length }})
-          </button>
-            <p class="setting-hint">
-              Add users who should have access to this imported conversation
-          </p>
-        </div>
-      </div>
-
-        <!-- Format Detection & Preview -->
-        <div v-if="parsedMessages.length > 0" class="import-content-container">
-          <div class="import-preview">
-            <div class="preview-header">
-              <h4>Preview ({{ parsedMessages.length }} messages)</h4>
-              <div v-if="formatDetection.hint" class="format-detection" :class="formatDetection.format">
-                <span class="format-icon">{{ getFormatIcon() }}</span>
-                <span class="format-hint">{{ formatDetection.hint }}</span>
+          <!-- Built Messages Preview -->
+          <div v-if="builtMessages.length > 0" class="built-messages-preview">
+            <div class="built-messages-header">
+              <h4>Built Conversation ({{ builtMessages.length }} messages)</h4>
+              <button 
+                @click="clearBuiltMessages"
+                class="clear-messages-button"
+                :disabled="isImporting"
+              >
+                🗑️ Clear All
+              </button>
+            </div>
+            
+            <div class="built-messages-list">
+              <div 
+                v-for="(msg, index) in builtMessages" 
+                :key="index" 
+                class="built-message"
+              >
+                <div class="built-message-header">
+                  <span class="built-message-author">{{ msg.authorName }} (@{{ msg.authorTag }})</span>
+                  <button 
+                    @click="removeBuiltMessage(index)"
+                    class="remove-message-button"
+                    :disabled="isImporting"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div class="built-message-content">{{ msg.content }}</div>
               </div>
             </div>
-            <div class="preview-messages">
-              <div v-for="(msg, index) in parsedMessages" :key="index" class="preview-message">
-                <span class="preview-role">{{ msg.role === 'user' ? 'You' : selectedBot?.display_name || 'AI' }}:</span>
-                <span class="preview-content">{{ truncateContent(msg.content) }}</span>
+          </div>
+
+          <!-- Conversation Settings for Admin Mode -->
+          <div v-if="builtMessages.length > 0" class="conversation-settings">
+            <h4>Conversation Settings</h4>
+            
+            <!-- Public/Private Toggle -->
+            <div class="setting-group">
+              <label class="setting-label">Visibility:</label>
+              <div class="visibility-toggle">
+                <button 
+                  @click="isPublic = !isPublic"
+                  class="visibility-toggle-button"
+                  :class="{ 'public': isPublic, 'private': !isPublic }"
+                  :disabled="isImporting"
+                >
+                  <span class="toggle-slider"></span>
+                  <span class="toggle-label">{{ isPublic ? 'Public' : 'Private' }}</span>
+                </button>
               </div>
+            </div>
+
+            <!-- Recipients -->
+            <div class="setting-group">
+              <label class="setting-label">Recipients:</label>
+              <button 
+                class="recipients-button" 
+                @click="showRecipientSelector = true"
+                :disabled="isImporting"
+              >
+                👥 Add Recipients ({{ recipients.length }})
+              </button>
+              <p class="setting-hint">
+                Add users who should have access to this built conversation
+              </p>
             </div>
           </div>
         </div>
@@ -165,7 +326,7 @@ The format will be auto-detected once you paste your conversation."
             class="import-button"
             :class="{ 'importing': isImporting, 'disabled': !hasImportPermissions }"
           >
-            <span v-if="!isImporting">Import {{ parsedMessages.length }} Messages</span>
+            <span v-if="!isImporting">{{ getImportButtonText() }}</span>
             <span v-else>Importing...</span>
           </button>
           <p v-if="!hasImportPermissions" class="permission-message">
@@ -234,6 +395,7 @@ const {
 
 // Refs
 const fileInput = ref(null);
+const authorInput = ref(null);
 
 // UI State
 const inputMethod = ref('text');
@@ -243,6 +405,22 @@ const selectedBot = ref('');
 const isPublic = ref(true);
 const recipients = ref([]);
 const showRecipientSelector = ref(false);
+
+// Admin Mode State
+const adminMode = ref(false);
+
+// Admin Builder State
+const newMessageAuthor = ref('');
+const newMessageContent = ref('');
+const selectedAuthor = ref(null);
+const builtMessages = ref([]);
+
+// Author Search State
+const authorSearchResults = ref([]);
+const isSearchingAuthor = ref(false);
+const showAuthorResults = ref(false);
+const isAuthorValid = ref(null);
+let authorSearchTimeout = null;
 
 // Import State
 const isImporting = ref(false);
@@ -257,6 +435,11 @@ const formatDetection = ref({ format: 'unknown', confidence: 0, hint: '' });
 const user = computed(() => store.getters['auth/user']);
 const availableBots = computed(() => store.getters['bots/bots']);
 
+// Computed property for admin status
+const isAdmin = computed(() => {
+  return user.value?.status === 'admin';
+});
+
 // Computed property for import permissions
 const hasImportPermissions = computed(() => {
   if (!user.value) return false;
@@ -265,11 +448,27 @@ const hasImportPermissions = computed(() => {
 
 // Computed property for import button state
 const canImport = computed(() => {
-  return hasImportPermissions.value && 
-         selectedBot.value && 
-           parsedMessages.value.length > 0 && 
-         parsedMessages.value.length <= 30 &&
+  if (!hasImportPermissions.value) return false;
+  
+  if (adminMode.value) {
+    // In admin mode, check built messages
+    return builtMessages.value.length > 0 && 
+           builtMessages.value.length <= 30 &&
            importErrors.value.length === 0;
+  } else {
+    // In normal mode, check parsed messages
+    return selectedBot.value && 
+           parsedMessages.value.length > 0 && 
+           parsedMessages.value.length <= 30 &&
+           importErrors.value.length === 0;
+  }
+});
+
+// Computed property for adding builder messages
+const canAddBuilderMessage = computed(() => {
+  return selectedAuthor.value && 
+         newMessageContent.value.trim().length > 0 &&
+         builtMessages.value.length < 30;
 });
 
 // Computed property for permission error message
@@ -284,8 +483,172 @@ const importPermissionMessage = computed(() => {
 });
 
 // Methods
-const cancelImport = () => {
-  router.back();
+
+// Admin Mode Methods
+const toggleAdminMode = () => {
+  if (isImporting.value) return;
+  
+  adminMode.value = !adminMode.value;
+  
+  // Clear all state when switching modes
+  clearAllState();
+};
+
+const clearAllState = () => {
+  // Clear normal mode state
+  importText.value = '';
+  uploadedFileName.value = '';
+  selectedBot.value = '';
+  parsedMessages.value = [];
+  
+  // Clear admin mode state
+  newMessageAuthor.value = '';
+  newMessageContent.value = '';
+  selectedAuthor.value = null;
+  builtMessages.value = [];
+  clearAuthorSearch();
+  
+  // Clear common state
+  importErrors.value = [];
+  formatDetection.value = { format: 'unknown', confidence: 0, hint: '' };
+  
+  // Clear file input
+  if (fileInput.value) {
+    fileInput.value.value = '';
+  }
+};
+
+// Author Search Methods
+const searchAuthors = (event) => {
+  clearTimeout(authorSearchTimeout);
+  const query = event.target.value.trim();
+  
+  // Clear previous search state
+  isSearchingAuthor.value = query.length >= 1;
+  
+  if (query.length < 1) {
+    isAuthorValid.value = null;
+    authorSearchResults.value = [];
+    showAuthorResults.value = false;
+    selectedAuthor.value = null;
+    return;
+  }
+  
+  // Set up debounce
+  authorSearchTimeout = setTimeout(async () => {
+    try {
+      isSearchingAuthor.value = true;
+      
+      // Call API to search users (same as RecipientsModal)
+      const results = await store.dispatch('auth/searchUsers', query);
+      
+      if (!results || !Array.isArray(results)) {
+        authorSearchResults.value = [];
+        showAuthorResults.value = false;
+        isAuthorValid.value = false;
+        selectedAuthor.value = null;
+      } else {
+        authorSearchResults.value = results;
+        showAuthorResults.value = results.length > 0;
+        isAuthorValid.value = results.length > 0;
+        
+        // If there's an exact match, pre-select it
+        const exactMatch = results.find(user => 
+          user.user_tag.toLowerCase() === query.toLowerCase() ||
+          user.display_name.toLowerCase() === query.toLowerCase()
+        );
+        if (exactMatch) {
+          selectedAuthor.value = exactMatch;
+        } else {
+          selectedAuthor.value = null;
+        }
+      }
+      
+      isSearchingAuthor.value = false;
+    } catch (error) {
+      console.error('Error searching authors:', error);
+      isAuthorValid.value = false;
+      authorSearchResults.value = [];
+      showAuthorResults.value = false;
+      selectedAuthor.value = null;
+      isSearchingAuthor.value = false;
+    }
+  }, 300); // 300ms debounce
+};
+
+const clearAuthorSearch = () => {
+  newMessageAuthor.value = '';
+  isAuthorValid.value = null;
+  authorSearchResults.value = [];
+  isSearchingAuthor.value = false;
+  showAuthorResults.value = false;
+  selectedAuthor.value = null;
+};
+
+const selectAuthor = (user) => {
+  selectedAuthor.value = user;
+  newMessageAuthor.value = `${user.display_name} (@${user.user_tag})`;
+  isAuthorValid.value = true;
+  
+  // Clear search results
+  authorSearchResults.value = [];
+  showAuthorResults.value = false;
+  isSearchingAuthor.value = false;
+};
+
+const selectFirstAuthor = () => {
+  if (authorSearchResults.value.length > 0) {
+    selectAuthor(authorSearchResults.value[0]);
+  }
+};
+
+// Built Messages Methods
+const addBuilderMessage = () => {
+  if (!canAddBuilderMessage.value) return;
+  
+  const message = {
+    content: newMessageContent.value.trim(),
+    authorUid: selectedAuthor.value.uid,
+    authorName: selectedAuthor.value.display_name,
+    authorTag: selectedAuthor.value.user_tag
+  };
+  
+  builtMessages.value.push(message);
+  
+  // Clear the form
+  newMessageContent.value = '';
+  clearAuthorSearch();
+  
+  // Clear any errors
+  importErrors.value = [];
+};
+
+const removeBuiltMessage = (index) => {
+  builtMessages.value.splice(index, 1);
+};
+
+const clearBuiltMessages = () => {
+  builtMessages.value = [];
+  importErrors.value = [];
+};
+
+const convertBuiltMessagesToImportFormat = () => {
+  return builtMessages.value.map((msg, index) => ({
+    role: 'user', // We'll handle the author assignment in the import logic
+    content: msg.content,
+    authorUid: msg.authorUid, // Include author info for import processing
+    authorName: msg.authorName,
+    authorTag: msg.authorTag
+  }));
+};
+
+// Import Button Text
+const getImportButtonText = () => {
+  if (adminMode.value) {
+    return `Import ${builtMessages.value.length} Built Messages`;
+  } else {
+    return `Import ${parsedMessages.value.length} Messages`;
+  }
 };
 
 const truncateContent = (content) => {
@@ -459,48 +822,97 @@ const importConversation = async () => {
     isImporting.value = true;
     importSuccess.value = false;
     
-    const messageCount = parsedMessages.value.length;
-    loadingMessage.value = `Importing ${messageCount} messages...`;
-    
-    if (capabilities.isLowBandwidth) {
-      loadingSubmessage.value = 'Processing conversation (this may take longer on slow connections)';
-    } else if (isLowEnd()) {
-      loadingSubmessage.value = 'Processing your conversation (optimizing for your device)';
-    } else if (messageCount > 20) {
-      loadingSubmessage.value = 'Processing large conversation - this may take a moment';
-    } else {
-      loadingSubmessage.value = `Processing your ${selectedBot.value.display_name} conversation`;
-    }
-    
-    // Use the unified import method
-    const result = await ImportService.importConversation(
-      parsedMessages.value,
-      selectedBot.value,
-      recipients.value,
-      isPublic.value
-    );
-    
-    if (result.success && result.thread_id) {
-      importSuccess.value = true;
-      loadingMessage.value = 'Import Successful!';
-      loadingSubmessage.value = 'Redirecting to your imported conversation...';
+    if (adminMode.value) {
+      // In admin mode, convert built messages to import format
+      const messagesToImport = convertBuiltMessagesToImportFormat();
+      const messageCount = messagesToImport.length;
+      loadingMessage.value = `Importing ${messageCount} built messages...`;
       
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      router.push({ path: `/${result.thread_id}` });
-      
-      // Show appropriate success message
-      if (result.partial_success) {
-        store.commit('ui/SET_WARNING', 
-          `Imported ${result.message_count} of ${result.total_requested} messages. Some messages failed to import.`
-        );
+      if (capabilities.isLowBandwidth) {
+        loadingSubmessage.value = 'Processing conversation (this may take longer on slow connections)';
+      } else if (isLowEnd()) {
+        loadingSubmessage.value = 'Processing your conversation (optimizing for your device)';
+      } else if (messageCount > 20) {
+        loadingSubmessage.value = 'Processing large conversation - this may take a moment';
       } else {
-        store.commit('ui/SET_SUCCESS', 
-          `Successfully imported ${result.message_count} messages`
-        );
+        loadingSubmessage.value = 'Processing your custom conversation';
+      }
+      
+      // Use the unified import method (no selectedBot required for admin mode)
+      const result = await ImportService.importConversation(
+        messagesToImport,
+        null, // selectedBot not required for admin mode
+        recipients.value,
+        isPublic.value
+      );
+      
+      if (result.success && result.thread_id) {
+        importSuccess.value = true;
+        loadingMessage.value = 'Import Successful!';
+        loadingSubmessage.value = 'Redirecting to your imported conversation...';
+        
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        router.push({ path: `/${result.thread_id}` });
+        
+        // Show appropriate success message
+        if (result.partial_success) {
+          store.commit('ui/SET_WARNING', 
+            `Imported ${result.message_count} of ${result.total_requested} messages. Some messages failed to import.`
+          );
+        } else {
+          store.commit('ui/SET_SUCCESS', 
+            `Successfully imported ${result.message_count} messages`
+          );
+        }
+      } else {
+        throw new Error('Import returned unexpected result');
       }
     } else {
-      throw new Error('Import returned unexpected result');
+      // In normal mode, import parsed messages
+      const messageCount = parsedMessages.value.length;
+      loadingMessage.value = `Importing ${messageCount} messages...`;
+      
+      if (capabilities.isLowBandwidth) {
+        loadingSubmessage.value = 'Processing conversation (this may take longer on slow connections)';
+      } else if (isLowEnd()) {
+        loadingSubmessage.value = 'Processing your conversation (optimizing for your device)';
+      } else if (messageCount > 20) {
+        loadingSubmessage.value = 'Processing large conversation - this may take a moment';
+      } else {
+        loadingSubmessage.value = `Processing your ${selectedBot.value.display_name} conversation`;
+      }
+      
+      // Use the unified import method
+      const result = await ImportService.importConversation(
+        parsedMessages.value,
+        selectedBot.value,
+        recipients.value,
+        isPublic.value
+      );
+      
+      if (result.success && result.thread_id) {
+        importSuccess.value = true;
+        loadingMessage.value = 'Import Successful!';
+        loadingSubmessage.value = 'Redirecting to your imported conversation...';
+        
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        router.push({ path: `/${result.thread_id}` });
+        
+        // Show appropriate success message
+        if (result.partial_success) {
+          store.commit('ui/SET_WARNING', 
+            `Imported ${result.message_count} of ${result.total_requested} messages. Some messages failed to import.`
+          );
+        } else {
+          store.commit('ui/SET_SUCCESS', 
+            `Successfully imported ${result.message_count} messages`
+          );
+        }
+      } else {
+        throw new Error('Import returned unexpected result');
+      }
     }
   } catch (error) {
     console.error('Import failed:', error);
@@ -1506,6 +1918,385 @@ watch(() => store.getters['navigation/replyRecipients'], (newRecipients) => {
   color: var(--color-text-secondary);
 }
 
+/* Admin Mode Toggle */
+.admin-mode-toggle {
+  margin-left: auto;
+}
+
+.admin-toggle-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  background: transparent;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.admin-toggle-button:hover:not(:disabled) {
+  background-color: var(--color-hover-overlay);
+  border-color: var(--color-border-hover);
+  color: var(--color-text);
+}
+
+.admin-toggle-button.active {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.admin-toggle-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggle-icon {
+  font-size: var(--font-size-md);
+}
+
+.toggle-text {
+  white-space: nowrap;
+}
+
+/* Admin Builder Mode */
+.admin-builder-mode {
+  width: 100%;
+}
+
+.admin-mode-description {
+  color: var(--color-text-secondary);
+  font-style: italic;
+  margin-bottom: var(--space-lg);
+  text-align: center;
+  padding: var(--space-sm);
+  background-color: var(--color-surface-light);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+}
+
+/* Message Builder */
+.message-builder {
+  background-color: var(--color-surface-light);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.message-builder h4 {
+  margin: 0 0 var(--space-md) 0;
+  color: var(--color-primary);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+/* Author Selection */
+.author-selection-container {
+  margin-bottom: var(--space-md);
+}
+
+.author-selection-label {
+  display: block;
+  margin-bottom: var(--space-xs);
+  font-weight: 600;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+}
+
+.author-input-wrapper {
+  position: relative;
+}
+
+.author-input {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  padding-right: calc(var(--space-xl) + var(--space-sm));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-md);
+  transition: border-color var(--transition-fast);
+}
+
+.author-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.2);
+}
+
+.author-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: var(--color-border-light);
+}
+
+/* Author Search Results */
+.author-search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.author-search-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.author-search-result:last-child {
+  border-bottom: none;
+}
+
+.author-search-result:hover {
+  background-color: var(--color-hover-overlay);
+}
+
+.author-name {
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.author-tag {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+/* Message Content */
+.message-content-container {
+  margin-bottom: var(--space-md);
+}
+
+.message-content-label {
+  display: block;
+  margin-bottom: var(--space-xs);
+  font-weight: 600;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+}
+
+.message-content-textarea {
+  width: 100%;
+  padding: var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-md);
+  font-family: inherit;
+  resize: vertical;
+  min-height: 100px;
+  transition: border-color var(--transition-fast);
+}
+
+.message-content-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb), 0.2);
+}
+
+.message-content-textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: var(--color-border-light);
+}
+
+/* Add Message Button */
+.add-message-container {
+  display: flex;
+  justify-content: center;
+}
+
+.add-message-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-lg);
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.add-message-button:hover:not(:disabled) {
+  background-color: var(--color-primary-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.add-message-button:disabled {
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.add-icon {
+  font-size: var(--font-size-lg);
+}
+
+/* Built Messages Preview */
+.built-messages-preview {
+  background-color: var(--color-surface-light);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.built-messages-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-sm);
+  gap: var(--space-sm);
+}
+
+.built-messages-header h4 {
+  margin: 0;
+  color: var(--color-primary);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+
+.clear-messages-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  background: transparent;
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-sm);
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.clear-messages-button:hover:not(:disabled) {
+  background-color: rgba(220, 38, 38, 0.1);
+}
+
+.clear-messages-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Built Messages List */
+.built-messages-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: var(--space-sm);
+}
+
+.built-messages-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.built-messages-list::-webkit-scrollbar-track {
+  background: var(--color-surface-light);
+  border-radius: var(--radius-sm);
+}
+
+.built-messages-list::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.built-messages-list::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-dark);
+}
+
+.built-message {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm);
+}
+
+.built-message-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-xs);
+  gap: var(--space-sm);
+}
+
+.built-message-author {
+  font-weight: 600;
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+}
+
+.remove-message-button {
+  padding: var(--space-xxs) var(--space-xs);
+  background: transparent;
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-xs);
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  line-height: 1;
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.remove-message-button:hover:not(:disabled) {
+  background-color: rgba(220, 38, 38, 0.1);
+}
+
+.remove-message-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.built-message-content {
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  padding: var(--space-xs);
+  background-color: var(--color-surface-light);
+  border-radius: var(--radius-xs);
+}
+
+/* Normal Import Mode */
+.normal-import-mode {
+  width: 100%;
+}
+
 /* Mobile Responsive */
 @media (max-width: 768px) {
   .input-method-tabs {
@@ -1532,6 +2323,50 @@ watch(() => store.getters['navigation/replyRecipients'], (newRecipients) => {
     font-size: var(--font-size-md);
     padding: var(--space-sm) var(--space-lg);
   }
+
+  /* Admin Mode Mobile Responsive */
+  .admin-mode-toggle {
+    margin-left: 0;
+    margin-top: var(--space-xs);
+  }
+  
+  .import-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-xs);
+  }
+  
+  .admin-toggle-button {
+    font-size: var(--font-size-xs);
+    padding: var(--space-xxs) var(--space-xs);
+  }
+  
+  .built-messages-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-xs);
+  }
+  
+  .built-messages-header h4 {
+    text-align: center;
+  }
+  
+  .clear-messages-button {
+    align-self: center;
+  }
+  
+  .built-message-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-xs);
+  }
+  
+  .author-search-results {
+    position: fixed;
+    left: var(--space-sm);
+    right: var(--space-sm);
+    z-index: 100;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1556,6 +2391,28 @@ watch(() => store.getters['navigation/replyRecipients'], (newRecipients) => {
   .import-button {
     font-size: var(--font-size-sm);
     padding: var(--space-xs) var(--space-md);
+  }
+
+  /* Admin Mode Mobile Responsive 480px */
+  .message-builder {
+    padding: var(--space-sm);
+  }
+  
+  .built-messages-preview {
+    padding: var(--space-sm);
+  }
+  
+  .add-message-button {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .author-input {
+    font-size: var(--font-size-sm);
+  }
+  
+  .message-content-textarea {
+    font-size: var(--font-size-sm);
   }
 }
 
@@ -1622,6 +2479,75 @@ watch(() => store.getters['navigation/replyRecipients'], (newRecipients) => {
   }
   
   .import-button:disabled {
+    background-color: #333;
+    color: #666;
+  }
+
+  /* Admin Mode Dark Theme */
+  .admin-mode-description {
+    background-color: #1a1a1a;
+    border-color: #333;
+  }
+  
+  .message-builder {
+    background-color: #1a1a1a;
+    border-color: #333;
+  }
+  
+  .author-input {
+    background-color: #1a1a1a;
+    border-color: #333;
+    color: #eee;
+  }
+  
+  .author-input:focus {
+    border-color: #10a37f;
+    box-shadow: 0 0 0 2px rgba(16, 163, 127, 0.2);
+  }
+  
+  .author-search-results {
+    background-color: #1a1a1a;
+    border-color: #333;
+  }
+  
+  .author-search-result:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+  
+  .message-content-textarea {
+    background-color: #1a1a1a;
+    border-color: #333;
+    color: #eee;
+  }
+  
+  .message-content-textarea:focus {
+    border-color: #10a37f;
+    box-shadow: 0 0 0 2px rgba(16, 163, 127, 0.2);
+  }
+  
+  .built-messages-preview {
+    background-color: #1a1a1a;
+    border-color: #333;
+  }
+  
+  .built-message {
+    background-color: #222;
+    border-color: #444;
+  }
+  
+  .built-message-content {
+    background-color: #1a1a1a;
+  }
+  
+  .add-message-button:not(:disabled) {
+    background-color: #10a37f;
+  }
+  
+  .add-message-button:hover:not(:disabled) {
+    background-color: #0e906e;
+  }
+  
+  .add-message-button:disabled {
     background-color: #333;
     color: #666;
   }

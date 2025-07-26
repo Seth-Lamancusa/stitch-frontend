@@ -69,7 +69,7 @@
             class="recipients-toggle author-toggle"
             title="Add recipients to this message"
           >
-            Recipients {{ typeof message.recipients === 'object' ? `(${deduplicatedRecipients.length})` : '' }}
+            Recipients {{ typeof message.recipients === 'string' ? '' : `(${deduplicatedRecipients.length})` }}
           </button>
           
           <!-- Delete button - shows for admins (all messages) or authors (own messages), but not in list view -->
@@ -682,12 +682,8 @@ export default {
     });
     
     const hasRecipients = computed(() => {
-      // If recipients is a string (access message), display it anyway
-      if (typeof props.message.recipients === 'string') {
-        return true;
-      }
-      // Otherwise check if we have deduplicated recipients
-      return deduplicatedRecipients.value.length > 0;
+      // Always show the recipients badge
+      return true;
     });
     
     // New method to handle swipe navigation
