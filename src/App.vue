@@ -1,5 +1,8 @@
 <script setup>
 import { onMounted, onBeforeUnmount } from 'vue';
+import RecipientsModal from './components/RecipientsModal.vue';
+import LinksModal from './components/LinksModal.vue';
+import EditMessageModal from './components/EditMessageModal.vue';
 
 // More robust height calculation for the entire app
 const setAppHeight = () => {
@@ -19,7 +22,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div>
-    <AppHeader />
     <main>
       <router-view/>
     </main>
@@ -64,5 +66,17 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+#app > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+main {
+  flex: 1;
+  min-height: 0;
 }
 </style>
