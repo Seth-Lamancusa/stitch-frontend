@@ -277,4 +277,26 @@ export default {
     });
     return response;
   },
+
+  async updateMessage(messageId, payload) {
+    const headers = await getAuthHeaders();
+    try {
+      const response = await axios.patch(`${apiBaseUrl}/messages/${messageId}`, payload, { headers });
+      return response;
+    } catch (error) {
+      console.error('[MessageService] Update message request failed:', error);
+      throw error;
+    }
+  },
+
+  async adminUpdateMessage(messageId, payload) {
+    const headers = await getAuthHeaders();
+    try {
+      const response = await axios.put(`${apiBaseUrl}/messages/${messageId}/admin`, payload, { headers });
+      return response.data;
+    } catch (error) {
+      console.error('[MessageService] Admin update message request failed:', error);
+      throw error;
+    }
+  },
 };
