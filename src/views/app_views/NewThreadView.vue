@@ -35,6 +35,18 @@
         </div>
       </div>
       
+      <!-- Guest notification box - only shown for guests -->
+      <div v-if="!user" class="guest-notification">
+        <div class="notification-content">
+          <div class="notification-icon">🔒</div>
+          <div class="notification-text">
+            <h3>Not logged in</h3>
+            <p>You need to login to send messages</p>
+          </div>
+          <div class="notification-arrow">↑</div>
+        </div>
+      </div>
+
       <!-- Reply box component -->
       <reply-box
         :is-new-thread="true"
@@ -783,5 +795,78 @@ const closeProfileModal = () => {
   color: var(--color-text-secondary);
   text-align: center;
   gap: var(--space-sm);
+}
+
+/* Guest notification styles */
+.guest-notification {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.notification-content {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+  opacity: 0.9;
+}
+
+.notification-icon {
+  font-size: 2rem;
+  opacity: 0.8;
+}
+
+.notification-text {
+  text-align: center;
+}
+
+.notification-text h3 {
+  margin: 0 0 var(--space-xs) 0;
+  color: var(--color-text);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+.notification-text p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-md);
+}
+
+.notification-arrow {
+  font-size: 1.5rem;
+  color: var(--color-primary);
+  font-weight: bold;
+  animation: arrow-pulse 2s ease-in-out infinite;
+}
+
+@keyframes arrow-pulse {
+  0%, 100% { opacity: 0.6; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-4px); }
+}
+
+/* Dark theme for guest notification */
+@media (prefers-color-scheme: dark) {
+  .notification-content {
+    background-color: var(--surface-color-dark, #222);
+    border-color: var(--border-color-dark, #444);
+  }
+  
+  .notification-text h3 {
+    color: var(--text-color-dark, #eee);
+  }
+  
+  .notification-text p {
+    color: var(--text-color-light-dark, #aaa);
+  }
 }
 </style> 

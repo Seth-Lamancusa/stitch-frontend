@@ -3,10 +3,7 @@
     pageTitle="Terms & Conditions"
     pageSubtitle="Terms of user and privacy policy."
     heroClass="legal-hero"
-    :showBetaBanner="true"
-    betaBannerIcon="📝"
-    betaBannerTitle="A Legal Landscape"
-    betaBannerText="We're currently in beta, focusing on perfecting the platform experience."
+    :showBetaBanner="false"
   >
     <!-- Legal Details Layout -->
     <div class="legal-details-layout">
@@ -254,11 +251,12 @@ onBeforeUnmount(() => {
   gap: 2rem;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 2rem;
+  padding: 2rem 2rem 0 2rem;
 }
 
 .legal-content {
   min-height: 100vh;
+  padding-top: 1rem;
 }
 
 .legal-section {

@@ -4,13 +4,14 @@
     <header>
       <nav class="main-nav">
         <div class="logo">
-          <router-link to="/public" class="logo-link">
+          <router-link to="/home" class="logo-link">
             <span class="logo-text">Stitch</span>
           </router-link>
         </div>
         <ul class="nav-links" :class="{ active: isMenuOpen }">
           <li><router-link to="/home" :class="{ active: currentRoute === '/home' }">Home</router-link></li>
-          <li><router-link to="/architecture" :class="{ active: currentRoute === '/architecture' }">Architecture</router-link></li>
+          <!-- <li><router-link to="/architecture" :class="{ active: currentRoute === '/architecture' }">Architecture</router-link></li> -->
+          <li><router-link to="/features" :class="{ active: currentRoute === '/features' }">Features</router-link></li>
           <li><router-link to="/requests" :class="{ active: currentRoute === '/requests' }">Join Waitlist</router-link></li>
           <li><router-link to="/terms" :class="{ active: currentRoute === '/terms' }">Terms</router-link></li>
           <li><router-link to="/public" class="login-btn">Go to Stitch</router-link></li>
@@ -38,9 +39,9 @@
     <section v-if="showBetaBanner" class="beta-banner">
       <div class="container">
         <div class="banner-content">
-          <div class="banner-icon">{{ betaBannerIcon || '🚀' }}</div>
+          <div v-if="betaBannerIcon" class="banner-icon">{{ betaBannerIcon }}</div>
           <div class="banner-text">
-            <h3>{{ betaBannerTitle || 'Beta Phase: Now Live' }}</h3>
+            <h3 v-if="betaBannerTitle">{{ betaBannerTitle }}</h3>
             <p>
               <slot name="betaBannerText">
                 {{ betaBannerText || 'We\'re currently in beta, focusing on perfecting the platform experience.' }}
@@ -95,11 +96,11 @@ const props = defineProps({
   },
   betaBannerIcon: {
     type: String,
-    default: '🚀'
+    default: ''
   },
   betaBannerTitle: {
     type: String,
-    default: 'Beta Phase: Now Live'
+    default: ''
   },
   betaBannerText: {
     type: String,

@@ -4,12 +4,40 @@
     pageSubtitle="Connect, compare, share."
     heroClass="home-hero"
     :showBetaBanner="true"
-    betaBannerIcon="🚀"
-    betaBannerTitle="Stitch alpha is now live"
+    betaBannerIcon=""
+    betaBannerTitle=""
     footerTagline="Collaborate with humans, with AI."
   >
     <template #betaBannerText>
-      Working with select testers. <router-link to='/requests' class='banner-link'>Join the waitlist</router-link>.
+      <div class="banner-buttons">
+        <a href="https://youtu.be/ZoNM-2rqzko" target="_blank" class="banner-btn">
+          <div class="btn-content">
+            <div class="btn-header">
+              <span class="btn-icon">📺</span>
+              <div class="btn-title">Watch Demo</div>
+            </div>
+            <div class="btn-subtitle">How does it work?</div>
+          </div>
+        </a>
+        <router-link to="/new-thread" class="banner-btn">
+          <div class="btn-content">
+            <div class="btn-header">
+              <span class="btn-icon">💬</span>
+              <div class="btn-title">Try it Out</div>
+            </div>
+            <div class="btn-subtitle">Like ChatGPT, but better</div>
+          </div>
+        </router-link>
+        <router-link to="/features" class="banner-btn">
+          <div class="btn-content">
+            <div class="btn-header">
+              <span class="btn-icon">⚡</span>
+              <div class="btn-title">Features</div>
+            </div>
+            <div class="btn-subtitle">Messaging, AI, automation & more</div>
+          </div>
+        </router-link>
+      </div>
     </template>
     <section class="home-main">
       <div class="container">
@@ -17,14 +45,17 @@
           <div class="branching-graph"></div>
           <div class="content-columns">
             <div class="home-main-content-1">
+              <div class="content-icon">🧠</div>
               <h2>Connecting ideas, connecting minds</h2>
-              <p>Engage in multi-threaded conversations with bot and human users alike, generating and evaluating ideas, linking them together, and branching them off in new directions.</p>
+              <p>Engage in multi-threaded conversations with bot and human users alike. Stitch makes it easy to keep track of replies, topics, and conversations with different users.</p>
             </div>
             <div class="home-main-content-2">
+              <div class="content-icon">⚡</div>
               <h2>Compare responses<br>in real time</h2>
-              <p>Easily send messages to multiple users at a time or share them publicly, receiving various chatbot and human responses.</p>
+              <p>Easily send messages to groups of users or share them in public channels. Chatbots will automatically reply to messages sent to them.</p>
             </div>
             <div class="home-main-content-3">
+              <div class="content-icon">🔗</div>
               <h2>Share your conversations with others</h2>
               <p>Each message comes with a URL, allowing you to easily share them with others to respond or spin off in their own directions.</p>
             </div>
@@ -93,6 +124,92 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
   opacity: 0.9;
 }
 
+/* Banner buttons styling */
+.banner-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  margin: 0 auto;
+}
+
+.banner-btn {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, rgba(16, 163, 127, 0.15) 0%, rgba(31, 197, 157, 0.1) 100%);
+  border: 1px solid rgba(16, 163, 127, 0.3);
+  border-radius: 10px;
+  color: var(--text-light);
+  text-decoration: none;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  min-width: 140px;
+  height: 70px;
+  position: relative;
+  overflow: hidden;
+}
+
+.banner-btn:hover {
+  background: linear-gradient(135deg, rgba(16, 163, 127, 0.25) 0%, rgba(31, 197, 157, 0.2) 100%);
+  border-color: rgba(16, 163, 127, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(16, 163, 127, 0.2);
+  color: var(--text-light);
+}
+
+.banner-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transition: left 0.6s ease;
+}
+
+.banner-btn:hover::before {
+  left: 100%;
+}
+
+.btn-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+  padding-bottom: 0.5rem;
+}
+
+.btn-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.btn-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--color-primary, #4f8cff);
+  line-height: 1.2;
+  margin: 0;
+}
+
+.btn-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  opacity: 0.8;
+  line-height: 1.3;
+  margin: 0;
+  padding-left: 2rem;
+}
+
 .home-main {
   padding: 0 0;
   background: var(--background-dark);
@@ -100,7 +217,7 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
 
 .home-main-content {
   max-width: 1200px;
-  margin: 0 0 76px 0;
+  margin: 0 0 2rem 0;
 }
 
 .branching-graph {
@@ -112,26 +229,140 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
 .content-columns {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 2rem;
+  gap: 2.5rem;
   text-align: center;
+  margin-top: 1rem;
+}
+
+.content-columns > div {
+  background: var(--card-background);
+  border: 1px solid var(--card-border);
+  border-radius: var(--border-radius-lg);
+  padding: 2.5rem 2rem;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+}
+
+.content-columns > div:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 30px rgba(16, 163, 127, 0.15);
+  border-color: rgba(16, 163, 127, 0.3);
+}
+
+.content-columns > div::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--gradient-primary);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.content-columns > div:hover::before {
+  opacity: 1;
 }
 
 .content-columns h2 {
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   color: var(--color-primary, #4f8cff);
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  font-weight: 600;
+  line-height: 1.3;
 }
 
-/* Mobile styles */
-@media (max-width: 768px) {
-  .home-main {
-    padding: 2rem 0;
+.content-columns p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  font-size: 1rem;
+  margin-bottom: 0;
+}
+
+.content-icon {
+  font-size: 1.5rem;
+  margin-bottom: 1.5rem;
+  display: block;
+  opacity: 0.9;
+  transition: transform 0.3s ease;
+}
+
+.content-columns > div:hover .content-icon {
+  transform: scale(1.1);
+}
+
+  /* Mobile styles */
+  @media (max-width: 768px) {
+    .home-main {
+      padding: 2rem 0;
+    }
+    
+    .content-columns {
+      grid-template-columns: 1fr !important;
+      gap: 2rem;
+      padding: 0 1rem;
+    }
+    
+    .content-columns > div {
+      padding: 2rem 1.5rem;
+    }
+    
+    .content-columns h2 {
+      font-size: 1.4rem;
+    }
+    
+    .content-columns p {
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    
+    .content-icon {
+      font-size: 2.5rem;
+      margin-bottom: 1.25rem;
+    }
+    
+    .branching-graph {
+      margin-bottom: 2.5rem;
+    }
+
+      /* Banner buttons mobile styles */
+  .banner-buttons {
+    gap: 0.375rem;
   }
-  
+
+  .banner-btn {
+    min-width: auto;
+    flex: 1;
+    padding: 0.625rem 0.75rem;
+    height: 60px;
+  }
+
+  .btn-content {
+    flex-direction: row;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .btn-title {
+    font-size: 0.9rem;
+  }
+
+  .btn-subtitle {
+    display: none;
+  }
+  }
+
+@media (max-width: 480px) {
   .content-columns {
     grid-template-columns: 1fr !important;
-    gap: 2.5rem;
-    padding: 0 1rem;
+    gap: 1.5rem;
+  }
+  
+  .content-columns > div {
+    padding: 1.5rem 1.25rem;
   }
   
   .content-columns h2 {
@@ -139,27 +370,40 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
   }
   
   .content-columns p {
-    font-size: 0.95rem;
-    line-height: 1.5;
-  }
-  
-  .branching-graph {
-    margin-bottom: 2.5rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .content-columns {
-    grid-template-columns: 1fr !important;
-    gap: 2rem;
-  }
-  
-  .content-columns h2 {
-    font-size: 1.2rem;
-  }
-  
-  .content-columns p {
     font-size: 0.9rem;
+  }
+
+  .content-icon {
+    font-size: 2.25rem;
+    margin-bottom: 1rem;
+  }
+
+  /* Banner buttons small mobile styles */
+  .banner-buttons {
+    gap: 0.25rem;
+  }
+
+  .banner-btn {
+    padding: 0.5rem 0.625rem;
+    height: 50px;
+  }
+
+  .btn-content {
+    flex-direction: row;
+    gap: 0.375rem;
+    align-items: center;
+  }
+
+  .btn-icon {
+    font-size: 1.1rem;
+  }
+
+  .btn-title {
+    font-size: 0.8rem;
+  }
+
+  .btn-subtitle {
+    display: none;
   }
 }
 
