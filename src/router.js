@@ -12,12 +12,13 @@ import HomeView from './views/info_views/HomeView.vue';
 import ArchitectureView from './views/info_views/ArchitectureView.vue';
 import RequestAccessView from './views/info_views/RequestAccessView.vue';
 import TermsView from './views/info_views/TermsView.vue';
+import FeaturesView from './views/info_views/FeaturesView.vue';
 import MessageListView from './views/app_views/MessageListView.vue';
 
 const routes = [
   {
     path: '/',
-    redirect: '/new-thread'
+    redirect: '/home'
   },
   {
     path: '/home',
@@ -34,6 +35,10 @@ const routes = [
   {
     path: '/terms',
     component: TermsView
+  },
+  {
+    path: '/features',
+    component: FeaturesView
   },
   {
     path: '/inbox',
