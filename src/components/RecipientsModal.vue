@@ -1061,16 +1061,16 @@ const handleClickOutside = (event) => {
   }
 };
 
-// Auto-focus input when modal opens
-watch(() => props.isVisible, (newVal) => {
-  if (newVal) {
-    nextTick(() => {
-      if (recipientInput.value) {
-        recipientInput.value.focus();
-      }
-    });
-  }
-});
+// Auto-focus input when modal opens - DISABLED to prevent mobile keyboard
+// watch(() => props.isVisible, (newVal) => {
+//   if (newVal) {
+//     nextTick(() => {
+//       if (recipientInput.value) {
+//         recipientInput.value.focus();
+//       }
+//     });
+//   }
+// });
 
 // Lifecycle hooks
 onMounted(() => {
