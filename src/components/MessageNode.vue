@@ -23,7 +23,6 @@
             :message-id="message.id"
             :parent-id="message.parent_id"
             :mobile-mode="isMobile"
-            :class="{ 'selection-mode-disabled': isSelectionMode }"
             @navigate="handleSiblingNavigation"
             :data-debug-has-siblings="hasSiblings"
           />
@@ -190,7 +189,6 @@
         :message-id="message.id"
         :parent-id="message.parent_id"
         :mobile-mode="false"
-        :class="{ 'selection-mode-disabled': isSelectionMode }"
         @navigate="handleSiblingNavigation"
         :data-debug-has-siblings="hasSiblings"
       />
@@ -276,6 +274,7 @@ import { memoize } from 'lodash-es';
 import MessageService from '../services/MessageService.js';
 import UserService from '../services/UserService.js';
 import { useAudioPlayback } from '../services/AudioPlaybackService.js';
+import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 
 export default {
   name: 'MessageNode',
@@ -510,6 +509,7 @@ export default {
     };
     
     const openAddRecipientsModal = () => {
+      dismissMobileKeyboard();
       console.log('[MessageNode] openAddRecipientsModal called for message', props.message.id);
       console.log('[MessageNode] hasRecipients computed value:', hasRecipients.value);
       console.log('[MessageNode] message.recipients:', props.message.recipients);
@@ -2251,12 +2251,7 @@ export default {
 
 }
 
-/* Selection mode disabled styling for sibling navigator */
-.selection-mode-disabled {
-  opacity: 0.1 !important;
-  pointer-events: none !important;
-  user-select: none !important;
-}
+
 
 .message-id {
   font-size: var(--font-size-xs);

@@ -135,7 +135,7 @@ The format will be auto-detected once you paste your conversation."
               <label class="setting-label">Recipients:</label>
               <button 
                 class="recipients-button" 
-                @click="showRecipientSelector = true"
+                @click="openRecipientSelector"
                 :disabled="isImporting"
               >
                 👥 Add Recipients ({{ recipients.length }})
@@ -298,7 +298,7 @@ The format will be auto-detected once you paste your conversation."
               <label class="setting-label">Recipients:</label>
               <button 
                 class="recipients-button" 
-                @click="showRecipientSelector = true"
+                @click="openRecipientSelector"
                 :disabled="isImporting"
               >
                 👥 Add Recipients ({{ recipients.length }})
@@ -379,6 +379,7 @@ import ImportService from '../../services/ImportService';
 import RecipientsModal from '../../components/RecipientsModal.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
 import { useBrowserCapabilities } from '../../composables/useBrowserCapabilities.js';
+import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
 
 // Setup store and routing
 const store = useStore();
@@ -405,6 +406,12 @@ const selectedBot = ref('');
 const isPublic = ref(true);
 const recipients = ref([]);
 const showRecipientSelector = ref(false);
+
+// Helper function to open recipient selector with keyboard dismissal
+const openRecipientSelector = () => {
+  dismissMobileKeyboard();
+  showRecipientSelector.value = true;
+};
 
 // Admin Mode State
 const adminMode = ref(false);

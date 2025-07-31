@@ -98,20 +98,34 @@
       
       <!-- Text area - hidden in add recipients mode -->
       <div v-if="!isAddRecipientsMode" class="reply-sheet__textarea-container">
-        <textarea 
-          v-model="content" 
-          :placeholder="placeholderText" 
-          class="reply-sheet__textarea"
-          ref="replyTextarea"
-          @keydown="handleTextareaKeyDown"
-          @focus="handleTextareaFocus"
-          @blur="handleTextareaBlur"
-          @input="autoResizeTextarea"
-          :disabled="!canInteract"
-          :class="{ 'disabled': !canInteract }"
-          aria-label="Message content"
-          rows="1"
-        ></textarea>
+        <div class="textarea-wrapper">
+          <textarea 
+            v-model="content" 
+            :placeholder="placeholderText" 
+            class="reply-sheet__textarea"
+            ref="replyTextarea"
+            @keydown="handleTextareaKeyDown"
+            @focus="handleTextareaFocus"
+            @blur="handleTextareaBlur"
+            @input="autoResizeTextarea"
+            :disabled="!canInteract"
+            :class="{ 'disabled': !canInteract }"
+            aria-label="Message content"
+            rows="1"
+          ></textarea>
+          
+          <!-- Expand/Collapse toggle arrow -->
+          <button 
+            v-if="content.trim().length > 0"
+            class="textarea-expand-toggle"
+            @click.stop="toggleTextareaExpansion"
+            :class="{ 'expanded': isTextareaExpanded }"
+            :aria-label="isTextareaExpanded ? 'Collapse to single line' : 'Expand to full height'"
+            title="Toggle textarea height"
+          >
+            <span class="expand-arrow">↗</span>
+          </button>
+        </div>
         
         <!-- Send button -->
         <button 
@@ -268,6 +282,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import RecipientsModal from './RecipientsModal.vue';
+import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 
 const props = defineProps({
   targetId: {
@@ -319,6 +334,9 @@ const dragDistance = ref(0);
 
 // UI state
 const showRecipientSelector = ref(false);
+
+// Textarea expansion state
+const isTextareaExpanded = ref(false);
 
 // Bot prompt state
 const availableBots = computed(() => store.getters['bots/bots']);
@@ -529,12 +547,36 @@ const autoResizeTextarea = () => {
   // Set new height based on scrollHeight, with min and max constraints
   const minHeight = 24; // Single line
   const maxHeight = window.innerHeight * 0.4; // 40vh
-  const newHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight);
+  const naturalHeight = textarea.scrollHeight;
+  
+  let newHeight;
+  if (isTextareaExpanded.value) {
+    // Expanded mode: use natural height up to max
+    newHeight = Math.min(Math.max(naturalHeight, minHeight), maxHeight);
+  } else {
+    // Collapsed mode: single line only
+    newHeight = minHeight;
+  }
   
   textarea.style.height = `${newHeight}px`;
   
-  // Only show scrollbar if content exceeds max height
-  textarea.style.overflowY = newHeight >= maxHeight ? 'auto' : 'hidden';
+  // Always show scrollbar when collapsed and content overflows, or when expanded and at max height
+  if (!isTextareaExpanded.value && naturalHeight > minHeight) {
+    textarea.style.overflowY = 'auto';
+  } else if (isTextareaExpanded.value && newHeight >= maxHeight) {
+    textarea.style.overflowY = 'auto';
+  } else {
+    textarea.style.overflowY = 'hidden';
+  }
+};
+
+// Toggle textarea expansion
+const toggleTextareaExpansion = () => {
+  isTextareaExpanded.value = !isTextareaExpanded.value;
+  // Trigger resize after state change
+  nextTick(() => {
+    autoResizeTextarea();
+  });
 };
 
 const sendReply = async () => {
@@ -601,6 +643,9 @@ const sendReply = async () => {
     
     // Clear the input
     content.value = '';
+    
+    // Reset expansion state
+    isTextareaExpanded.value = false;
     
     // Resize the textarea
     autoResizeTextarea();
@@ -729,6 +774,10 @@ const getAuthorUserTag = (message) => {
 
 // Toggle recipient selector visibility
 const toggleRecipientSelector = () => {
+  if (!showRecipientSelector.value) {
+    // Only dismiss keyboard when opening the modal
+    dismissMobileKeyboard();
+  }
   showRecipientSelector.value = !showRecipientSelector.value;
 };
 
@@ -742,6 +791,7 @@ const closeRecipientSelector = (event) => {
 
 // Bot prompt methods
 const showBotPromptModal = () => {
+  dismissMobileKeyboard();
   showBotModal.value = true;
   // Reset all confirm states when opening modal
   botConfirmStates.value = {};
@@ -911,6 +961,7 @@ defineExpose({
   },
   clear: () => {
     content.value = '';
+    isTextareaExpanded.value = false;
     nextTick(() => {
       autoResizeTextarea();
     });
@@ -1122,11 +1173,20 @@ defineExpose({
   gap: 8px;
 }
 
+/* Textarea wrapper with toggle button */
+.textarea-wrapper {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+}
+
 .reply-sheet__textarea {
   flex: 1;
   min-height: 24px; /* Single line height */
   max-height: 40vh;
   padding: 8px 12px;
+  padding-bottom: 28px; /* Extra space for expand toggle when present */
   margin: 0;
   border: 1px solid var(--color-border);
   border-radius: 12px;
@@ -1136,9 +1196,9 @@ defineExpose({
   font-size: var(--font-size-md);
   line-height: 1.5;
   resize: none;
-  transition: border-color 0.2s ease;
+  transition: border-color 0.2s ease, height 0.2s ease;
   box-sizing: border-box;
-  overflow-y: hidden; /* Hide scrollbar during resize */
+  overflow-y: hidden; /* Will be controlled by autoResizeTextarea */
 }
 
 .reply-sheet__textarea:focus {
@@ -1151,6 +1211,55 @@ defineExpose({
   background-color: var(--color-surface-light);
   color: var(--color-text-disabled);
   cursor: not-allowed;
+}
+
+/* Textarea expand toggle button */
+.textarea-expand-toggle {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  width: 20px;
+  height: 20px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  transition: all 0.2s ease;
+  z-index: 10;
+  opacity: 0.7;
+}
+
+.textarea-expand-toggle:hover {
+  background: var(--color-hover-overlay);
+  border-color: var(--color-border-hover);
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+.textarea-expand-toggle.expanded {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  opacity: 1;
+}
+
+.textarea-expand-toggle.expanded:hover {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+
+.expand-arrow {
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.textarea-expand-toggle.expanded .expand-arrow {
+  transform: rotate(180deg);
 }
 
 /* Textarea send button */
@@ -1749,6 +1858,8 @@ defineExpose({
   position: relative;
   max-width: 450px;
   width: 95%;
+  height: 75vh;
+  max-height: 75vh;
   background-color: var(--color-surface);
   padding: var(--space-lg);
   border-radius: var(--radius-md);
@@ -1757,7 +1868,6 @@ defineExpose({
   display: flex;
   flex-direction: column;
   z-index: 1001;
-  max-height: 80vh;
   overflow-y: auto;
 }
 

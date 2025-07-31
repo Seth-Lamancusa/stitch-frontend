@@ -204,6 +204,7 @@ import RecipientsModal from '../../components/RecipientsModal.vue';
 import DeleteConfirmModal from '../../components/DeleteConfirmModal.vue';
 import ProfileEditModal from '../../components/ProfileEditModal.vue';
 import { useAuthentication } from '../../composables/useAuthentication';
+import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
 
 // Setup store and routing
 const store = useStore();
@@ -940,10 +941,12 @@ const copySelectedMessages = () => {
 };
 
 const confirmDeleteMessage = (message) => {
+  dismissMobileKeyboard();
   store.dispatch('ui/showDeleteConfirm', message);
 };
 
 const handleShowLinks = (message) => {
+  dismissMobileKeyboard();
   linksModalMessage.value = message;
   showLinksModal.value = true;
 };
@@ -1399,7 +1402,7 @@ const closeProfileModal = () => {
   flex-direction: column;
   padding-left: 80px;
   padding-right: 80px;
-  padding-bottom: 100px; /* Add space at bottom for the reply box */
+  padding-bottom: calc(100px + 100vh); /* Add space at bottom for the reply box plus a screen's worth of scrollable space */
   gap: 20px; /* Consistent gap between elements */
   overflow-y: auto;
   overflow-x: hidden;
@@ -1646,7 +1649,7 @@ const closeProfileModal = () => {
   .messages-container {
     padding-left: 8px;
     padding-right: 8px;
-    padding-bottom: 120px; /* More space for the reply box on mobile */
+    padding-bottom: calc(120px + 100vh); /* More space for the reply box on mobile plus a screen's worth of scrollable space */
   }
   
   .reply-box-container {
@@ -1720,7 +1723,7 @@ const closeProfileModal = () => {
   .messages-container {
     padding-left: 4px; /* Minimal padding for thread content */
     padding-right: 4px;
-    padding-bottom: 130px;
+    padding-bottom: calc(130px + 100vh); /* Minimal padding plus a screen's worth of scrollable space */
   }
   
   .reply-box-container {
