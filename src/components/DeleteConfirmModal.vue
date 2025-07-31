@@ -119,10 +119,14 @@ const handleConfirm = () => {
   border-radius: var(--radius-md);
   width: 90%;
   max-width: 500px;
+  height: 75vh;
+  max-height: 75vh;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   border: 1px solid var(--color-border);
   overflow: hidden;
   animation: modal-appear var(--transition-normal);
+  display: flex;
+  flex-direction: column;
 }
 
 @keyframes modal-appear {
@@ -174,6 +178,9 @@ const handleConfirm = () => {
 
 .modal-content {
   padding: var(--space-lg);
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .warning-text {
@@ -200,6 +207,7 @@ const handleConfirm = () => {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-md);
+  flex-shrink: 0;
 }
 
 .cancel-btn {

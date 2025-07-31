@@ -265,7 +265,8 @@ const addSelectedLinks = async () => {
   border-radius: var(--radius-md);
   width: 90%;
   max-width: 600px;
-  max-height: 85vh;
+  height: 75vh;
+  max-height: 75vh;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   overflow: hidden;
   animation: modal-appear var(--transition-normal);
@@ -332,6 +333,7 @@ const addSelectedLinks = async () => {
   padding: var(--space-lg);
   flex: 1;
   overflow-y: auto;
+  min-height: 0;
 }
 
 .loading-state {

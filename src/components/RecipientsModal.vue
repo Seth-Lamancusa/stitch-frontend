@@ -1119,7 +1119,8 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   min-width: 400px;
   max-width: 600px;
   width: 100%;
-  max-height: 80vh;
+  height: 75vh;
+  max-height: 75vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
