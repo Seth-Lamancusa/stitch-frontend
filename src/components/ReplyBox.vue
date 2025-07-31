@@ -116,14 +116,14 @@
           
           <!-- Expand/Collapse toggle arrow -->
           <button 
-            v-if="content.trim().length > 0"
+            v-if="hasMultipleLines"
             class="textarea-expand-toggle"
             @click.stop="toggleTextareaExpansion"
             :class="{ 'expanded': isTextareaExpanded }"
             :aria-label="isTextareaExpanded ? 'Collapse to single line' : 'Expand to full height'"
             title="Toggle textarea height"
           >
-            <span class="expand-arrow">↗</span>
+            <span class="expand-arrow">↕</span>
           </button>
         </div>
         
@@ -337,6 +337,8 @@ const showRecipientSelector = ref(false);
 
 // Textarea expansion state
 const isTextareaExpanded = ref(false);
+const hasMultipleLines = ref(false);
+const userHasManuallyToggled = ref(false);
 
 // Bot prompt state
 const availableBots = computed(() => store.getters['bots/bots']);
@@ -541,18 +543,76 @@ const autoResizeTextarea = () => {
   const textarea = replyTextarea.value;
   if (!textarea) return;
   
-  // Reset height to auto to get the natural height
+  // Check if there's actual content
+  const hasContent = content.value.trim().length > 0;
+  
+  console.log('[ReplyBox] autoResizeTextarea called:', {
+    hasContent,
+    contentLength: content.value.length,
+    contentValue: JSON.stringify(content.value)
+  });
+  
+  if (!hasContent) {
+    // No content - reset everything
+    console.log('[ReplyBox] No content - resetting everything');
+    hasMultipleLines.value = false;
+    isTextareaExpanded.value = false;
+    userHasManuallyToggled.value = false;
+    textarea.style.height = '36px';
+    textarea.style.overflowY = 'hidden';
+    return;
+  }
+  
+  // Reset height to get natural content height (no need for padding manipulation)
   textarea.style.height = 'auto';
   
-  // Set new height based on scrollHeight, with min and max constraints
-  const minHeight = 24; // Single line
+  const minHeight = 36; // Single line (increased from 24px)
   const maxHeight = window.innerHeight * 0.4; // 40vh
   const naturalHeight = textarea.scrollHeight;
+  
+  // More precise multi-line detection - now with accurate measurements
+  const hasNewlines = content.value.includes('\n');
+  // With padding (4px top, 8px bottom), single line should be around 44px (4+32+8)
+  const singleLineThreshold = 49; // Allow some buffer for line-height
+  const heightExceedsMinimum = naturalHeight > singleLineThreshold;
+  
+  console.log('[ReplyBox] Height measurements:', {
+    minHeight,
+    naturalHeight,
+    singleLineThreshold,
+    heightDifference: naturalHeight - singleLineThreshold,
+    hasNewlines,
+    heightExceedsMinimum,
+    padding: 'right: 36px (for toggle), top: 4px, bottom: 8px, minHeight: 36px'
+  });
+  
+  // Only consider it multi-line if there are actual newlines OR significant height difference
+  hasMultipleLines.value = hasNewlines || heightExceedsMinimum;
+  
+  console.log('[ReplyBox] Multi-line detection result:', {
+    hasMultipleLines: hasMultipleLines.value,
+    isTextareaExpanded: isTextareaExpanded.value
+  });
+  
+  // Auto-expand when multi-line is detected (unless user has manually toggled)
+  if (hasMultipleLines.value && !isTextareaExpanded.value && !userHasManuallyToggled.value) {
+    isTextareaExpanded.value = true;
+    console.log('[ReplyBox] Auto-expanded textarea for multi-line content');
+  } else if (!hasMultipleLines.value && isTextareaExpanded.value) {
+    isTextareaExpanded.value = false;
+    userHasManuallyToggled.value = false; // Reset manual toggle when content becomes single line
+    console.log('[ReplyBox] Auto-collapsed textarea for single-line content');
+  }
   
   let newHeight;
   if (isTextareaExpanded.value) {
     // Expanded mode: use natural height up to max
     newHeight = Math.min(Math.max(naturalHeight, minHeight), maxHeight);
+    console.log('[ReplyBox] Expanded height calculation:', {
+      naturalHeight,
+      newHeight,
+      maxHeight
+    });
   } else {
     // Collapsed mode: single line only
     newHeight = minHeight;
@@ -560,19 +620,31 @@ const autoResizeTextarea = () => {
   
   textarea.style.height = `${newHeight}px`;
   
-  // Always show scrollbar when collapsed and content overflows, or when expanded and at max height
-  if (!isTextareaExpanded.value && naturalHeight > minHeight) {
+  // Show scrollbar only when content actually overflows
+  if (isTextareaExpanded.value && newHeight >= maxHeight) {
     textarea.style.overflowY = 'auto';
-  } else if (isTextareaExpanded.value && newHeight >= maxHeight) {
-    textarea.style.overflowY = 'auto';
+    console.log('[ReplyBox] Showing scrollbar (expanded at max height)');
   } else {
     textarea.style.overflowY = 'hidden';
+    console.log('[ReplyBox] Hiding scrollbar');
   }
+  
+  console.log('[ReplyBox] Final state:', {
+    finalHeight: newHeight,
+    overflowY: textarea.style.overflowY,
+    hasMultipleLines: hasMultipleLines.value,
+    isExpanded: isTextareaExpanded.value
+  });
 };
 
 // Toggle textarea expansion
 const toggleTextareaExpansion = () => {
   isTextareaExpanded.value = !isTextareaExpanded.value;
+  userHasManuallyToggled.value = true;
+  console.log('[ReplyBox] Manual toggle:', { 
+    isTextareaExpanded: isTextareaExpanded.value,
+    userHasManuallyToggled: userHasManuallyToggled.value
+  });
   // Trigger resize after state change
   nextTick(() => {
     autoResizeTextarea();
@@ -646,6 +718,8 @@ const sendReply = async () => {
     
     // Reset expansion state
     isTextareaExpanded.value = false;
+    hasMultipleLines.value = false;
+    userHasManuallyToggled.value = false;
     
     // Resize the textarea
     autoResizeTextarea();
@@ -962,6 +1036,8 @@ defineExpose({
   clear: () => {
     content.value = '';
     isTextareaExpanded.value = false;
+    hasMultipleLines.value = false;
+    userHasManuallyToggled.value = false;
     nextTick(() => {
       autoResizeTextarea();
     });
@@ -1179,14 +1255,15 @@ defineExpose({
   position: relative;
   display: flex;
   align-items: flex-end;
+  margin-bottom: 10px; /* Add space at bottom without affecting textarea height */
 }
 
 .reply-sheet__textarea {
   flex: 1;
-  min-height: 24px; /* Single line height */
+  min-height: 36px; /* Single line height (increased from 24px) */
   max-height: 40vh;
-  padding: 8px 12px;
-  padding-bottom: 28px; /* Extra space for expand toggle when present */
+  padding: 4px 12px 8px 12px; /* Reduced top padding, kept bottom padding */
+  padding-right: 36px; /* Space for toggle button on right */
   margin: 0;
   border: 1px solid var(--color-border);
   border-radius: 12px;
@@ -1217,7 +1294,7 @@ defineExpose({
 .textarea-expand-toggle {
   position: absolute;
   bottom: 6px;
-  left: 6px;
+  right: 6px;
   width: 20px;
   height: 20px;
   background: var(--color-surface);
@@ -1259,7 +1336,7 @@ defineExpose({
 }
 
 .textarea-expand-toggle.expanded .expand-arrow {
-  transform: rotate(180deg);
+  transform: rotate(90deg);
 }
 
 /* Textarea send button */
