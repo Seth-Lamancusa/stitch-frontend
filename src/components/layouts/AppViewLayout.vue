@@ -94,6 +94,11 @@
     </div>
     
     <div class="main-content">
+      <div class="feedback-button-container">
+        <router-link to="/2HhB" class="feedback-button">
+          💬 Leave Feedback and Questions Here!
+        </router-link>
+      </div>
       <slot></slot>
     </div>
     
@@ -468,6 +473,36 @@ const handleTabClick = (tab) => {
   height: 100%;
 }
 
+.feedback-button-container {
+  padding: 12px 6px;
+  text-align: center;
+  background: var(--color-background, #fff);
+}
+
+.feedback-button {
+  display: inline-block;
+  background: linear-gradient(135deg, rgba(16, 163, 127, 0.8) 0%, rgba(31, 197, 157, 0.7) 100%);
+  color: var(--color-text-inverse, #fff);
+  text-decoration: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(16, 163, 127, 0.3);
+  border: 1px solid rgba(16, 163, 127, 0.3);
+  backdrop-filter: blur(10px);
+  margin-top: 6px;
+}
+
+.feedback-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(16, 163, 127, 0.4);
+  background: linear-gradient(135deg, rgba(16, 163, 127, 0.9) 0%, rgba(31, 197, 157, 0.8) 100%);
+  border-color: rgba(16, 163, 127, 0.5);
+  color: var(--color-text-inverse, #fff);
+}
+
 /* Mobile responsive styles */
 @media (max-width: 768px) {
   .app-header {
@@ -559,6 +594,15 @@ const handleTabClick = (tab) => {
     white-space: nowrap; /* Prevent text wrapping */
     flex-shrink: 0; /* Never shrink the logout button */
   }
+  
+  .feedback-button-container {
+    padding: 8px 4px; /* Reduced padding on mobile */
+  }
+  
+  .feedback-button {
+    font-size: 0.85rem; /* Slightly smaller text */
+    padding: 8px 16px; /* Smaller button padding */
+  }
 }
 
 @media (max-width: 480px) {
@@ -641,6 +685,15 @@ const handleTabClick = (tab) => {
     font-size: calc(var(--font-size-xs) - 2px); /* Very small font */
     min-width: 50px; /* Ensure minimum button width */
   }
+  
+  .feedback-button-container {
+    padding: 6px 4px; /* Even more reduced padding on smaller screens */
+  }
+  
+  .feedback-button {
+    font-size: 0.8rem; /* Smaller text for narrow screens */
+    padding: 6px 12px; /* More compact padding */
+  }
 }
 
 /* Stack layout vertically on very narrow screens - much better UX */
@@ -708,6 +761,15 @@ const handleTabClick = (tab) => {
   .loading-spinner {
     width: 9px;
     height: 9px;
+  }
+  
+  .feedback-button-container {
+    padding: 8px 6px; /* Better padding with vertical layout */
+  }
+  
+  .feedback-button {
+    font-size: 0.85rem; /* Good size for vertical layout */
+    padding: 8px 14px; /* Comfortable padding */
   }
 }
 </style> 
