@@ -11,30 +11,31 @@
     <template #betaBannerText>
       <div class="banner-buttons">
         <a href="https://youtu.be/ZoNM-2rqzko" target="_blank" class="banner-btn">
-          <div class="btn-content">
-            <div class="btn-header">
-              <span class="btn-icon">📺</span>
-              <div class="btn-title">Watch Demo</div>
-            </div>
+          <span class="btn-icon">📺</span>
+          <div class="btn-text-content">
+            <div class="btn-title">Watch Demo</div>
             <div class="btn-subtitle">How does it work?</div>
           </div>
         </a>
         <router-link to="/new-thread" class="banner-btn">
-          <div class="btn-content">
-            <div class="btn-header">
-              <span class="btn-icon">💬</span>
-              <div class="btn-title">Try it Out</div>
-            </div>
+          <span class="btn-icon">💬</span>
+          <div class="btn-text-content">
+            <div class="btn-title">Try it FREE</div>
             <div class="btn-subtitle">Like ChatGPT, but better</div>
           </div>
         </router-link>
         <router-link to="/features" class="banner-btn">
-          <div class="btn-content">
-            <div class="btn-header">
-              <span class="btn-icon">⚡</span>
-              <div class="btn-title">Features</div>
-            </div>
-            <div class="btn-subtitle">Messaging, AI, automation & more</div>
+          <span class="btn-icon">⚡</span>
+          <div class="btn-text-content">
+            <div class="btn-title">Features</div>
+            <div class="btn-subtitle">Messaging, AI, & more</div>
+          </div>
+        </router-link>
+        <router-link to="/public" class="banner-btn">
+          <span class="btn-icon">🌐</span>
+          <div class="btn-text-content">
+            <div class="btn-title">Public Threads</div>
+            <div class="btn-subtitle">Jump into the convo!</div>
           </div>
         </router-link>
       </div>
@@ -137,6 +138,8 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
 .banner-btn {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
   padding: 0.75rem 1rem;
   background: linear-gradient(135deg, rgba(16, 163, 127, 0.15) 0%, rgba(31, 197, 157, 0.1) 100%);
   border: 1px solid rgba(16, 163, 127, 0.3);
@@ -174,23 +177,19 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
   left: 100%;
 }
 
-.btn-content {
+.btn-text-content {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  width: 100%;
-  padding-bottom: 0.5rem;
-}
-
-.btn-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  min-width: 0;
+  flex: 1;
 }
 
 .btn-icon {
   font-size: 1.5rem;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
 }
 
 .btn-title {
@@ -207,7 +206,6 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
   opacity: 0.8;
   line-height: 1.3;
   margin: 0;
-  padding-left: 2rem;
 }
 
 .home-main {
@@ -331,19 +329,19 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
       /* Banner buttons mobile styles */
   .banner-buttons {
     gap: 0.375rem;
+    max-width: 600px;
   }
 
   .banner-btn {
     min-width: auto;
-    flex: 1;
+    flex: 1 1 calc(50% - 0.1875rem);
     padding: 0.625rem 0.75rem;
     height: 60px;
+    gap: 0.5rem;
   }
 
-  .btn-content {
-    flex-direction: row;
-    gap: 0.5rem;
-    align-items: center;
+  .btn-text-content {
+    justify-content: center;
   }
 
   .btn-title {
@@ -381,17 +379,18 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
   /* Banner buttons small mobile styles */
   .banner-buttons {
     gap: 0.25rem;
+    max-width: 500px;
   }
 
   .banner-btn {
+    flex: 1 1 calc(50% - 0.125rem);
     padding: 0.5rem 0.625rem;
     height: 50px;
+    gap: 0.375rem;
   }
 
-  .btn-content {
-    flex-direction: row;
-    gap: 0.375rem;
-    align-items: center;
+  .btn-text-content {
+    justify-content: center;
   }
 
   .btn-icon {
