@@ -182,9 +182,18 @@ const navigate = async (direction) => {
   transition: all var(--transition-fast);
   color: var(--color-text-secondary);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-  opacity: 0.7;
+  opacity: 1; /* Make clickable buttons fully visible */
   min-width: 36px;
   min-height: 36px;
+}
+
+/* Make active/clickable buttons more prominent - bright arrows, subtle border */
+.mobile-nav-btn:not(.disabled):not(.loading) {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border); /* Keep border subtle */
+  color: var(--color-primary); /* Bright arrow color */
+  opacity: 1;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
 }
 
 .mobile-nav-btn:hover:not(:disabled) {
