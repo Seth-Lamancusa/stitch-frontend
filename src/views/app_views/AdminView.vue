@@ -1,5 +1,5 @@
 <template>
-  <AppViewLayout>
+  <TabViewLayout>
     <!-- Admin Access Denied Notice -->
     <div v-if="!isAdmin && authReady" class="access-denied-notice">
       <div class="denial-content">
@@ -31,7 +31,7 @@
             <span v-if="stats" class="card-badge">{{ stats.total_users }} users</span>
           </div>
           <div class="card-content">
-            <p>Manage user accounts, permissions, and whitelist status</p>
+            <p>Manage user accounts and permissions</p>
             <div class="card-actions">
               <router-link to="/admin/users" class="admin-btn primary">
                 Manage Users
@@ -178,14 +178,14 @@
         </div>
       </div> -->
     </div>
-  </AppViewLayout>
+  </TabViewLayout>
 </template>
 
 <script setup>
 import { computed, ref, onMounted } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter } from 'vue-router';
-import AppViewLayout from '../../components/layouts/AppViewLayout.vue';
+import TabViewLayout from '../../components/layouts/TabViewLayout.vue';
 import AdminService from '../../services/AdminService';
 
 const store = useStore();

@@ -1,5 +1,6 @@
 import axios from 'axios';
-import { getFirebaseToken } from '../firebase.js';
+import TokenManager from './TokenManager';
+import { installAxiosAuthInterceptor } from './httpClient';
 
 const apiClient = axios.create({
   baseURL: '/api',
@@ -8,6 +9,9 @@ const apiClient = axios.create({
     'Content-Type': 'application/json'
   }
 });
+
+// Install shared 401->refresh interceptor
+installAxiosAuthInterceptor(apiClient);
 
 export default {
   
@@ -22,7 +26,7 @@ export default {
   async updateProfile(profileData) {
     try {
       console.log('[UserService] Updating profile with data:', profileData);
-      const token = await getFirebaseToken();
+      const token = TokenManager.accessToken;
       
       if (!token) {
         throw new Error('No authentication token available');
@@ -52,7 +56,7 @@ export default {
   async searchUsers(query, limit = 15) {
     try {
       console.log('[Service] Searching users with query:', query, 'limit:', limit);
-      const token = await getFirebaseToken();
+      const token = TokenManager.accessToken;
       
       if (!token) {
         throw new Error('No authentication token available');
@@ -79,33 +83,7 @@ export default {
       throw error;
     }
   },
-  
-  /**
-   * Validate if a user tag exists
-   * @param {String} tag - The user tag to validate
-   * @returns {Promise<Boolean>} - Whether the tag exists
-   */
-  async validateUserTag(tag) {
-    try {
-      const token = await getFirebaseToken();
-      
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
-      
-      const response = await apiClient.get('/users/validate-tag', {
-        params: { tag },
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      return response.data.exists;
-    } catch (error) {
-      console.error('Error validating user tag:', error);
-      return false;
-    }
-  },
+
 
   /**
    * Get messages for the current user with skip-based pagination
@@ -115,7 +93,7 @@ export default {
    */
   async fetchUserMessages(limit = 15, skip = 0) {
     try {
-      const token = await getFirebaseToken();
+      const token = TokenManager.accessToken;
       
       if (!token) {
         throw new Error('No authentication token available');
@@ -124,7 +102,7 @@ export default {
       // Build query parameters with skip-based pagination
       const params = { limit, skip };
       
-      const response = await apiClient.get('/users/messages', {
+      const response = await apiClient.get('/messages/inbox', {
         params,
         headers: {
           'Authorization': `Bearer ${token}`
@@ -159,7 +137,7 @@ export default {
       // Get token if user is authenticated, but don't require it
       let headers = {};
       try {
-        const token = await getFirebaseToken();
+        const token = TokenManager.accessToken;
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
@@ -167,7 +145,7 @@ export default {
         console.log('No authentication token available - proceeding as guest');
       }
       
-      const response = await apiClient.get(`/users/messages/${messageId}/user-incoming-links`, {
+      const response = await apiClient.get(`/links/messages/${messageId}/incoming`, {
         headers,
         params: {
           skip,
@@ -196,7 +174,7 @@ export default {
       // Get token if user is authenticated, but don't require it
       let headers = {};
       try {
-        const token = await getFirebaseToken();
+        const token = TokenManager.accessToken;
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
@@ -204,7 +182,7 @@ export default {
         console.log('No authentication token available - proceeding as guest');
       }
       
-      const response = await apiClient.get(`/users/messages/${messageId}/user-outgoing-links`, {
+      const response = await apiClient.get(`/links/messages/${messageId}/outgoing`, {
         headers,
         params: {
           skip,
@@ -228,7 +206,7 @@ export default {
    */
   async getSavedMessages(skip = 0, limit = 15) {
     try {
-      const token = await getFirebaseToken();
+      const token = localStorage.getItem('auth_token');
       
       if (!token) {
         throw new Error('No authentication token available');
@@ -264,7 +242,7 @@ export default {
      */
     async getUnreadMessageCount() {
       try {
-        const token = await getFirebaseToken();
+        const token = TokenManager.accessToken;
         
         if (!token) {
           throw new Error('No authentication token available');
@@ -292,13 +270,14 @@ export default {
     async markMessageAsRead(messageId) {
       try {
         console.log('[UserService] Marking message as read:', messageId);
-        const token = await getFirebaseToken();
+        const token = TokenManager.accessToken;
         
         if (!token) {
           throw new Error('No authentication token available');
         }
         
-        const response = await apiClient.post(`/users/messages/${messageId}/mark-read`, {}, {
+        // Use consolidated endpoint that accepts single id or list
+        const response = await apiClient.post('/users/messages/mark-read', { message_id: messageId }, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -320,13 +299,14 @@ export default {
     async batchMarkAsRead(messageIds) {
       try {
         console.log('[UserService] Batch marking messages as read:', messageIds.length, 'messages');
-        const token = await getFirebaseToken();
+        const token = TokenManager.accessToken;
         
         if (!token) {
           throw new Error('No authentication token available');
         }
         
-        const response = await apiClient.post('/users/messages/batch-mark-read', messageIds, {
+        // Use consolidated endpoint that accepts list directly
+        const response = await apiClient.post('/users/messages/mark-read', messageIds, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -348,7 +328,7 @@ export default {
     async markMessageAsUnread(messageId) {
       try {
         console.log('[UserService] Marking message as unread:', messageId);
-        const token = await getFirebaseToken();
+        const token = TokenManager.accessToken;
         
         if (!token) {
           throw new Error('No authentication token available');
@@ -376,7 +356,7 @@ export default {
     async saveMessage(messageId) {
       try {
         console.log('[UserService] Saving message:', messageId);
-        const token = await getFirebaseToken();
+        const token = localStorage.getItem('auth_token');
         
         if (!token) {
           throw new Error('No authentication token available');
@@ -404,7 +384,7 @@ export default {
     async unsaveMessage(messageId) {
       try {
         console.log('[UserService] Unsaving message:', messageId);
-        const token = await getFirebaseToken();
+        const token = localStorage.getItem('auth_token');
         
         if (!token) {
           throw new Error('No authentication token available');
@@ -430,7 +410,7 @@ export default {
      */
     async getSavedMessagesCount() {
       try {
-        const token = await getFirebaseToken();
+        const token = localStorage.getItem('auth_token');
         
         if (!token) {
           throw new Error('No authentication token available');
@@ -458,13 +438,13 @@ export default {
      */
     async deleteLink(messageIdFrom, messageIdTo) {
       try {
-        const token = await getFirebaseToken();
+        const token = localStorage.getItem('auth_token');
         
         if (!token) {
           throw new Error('No authentication token available');
         }
         
-        const response = await apiClient.delete(`/users/messages/${messageIdFrom}/links/${messageIdTo}`, {
+        const response = await apiClient.delete(`/links/messages/${messageIdFrom}/${messageIdTo}`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -485,13 +465,13 @@ export default {
      */
     async createLink(messageIdFrom, messageIdTo) {
       try {
-        const token = await getFirebaseToken();
+        const token = localStorage.getItem('auth_token');
         
         if (!token) {
           throw new Error('No authentication token available');
         }
         
-        const response = await apiClient.post(`/users/messages/${messageIdFrom}/links/${messageIdTo}`, {}, {
+        const response = await apiClient.post(`/links/messages/${messageIdFrom}/${messageIdTo}`, {}, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -533,7 +513,7 @@ export default {
     async deleteUser(userId) {
       try {
         console.log('[UserService] Deleting user:', userId);
-        const token = await getFirebaseToken();
+        const token = localStorage.getItem('auth_token');
         
         if (!token) {
           throw new Error('No authentication token available');

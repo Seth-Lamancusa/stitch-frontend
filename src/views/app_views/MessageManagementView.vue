@@ -1,5 +1,5 @@
 <template>
-  <AppViewLayout>
+  <TabViewLayout>
     <!-- Admin Access Denied Notice -->
     <div v-if="!isAdmin && authReady" class="access-denied-notice">
       <div class="denial-content">
@@ -49,14 +49,14 @@
         </div>
       </div>
     </div>
-  </AppViewLayout>
+  </TabViewLayout>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter } from 'vue-router';
-import AppViewLayout from '../../components/layouts/AppViewLayout.vue';
+import TabViewLayout from '../../components/layouts/TabViewLayout.vue';
 import MessageList from '../../components/MessageList.vue';
 import AdminService from '../../services/AdminService';
 

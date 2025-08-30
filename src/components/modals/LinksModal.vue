@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import MessageList from './MessageList.vue';
+import MessageList from '../MessageList.vue';
 import { useStore } from 'vuex';
 
 const props = defineProps({

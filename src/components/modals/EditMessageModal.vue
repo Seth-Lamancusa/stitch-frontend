@@ -42,8 +42,8 @@
 <script>
 import { ref, watch, computed } from 'vue';
 import { useStore } from 'vuex';
-import MessageService from '../services/MessageService';
-import UserSearchInput from './UserSearchInput.vue';
+import MessageService from '../../services/MessageService';
+import UserSearchInput from '../UserSearchInput.vue';
 
 export default {
   name: 'EditMessageModal',

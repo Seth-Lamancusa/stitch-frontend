@@ -1,8 +1,8 @@
 <script setup>
 import { onMounted, onBeforeUnmount } from 'vue';
-import RecipientsModal from './components/RecipientsModal.vue';
-import LinksModal from './components/LinksModal.vue';
-import EditMessageModal from './components/EditMessageModal.vue';
+import RecipientsModal from './components/modals/RecipientsModal.vue';
+import LinksModal from './components/modals/LinksModal.vue';
+import EditMessageModal from './components/modals/EditMessageModal.vue';
 
 // More robust height calculation for the entire app
 const setAppHeight = () => {

@@ -10,15 +10,20 @@ import ImportView from './views/app_views/ImportView.vue';
 import GraphView from './views/app_views/GraphView.vue';
 import HomeView from './views/info_views/HomeView.vue';
 import ArchitectureView from './views/info_views/ArchitectureView.vue';
-import RequestAccessView from './views/info_views/RequestAccessView.vue';
 import TermsView from './views/info_views/TermsView.vue';
 import FeaturesView from './views/info_views/FeaturesView.vue';
 import MessageListView from './views/app_views/MessageListView.vue';
+import PasswordResetView from './views/app_views/PasswordResetView.vue';
 
 const routes = [
   {
     path: '/',
     redirect: '/home'
+  },
+  {
+    path: '/reset-password',
+    name: 'reset-password',
+    component: PasswordResetView
   },
   {
     path: '/home',
@@ -27,10 +32,6 @@ const routes = [
   {
     path: '/architecture',
     component: ArchitectureView
-  },
-  {
-    path: '/requests',
-    component: RequestAccessView
   },
   {
     path: '/terms',
@@ -90,17 +91,12 @@ const routes = [
     }
   },
   {
-    path: '/import',
-    name: 'import',
-    component: ImportView
-  },
-  {
-    path: '/:messageId/graph',
+    path: '/messages/:messageId/graph',
     name: 'graph-view',
     component: GraphView
   },
   {
-    path: '/:id',
+    path: '/messages/:id',
     name: 'message',
     component: ThreadView
   }

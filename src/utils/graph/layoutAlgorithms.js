@@ -15,7 +15,7 @@ import { scaleLinear } from 'd3-scale';
 export function calculateLayout(messages, options = {}) {
   const config = {
     layerHeight: 100,
-    nodeSpacing: 60,
+    nodeSpacing: 240,
     rootSpacing: 150,
     maxWidth: 1200,
     ...options
@@ -140,30 +140,51 @@ function assignLayers(tree) {
 function calculateHorizontalPositions(layers, config) {
   const positions = new Map();
   
+  // Pass 1: assign provisional positions
   layers.forEach((layer, layerIndex) => {
     const layerY = layerIndex * config.layerHeight;
-    
-    // Sort nodes in layer by their subtree characteristics
-    layer.sort((a, b) => {
-      // Sort by timestamp of earliest descendant
-      const aEarliest = getEarliestDescendantTime(a);
-      const bEarliest = getEarliestDescendantTime(b);
-      return aEarliest - bEarliest;
+    const siblingsByParent = new Map();
+
+    // Bucket nodes by parent_id
+    layer.forEach(node => {
+      const parentId = node.message.parent_id || '__root__';
+      if (!siblingsByParent.has(parentId)) siblingsByParent.set(parentId, []);
+      siblingsByParent.get(parentId).push(node);
     });
-    
-    // Calculate X positions with even spacing
-    const totalWidth = Math.max(config.maxWidth, layer.length * config.nodeSpacing);
-    const spacing = layer.length > 1 ? totalWidth / (layer.length - 1) : 0;
-    
-    layer.forEach((node, index) => {
-      const x = layer.length === 1 ? totalWidth / 2 : index * spacing;
-      
-      positions.set(node.id, {
-        x: x,
-        y: layerY,
-        layer: layerIndex,
-        message: node.message
-      });
+
+    // For each sibling group
+    siblingsByParent.forEach(nodes => {
+      // Sort siblings by timestamp
+      nodes.sort((a, b) => new Date(a.message.timestamp) - new Date(b.message.timestamp));
+
+      // Determine center X: align under parent if present, else center of layer
+      let centerX = config.maxWidth / 2;
+      const parentId = nodes[0].message.parent_id;
+      if (parentId && positions.has(parentId)) {
+        centerX = positions.get(parentId).x;
+      }
+
+      if (nodes.length === 1) {
+        // Single child aligns vertically under parent
+        positions.set(nodes[0].id, {
+          x: centerX,
+          y: layerY,
+          layer: layerIndex,
+          message: nodes[0].message
+        });
+      } else {
+        // Multiple children spread horizontally around centerX
+        const totalWidth = (nodes.length - 1) * config.nodeSpacing;
+        const startX = centerX - totalWidth / 2;
+        nodes.forEach((n, i) => {
+          positions.set(n.id, {
+            x: startX + i * config.nodeSpacing,
+            y: layerY,
+            layer: layerIndex,
+            message: n.message
+          });
+        });
+      }
     });
   });
   

@@ -38,28 +38,26 @@
             >
               Public
             </router-link>
-            <template v-if="user">
-              <router-link 
-                to="/saved" 
-                class="nav-tab"
-                :class="{ 'active': activeTab === 'saved' }"
-                @click="handleTabClick('saved')"
-              >
-                Saved
-              </router-link>
-              <router-link 
-                to="/inbox" 
-                class="nav-tab"
-                :class="{ 'active': activeTab === 'inbox' }"
-                @click="handleTabClick('inbox')"
-              >
-                Inbox
-                <span v-if="isUnreadCountLoading" class="unread-inline-badge">
-                  <span class="loading-spinner"></span>
-                </span>
-                <span v-else-if="unreadCount > 0" class="unread-inline-badge">{{ unreadCount }}</span>
-              </router-link>
-            </template>
+            <router-link 
+              to="/saved" 
+              class="nav-tab"
+              :class="{ 'active': activeTab === 'saved' }"
+              @click="handleTabClick('saved')"
+            >
+              Saved
+            </router-link>
+            <router-link 
+              to="/inbox" 
+              class="nav-tab"
+              :class="{ 'active': activeTab === 'inbox' }"
+              @click="handleTabClick('inbox')"
+            >
+              Inbox
+              <span v-if="isUnreadCountLoading" class="unread-inline-badge">
+                <span class="loading-spinner"></span>
+              </span>
+              <span v-else-if="unreadCount > 0" class="unread-inline-badge">{{ unreadCount }}</span>
+            </router-link>
           </template>
         </div>
       </div>
@@ -76,8 +74,6 @@
           <!-- Auth status badges - only shown when auth is ready -->
           <template v-if="authReady">
             <span v-if="isAdmin" class="admin-badge" title="Admin">⛊</span>
-            <span v-else-if="isWhitelisted" class="whitelist-badge" title="Whitelisted">✓</span>
-            <span v-else-if="user && !isWhitelisted" class="non-whitelist-badge" title="Not whitelisted">✗</span>
             <span v-if="!user" class="guest-badge" title="Not logged in">?</span>
           </template>
 
@@ -86,16 +82,22 @@
             <span class="auth-loading-spinner"></span>
           </span>
         </div>
+        <button v-if="user" @click="openApiKeysModal" class="logout-btn" title="Manage API Keys">API Keys</button>
         <button v-if="user" @click="logout" class="logout-btn">Logout</button>
-        <button v-else @click="handleLogin" class="login-btn" :disabled="isLoggingIn">
-          {{ isLoggingIn ? 'Signing in...' : 'Login' }}
-        </button>
+        <template v-else>
+          <LoginButton />
+          <RegisterButton />
+        </template>
       </div>
     </div>
     
     <div class="main-content">
+      <div v-if="user && authReady && !isEmailVerified" class="verify-banner">
+        <span>Verify your email to unlock messaging & notifications.</span>
+        <a class="verify-link" href="#" @click.prevent="openProfileModal">Verify now</a>
+      </div>
       <div class="feedback-button-container">
-        <router-link to="/2HhB" class="feedback-button">
+        <router-link to="/messages/2HhB" class="feedback-button">
           💬 Leave Feedback and Questions Here!
         </router-link>
       </div>
@@ -106,6 +108,10 @@
       :isOpen="isProfileModalOpen" 
       @close="closeProfileModal" 
     />
+    <ApiKeysModal 
+      :isOpen="isApiKeysModalOpen" 
+      @close="closeApiKeysModal" 
+    />
     <GlobalNotifications />
   </div>
 </template>
@@ -115,16 +121,18 @@ import { computed, ref, watch, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useStore } from 'vuex';
 import { useAuthentication } from '../../composables/useAuthentication';
-import ProfileEditModal from '../ProfileEditModal.vue';
+import LoginButton from '@/components/buttons/LoginButton.vue'
+import RegisterButton from '@/components/buttons/RegisterButton.vue'
+import ProfileEditModal from '../modals/ProfileEditModal.vue';
+import ApiKeysModal from '../modals/ApiKeysModal.vue';
 import GlobalNotifications from '../GlobalNotifications.vue';
 
 const router = useRouter();
 const route = useRoute();
 const store = useStore();
-const { signInWithGoogle, logout } = useAuthentication();
+const { signInWithApiKey, logout } = useAuthentication();
 
 const user = computed(() => store.getters['auth/user']);
-const isWhitelisted = computed(() => store.getters['auth/isWhitelisted']);
 const isAdmin = computed(() => store.getters['auth/isAdmin']);
 const authReady = computed(() => store.getters['auth/authReady']);
 const activeTab = computed(() => store.getters['navigation/activeTab']);
@@ -132,6 +140,7 @@ const unreadCount = computed(() => store.getters['messages/getUnreadMessageCount
 const isUnreadCountLoading = computed(() => store.getters['messages/isLoading']('fetchingUnreadCount'));
 const isLoggingIn = ref(false);
 const isProfileModalOpen = ref(false);
+const isApiKeysModalOpen = ref(false);
 
 // Check if we're on an admin page
 const isOnAdminPage = computed(() => {
@@ -148,57 +157,26 @@ const userTag = computed(() => {
   return user.value.user_tag || null;
 });
 
+const isEmailVerified = computed(() => !!(user.value && user.value.is_email_verified));
+
 // Fetch unread count when user authentication state changes
 watch(
   () => user.value,
   (newUser) => {
     if (newUser) {
-      // User is authenticated, fetch unread count
       store.dispatch('messages/fetchUnreadMessageCount');
     } else {
-      // User logged out, reset count to 0
       store.commit('messages/SET_UNREAD_MESSAGE_COUNT', 0);
     }
   },
   { immediate: true }
 );
 
-// Also fetch on mount if user is already authenticated
 onMounted(() => {
   if (user.value) {
     store.dispatch('messages/fetchUnreadMessageCount');
   }
 });
-
-const handleLogin = async () => {
-  isLoggingIn.value = true;
-  try {
-    // Clear rejection state before login attempt to ensure fresh state
-    store.commit('auth/SET_REJECTED_FOR_WHITELIST', false);
-    await signInWithGoogle();
-    
-    // Wait a moment for auth state to be processed
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Check if user is still logged in and whitelisted
-    const currentUser = store.getters['auth/user'];
-    if (currentUser && ['admin', 'whitelisted', 'import'].includes(currentUser.status)) {
-      // Only redirect if there was a specific redirect requested
-      if (route.query.redirect) {
-        router.push(route.query.redirect);
-      }
-      // Otherwise stay on current page
-    }
-    // If user is not logged in or not whitelisted, 
-    // the auth store will have already handled the logout and redirect
-  } catch (e) {
-    console.error("Login error:", e);
-    // On authentication error, set rejection state and redirect to public page
-    await store.dispatch('auth/forceLogoutWithMessage', router);
-  } finally {
-    isLoggingIn.value = false;
-  }
-};
 
 const openProfileModal = () => {
   if (user.value) {
@@ -212,6 +190,16 @@ const closeProfileModal = () => {
 
 const handleTabClick = (tab) => {
   store.dispatch('navigation/setActiveTab', tab);
+};
+
+const openApiKeysModal = () => {
+  if (user.value) {
+    isApiKeysModalOpen.value = true;
+  }
+};
+
+const closeApiKeysModal = () => {
+  isApiKeysModalOpen.value = false;
 };
 </script>
 
@@ -502,6 +490,25 @@ const handleTabClick = (tab) => {
   border-color: rgba(16, 163, 127, 0.5);
   color: var(--color-text-inverse, #fff);
 }
+
+/* Banner prompting email verification */
+.verify-banner {
+  background: rgba(255, 193, 7, 0.12);
+  color: var(--color-text, #fff);
+  border: 1px solid rgba(255, 193, 7, 0.35);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 8px 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.verify-link {
+  color: var(--color-primary, #4f8cff);
+  text-decoration: none;
+  font-weight: 600;
+}
+.verify-link:hover { text-decoration: underline; }
 
 /* Mobile responsive styles */
 @media (max-width: 768px) {

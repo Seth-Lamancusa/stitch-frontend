@@ -24,14 +24,10 @@
 
             <!-- Auth status badges -->
             <span v-if="isAdmin" class="admin-badge" title="Admin">⛊</span>
-            <span v-else-if="isWhitelisted" class="whitelist-badge" title="Whitelisted">✓</span>
-            <span v-else-if="user && !isWhitelisted" class="non-whitelist-badge" title="Not whitelisted">✗</span>
             <span v-if="!user" class="guest-badge" title="Not logged in">?</span>
           </div>
           <button v-if="user" @click="logout" class="logout-btn">Logout</button>
-          <button v-else @click="handleLogin" class="login-btn" :disabled="isLoggingIn">
-            {{ isLoggingIn ? 'Signing in...' : 'Login' }}
-          </button>
+          <LoginButton v-else />
         </div>
       </div>
       
@@ -85,8 +81,9 @@ import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
 import ReplyBox from '../../components/ReplyBox.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
-import ProfileEditModal from '../../components/ProfileEditModal.vue';
+import ProfileEditModal from '../../components/modals/ProfileEditModal.vue';
 import { useAuthentication } from '../../composables/useAuthentication';
+import LoginButton from '@buttons/LoginButton.vue'
 
 // Setup store and routing
 const store = useStore();
@@ -111,7 +108,7 @@ const isProfileModalOpen = ref(false);
 const user = computed(() => store.getters['auth/user']);
 const authReady = computed(() => store.getters['auth/authReady']);
 const isAdmin = computed(() => store.getters['auth/isAdmin']);
-const isWhitelisted = computed(() => store.getters['auth/isWhitelisted']);
+const canInteract = computed(() => store.getters['auth/canInteract']);
 
 // User display properties
 const userDisplayName = computed(() => {
@@ -124,26 +121,7 @@ const userTag = computed(() => {
   return user.value.user_tag || null;
 });
 
-const canInteract = computed(() => {
-  console.log("NewThreadView - checking canInteract:", 
-    user.value?.status, 
-    store.getters['auth/isAdmin'], 
-    store.getters['auth/isWhitelisted'],
-    store.getters['auth/canInteract']
-  );
-  
-  // First priority: direct user status check
-  if (user.value?.status === 'admin' || user.value?.status === 'whitelisted' || user.value?.status === 'import') {
-    return true;
-  }
-  
-  // Fallback to the store properties if status isn't available directly
-  if (store.getters['auth/isAdmin'] || store.getters['auth/isWhitelisted']) {
-    return true;
-  }
-  
-  return false;
-});
+// canInteract provided by store: admin or msg.write
 
 // Add computed property for current reply visibility
 const isPublic = computed(() => store.getters['navigation/replyIsPublic']);
@@ -181,7 +159,7 @@ onMounted(async () => {
   
   // Set default visibility to public and clear recipients in one call
   store.dispatch('navigation/setVisibilitySettings', {
-    isPublic: true,
+    isPublic: false,
     recipients: []
   });
   
@@ -194,14 +172,7 @@ onMounted(async () => {
 });
 
 // Watch for rejection state changes and redirect to /public
-watch(() => store.getters['auth/wasRejectedForWhitelist'], (newValue, oldValue) => {
-  console.log('[NewThreadView] Rejection state watcher triggered - oldValue:', oldValue, 'newValue:', newValue);
-  // Always redirect when rejection state is set to true
-  if (newValue) {
-    console.log('[NewThreadView] Rejection state is true, redirecting to /public');
-    router.push('/public');
-  }
-});
+// No whitelist rejection flow anymore
 
 // Methods
 const cancelThread = () => {
@@ -226,7 +197,7 @@ const handleSendSuccess = async (newMessage) => {
     loadingSubmessage.value = 'This will only take a moment';
     
     // Redirect to the new thread
-    router.replace({ path: `/${newMessage.id}` });
+    router.replace({ path: `/messages/${newMessage.id}` });
   } catch (error) {
     console.error('Error handling message success:', error);
     store.commit('ui/SET_ERROR', 'Failed to complete thread creation.');
@@ -241,43 +212,7 @@ const handleSendError = (error) => {
   store.commit('ui/SET_ERROR', 'Failed to create thread. Please try again.');
 };
 
-// Add login handler
-const handleLogin = async () => {
-  isLoggingIn.value = true;
-  try {
-    console.log('[NewThreadView] Starting signInWithGoogle');
-    // Clear rejection state before login attempt to ensure fresh state
-    store.commit('auth/SET_REJECTED_FOR_WHITELIST', false);
-    await signInWithGoogle();
-    console.log('[NewThreadView] signInWithGoogle completed successfully');
-    
-    // Wait a moment for auth state to be processed
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Check if user is still logged in and whitelisted
-    const currentUser = store.getters['auth/user'];
-    if (currentUser && ['admin', 'whitelisted', 'import'].includes(currentUser.status)) {
-      console.log('[NewThreadView] User logged in successfully, staying on page');
-      // Only redirect if there was a specific redirect requested
-      if (route.query.redirect) {
-        router.push(route.query.redirect);
-      }
-      // Otherwise stay on current page
-    } else {
-      console.log('[NewThreadView] User not whitelisted or not logged in after auth');
-    }
-  } catch (e) {
-    console.error("Login error:", e);
-    console.log('[NewThreadView] About to call forceLogoutWithMessage');
-    console.log('[NewThreadView] Current location before forceLogoutWithMessage:', window.location.href);
-    // On authentication error, set rejection state and redirect to public page
-    await store.dispatch('auth/forceLogoutWithMessage', router);
-    console.log('[NewThreadView] forceLogoutWithMessage completed');
-    console.log('[NewThreadView] Current location after forceLogoutWithMessage:', window.location.href);
-  } finally {
-    isLoggingIn.value = false;
-  }
-};
+// Login handled by LoginButton component
 
 // Profile modal methods
 const openProfileModal = () => {

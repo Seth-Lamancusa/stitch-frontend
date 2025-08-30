@@ -44,29 +44,19 @@
       <div class="reply-sheet__toolbar">
         <!-- Left side controls -->
         <div class="toolbar-left">
-          <!-- Public/Private toggle switch -->
-          <div class="toolbar-control">
-            <div class="visibility-toggle" :class="{ 'disabled': !canInteract }">
-              <button 
-                @click="isPublic = false"
-                class="visibility-option"
-                :class="{ 'active': !isPublic }"
-                :disabled="!canInteract"
-                aria-label="Set message to private"
-              >
-                Private
-              </button>
-              <button 
-                @click="isPublic = true"
-                class="visibility-option"
-                :class="{ 'active': isPublic }"
-                :disabled="!canInteract"
-                aria-label="Set message to public"
-              >
-                Public
-              </button>
-            </div>
-          </div>
+          <!-- Public visibility globe toggle -->
+          <button 
+            class="toolbar-control meta-pill visibility-globe-toggle" 
+            @click="isPublic = !isPublic"
+            :class="{ 'active': isPublic }"
+            :disabled="!canInteract"
+            :aria-pressed="isPublic"
+            aria-label="Toggle public visibility"
+            title="Public"
+          >
+            <span class="meta-pill__icon">🌐</span>
+            <span class="meta-pill__text">Public</span>
+          </button>
           
           <!-- Recipients button -->
           <button 
@@ -281,7 +271,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
-import RecipientsModal from './RecipientsModal.vue';
+import RecipientsModal from './modals/RecipientsModal.vue';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 
 const props = defineProps({
@@ -340,12 +330,11 @@ const isTextareaExpanded = ref(false);
 const hasMultipleLines = ref(false);
 const userHasManuallyToggled = ref(false);
 
-// Bot prompt state
-const availableBots = computed(() => store.getters['bots/bots']);
-
-// Separate main and advanced bots
-const mainBots = computed(() => availableBots.value.filter(bot => !bot.advanced));
-const advancedBots = computed(() => availableBots.value.filter(bot => bot.advanced));
+// Featured bots for prompt modal
+import FeaturedBotsService from '../services/FeaturedBotsService.js';
+const featuredBots = ref([]);
+const mainBots = computed(() => featuredBots.value.filter(bot => !bot.advanced));
+const advancedBots = computed(() => featuredBots.value.filter(bot => bot.advanced));
 
 // Advanced bots dropdown state
 const showAdvancedBotsModal = ref(false);
@@ -392,7 +381,7 @@ const placeholderText = computed(() => {
     if (!props.isAuthenticated) {
       return "You need to log in to send messages";
     }
-    return "You need to be whitelisted to send messages";
+    return "You need write permission to send messages";
   }
   
   return "Type your message...";
@@ -671,13 +660,8 @@ const sendReply = async () => {
         recipientsCount: recipients.value.length
       });
       
-      const MessageService = (await import('../services/MessageService.js')).default;
-      const response = await MessageService.addRecipientsToMessage(
-        addRecipientsMessageId.value,
-        recipients.value
-      );
-      
-      console.log('[ReplyBox] Recipients added successfully', response.data);
+      // Adding recipients via API is not supported
+      throw new Error('Adding recipients is not supported');
       
       // Clear the form and exit add recipients mode
       content.value = '';
@@ -909,8 +893,8 @@ const confirmBotPrompt = async (bot) => {
     // Import MessageService dynamically
     const MessageService = (await import('../services/MessageService.js')).default;
     
-    // Add the bot as a recipient to the parent message
-    await MessageService.addRecipientsToMessage(props.targetId, [bot]);
+    // Not supported: adding recipients via API
+    throw new Error('Adding recipients is not supported');
     
     console.log(`[ReplyBox] Successfully prompted ${bot.display_name} for response`);
     
@@ -963,7 +947,7 @@ const handleClickOutside = (event) => {
 };
 
 // Close search results when clicking outside
-onMounted(() => {
+onMounted(async () => {
   document.addEventListener('click', handleClickOutsideSearch);
   document.addEventListener('click', handleClickOutside);
   
@@ -971,6 +955,12 @@ onMounted(() => {
   nextTick(() => {
     autoResizeTextarea();
   });
+  // Load featured bots (mocked)
+  try {
+    featuredBots.value = await FeaturedBotsService.listFeaturedBots();
+  } catch (e) {
+    featuredBots.value = [];
+  }
 });
 
 // Watch content changes to ensure textarea resizes properly
@@ -1235,6 +1225,21 @@ defineExpose({
 
 .meta-pill__text {
   font-weight: 500;
+}
+
+/* Globe toggle styling */
+.visibility-globe-toggle {
+  position: relative;
+}
+
+.visibility-globe-toggle.active {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.visibility-globe-toggle.active .meta-pill__icon {
+  filter: none;
 }
 
 /* Textarea container */

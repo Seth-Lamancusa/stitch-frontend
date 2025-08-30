@@ -1,4 +1,5 @@
 import store from '../store';
+import TokenManager from './TokenManager';
 
 const WS_BASE_URL = '/ws'
 
@@ -21,6 +22,11 @@ const WebSocketService = {
   maxReconnectAttempts: 5,
   reconnectDelay: 1000,
   
+  // Activity-based reconnect
+  activityHandlersInstalled: false,
+  lastActivityReconnectAt: 0,
+  activityReconnectCooldownMs: 5000,
+  
   // Token management
   tokenRefreshInProgress: false,
   lastTokenRefresh: null,
@@ -38,6 +44,56 @@ const WebSocketService = {
     }
   },
   
+  maybeActivityReconnect() {
+    try {
+      const now = Date.now();
+      if (now - this.lastActivityReconnectAt < this.activityReconnectCooldownMs) {
+        return;
+      }
+      this.lastActivityReconnectAt = now;
+      const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
+      if (!isOpen) {
+        this.log('Activity detected and WS not open; attempting reconnect');
+        const token = TokenManager.accessToken;
+        if (token) this.connectUser(token);
+      }
+    } catch (e) {
+      // no-op
+    }
+  },
+  
+  installActivityReconnectHandlers() {
+    if (this.activityHandlersInstalled) return;
+    const handler = this.maybeActivityReconnect.bind(this);
+    this._activityHandlerRef = handler;
+    try {
+      window.addEventListener('visibilitychange', handler);
+      window.addEventListener('focus', handler);
+      window.addEventListener('click', handler);
+      window.addEventListener('keydown', handler);
+      window.addEventListener('mousemove', handler);
+      this.activityHandlersInstalled = true;
+      this.log('Installed activity-based reconnect handlers');
+    } catch (e) {
+      // ignore
+    }
+  },
+  
+  removeActivityReconnectHandlers() {
+    if (!this.activityHandlersInstalled) return;
+    const handler = this._activityHandlerRef;
+    try {
+      window.removeEventListener('visibilitychange', handler);
+      window.removeEventListener('focus', handler);
+      window.removeEventListener('click', handler);
+      window.removeEventListener('keydown', handler);
+      window.removeEventListener('mousemove', handler);
+    } catch (e) {
+      // ignore
+    }
+    this.activityHandlersInstalled = false;
+    this._activityHandlerRef = null;
+  },
   warn(...messages) {
     console.warn('[WebSocket]', ...messages);
   },
@@ -46,48 +102,28 @@ const WebSocketService = {
     console.error('[WebSocket]', ...messages);
   },
   
+  async attemptRefreshAndReconnect() {
+    try {
+      this.log('Attempting token refresh due to authentication failure');
+      const newAccess = await TokenManager.refreshAccessToken();
+      if (!newAccess) {
+        this.error('Token refresh failed, forcing logout');
+        try { await store.dispatch('auth/forceLogoutWithMessage'); } catch (e) {}
+        return;
+      }
+      this.log('Token refresh succeeded, reconnecting with new token');
+      await this.connectUser(newAccess);
+    } catch (e) {
+      this.error('Error during refresh-and-reconnect:', e);
+      try { await store.dispatch('auth/forceLogoutWithMessage'); } catch (err) {}
+    }
+  },
+  
   /**
-   * Get a fresh authentication token from Firebase
-   * @returns {Promise<string|null>} Fresh token or null if not available
+   * Retrieve auth token from localStorage
    */
   async getFreshAuthToken() {
-    if (this.tokenRefreshInProgress) {
-      this.log('Token refresh already in progress, waiting...');
-      // Wait for existing refresh to complete
-      while (this.tokenRefreshInProgress) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      return localStorage.getItem('auth_token');
-    }
-    
-    this.tokenRefreshInProgress = true;
-    
-    try {
-      // Try to get fresh token from Firebase auth
-      const { getFirebaseAuth } = await import('../firebase.js');
-      const auth = getFirebaseAuth();
-      const currentUser = auth.currentUser;
-      
-      if (currentUser) {
-        this.log('Getting fresh token from Firebase');
-        const token = await currentUser.getIdToken(true); // Force refresh
-        
-        // Update localStorage with fresh token
-        localStorage.setItem('auth_token', token);
-        this.lastTokenRefresh = Date.now();
-        this.log('Fresh token obtained and stored');
-        
-        return token;
-      } else {
-        this.log('No current Firebase user available');
-        return null;
-      }
-    } catch (error) {
-      this.error('Error getting fresh token:', error);
-      return null;
-    } finally {
-      this.tokenRefreshInProgress = false;
-    }
+    return localStorage.getItem('auth_token');
   },
   
   /**
@@ -120,8 +156,8 @@ const WebSocketService = {
       this.log(`Initializing global connection for user ${user.uid}`);
       
       try {
-        // Get fresh token from Firebase instead of localStorage
-        const authToken = await this.getFreshAuthToken();
+        // Get token from localStorage
+        const authToken = TokenManager.accessToken || await this.getFreshAuthToken();
         
         if (!authToken) {
           this.log('Failed to get fresh auth token');
@@ -139,6 +175,9 @@ const WebSocketService = {
         await this.connectUser(authToken);
         this.isInitialized = true;
         this.log(`Global connection established for user ${user.uid}`);
+        
+        // Install activity-based auto-reconnect handlers
+        this.installActivityReconnectHandlers();
       } catch (error) {
         this.error('Failed to connect:', error);
         this.cleanup();
@@ -172,6 +211,9 @@ const WebSocketService = {
       this.unsubscribeFunction();
       this.unsubscribeFunction = null;
     }
+    
+    // Remove activity listeners
+    this.removeActivityReconnectHandlers();
     
     // Disconnect WebSocket
     if (this.connection) {
@@ -521,12 +563,18 @@ const WebSocketService = {
           reject(new Error(`Connection closed unexpectedly: code ${event.code}, reason: ${event.reason || 'none'}`));
         }
         
+        // Handle authentication failures specifically: try refresh then reconnect
+        if (event.code === 1008) {
+          this.error('Authentication failed (1008). Attempting refresh and reconnect');
+          this.attemptRefreshAndReconnect();
+          return;
+        }
+
         // Determine if we should reconnect
         const shouldReconnect = !event.wasClean && 
                                this.connectionAttempts < this.maxReconnectAttempts &&
                                event.code !== 1000 && // Normal closure
                                event.code !== 1001 && // Going away
-                               event.code !== 1008 && // Policy violation (auth failed)
                                this.isInitialized; // Only reconnect if we're supposed to be connected
         
         if (shouldReconnect) {
@@ -538,18 +586,7 @@ const WebSocketService = {
           
           setTimeout(async () => {
             try {
-              // Check if we should refresh token before reconnecting
-              let tokenToUse = this.authToken;
-              if (this.shouldRefreshToken()) {
-                this.log('Refreshing token before reconnection');
-                const freshToken = await this.getFreshAuthToken();
-                if (freshToken) {
-                  tokenToUse = freshToken;
-                } else {
-                  this.error('Cannot reconnect: failed to get fresh token');
-                  return;
-                }
-              }
+              let tokenToUse = this.authToken || TokenManager.accessToken;
               
               this.log(`Attempting reconnection with ${tokenToUse === this.authToken ? 'existing' : 'fresh'} token`);
               await this.connectUser(tokenToUse);
@@ -559,8 +596,6 @@ const WebSocketService = {
           }, this.reconnectDelay);
         } else if (this.connectionAttempts >= this.maxReconnectAttempts) {
           this.error(`Max reconnection attempts (${this.maxReconnectAttempts}) exceeded`);
-        } else if (event.code === 1008) {
-          this.error('Authentication failed, not attempting to reconnect');
         }
       };
       

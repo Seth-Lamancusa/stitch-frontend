@@ -111,21 +111,16 @@ export default {
     
     pathData() {
       const { sourcePosition, targetPosition } = this;
-      
-      // Calculate control points for smooth curve
+      // Draw from center of source to center of target
       const dx = targetPosition.x - sourcePosition.x;
       const dy = targetPosition.y - sourcePosition.y;
-      
-      // Vertical curve with moderate tension
-      const tension = Math.min(Math.abs(dy) * 0.6, 50);
-      
-      const cp1x = sourcePosition.x;
-      const cp1y = sourcePosition.y + tension;
-      const cp2x = targetPosition.x;
-      const cp2y = targetPosition.y - tension;
-      
-      return `M ${sourcePosition.x} ${sourcePosition.y} 
-              C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${targetPosition.x} ${targetPosition.y}`;
+      const tension = Math.min(Math.hypot(dx, dy) * 0.3, 60);
+      const angle = Math.atan2(dy, dx);
+      const cp1x = sourcePosition.x + Math.cos(angle) * tension;
+      const cp1y = sourcePosition.y + Math.sin(angle) * tension;
+      const cp2x = targetPosition.x - Math.cos(angle) * tension;
+      const cp2y = targetPosition.y - Math.sin(angle) * tension;
+      return `M ${sourcePosition.x} ${sourcePosition.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${targetPosition.x} ${targetPosition.y}`;
     },
     
     arrowPoints() {

@@ -29,8 +29,8 @@ class GraphLayoutService {
       return this.layoutCache.get(cacheKey);
     }
     
-    // Calculate new layout
-    return this.debouncedCalculate(messages, options, cacheKey);
+    // Calculate new layout (avoid debounced return value ambiguity with async)
+    return this.calculateLayoutInternal(messages, options, cacheKey);
   }
 
   /**

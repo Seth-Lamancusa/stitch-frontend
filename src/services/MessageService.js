@@ -1,24 +1,12 @@
 import axios from 'axios';
-import { getFirebaseAuth } from '../firebase.js';
+import TokenManager from './TokenManager';
 
 const apiBaseUrl = '/api';
 
 // Helper function to get auth headers
-const getAuthHeaders = async () => {
-  const auth = getFirebaseAuth();
-  if (!auth || !auth.currentUser) {
-    return {};
-  }
-  
-  try {
-    const token = await auth.currentUser.getIdToken();
-    return {
-      Authorization: `Bearer ${token}`
-    };
-  } catch (error) {
-    console.error('Error getting auth token:', error);
-    return {};
-  }
+const getAuthHeaders = () => {
+  const token = TokenManager.accessToken;
+  return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
 export default {
@@ -40,8 +28,7 @@ export default {
       content_author
     });
     
-    const headers = await getAuthHeaders();
-    const auth = getFirebaseAuth();
+    const headers = getAuthHeaders();
     
     // Unified endpoint for both root messages and replies
     const messageData = {
@@ -55,13 +42,9 @@ export default {
       messageData.parent_id = parentId;
     }
     
-    // Handle special case for ChatGPT
-    if (content_author === 'chatgpt') {
-      messageData.content_author = 'chatgpt';
-    } else {
-      // For regular users, use the authenticated user's UID
-      // The backend requires content_author to match the authenticated user's UID
-      messageData.content_author = auth.currentUser?.uid;
+    // Always include content_author when provided (backend requires it)
+    if (content_author) {
+      messageData.content_author = content_author;
     }
     
     console.log('[MessageService] Sending API request with data:', {
@@ -74,13 +57,21 @@ export default {
     });
     
     try {
-      const response = await axios.post(`${apiBaseUrl}/messages`, messageData, { headers });
+      // Unified endpoint returns an array; wrap single request in array
+      const response = await axios.post(`${apiBaseUrl}/messages`, [messageData], { headers });
+      const results = Array.isArray(response.data) ? response.data : [];
+      const first = results[0] || null;
+      if (!first || !first.success || !first.message) {
+        const err = first?.error || 'Unknown error creating message';
+        throw new Error(err);
+      }
       console.log('[MessageService] API request successful:', {
         status: response.status,
-        messageId: response.data?.id,
-        hasData: !!response.data
+        messageId: first.message.id,
+        hasData: true
       });
-      return response;
+      // Normalize to previous shape where response.data was the message
+      return { data: first.message, status: response.status };
     } catch (error) {
       console.error('[MessageService] API request failed:', error);
       console.error('[MessageService] Error details:', {
@@ -93,162 +84,110 @@ export default {
     }
   },
   
-  // Add recipients to an existing message
-  async addRecipientsToMessage(messageId, recipients, propagateToDescendants = false) {
-    console.log('[MessageService] addRecipientsToMessage called with:', {
-      messageId,
-      recipientsCount: recipients?.length || 0
-    });
-    
-    const headers = await getAuthHeaders();
-    
-    const requestData = {
-      recipients
-    };
-    
-    console.log('[MessageService] Sending add recipients request:', {
-      endpoint: `${apiBaseUrl}/messages/${messageId}/recipients`,
-      requestData,
-      propagateToDescendants,
-      hasHeaders: !!headers
-    });
-    
-    try {
-      const url = `${apiBaseUrl}/messages/${messageId}/recipients${propagateToDescendants ? '?propagate_to_descendants=true' : ''}`;
-      const response = await axios.post(url, requestData, { headers });
-      console.log('[MessageService] Add recipients request successful:', {
-        status: response.status,
-        addedCount: response.data?.added_recipients?.length || 0,
-        skippedCount: response.data?.skipped_recipients?.length || 0
-      });
-      return response;
-    } catch (error) {
-      console.error('[MessageService] Add recipients request failed:', error);
-      console.error('[MessageService] Error details:', {
-        message: error.message,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data
-      });
-      throw error;
-    }
+  // Add recipients to a message (or multiple messages)
+  async addRecipientsToMessage(messageIdOrIds, recipients, propagateToDescendants = false) {
+    const headers = getAuthHeaders();
+    const body = Array.isArray(messageIdOrIds)
+      ? { message_ids: messageIdOrIds, recipients }
+      : { message_id: messageIdOrIds, recipients };
+    const params = { propagate_to_descendants: propagateToDescendants };
+    return axios.post(`${apiBaseUrl}/recipients/add`, body, { headers, params });
   },
-  
-  // Remove a recipient from an existing message
-  async removeRecipientFromMessage(messageId, recipientUid, propagateToDescendants = false) {
-    console.log('[MessageService] removeRecipientFromMessage called with:', {
-      messageId,
-      recipientUid,
-      propagateToDescendants
-    });
-    
-    const headers = await getAuthHeaders();
-    
-    console.log('[MessageService] Sending remove recipient request:', {
-      endpoint: `${apiBaseUrl}/messages/${messageId}/recipients/${recipientUid}`,
-      propagateToDescendants,
-      hasHeaders: !!headers
-    });
-    
-    try {
-      const url = `${apiBaseUrl}/messages/${messageId}/recipients/${recipientUid}${propagateToDescendants ? '?propagate_to_descendants=true' : ''}`;
-      const response = await axios.delete(url, { headers });
-      console.log('[MessageService] Remove recipient request successful:', {
-        status: response.status,
-        removed: response.data?.removed_recipient
-      });
-      return response;
-    } catch (error) {
-      console.error('[MessageService] Remove recipient request failed:', error);
-      console.error('[MessageService] Error details:', {
-        message: error.message,
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        data: error.response?.data
-      });
-      throw error;
-    }
+
+  // Remove a recipient from a message (or multiple messages)
+  async removeRecipientFromMessage(messageIdOrIds, recipientUid, propagateToDescendants = false) {
+    const headers = getAuthHeaders();
+    const body = Array.isArray(messageIdOrIds)
+      ? { message_ids: messageIdOrIds, recipient_uid: recipientUid }
+      : { message_id: messageIdOrIds, recipient_uid: recipientUid };
+    const params = { propagate_to_descendants: propagateToDescendants };
+    return axios.delete(`${apiBaseUrl}/recipients/remove`, { headers, params, data: body });
   },
   
   // Delete a message and optionally its descendants
   async deleteMessage(id, deleteDescendants = false) {
-    const headers = await getAuthHeaders();
+    const headers = getAuthHeaders();
     const params = { delete_descendants: deleteDescendants };
     return axios.delete(`${apiBaseUrl}/messages/${id}`, { headers, params });
   },
   
   // Pin a message (admin only)
   async pinMessage(id) {
-    const headers = await getAuthHeaders();
-    return axios.post(`${apiBaseUrl}/messages/${id}/pin`, {}, { headers });
+    throw new Error('pinMessage is not supported by the server');
   },
   
   // Unpin a message (admin only)
   async unpinMessage(id) {
-    const headers = await getAuthHeaders();
-    return axios.post(`${apiBaseUrl}/messages/${id}/unpin`, {}, { headers });
+    throw new Error('unpinMessage is not supported by the server');
   },
   
-  // Load parent branch with specified depth
+  // Load messages via unified traversal endpoint
+  async traverseFrom(messageId, { up_depth = 2, down_depth = 2, get_replies = true } = {}) {
+    const headers = getAuthHeaders();
+    const url = `${apiBaseUrl}/messages/traverse-from/${messageId}?up_depth=${up_depth}&down_depth=${down_depth}&get_replies=${get_replies}`;
+    const response = await axios.get(url, { headers });
+    return response;
+  },
+  
+  // Load parent branch with specified depth (via unified traversal)
   async loadBranchUp(messageId, depth = 2, get_replies = true) {
-    const headers = await getAuthHeaders();
-    const response = await axios.get(`${apiBaseUrl}/messages/branch_up/${messageId}?depth=${depth}&get_replies=${get_replies}`, { headers });
-    console.log(`[DEBUG] MessageService - loadBranchUp(${messageId}, depth=${depth}, get_replies=${get_replies}) response:`, 
-      response.data.length > 0 ? 
-      {count: response.data.length, firstMessage: response.data[0]} : 
-      {count: 0});
-    return response;
+    const headers = getAuthHeaders();
+    const response = await this.traverseFrom(messageId, { up_depth: depth, down_depth: 0, get_replies });
+    const data = response.data || {};
+    const combined = [];
+    if (data.origin) combined.push(data.origin);
+    if (Array.isArray(data.messages)) combined.push(...data.messages);
+    console.log(`[DEBUG] MessageService - loadBranchUp(${messageId}, depth=${depth}, get_replies=${get_replies}) response:`,
+      combined.length > 0 ? { count: combined.length, firstMessage: combined[0] } : { count: 0 }
+    );
+    return { data: combined, status: response.status };
   },
   
-  // Load child branch with specified depth
+  // Load child branch with specified depth (via unified traversal)
   async loadBranchDown(messageId, depth = 2, get_replies = true) {
-    const headers = await getAuthHeaders();
-    const response = await axios.get(`${apiBaseUrl}/messages/branch_down/${messageId}?depth=${depth}&get_replies=${get_replies}`, { headers });
-    console.log(`[DEBUG] MessageService - loadBranchDown(${messageId}, depth=${depth}, get_replies=${get_replies}) response:`, 
-      response.data.length > 0 ? 
-      {count: response.data.length, firstMessage: response.data[0]} : 
-      {count: 0});
-    return response;
+    const headers = getAuthHeaders();
+    const response = await this.traverseFrom(messageId, { up_depth: 0, down_depth: depth, get_replies });
+    const data = response.data || {};
+    const combined = [];
+    if (data.origin) combined.push(data.origin);
+    if (Array.isArray(data.messages)) combined.push(...data.messages);
+    console.log(`[DEBUG] MessageService - loadBranchDown(${messageId}, depth=${depth}, get_replies=${get_replies}) response:`,
+      combined.length > 0 ? { count: combined.length, firstMessage: combined[0] } : { count: 0 }
+    );
+    return { data: combined, status: response.status };
   },
   
-  // Load messages within a radius of a target message (both parents and children)
+  // Load messages within a radius of a target message (both parents and children) via unified traversal
   async loadMessageRadius(messageId, radius = 5, get_replies = true) {
-    const headers = await getAuthHeaders();
-    const response = await axios.get(`${apiBaseUrl}/messages/radius/${messageId}?radius=${radius}&get_replies=${get_replies}`, { headers });
-    console.log(`[DEBUG] MessageService - loadMessageRadius(${messageId}, radius=${radius}, get_replies=${get_replies}) response:`, 
-      response.data.length > 0 ? 
-      {count: response.data.length, messageIds: response.data.map(m => m.id)} : 
-      {count: 0});
-    return response;
+    const headers = getAuthHeaders();
+    const response = await this.traverseFrom(messageId, { up_depth: radius, down_depth: radius, get_replies });
+    const data = response.data || {};
+    const combined = [];
+    if (data.origin) combined.push(data.origin);
+    if (Array.isArray(data.messages)) combined.push(...data.messages);
+    console.log(`[DEBUG] MessageService - loadMessageRadius(${messageId}, radius=${radius}, get_replies=${get_replies}) response:`,
+      combined.length > 0 ? { count: combined.length, messageIds: combined.map(m => m.id) } : { count: 0 }
+    );
+    return { data: combined, status: response.status };
   },
   
-
+  
   
   // Mark a message as read
   async markMessageAsRead(id) {
     const headers = await getAuthHeaders();
-    return axios.post(`${apiBaseUrl}/messages/${id}/mark-read`, {}, { headers });
+    return axios.post(`${apiBaseUrl}/users/messages/mark-read`, { message_id: id }, { headers });
   },
   
   // Mark a message as unread
   async markMessageAsUnread(id) {
     const headers = await getAuthHeaders();
-    return axios.post(`${apiBaseUrl}/messages/${id}/mark-unread`, {}, { headers });
+    return axios.post(`${apiBaseUrl}/users/messages/${id}/mark-unread`, {}, { headers });
   },
   
-  // Get unread message count for the current user
-  async getUnreadMessageCount() {
-    const headers = await getAuthHeaders();
-    const response = await axios.get(`${apiBaseUrl}/messages/unread-count`, { headers });
-    console.log('[DEBUG] MessageService - getUnreadMessageCount response:', response.data);
-    return response;
-  },
+  // Removed: getUnreadMessageCount (no server endpoint)
 
-  // Reformat a message according to Stitch guidelines
-  async reformatMessage(messageId) {
-    const headers = await getAuthHeaders();
-    return axios.post(`${apiBaseUrl}/messages/${messageId}/reformat`, {}, { headers });
-  },
+  // Removed: reformat (no server endpoint)
 
   // Get public messages with pagination
   async getPublicMessages(skip = 0, limit = 15) {
@@ -256,47 +195,13 @@ export default {
     return axios.get(`${apiBaseUrl}/messages/public?skip=${skip}&limit=${limit}`, { headers });
   },
 
-  // Get all saved messages with pagination  
-  async getAllSavedMessages(skip = 0, limit = 15) {
-    const headers = await getAuthHeaders();
-    return axios.get(`${apiBaseUrl}/messages/saved?skip=${skip}&limit=${limit}`, { headers });
-  },
+  // Removed: getAllSavedMessages (use /users/saved-messages via UserService)
 
-  // Update message read status
-  async updateReadStatus(id, isRead) {
-    const headers = await getAuthHeaders();
-    return axios.patch(`${apiBaseUrl}/messages/${id}/read-status`, { is_read: isRead }, { headers });
-  },
+  // Removed: updateReadStatus (no server endpoint)
 
-  // Get read out loud audio for a message
-  async getReadOutLoudAudio(messageId) {
-    const headers = await getAuthHeaders();
-    const response = await axios.get(`${apiBaseUrl}/messages/${messageId}/read_out_loud`, {
-      headers,
-      responseType: 'blob',
-    });
-    return response;
-  },
+  
 
-  async updateMessage(messageId, payload) {
-    const headers = await getAuthHeaders();
-    try {
-      const response = await axios.patch(`${apiBaseUrl}/messages/${messageId}`, payload, { headers });
-      return response;
-    } catch (error) {
-      console.error('[MessageService] Update message request failed:', error);
-      throw error;
-    }
-  },
+  // Removed: updateMessage (no server endpoint)
 
-  async adminUpdateMessage(messageId, payload) {
-    const headers = await getAuthHeaders();
-    try {
-      const response = await axios.put(`${apiBaseUrl}/messages/${messageId}/admin`, payload, { headers });
-      return response.data;
-    } catch (error) {
-      console.error('[MessageService] Admin update message request failed:', error);
-      throw error;
-    }
-  },
+  // Removed: adminUpdateMessage (no server endpoint)
 };

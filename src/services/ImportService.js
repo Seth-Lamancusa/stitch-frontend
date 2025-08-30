@@ -1,24 +1,12 @@
 import axios from 'axios';
-import { getFirebaseAuth } from '../firebase.js';
+import TokenManager from './TokenManager';
 
 const apiBaseUrl = '/api';
 
 // Helper function to get auth headers
-const getAuthHeaders = async () => {
-  const auth = getFirebaseAuth();
-  if (!auth || !auth.currentUser) {
-    return {};
-  }
-  
-  try {
-    const token = await auth.currentUser.getIdToken();
-    return {
-      Authorization: `Bearer ${token}`
-    };
-  } catch (error) {
-    console.error('Error getting auth token:', error);
-    return {};
-  }
+const getAuthHeaders = () => {
+  const token = TokenManager.accessToken;
+  return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
 class ImportService {
@@ -27,8 +15,8 @@ class ImportService {
    * @returns {string|null} Current user UID
    */
   getCurrentUserUid() {
-    const auth = getFirebaseAuth();
-    return auth?.currentUser?.uid || null;
+    // JWT subject is authoritative on backend; optionally decode token client-side if needed
+    return null;
   }
 
   /**
@@ -40,12 +28,7 @@ class ImportService {
    * @returns {Promise} - API response with thread_id
    */
   async importConversation(messages, selectedBot, recipients = [], isPublic = true) {
-    const headers = await getAuthHeaders();
-    const currentUserUid = this.getCurrentUserUid();
-    
-    if (!currentUserUid) {
-      throw new Error('User must be authenticated to import conversations');
-    }
+    const headers = getAuthHeaders();
     
     // Detect admin mode: check if messages have authorUid (admin-built messages)
     const isAdminMode = messages.length > 0 && messages[0].authorUid;
@@ -65,7 +48,7 @@ class ImportService {
           const previousAuthorUid = messages[index - 1].authorUid;
           // Only add if not already in recipients
           if (!messageRecipients.some(r => r.uid === previousAuthorUid)) {
-            messageRecipients.push({ uid: previousAuthorUid, visible: true });
+            messageRecipients.push({ uid: previousAuthorUid, public: true });
           }
         }
         
@@ -89,7 +72,7 @@ class ImportService {
           // For user messages: add the bot as a recipient so bot can see the message
           const messageRecipients = [
             ...recipients, // Include any additional recipients specified
-            { uid: selectedBot.uid, visible: true } // Add bot as recipient
+            { uid: selectedBot.uid, public: true } // Add bot as recipient
           ];
           
           return {
@@ -105,7 +88,7 @@ class ImportService {
             ...recipients // Include any additional recipients specified
           ];
 
-          messageRecipients.push({ uid: currentUserUid, visible: true });
+          messageRecipients.push({ uid: currentUserUid, public: true });
           
           return {
             content: msg.content,
@@ -118,9 +101,8 @@ class ImportService {
       });
     }
     
-    const batchData = {
-      messages: transformedMessages
-    };
+    // Unified endpoint accepts either array or {messages: [...]} – send array directly
+    const payload = transformedMessages;
     
     if (isAdminMode) {
       console.log('[ImportService] Importing admin-built conversation:', {
@@ -140,13 +122,29 @@ class ImportService {
     
     try {
       const response = await axios.post(
-        `${apiBaseUrl}/messages/batch`,
-        batchData,
+        `${apiBaseUrl}/messages`,
+        payload,
         { headers }
       );
       
-      console.log('[ImportService] Import successful:', response.data);
-      return response.data;
+      // Response is an array of per-message results
+      const results = Array.isArray(response.data) ? response.data : [];
+      const successful = results.filter(r => r && r.success && r.message);
+      const totalRequested = payload.length;
+      const messageCount = successful.length;
+      const partial_success = messageCount < totalRequested;
+      const thread_id = successful.length > 0 ? successful[0].message.id : null;
+
+      const shaped = {
+        success: messageCount > 0,
+        thread_id,
+        message_count: messageCount,
+        total_requested: totalRequested,
+        partial_success
+      };
+      
+      console.log('[ImportService] Import results:', shaped);
+      return shaped;
     } catch (error) {
       console.error('[ImportService] Import failed:', error);
       throw error;

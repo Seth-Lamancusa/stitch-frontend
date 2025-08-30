@@ -4,9 +4,55 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router.js'
 import store from './store'
+import TokenManager from './services/TokenManager'
+import axios from 'axios'
+import { installAxiosAuthInterceptor } from './services/httpClient'
 import { initFormatters } from './components/FormattedContent/init'
 
 console.log('Main.js starting execution');
+
+// Install a global fetch wrapper to auto-refresh on 401 and retry once
+function installFetchAuthInterceptor() {
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = async (input, init = {}) => {
+    // Bypass only when explicitly skipped; allow retries for all endpoints
+    const url = typeof input === 'string' ? input : (input && input.url) ? input.url : '';
+    if (init && init._skipAuth) return originalFetch(input, init);
+    const response = await originalFetch(input, init);
+    if (response && response.status !== 401) {
+      return response;
+    }
+    if (response && response.status === 401) {
+      // Avoid loops and skip for auth endpoints
+      if (init && init._retry) return response;
+      // If this was the refresh endpoint itself, do not attempt to refresh again
+      if (url.includes('/api/auth/sessions/refresh')) return response;
+      const newAccess = await TokenManager.refreshAccessToken();
+      if (!newAccess) {
+        try {
+          // Force logout if refresh failed
+          await store.dispatch('auth/forceLogoutWithMessage');
+        } catch (e) {}
+        return response;
+      }
+      // Retry the original request with updated Authorization header
+      try {
+        const newHeaders = new Headers(init && init.headers ? init.headers : undefined);
+        newHeaders.set('Authorization', `Bearer ${newAccess}`);
+        const retryInit = { ...init, headers: newHeaders, _retry: true };
+        return await originalFetch(url || input, retryInit);
+      } catch (e) {
+        return response;
+      }
+    }
+    return response;
+  };
+}
+
+// Install axios interceptor globally on the default axios instance
+installAxiosAuthInterceptor(axios);
+
+installFetchAuthInterceptor();
 
 const app = createApp(App)
 app.use(router)
@@ -19,10 +65,6 @@ const initApp = async () => {
     // Initialize auth (handles Firebase setup internally)
     await store.dispatch('auth/initAuth');
     console.log("Auth initialized");
-    
-    // Fetch available bots
-    await store.dispatch('bots/fetchBots');
-    console.log("Bots loaded");
     
     // Initialize formatters (for rich text)
     initFormatters();

@@ -87,63 +87,63 @@
             >Stage</button>
           </div>
           
-          <!-- Chatbots section -->
+          <!-- Featured Bots section -->
           <div v-if="!isGuestUser" class="chatbots-section">
-            <p class="chatbots-header">Available Chatbots</p>
+            <p class="chatbots-header">Featured Bots</p>
             
-            <!-- Main chatbots -->
+            <!-- Main featured bots -->
             <div class="chatbots-list">
               <div 
-                v-for="chatbot in mainChatbots" 
-                :key="chatbot.uid" 
+                v-for="bot in mainFeaturedBots" 
+                :key="bot.uid" 
                 class="chatbot-card"
-                :class="{ 'chatbot-selected': isChatbotSelected(chatbot) }"
-                @click="toggleChatbot(chatbot)"
+                :class="{ 'chatbot-selected': isFeaturedBotSelected(bot) }"
+                @click="toggleFeaturedBot(bot)"
               >
                 <div class="chatbot-info">
-                  <span class="chatbot-name">{{ chatbot.display_name }}</span>
-                  <span class="chatbot-tag">@{{ chatbot.user_tag }}</span>
+                  <span class="chatbot-name">{{ bot.display_name }}</span>
+                  <span class="chatbot-tag">@{{ bot.user_tag }}</span>
                 </div>
                 <div class="chatbot-toggle">
                   <input 
                     type="checkbox" 
-                    :checked="isChatbotSelected(chatbot)"
-                    @click.stop="toggleChatbot(chatbot)"
+                    :checked="isFeaturedBotSelected(bot)"
+                    @click.stop="toggleFeaturedBot(bot)"
                   />
                 </div>
               </div>
             </div>
             
-            <!-- Advanced chatbots dropdown -->
-            <div v-if="advancedChatbots.length > 0" class="advanced-chatbots">
+            <!-- Advanced featured bots dropdown -->
+            <div v-if="advancedFeaturedBots.length > 0" class="advanced-chatbots">
               <span class="advanced-toggle-inline">
                 <button 
                   class="advanced-toggle-button"
                   @click="showAdvancedBots = !showAdvancedBots"
                   :aria-expanded="showAdvancedBots"
                 >
-                  <span class="advanced-toggle-text">Advanced ({{ advancedChatbots.length }})</span>
+                  <span class="advanced-toggle-text">Advanced ({{ advancedFeaturedBots.length }})</span>
                   <span class="advanced-toggle-icon" :class="{ 'expanded': showAdvancedBots }">▼</span>
                 </button>
               </span>
               
               <div v-if="showAdvancedBots" class="advanced-chatbots-list">
                 <div 
-                  v-for="chatbot in advancedChatbots" 
-                  :key="chatbot.uid" 
+                  v-for="bot in advancedFeaturedBots" 
+                  :key="bot.uid" 
                   class="chatbot-card advanced-chatbot-card"
-                  :class="{ 'chatbot-selected': isChatbotSelected(chatbot) }"
-                  @click="toggleChatbot(chatbot)"
+                  :class="{ 'chatbot-selected': isFeaturedBotSelected(bot) }"
+                  @click="toggleFeaturedBot(bot)"
                 >
                   <div class="chatbot-info">
-                    <span class="chatbot-name">{{ chatbot.display_name }}</span>
-                    <span class="chatbot-tag">@{{ chatbot.user_tag }}</span>
+                    <span class="chatbot-name">{{ bot.display_name }}</span>
+                    <span class="chatbot-tag">@{{ bot.user_tag }}</span>
                   </div>
                   <div class="chatbot-toggle">
                     <input 
                       type="checkbox" 
-                      :checked="isChatbotSelected(chatbot)"
-                      @click.stop="toggleChatbot(chatbot)"
+                      :checked="isFeaturedBotSelected(bot)"
+                      @click.stop="toggleFeaturedBot(bot)"
                     />
                   </div>
                 </div>
@@ -193,12 +193,12 @@
                   <button 
                     @click.stop="() => toggleRecipientVisibility(index)"
                     class="visibility-toggle-btn"
-                    :class="{ 'visible': recipient.visible !== false, 'invisible': recipient.visible === false }"
-                    :title="recipient.visible !== false ? 'Visible (CC)' : 'Hidden (BCC)'"
+                    :class="{ 'visible': recipient.public !== false, 'invisible': recipient.public === false }"
+                    :title="recipient.public !== false ? 'Visible (CC)' : 'Hidden (BCC)'"
                   >
                     <span class="visibility-emoji visible-emoji">👁️</span>
                     <span class="visibility-emoji hidden-emoji">🙈</span>
-                    <div class="visibility-slider" :class="{ 'is-visible': recipient.visible !== false }"></div>
+                    <div class="visibility-slider" :class="{ 'is-visible': recipient.public !== false }"></div>
                   </button>
                   <button 
                     @click.stop="() => removeRecipient(index, recipient)" 
@@ -240,12 +240,12 @@
               <button 
                 @click.stop="() => toggleRecipientVisibility(index)"
                 class="visibility-toggle-btn"
-                :class="{ 'visible': recipient.visible !== false, 'invisible': recipient.visible === false }"
-                :title="recipient.visible !== false ? 'Visible (CC)' : 'Hidden (BCC)'"
+                :class="{ 'visible': recipient.public !== false, 'invisible': recipient.public === false }"
+                :title="recipient.public !== false ? 'Visible (CC)' : 'Hidden (BCC)'"
               >
                 <span class="visibility-emoji visible-emoji">👁️</span>
                 <span class="visibility-emoji hidden-emoji">🙈</span>
-                <div class="visibility-slider" :class="{ 'is-visible': recipient.visible !== false }"></div>
+                <div class="visibility-slider" :class="{ 'is-visible': recipient.public !== false }"></div>
               </button>
               <button 
                 v-if="canRemoveRecipient(recipient)"
@@ -368,7 +368,8 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
-import MessageService from '../services/MessageService.js';
+import MessageService from '../../services/MessageService.js';
+import FeaturedBotsService from '../../services/FeaturedBotsService.js';
 
 const props = defineProps({
   isVisible: {
@@ -415,15 +416,6 @@ const isRemovingFromSingle = ref(false); // Track if removing from single messag
 const isRemovingFromDescendants = ref(false); // Track if removing from descendants
 let searchTimeout = null;
 
-// Available chatbots
-const availableChatbots = computed(() => store.getters['bots/bots']);
-
-// Separate main and advanced bots
-const mainChatbots = computed(() => availableChatbots.value.filter(bot => !bot.advanced));
-const advancedChatbots = computed(() => availableChatbots.value.filter(bot => bot.advanced));
-
-// Advanced bots dropdown state
-const showAdvancedBots = ref(false);
 
 // Helper function to deduplicate and reconcile recipient data
 const deduplicateRecipients = (recipientEdges, currentUserUid) => {
@@ -467,8 +459,8 @@ const deduplicateRecipients = (recipientEdges, currentUserUid) => {
       : null;
     
     // Reconcile visibility: determine what symbols to show
-    const visibleEdges = edges.filter(e => e.visible === true || e.visible === null);
-    const hiddenEdges = edges.filter(e => e.visible === false);
+    const visibleEdges = edges.filter(e => (e.public ?? e.visible) === true || (e.public ?? e.visible) === null);
+    const hiddenEdges = edges.filter(e => (e.public ?? e.visible) === false);
     
     // Check if current user can see hidden edges (they added them or they are the recipient)
     const canSeeHidden = currentUserUid && (
@@ -866,7 +858,8 @@ const selectSearchResult = (user) => {
       uid: user.uid,
       display_name: user.display_name,
       user_tag: user.user_tag,
-      visible: true  // Default to visible (CC)
+      public: true, // Default to public (CC)
+      visible: true
     };
     
     console.log('[RecipientsModal] Adding recipient to store:', recipientToAdd);
@@ -1027,25 +1020,27 @@ const toggleRecipientVisibility = (index) => {
   store.dispatch('navigation/toggleRecipientVisibility', index);
 };
 
-// Chatbot methods
-const isChatbotSelected = (chatbot) => {
-  return recipients.value.some(recipient => recipient.uid === chatbot.uid);
+// Featured bots state and methods
+const featuredBots = ref([]);
+const mainFeaturedBots = computed(() => featuredBots.value.filter(bot => !bot?.advanced));
+const advancedFeaturedBots = computed(() => featuredBots.value.filter(bot => bot?.advanced));
+const showAdvancedBots = ref(false);
+
+const isFeaturedBotSelected = (bot) => {
+  return recipients.value.some(recipient => recipient.uid === bot.uid);
 };
 
-const toggleChatbot = (chatbot) => {
-  if (isChatbotSelected(chatbot)) {
-    // Remove chatbot from recipients
-    const index = recipients.value.findIndex(recipient => recipient.uid === chatbot.uid);
+const toggleFeaturedBot = (bot) => {
+  if (isFeaturedBotSelected(bot)) {
+    const index = recipients.value.findIndex(recipient => recipient.uid === bot.uid);
     if (index !== -1) {
       store.dispatch('navigation/removeRecipient', index);
     }
   } else {
-    // Add chatbot to recipients
     store.dispatch('navigation/addRecipient', {
-      uid: chatbot.uid,
-      display_name: chatbot.display_name,
-      user_tag: chatbot.user_tag,
-      email: chatbot.email
+      uid: bot.uid,
+      display_name: bot.display_name,
+      user_tag: bot.user_tag
     });
   }
 };
@@ -1073,8 +1068,14 @@ const handleClickOutside = (event) => {
 // });
 
 // Lifecycle hooks
-onMounted(() => {
+onMounted(async () => {
   document.addEventListener('click', handleClickOutside);
+  // Load featured bots (mocked service for now)
+  try {
+    featuredBots.value = await FeaturedBotsService.listFeaturedBots();
+  } catch (e) {
+    featuredBots.value = [];
+  }
 });
 
 onBeforeUnmount(() => {

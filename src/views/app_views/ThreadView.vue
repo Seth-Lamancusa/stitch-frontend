@@ -21,10 +21,9 @@
         <button @click="backToList()" class="back-button">
           &larr; Back
         </button>
-        <h2 class="thread-title">{{ threadTitle }}</h2>
         
-        <!-- Graph view toggle
-        <button @click="openGraphView" class="graph-view-button" title="Switch to graph view">
+        <!-- Graph view toggle -->
+        <!-- <button @click="openGraphView" class="graph-view-button" title="Switch to graph view">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
             <path d="M1 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h4.5a1 1 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5H1zm7 0a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h4.5a1 1 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5H8zm-7 1h3v6H1V4zm7 0h3v6H8V4z"/>
             <circle cx="3" cy="6" r="1"/>
@@ -59,14 +58,10 @@
 
             <!-- Auth status badges -->
             <span v-if="isAdmin" class="admin-badge" title="Admin">⛊</span>
-            <span v-else-if="isWhitelisted" class="whitelist-badge" title="Whitelisted">✓</span>
-            <span v-else-if="user && !isWhitelisted" class="non-whitelist-badge" title="Not whitelisted">✗</span>
             <span v-if="!user" class="guest-badge" title="Not logged in">?</span>
           </div>
           <button v-if="user" @click="logout" class="logout-btn">Logout</button>
-          <button v-else @click="handleLogin" class="login-btn" :disabled="isLoggingIn">
-            {{ isLoggingIn ? 'Signing in...' : 'Login' }}
-          </button>
+          <LoginButton v-else />
         </div>
       </div>
       
@@ -109,6 +104,7 @@
             @reply="setReplyingTo(message.id)"
             @delete="confirmDeleteMessage"
             @showLinks="handleShowLinks"
+            @center="handleCenterOnMessage"
             @selectionToggled="handleMessageSelection"
           />
           
@@ -157,6 +153,9 @@
       :show="showDeleteConfirm"
       :message="messageToDelete"
       :is-deleting="isDeleting"
+      :relation="deleteRelation"
+      :disallow-confirm="isCenteredDeletion"
+      :disallow-reason="centeredDeletionReason"
       @cancel="store.dispatch('ui/hideDeleteConfirm')"
       @confirm="deleteMessage"
     />
@@ -199,11 +198,12 @@ import AdaptiveMarker from '../../components/AdaptiveMarker.vue';
 import ReplyBox from '../../components/ReplyBox.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
 import MessageService from '../../services/MessageService.js';
-import LinksModal from '../../components/LinksModal.vue';
-import RecipientsModal from '../../components/RecipientsModal.vue';
-import DeleteConfirmModal from '../../components/DeleteConfirmModal.vue';
-import ProfileEditModal from '../../components/ProfileEditModal.vue';
+import LinksModal from '../../components/modals/LinksModal.vue';
+import RecipientsModal from '../../components/modals/RecipientsModal.vue';
+import DeleteConfirmModal from '../../components/modals/DeleteConfirmModal.vue';
+import ProfileEditModal from '../../components/modals/ProfileEditModal.vue';
 import { useAuthentication } from '../../composables/useAuthentication';
+import LoginButton from '@buttons/LoginButton.vue'
 import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
 
 // Setup store and routing
@@ -230,7 +230,7 @@ const linksModalMessage = ref(null);
 const isCopied = ref(false);
 
 // Consolidated loading state - single source of truth
-const isLoadingThread = ref(false); // Main loading state for all thread operations
+const isLoadingThread = ref(true); // Main loading state for all thread operations
 const isLoadingParents = ref(false); // Keep for incremental parent loading
 const isLoadingChildren = ref(false); // Keep for incremental child loading
 
@@ -254,7 +254,6 @@ const user = computed(() => store.getters['auth/user']);
 const isAuthReady = computed(() => store.getters['auth/authReady']);
 const canInteract = computed(() => store.getters['auth/canInteract']);
 const isAdmin = computed(() => store.getters['auth/isAdmin']);
-const isWhitelisted = computed(() => store.getters['auth/isWhitelisted']);
 
 // User display properties
 const userDisplayName = computed(() => {
@@ -276,6 +275,38 @@ const replyingToMessageId = computed(() => store.getters['navigation/replyingToM
 const isReplyMessageLoading = computed(() => store.getters['navigation/isReplyMessageLoading']);
 const replyTargetId = computed(() => store.getters['navigation/replyTargetId']);
 const isReplying = computed(() => store.getters['navigation/isReplying']);
+
+// Compute relation of the message being deleted to the centered message in URL
+const deleteRelation = computed(() => {
+  const centeredId = messageId.value;
+  const toDelete = messageToDelete.value;
+  if (!centeredId || !toDelete) return null;
+
+  // Find positions within current displayed branch
+  const messages = displayedMessages.value || [];
+  const centeredIndex = messages.findIndex(m => String(m.id) === String(centeredId));
+  const deleteIndex = messages.findIndex(m => String(m.id) === String(toDelete.id));
+  if (centeredIndex === -1 || deleteIndex === -1) return null;
+
+  // Report relation of the centered message relative to the one being deleted
+  if (centeredIndex < deleteIndex) return 'above';
+  if (centeredIndex > deleteIndex) return 'below';
+  return null; // equal means same message (UI prevents deletion)
+});
+
+// Disallow confirm if attempting to delete centered message
+const isCenteredDeletion = computed(() => {
+  const centeredId = messageId.value;
+  const toDelete = messageToDelete.value;
+  if (!centeredId || !toDelete) return false;
+  return String(centeredId) === String(toDelete.id);
+});
+
+const centeredDeletionReason = computed(() => {
+  return isCenteredDeletion.value
+    ? 'You cannot delete the currently centered message. Center a different message first.'
+    : '';
+});
 
 // Message display - only show messages when not loading
 const displayedMessages = computed(() => {
@@ -343,6 +374,9 @@ const webSocketDebounceTime = 1000; // 1 second debounce
 // In the script setup section, add a debounce timer
 const websocketDebounceTimer = ref(null);
 const currentSubscribedMessageId = ref(null);
+
+// When true, a route param change should not trigger a full reload
+const suppressRouteReload = ref(false);
 
 // Add new refs for scroll monitoring
 const lastScrollPosition = ref(0);
@@ -575,8 +609,7 @@ onMounted(async () => {
   
   console.log(`[ThreadView] 🔧 MOUNT onMounted complete`);
   
-  // Log initial rejection state
-  console.log('[ThreadView] Initial rejection state on mount:', store.getters['auth/wasRejectedForWhitelist']);
+  // No whitelist rejection state anymore
 });
 
 onBeforeUnmount(() => {
@@ -617,6 +650,13 @@ onBeforeUnmount(() => {
 watch(messageId, async (newId, oldId) => {
   console.log(`[ThreadView] 👀 WATCH messageId changed from ${oldId} to ${newId}, triggered by:`, new Error().stack);
   if (newId) {
+    // Handle shallow updates where we only want to update the URL/scroll
+    if (suppressRouteReload.value) {
+      console.log('[ThreadView] 👀 WATCH messageId shallow update – skipping loadInitialContent');
+      suppressRouteReload.value = false;
+      // Keep existing content; do not adjust scroll on shallow URL updates
+      return;
+    }
     // Clear selection mode when navigating to a new thread
     if (isSelectionMode.value) {
       store.dispatch('navigation/exitSelectionMode');
@@ -660,24 +700,41 @@ watch(() => displayedMessages.value.length > 0 ? displayedMessages.value[0].id :
   }
 });
 
+// Watch for login while on this view to hydrate read state and auto-mark only unread
+watch(() => store.getters['auth/user'], async (newUser, oldUser) => {
+  // Detect transition from guest -> logged-in
+  if (!oldUser && newUser && messageId.value) {
+    try {
+      console.log('[ThreadView] 👤 LOGIN detected on ThreadView - hydrating read state');
+
+      // Reload current thread radius to hydrate user-specific fields (e.g., is_read, recipients)
+      await store.dispatch('messages/loadMessageRadius', {
+        messageId: messageId.value,
+        radius: 5
+      });
+
+      // Re-prepare branch path in case branch_child needs adjustment
+      await store.dispatch('messages/prepareBranchPath', messageId.value);
+
+      // Re-render without changing scroll or branch path
+      await nextTick();
+      await renderThread(true, true);
+
+      // Auto-mark only the unread messages in the visible branch
+      store.dispatch('messages/markVisibleBranchAsRead', messageId.value);
+    } catch (e) {
+      console.error('[ThreadView] Error hydrating after login:', e);
+    }
+  }
+});
+
 // Watch for message changes to ensure reply settings are always in sync
 watch(replyingToMessageId, () => {
   // Remove call to syncReplySettingsWithSelectedMessage since it's now automatic
   // Settings are synced automatically when selecting a message
 }, { immediate: true });
 
-// Watch for rejection state changes and redirect to /public
-console.log('[ThreadView] Setting up rejection state watcher');
-watch(() => store.getters['auth/wasRejectedForWhitelist'], (newValue, oldValue) => {
-  console.log('[ThreadView] Rejection state watcher triggered - oldValue:', oldValue, 'newValue:', newValue);
-  // Always redirect when rejection state is set to true
-  if (newValue) {
-    console.log('[ThreadView] Rejection state is true, redirecting to /public');
-    console.log('[ThreadView] Current route before push:', route.path);
-    router.push('/public');
-    console.log('[ThreadView] router.push(/public) called');
-  }
-});
+// No whitelist rejection watcher anymore
 
 // Navigation
 const backToList = async () => {
@@ -692,9 +749,30 @@ const backToList = async () => {
 
 const openGraphView = () => {
   const currentMessageId = messageId.value;
-  if (currentMessageId) {
-    router.push(`/${currentMessageId}/graph`);
+  if (!currentMessageId) return;
+  // Use named route with correct param name to avoid path mismatches
+  router.push({ name: 'graph-view', params: { messageId: currentMessageId } });
+};
+
+// Shallowly center on a different message by updating the URL without reloading content
+// Usage: centerOnMessageInUrl('newMessageId') or centerOnMessageInUrl('newMessageId', { replace: true })
+const centerOnMessageInUrl = async (newMessageId, options = { replace: true }) => {
+  if (!newMessageId || newMessageId === messageId.value) return;
+  // Only update URL; do not trigger scroll in shallow mode per requirement
+  suppressRouteReload.value = true;
+  const nav = route.name
+    ? { name: route.name, params: { ...route.params, id: newMessageId }, query: { ...route.query } }
+    : { path: `/messages/${newMessageId}`, query: { ...route.query } };
+  if (options.replace) {
+    await router.replace(nav);
+  } else {
+    await router.push(nav);
   }
+};
+
+// Handle center event from MessageNode
+const handleCenterOnMessage = async (targetId) => {
+  await centerOnMessageInUrl(targetId, { replace: true });
 };
 
 const loadInitialContent = async (targetMessageId) => {
@@ -714,11 +792,40 @@ const loadInitialContent = async (targetMessageId) => {
     
     console.log(`[ThreadView] 🔄 INITIAL LOAD starting for message ID: ${targetMessageId}`);
     
-    // Load radius around the target message - this handles everything in one go
-    await store.dispatch('messages/loadMessageRadius', {
-      messageId: targetMessageId,
-      radius: 5
-    });
+    // Only load if required messages for radius are not already in store
+    const ensureRadiusInStore = async (centerId, radius) => {
+      const visited = new Set();
+      const queue = [{ id: centerId, depthUp: 0, depthDown: 0 }];
+      const neededIds = new Set([centerId]);
+      const getMsg = (id) => store.getters['messages/getMessage'](id);
+      while (queue.length) {
+        const { id, depthUp, depthDown } = queue.shift();
+        if (!id || visited.has(id)) continue;
+        visited.add(id);
+        const msg = getMsg(id);
+        if (!msg) continue;
+        // Upward traversal
+        if (depthUp < radius && msg.parent_id) {
+          neededIds.add(msg.parent_id);
+          queue.push({ id: msg.parent_id, depthUp: depthUp + 1, depthDown });
+        }
+        // Downward traversal
+        if (depthDown < radius && Array.isArray(msg.child_ids)) {
+          for (const childId of msg.child_ids) {
+            neededIds.add(childId);
+            queue.push({ id: childId, depthUp, depthDown: depthDown + 1 });
+          }
+        }
+      }
+      // If any needed message is missing, fetch radius once
+      for (const id of neededIds) {
+        if (!getMsg(id)) {
+          await store.dispatch('messages/loadMessageRadius', { messageId: centerId, radius });
+          break;
+        }
+      }
+    };
+    await ensureRadiusInStore(targetMessageId, 5);
 
     // Prepare branch path for rendering
     console.log(`[ThreadView] 🔄 INITIAL LOAD calling prepareBranchPath with message ID: ${targetMessageId}`);
@@ -907,7 +1014,7 @@ const copySelectedMessages = () => {
     const formattedText = messagesToCopy.reduce((acc, message, index) => {
       // Format the current message
       const userTag = message.author_user_tag ? `(@${message.author_user_tag})` : '';
-      const header = `${message.author_display_name || 'Unknown'} ${userTag}, ${new Date(message.timestamp).toLocaleString()} (stitch.fyi/${message.id})`;
+      const header = `${message.author_display_name || 'Unknown'} ${userTag}, ${new Date(message.timestamp).toLocaleString()} (stitch.fyi/messages/${message.id})`;
       const messageText = `${header}\n\n${message.content || ''}`;
       
       // If this is the first message, just add it
@@ -1012,16 +1119,18 @@ const deleteMessage = async (options) => {
     // Set deleting state to true
     isDeleting.value = true;
     
+    // Safety guard: disallow deleting the centered message
+    if (String(deletedId) === String(messageId.value)) {
+      console.warn('[ThreadView] Prevented deletion of centered message');
+      store.commit('ui/SET_ERROR', 'Cannot delete the currently centered message.');
+      return;
+    }
+
     await store.dispatch('messages/deleteMessage', { messageId: deletedId, deleteDescendants });
     
-    // Get the previous route to return to
-    const prevRoute = store.getters['navigation/previousRoute'];
-    const defaultRoute = '/inbox'; // Default to inbox if no previous route
-    
-    console.log(`[ThreadView] Delete navigation - previous route: "${prevRoute}", using: "${prevRoute || defaultRoute}"`);
-    
-    // Always redirect out after deletion
-    router.push(prevRoute || defaultRoute);
+    // Stay in thread view after deleting off-center; if we deleted the currently centered message,
+    // the UI should have prevented it in MessageNode. When deleting, keep current route.
+    console.log('[ThreadView] Delete complete - staying in thread view');
     
     // Hide confirmation modal after successful deletion
     store.commit('ui/SET_DELETE_CONFIRM', { show: false, message: null });
@@ -1206,43 +1315,7 @@ const findEndOfBranchMessage = () => {
   return lastMessage;
 };
 
-// Add login handler
-const handleLogin = async () => {
-  isLoggingIn.value = true;
-  try {
-    console.log('[ThreadView] Starting signInWithGoogle');
-    // Clear rejection state before login attempt to ensure fresh state
-    store.commit('auth/SET_REJECTED_FOR_WHITELIST', false);
-    await signInWithGoogle();
-    console.log('[ThreadView] signInWithGoogle completed successfully');
-    
-    // Wait a moment for auth state to be processed
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Check if user is still logged in and whitelisted
-    const currentUser = store.getters['auth/user'];
-    if (currentUser && ['admin', 'whitelisted', 'import'].includes(currentUser.status)) {
-      console.log('[ThreadView] User logged in successfully, staying on page');
-      // Only redirect if there was a specific redirect requested
-      if (route.query.redirect) {
-        router.push(route.query.redirect);
-      }
-      // Otherwise stay on current page
-    } else {
-      console.log('[ThreadView] User not whitelisted or not logged in after auth');
-    }
-  } catch (e) {
-    console.error("Login error:", e);
-    console.log('[ThreadView] About to call forceLogoutWithMessage');
-    console.log('[ThreadView] Current location before forceLogoutWithMessage:', window.location.href);
-    // On authentication error, set rejection state and redirect to public page
-    await store.dispatch('auth/forceLogoutWithMessage', router);
-    console.log('[ThreadView] forceLogoutWithMessage completed');
-    console.log('[ThreadView] Current location after forceLogoutWithMessage:', window.location.href);
-  } finally {
-    isLoggingIn.value = false;
-  }
-};
+// Login handled by LoginButton component
 
 // Profile modal methods
 const openProfileModal = () => {
@@ -1294,7 +1367,7 @@ const closeProfileModal = () => {
   gap: 6px;
   padding: var(--space-xs) var(--space-sm);
   background-color: var(--color-primary);
-  color: white;
+  color: rgb(99, 90, 90);
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
