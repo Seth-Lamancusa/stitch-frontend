@@ -49,7 +49,7 @@ const error = computed(() => store.getters['ui/error']);
 const success = computed(() => store.getters['ui/success']);
 const messageNotification = computed(() => store.getters['ui/messageNotification']);
 
-// Auto-clear success messages after 8 seconds
+// Auto-clear success messages
 watch(success, (newSuccess) => {
   if (newSuccess) {
     setTimeout(() => {
@@ -58,7 +58,7 @@ watch(success, (newSuccess) => {
   }
 });
 
-// Auto-clear message notifications after 10 seconds
+// Auto-clear message notifications
 watch(messageNotification, (newNotification) => {
   if (newNotification) {
     setTimeout(() => {
@@ -67,7 +67,14 @@ watch(messageNotification, (newNotification) => {
   }
 });
 
-// Errors stay until manually dismissed
+// Auto-clear errors
+watch(error, (newError) => {
+  if (newError) {
+    setTimeout(() => {
+      store.commit('ui/SET_ERROR', null);
+    }, 3000);
+  }
+});
 
 // Methods to clear notifications
 const clearError = () => {
@@ -91,7 +98,7 @@ const handleMessageClick = () => {
     clearMessageNotification();
     
     // Navigate to the message
-    router.push(`/${messageData.id}`);
+    router.push(`/messages/${messageData.id}`);
   }
 };
 </script>

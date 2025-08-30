@@ -2,11 +2,8 @@
 import { computed, onMounted, ref, onUnmounted, nextTick, watch } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
-import { initializeFirebase } from '../firebase';
 import MessageNode from './MessageNode.vue';
-import DeleteConfirmModal from './DeleteConfirmModal.vue';
-import MessageService from '../services/MessageService';
-import AdminService from '../services/AdminService';
+import DeleteConfirmModal from './modals/DeleteConfirmModal.vue';
 
 // Props to support different modes and configurations
 const props = defineProps({
@@ -123,8 +120,8 @@ const threads = computed(() => {
 
 // Loading indicator should be visible if we're loading or have more to load
 const shouldShowLoadingIndicator = computed(() => {
-  // For saved mode, don't show loading indicator if user is not logged in
-  if (props.mode === 'saved' && !user.value) {
+  // For saved/inbox modes, don't show loading indicator if user is not logged in
+  if ((props.mode === 'saved' || props.mode === 'inbox') && !user.value) {
     return false;
   }
   return isLoading.value || !isAllLoaded.value;
@@ -132,9 +129,9 @@ const shouldShowLoadingIndicator = computed(() => {
 
 // Empty state only shows if we've loaded and have no messages
 const shouldShowEmptyState = computed(() => {
-  // For saved mode when not logged in, show empty state immediately
-  if (props.mode === 'saved' && !user.value) {
-    return threads.value.length === 0;
+  // For saved/inbox mode when not logged in, do not show empty state (we show login prompt)
+  if ((props.mode === 'saved' || props.mode === 'inbox') && !user.value) {
+    return false;
   }
   return !isLoading.value && isAllLoaded.value && threads.value.length === 0;
 });
@@ -146,7 +143,7 @@ const emptyStateMessage = computed(() => {
       if (user.value) {
         return 'No messages in your inbox.';
       } else {
-        return 'You must be logged in and whitelisted to view your inbox.';
+        return 'You must be logged in to view your inbox.';
       }
     case 'admin':
       return 'No messages found.';
@@ -154,7 +151,7 @@ const emptyStateMessage = computed(() => {
       if (user.value) {
         return 'No saved messages found.';
       } else {
-        return 'You must be logged in and whitelisted to view your saved messages.';
+        return 'You must be logged in to view your saved messages.';
       }
     case 'incoming-links':
       return 'No incoming links found.';
@@ -171,17 +168,29 @@ const emptyStateMessage = computed(() => {
   }
 });
 
-// Show login message when no user is logged in (only for inbox mode)
+// Show login message when no user is logged in (for inbox and saved)
 const shouldShowLoginMessage = computed(() => {
   return (props.mode === 'inbox' || props.mode === 'saved') && !user.value;
 });
 
+// Specific login/register prompt per tab when logged out
+const loginPromptMessage = computed(() => {
+  if (!user.value) {
+    if (props.mode === 'saved') {
+      return 'Login or register to save messages.';
+    }
+    if (props.mode === 'inbox') {
+      return 'Login or register to receive direct messages.';
+    }
+  }
+  return '';
+});
+
 const error = computed(() => store.getters['ui/error']);
 const user = computed(() => store.getters['auth/user']);
-const isWhitelisted = computed(() => store.getters['auth/isWhitelisted']);
 const canInteract = computed(() => store.getters['auth/canInteract']);
 
-const firebaseReady = ref(false);
+const firebaseReady = ref(true);
 const replyCounts = ref({}); // Track reply counts by thread ID
 
 // Add new ref for info box collapsed state
@@ -226,14 +235,14 @@ const viewMessage = (messageId) => {
   if (props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
     console.log(`[MessageList] Navigation from link mode (${props.mode}) - NOT setting previous route to preserve original`);
     emit('messageClicked', messageId);
-    router.push({ path: `/${messageId}` });
+    router.push({ path: `/messages/${messageId}` });
     return;
   }
   
   // Store current route before navigation (only for non-link modes)
   console.log(`[MessageList] Navigation from mode "${props.mode}" - setting previous route to: "${route.path}"`);
   store.dispatch('navigation/setPreviousRoute', route.path);
-  router.push({ path: `/${messageId}` });
+  router.push({ path: `/messages/${messageId}` });
 };
 
 // Handle message deletion requests
@@ -262,11 +271,11 @@ const handleNewThreadClick = (event) => {
     return;
   }
 
-  // Check user status directly
-        if (user.value.status === 'admin' || user.value.status === 'whitelisted' || user.value.status === 'import') {
+  // Check capability: admin or msg.write via centralized auth getter
+  if (store.getters['auth/canInteract']) {
     createNewThread();
   } else {
-    alert("You need to be whitelisted to create new messages");
+    alert("You need write permission to create new messages");
   }
 };
 
@@ -341,9 +350,9 @@ const loadMessages = async () => {
     return;
   }
   
-  // Skip for saved mode if no user (requires authentication)
-  if (props.mode === 'saved' && !user.value) {
-    console.log('[MessageList] Skipping load for saved - no user logged in');
+  // Skip for saved/inbox modes if no user (requires authentication)
+  if ((props.mode === 'saved' || props.mode === 'inbox') && !user.value) {
+    console.log('[MessageList] Skipping load for', props.mode, '- no user logged in');
     return;
   }
   
@@ -451,19 +460,12 @@ const loadMessages = async () => {
 
 // Initialize component
 onMounted(async () => {
-  try {
-    await initializeFirebase();
-    firebaseReady.value = true;
-  } catch (error) {
-    console.error("Firebase initialization failed:", error);
-  }
-
   // Start loading based on mode
   if (props.mode === 'admin') {
     // Admin mode - load immediately (auth checked server-side)
     loadMessages();
-  } else if (props.mode === 'saved' && !user.value) {
-    // Don't load saved messages for guests
+  } else if ((props.mode === 'saved' || props.mode === 'inbox') && !user.value) {
+    // Don't load saved/inbox messages for guests
     return;
   } else {
     // Load messages for all other modes
@@ -741,6 +743,11 @@ const handleLinkDelete = async (linkData) => {
 
     <!-- Messages container -->
     <div class="messages-container">
+      <!-- Login/register prompt for saved/inbox when logged out -->
+      <div v-if="shouldShowLoginMessage" class="empty-state">
+        <p>{{ loginPromptMessage }}</p>
+      </div>
+
       <!-- Messages list - now using MessageNode component -->
       <div 
         v-for="thread in threads" 

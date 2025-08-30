@@ -85,7 +85,8 @@ export default {
     TOGGLE_REPLY_RECIPIENT_VISIBILITY(state, index) {
       if (state.replySettings.recipients[index]) {
         const recipient = state.replySettings.recipients[index];
-        recipient.visible = recipient.visible !== false ? false : true;
+        const next = recipient.public !== false ? false : true;
+        recipient.public = next;
       }
     },
     
@@ -114,7 +115,8 @@ export default {
     TOGGLE_ADD_MODE_RECIPIENT_VISIBILITY(state, index) {
       if (state.addModeRecipients[index]) {
         const recipient = state.addModeRecipients[index];
-        recipient.visible = recipient.visible !== false ? false : true;
+        const next = recipient.public !== false ? false : true;
+        recipient.public = next;
       }
     },
     
@@ -450,8 +452,9 @@ export default {
               uid: recipient.uid,
               display_name: recipient.display_name,
               user_tag: recipient.user_tag,
+              // keep whatever backend provides; email may be absent
               email: recipient.email,
-              visible: recipient.visible !== false // Default to visible if not specified
+              public: (recipient.public !== false)
             };
             newRecipients.push(stagedRecipient);
             addedUids.add(recipientUid);

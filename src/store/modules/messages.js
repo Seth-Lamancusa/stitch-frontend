@@ -470,60 +470,38 @@ export default {
     
     // REMOVED setBranchPath - no longer needed since in_branch_path flags are unused
     
-    // Load parent branch - FIXED: Now consistent with loadMessageBranchDown
-    async loadMessageBranchUp({ commit, dispatch, state }, { messageId, depth = 1, get_replies = true }) {
+    // Unified traversal loader
+    async loadTraversal({ commit, state }, { messageId, up_depth = 0, down_depth = 0, get_replies = true }) {
       if (!messageId) return [];
-      
       try {
-        // Call the backend endpoint for efficient branch loading
-        const response = await MessageService.loadBranchUp(messageId, depth, get_replies);
-        const messages = response.data || [];
-        
-        if (messages.length > 0) {
-          // Add messages to store
-          commit('SET_MESSAGES', messages);
-          
-          // Use prepareBranchPath to establish branch_child relationships
-          // This will establish upward links from the messageId to the newly loaded parents
-          // without resetting any existing sibling relationships
-          dispatch('prepareBranchPath', messageId);
-          
-          console.log(`[DEBUG] Loaded ${messages.length} messages in parent branch for ${messageId}`);
+        const response = await MessageService.traverseFrom(messageId, { up_depth, down_depth, get_replies });
+        const data = response?.data || {};
+        const combined = [];
+        if (data.origin) combined.push(data.origin);
+        if (Array.isArray(data.messages)) combined.push(...data.messages);
+        if (combined.length > 0) {
+          commit('SET_MESSAGES', combined);
         }
-        
-        return messages;
+        return combined;
       } catch (error) {
-        console.error(`Error loading parent branch for ${messageId}:`, error);
+        console.error('[messages store] loadTraversal error:', error);
         return [];
       }
     },
     
-    // Load child branch
-    async loadMessageBranchDown({ commit, dispatch, state }, { messageId, depth = 1, get_replies = true }) {
-      if (!messageId) return [];
-      
-      try {
-        // Call the backend endpoint for efficient branch loading
-        const response = await MessageService.loadBranchDown(messageId, depth, get_replies);
-        const messages = response.data || [];
-        
-        if (messages.length > 0) {
-          // Add messages to store
-          commit('SET_MESSAGES', messages);
-          
-          // Use prepareBranchPath to establish the branch path
-          // Since we're loading from a visible message, the upward path is already correct
-          // This will only set branch_child for newly loaded messages going downward
-          dispatch('prepareBranchPath', messageId);
-          
-          console.log(`[DEBUG] Loaded ${messages.length} messages in child branch for ${messageId}`);
-        }
-        
-        return messages;
-      } catch (error) {
-        console.error(`Error loading children branch for ${messageId}:`, error);
-        return [];
-      }
+    // Load parent branch - delegate to unified traversal
+    async loadMessageBranchUp({ dispatch }, { messageId, depth = 1, get_replies = true }) {
+      return dispatch('loadTraversal', { messageId, up_depth: depth, down_depth: 0, get_replies });
+    },
+    
+    // Load child branch - delegate to unified traversal
+    async loadMessageBranchDown({ dispatch }, { messageId, depth = 1, get_replies = true }) {
+      return dispatch('loadTraversal', { messageId, up_depth: 0, down_depth: depth, get_replies });
+    },
+    
+    // Load radius - delegate to unified traversal
+    async loadMessageRadius({ dispatch }, { messageId, radius, get_replies = true }) {
+      return dispatch('loadTraversal', { messageId, up_depth: radius, down_depth: radius, get_replies });
     },
     
     // Send a reply to a message
@@ -548,12 +526,12 @@ export default {
             // If recipient is already an object with a uid - keep the full object
             if (typeof recipient === 'object' && recipient.uid) {
               console.log('[Messages Store] Using full recipient object:', recipient);
-              return recipient; // Keep entire object including visible property
+              return recipient; // Keep entire object
             }
             // If recipient is a string, convert to object (backward compatibility)
             else if (typeof recipient === 'string') {
               console.log('[Messages Store] Converting string recipient to object:', recipient);
-              return { uid: recipient, visible: true }; // Default visible for string recipients
+              return { uid: recipient, public: true }; // Default public for string recipients
             }
             console.log('[Messages Store] Invalid recipient format:', recipient);
             return null;
@@ -566,7 +544,7 @@ export default {
         // to ensure they can see their own message
         if (isPrivate && processedRecipients.length === 0 && effectiveAuthor) {
           // Add author as full recipient object
-          processedRecipients.push({ uid: effectiveAuthor, visible: true });
+          processedRecipients.push({ uid: effectiveAuthor, public: true });
           console.log('[Messages Store] Added author as recipient:', effectiveAuthor);
         }
         
@@ -699,25 +677,7 @@ export default {
       }
     },
     
-    // Reformat a message
-    async reformatMessage({ commit, state }, messageId) {
-      try {
-        console.log(`[Store] Reformatting message: ${messageId}`);
-        
-        // Call the API to reformat the message
-        const response = await MessageService.reformatMessage(messageId);
-        
-        // Update the message in the store with the reformatted content
-        if (response.data) {
-          commit('SET_MESSAGE', response.data);
-        }
-        
-        return true;
-      } catch (error) {
-        console.error('[Store] Error reformatting message:', error);
-        throw error;
-      }
-    },
+    // Removed: reformatMessage (no server endpoint)
     
     // Universal fetch action that routes to appropriate service based on mode
     async fetchMessages({ commit, state, rootState }, { mode, skip = 0, limit = 15, sourceMessageId = null, showAllLinks = false }) {
@@ -1331,60 +1291,13 @@ export default {
     // setSelectedRecipients
     // setSelectedAuthor
 
-    async loadMessageRadius({ commit, state }, { messageId, radius, get_replies = true }) {
-      try {
-        console.log('[Messages Store] loadMessageRadius called with:', { messageId, radius, get_replies });
-        
-        // Check current message state before API call
-        const currentMessage = state.messages[messageId];
-        const currentRecipients = currentMessage?.recipients || [];
-        console.log('[Messages Store] Current message recipients BEFORE API call:', {
-          messageId,
-          hasMessage: !!currentMessage,
-          recipientsCount: currentRecipients.length,
-          recipients: currentRecipients
-        });
-        
-        const response = await MessageService.loadMessageRadius(messageId, radius, get_replies);
-        console.log('[Messages Store] loadMessageRadius API response:', {
-          messageId,
-          dataLength: response.data?.length || 0,
-          data: response.data
-        });
-        
-        // Commit all loaded messages to the store
-        if (response.data && response.data.length > 0) {
-          response.data.forEach(message => {
-            console.log('[Messages Store] Committing message to store:', {
-              id: message.id,
-              recipientsCount: message.recipients?.length || 0,
-              recipients: message.recipients
-            });
-            commit('SET_MESSAGE', message);
-          });
-        }
-        
-        // Check message state after update
-        const updatedMessage = state.messages[messageId];
-        const updatedRecipients = updatedMessage?.recipients || [];
-        console.log('[Messages Store] Message recipients AFTER update:', {
-          messageId,
-          hasMessage: !!updatedMessage,
-          recipientsCount: updatedRecipients.length,
-          recipients: updatedRecipients,
-          changed: updatedRecipients.length !== currentRecipients.length
-        });
-        
-        return response.data;
-      } catch (error) {
-        console.error('Error loading message radius:', error);
-        throw error;
-      }
-    },
-
-    async deleteLink({ commit, dispatch }, { messageIdFrom, messageIdTo, linkType, sourceMessageId }) {
+    async deleteLink({ commit, dispatch, rootGetters }, { messageIdFrom, messageIdTo, linkType, sourceMessageId }) {
       try {
         console.log('[Store] Deleting link:', { messageIdFrom, messageIdTo, linkType, sourceMessageId });
+        // Gate on msg.write
+        if (!rootGetters['auth/hasScope']('msg.write')) {
+          throw new Error('Write permission required');
+        }
         
         // Call the service to delete the link
         const success = await UserService.deleteLink(messageIdFrom, messageIdTo);
@@ -1407,9 +1320,13 @@ export default {
       }
     },
 
-    async createLink({ commit, dispatch }, { messageIdFrom, messageIdTo }) {
+    async createLink({ commit, dispatch, rootGetters }, { messageIdFrom, messageIdTo }) {
       try {
         console.log('[Store] Creating link:', { messageIdFrom, messageIdTo });
+        // Gate on msg.write
+        if (!rootGetters['auth/hasScope']('msg.write')) {
+          throw new Error('Write permission required');
+        }
         
         // Call the service to create the link
         const success = await UserService.createLink(messageIdFrom, messageIdTo);

@@ -13,10 +13,10 @@ const state = {
     isCalculating: false,
     lastCalculated: null,
     options: {
-      layerHeight: 100,
-      nodeSpacing: 60,
-      rootSpacing: 150,
-      maxWidth: 1200
+      layerHeight: 240,
+      nodeSpacing: 240,
+      rootSpacing: 240,
+      maxWidth: 1600
     }
   },
 

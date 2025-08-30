@@ -69,6 +69,8 @@
             @click="handleNodeClick"
             @mouseenter="handleNodeMouseEnter"
             @mouseleave="handleNodeMouseLeave"
+            @load-more-up="handleLoadMoreUp"
+            @load-more-down="handleLoadMoreDown"
           />
         </g>
       </g>
@@ -126,7 +128,7 @@ export default {
       hoveredMessageId: null,
       
       // Zoom constraints
-      minScale: 0.1,
+      minScale: 0.5,
       maxScale: 4,
       zoomSensitivity: 0.001
     };
@@ -201,18 +203,18 @@ export default {
       'setViewportTranslate',
       'selectMessage'
     ]),
+    ...mapActions('messages', [
+      'loadMessageBranchUp',
+      'loadMessageBranchDown'
+    ]),
     
     getNodePosition(messageId) {
       const position = this.nodePosition(messageId);
       if (!position) {
         return { x: 0, y: 0 };
       }
-      
-      // Convert layout position to screen coordinates
-      return {
-        x: position.x - 60, // Center the node (assuming 120px width)
-        y: position.y - 24  // Center the node (assuming 48px height)
-      };
+      // Use layout position as node center; nodes will self-center around this
+      return { x: position.x, y: position.y };
     },
     
     isEdgeInSelection(edge) {
@@ -280,10 +282,7 @@ export default {
     
     // Node interaction handlers
     handleNodeClick({ message, event, multiSelect }) {
-      this.selectMessage({
-        messageId: message.id,
-        multiSelect
-      });
+      // No selection state in simplified graph mode
     },
     
     handleNodeMouseEnter({ message }) {
@@ -303,6 +302,24 @@ export default {
         this.containerWidth = rect.width;
         this.containerHeight = rect.height;
         this.setViewportSize();
+      }
+    },
+    
+    // Manual load handlers
+    async handleLoadMoreUp({ message }) {
+      const parentId = message.parent_id;
+      if (!parentId) return;
+      try {
+        await this.loadMessageBranchUp({ messageId: message.id, depth: 3 });
+      } catch (e) {
+        console.error('[GraphCanvas] Failed loading parents:', e);
+      }
+    },
+    async handleLoadMoreDown({ message }) {
+      try {
+        await this.loadMessageBranchDown({ messageId: message.id, depth: 3 });
+      } catch (e) {
+        console.error('[GraphCanvas] Failed loading children:', e);
       }
     },
     

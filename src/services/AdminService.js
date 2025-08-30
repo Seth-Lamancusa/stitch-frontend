@@ -1,5 +1,6 @@
 import axios from 'axios';
-import { getFirebaseToken } from '../firebase.js';
+import TokenManager from './TokenManager';
+import { installAxiosAuthInterceptor } from './httpClient';
 
 const API_BASE_URL = '/api';
 
@@ -10,27 +11,27 @@ class AdminService {
       timeout: 30000,
     });
 
+    // Install shared 401->refresh interceptor
+    installAxiosAuthInterceptor(this.client);
+
     // Add auth token to requests
     this.client.interceptors.request.use(async (config) => {
       try {
-        const token = await getFirebaseToken();
+        const token = TokenManager.accessToken;
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
       } catch (error) {
-        console.error('Error getting Firebase token:', error);
+        console.error('Error getting auth token:', error);
       }
       return config;
     });
 
-    // Handle auth errors
+    // Keep 403 logging
     this.client.interceptors.response.use(
       (response) => response,
-      (error) => {
-        if (error.response?.status === 401) {
-          // Handle unauthorized - could redirect to login
-          console.error('Admin API: Unauthorized access');
-        } else if (error.response?.status === 403) {
+      async (error) => {
+        if (error.response?.status === 403) {
           console.error('Admin API: Access forbidden - admin privileges required');
         }
         throw error;

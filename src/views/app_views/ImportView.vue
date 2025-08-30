@@ -30,7 +30,7 @@
           
           <!-- Bot Selection -->
           <div class="bot-selection-container">
-            <label class="bot-selection-label">Select AI Assistant:</label>
+            <label class="bot-selection-label">Select Featured Bot:</label>
             <select 
               v-model="selectedBot" 
               class="bot-selection-dropdown"
@@ -38,7 +38,7 @@
             >
               <option value="">Choose an AI assistant...</option>
               <option 
-                v-for="bot in availableBots" 
+                v-for="bot in featuredBots" 
                 :key="bot.uid" 
                 :value="bot"
               >
@@ -375,8 +375,9 @@ The format will be auto-detected once you paste your conversation."
 import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter } from 'vue-router';
+import FeaturedBotsService from '../../services/FeaturedBotsService.js';
 import ImportService from '../../services/ImportService';
-import RecipientsModal from '../../components/RecipientsModal.vue';
+import RecipientsModal from '../../components/modals/RecipientsModal.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
 import { useBrowserCapabilities } from '../../composables/useBrowserCapabilities.js';
 import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
@@ -440,18 +441,13 @@ const formatDetection = ref({ format: 'unknown', confidence: 0, hint: '' });
 
 // Computed properties from store
 const user = computed(() => store.getters['auth/user']);
-const availableBots = computed(() => store.getters['bots/bots']);
+const featuredBots = ref([]);
 
-// Computed property for admin status
-const isAdmin = computed(() => {
-  return user.value?.status === 'admin';
-});
+// Computed property for admin status (scope-derived)
+const isAdmin = computed(() => store.getters['auth/isAdmin']);
 
-// Computed property for import permissions
-const hasImportPermissions = computed(() => {
-  if (!user.value) return false;
-  return user.value.status === 'import' || user.value.status === 'admin';
-});
+// Permission: require msg.write or admin
+const hasImportPermissions = computed(() => store.getters['auth/hasAnyScope'](['msg.write', 'admin']));
 
 // Computed property for import button state
 const canImport = computed(() => {
@@ -481,11 +477,11 @@ const canAddBuilderMessage = computed(() => {
 // Computed property for permission error message
 const importPermissionMessage = computed(() => {
   if (!user.value) {
-    return 'You need to log in with import permissions to use this feature';
-  } else if (user.value.status === 'whitelisted') {
-    return 'You need import permissions to use this feature';
+    return 'You need to log in with write permission to use this feature';
+  } else if (store.getters['auth/hasScope']('msg.write')) {
+    return 'Write permission is already granted';
   } else {
-    return 'Import permissions required';
+    return 'Write permission required';
   }
 });
 
@@ -860,7 +856,7 @@ const importConversation = async () => {
         
         await new Promise(resolve => setTimeout(resolve, 1500));
         
-        router.push({ path: `/${result.thread_id}` });
+        router.push({ path: `/messages/${result.thread_id}` });
         
         // Show appropriate success message
         if (result.partial_success) {
@@ -905,7 +901,7 @@ const importConversation = async () => {
         
         await new Promise(resolve => setTimeout(resolve, 1500));
         
-        router.push({ path: `/${result.thread_id}` });
+        router.push({ path: `/messages/${result.thread_id}` });
         
         // Show appropriate success message
         if (result.partial_success) {
@@ -969,6 +965,15 @@ watch([importText, selectedBot], () => {
   }
 });
 
+// Load featured bots on mount
+onMounted(async () => {
+  try {
+    featuredBots.value = await FeaturedBotsService.listFeaturedBots();
+  } catch (e) {
+    featuredBots.value = [];
+  }
+});
+
 // Watch for input method changes
 watch(inputMethod, () => {
   // Clear data when switching input methods
@@ -979,15 +984,6 @@ watch(inputMethod, () => {
   formatDetection.value = { format: 'unknown', confidence: 0, hint: '' };
   if (fileInput.value) {
     fileInput.value.value = '';
-  }
-});
-
-// Load bots on mount
-onMounted(async () => {
-  try {
-    await store.dispatch('bots/fetchBots');
-  } catch (error) {
-    console.error('Failed to load bots:', error);
   }
 });
 

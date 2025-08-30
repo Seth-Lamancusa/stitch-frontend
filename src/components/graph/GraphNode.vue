@@ -2,7 +2,7 @@
   <g 
     class="graph-node" 
     :class="nodeClasses"
-    :transform="`translate(${position.x}, ${position.y})`"
+    :transform="`translate(${position.x - nodeWidth/2}, ${position.y - nodeHeight/2})`"
     @click="handleClick"
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
@@ -19,92 +19,62 @@
       class="node-background"
     />
     
-    <!-- Selection indicator -->
-    <rect
-      v-if="isSelected"
-      :width="nodeWidth + 4"
-      :height="nodeHeight + 4"
-      :rx="borderRadius + 2"
-      :ry="borderRadius + 2"
-      x="-2"
-      y="-2"
-      fill="none"
-      stroke="var(--color-primary)"
-      stroke-width="2"
-      class="selection-indicator"
-    />
     
-    <!-- Unread indicator -->
-    <circle
-      v-if="isUnread"
-      :cx="nodeWidth - 8"
-      cy="8"
-      r="4"
-      fill="var(--color-primary)"
-      class="unread-indicator"
-    />
     
     <!-- Content based on zoom level -->
     <g v-if="showContent" class="node-content">
-      <!-- Author name -->
-      <text
-        v-if="showAuthor"
-        x="8"
-        y="16"
-        class="author-text"
-        :font-size="authorFontSize"
-        fill="var(--color-text-primary)"
-      >
-        {{ authorName }}
-      </text>
-      
-      <!-- Timestamp -->
-      <text
-        v-if="showTimestamp"
-        :x="nodeWidth - 8"
-        y="16"
-        class="timestamp-text"
-        :font-size="timestampFontSize"
-        fill="var(--color-text-secondary)"
-        text-anchor="end"
-      >
-        {{ formattedTimestamp }}
-      </text>
+      <!-- Header (author + timestamp + public badge) -->
+      <foreignObject :x="contentPadding" :y="contentPadding - 2" :width="nodeWidth - (contentPadding*2)" height="24">
+        <div xmlns="http://www.w3.org/1999/xhtml" class="gnode-header">
+          <div class="author-info">
+            <span class="message-author" :class="{ 'current-user-name': isOwnMessage }">{{ authorDisplay }}</span>
+            <span v-if="authorTag" class="author-user-tag">@{{ authorTag }}</span>
+            <span v-if="message.public" class="visibility-indicator public">Public</span>
+          </div>
+          <div class="header-right">
+            <span class="message-timestamp">{{ formattedTimestamp }}</span>
+          </div>
+        </div>
+      </foreignObject>
       
       <!-- Message preview -->
-      <text
+      <foreignObject
         v-if="showPreview"
-        x="8"
-        y="32"
-        class="preview-text"
-        :font-size="previewFontSize"
-        fill="var(--color-text-primary)"
+        :x="contentPadding"
+        :y="contentPadding + 36"
+        :width="nodeWidth - (contentPadding*2)"
+        :height="contentAreaHeight"
       >
-        {{ messagePreview }}
-      </text>
+        <div xmlns="http://www.w3.org/1999/xhtml" class="preview-container" :class="{ expanded: isExpanded }">
+          <div class="preview-text" v-text="truncatedContent"></div>
+        </div>
+      </foreignObject>
       
-      <!-- Public/Private indicator -->
-      <text
-        v-if="showVisibility"
-        x="8"
-        :y="nodeHeight - 8"
-        class="visibility-text"
-        :font-size="metadataFontSize"
-        :fill="message.public ? 'var(--color-success)' : 'var(--color-warning)'"
-      >
-        {{ message.public ? 'Public' : 'Private' }}
-      </text>
+      
     </g>
     
-    <!-- Simplified view for small zoom levels -->
-    <circle
-      v-else
-      :cx="nodeWidth / 2"
-      :cy="nodeHeight / 2"
-      :r="Math.min(nodeWidth, nodeHeight) / 4"
-      :fill="nodeColor"
-      class="simplified-node"
-    />
+    
+
+    <!-- Manual load controls -->
+    <!-- Load parent button (top center) -->
+    <g
+      v-if="canLoadParent"
+      class="load-button load-parent"
+      @click.stop="emitLoadParent"
+    >
+      <rect :x="(nodeWidth/2) - 8" y="-18" width="16" height="16" rx="3" ry="3" fill="var(--color-primary)" opacity="0.9" />
+      <path d="M8 3 L8 13 M3 8 L13 8" stroke="white" stroke-width="2" stroke-linecap="round" transform="translate(0,-18) translate((nodeWidth/2)-8,0)"/>
+    </g>
+
+    <!-- Load children button (bottom center) -->
+    <g
+      v-if="canLoadChildren"
+      class="load-button load-children"
+      @click.stop="emitLoadChildren"
+    >
+      <rect :x="(nodeWidth/2) - 8" :y="nodeHeight + 2" width="16" height="16" rx="3" ry="3" fill="var(--color-primary)" opacity="0.9" />
+      <path d="M3 8 L13 8" stroke="white" stroke-width="2" stroke-linecap="round" :transform="`translate(0, ${nodeHeight + 2}) translate(${(nodeWidth/2)-8}, 0)`"/>
+    </g>
   </g>
 </template>
 
@@ -150,163 +120,176 @@ export default {
     }
   },
   
-  emits: ['click', 'mouseenter', 'mouseleave'],
+  data() {
+    return {
+    };
+  },
+  
+  emits: ['click', 'mouseenter', 'mouseleave', 'load-more-up', 'load-more-down'],
   
   computed: {
     nodeClasses() {
       return {
-        'node-selected': this.isSelected,
         'node-hovered': this.isHovered,
-        'node-own-message': this.isOwnMessage,
         'node-public': this.message.public,
         'node-private': !this.message.public,
-        'node-unread': this.isUnread,
         'node-root': this.isRootMessage,
         'node-simplified': this.zoomLevel < 0.5
       };
     },
     
+    contentPadding() {
+      return 16; // align with MessageNode var(--space-xl) feel
+    },
+    
     nodeWidth() {
-      if (this.zoomLevel < 0.5) return 20;
-      
-      const baseWidth = this.isRootMessage ? 140 : 120;
-      const contentWidth = this.calculateContentWidth();
-      
-      return Math.min(Math.max(baseWidth, contentWidth + 16), this.maxContentWidth);
+      // Fixed width for simplicity and consistency (50px wider)
+      return 480;
+    },
+    
+    contentAreaHeight() {
+      // Ensure a couple of extra pixels to avoid clipping last line
+      const innerWidth = this.nodeWidth - (this.contentPadding * 2);
+      const text = this.truncatedContent;
+      const charsPerLine = Math.max(20, Math.floor(innerWidth / 7));
+      const lines = Math.ceil(text.length / charsPerLine);
+      const base = Math.max(42, lines * 18);
+      return this.isExpanded ? Math.max(base, 48) : Math.min(base, 64);
     },
     
     nodeHeight() {
-      if (this.zoomLevel < 0.5) return 20;
-      
-      let height = this.isRootMessage ? 60 : 48;
-      
-      if (this.showPreview && this.zoomLevel > 1.5) {
-        height += 16; // Extra height for preview text
-      }
-      
+      let height = this.contentPadding + 24; // header
+      height += this.contentAreaHeight; // preview/body
+      height += this.contentPadding; // bottom padding
       return height;
     },
     
     borderRadius() {
-      return this.zoomLevel < 0.5 ? 10 : 8;
+      return 8;
     },
     
     backgroundColor() {
-      if (this.isOwnMessage) {
-        return 'var(--color-accent-light)';
-      }
-      return 'var(--color-surface-light)';
+      return 'var(--color-surface)';
     },
     
     borderColor() {
-      if (this.isSelected) {
-        return 'var(--color-primary)';
-      }
-      if (this.isUnread) {
-        return 'var(--color-primary)';
-      }
       if (this.message.public) {
         return 'var(--color-border)';
       }
-      return 'var(--color-border-dashed)';
+      return 'var(--color-border)';
     },
     
     borderWidth() {
-      if (this.isSelected || this.isUnread) {
-        return 2;
-      }
       return 1;
     },
     
     nodeColor() {
-      // Color for simplified view
-      if (this.isOwnMessage) {
-        return 'var(--color-accent)';
-      }
       return 'var(--color-primary)';
     },
     
     // Content visibility based on zoom
     showContent() {
-      return this.zoomLevel >= 0.5;
+      return true;
     },
     
     showAuthor() {
-      return this.zoomLevel >= 0.5;
+      return true;
     },
     
     showTimestamp() {
-      return this.zoomLevel >= 0.5;
+      return true;
     },
     
     showPreview() {
-      return this.zoomLevel > 1.5;
+      return true;
     },
     
     showVisibility() {
-      return this.zoomLevel > 2;
+      return true;
     },
     
     // Font sizes based on zoom
-    authorFontSize() {
-      return Math.max(10, 12 * this.zoomLevel);
-    },
-    
-    timestampFontSize() {
-      return Math.max(9, 10 * this.zoomLevel);
-    },
-    
-    previewFontSize() {
-      return Math.max(9, 11 * this.zoomLevel);
-    },
-    
-    metadataFontSize() {
-      return Math.max(8, 9 * this.zoomLevel);
-    },
+    authorFontSize() { return 12 * this.zoomLevel; },
+    timestampFontSize() { return 11 * this.zoomLevel; },
+    previewFontSize() { return 12 * this.zoomLevel; },
+    metadataFontSize() { return 10 * this.zoomLevel; },
     
     // Content calculations
     authorName() {
-      if (!this.message.author) return 'Unknown';
-      return this.message.author.display_name || this.message.author.username || 'User';
+      const display = this.message.author_display_name
+        || this.message.author?.display_name
+        || this.message.author?.username
+        || this.message.author?.email
+        || 'Unknown';
+      const tag = this.message.author_user_tag ? ` (@${this.message.author_user_tag})` : '';
+      return `${display}${tag}`;
+    },
+    authorDisplay() {
+      return this.message.author_display_name || this.message.author?.display_name || this.message.author?.username || this.message.author?.email || 'Unknown';
+    },
+    authorTag() {
+      return this.message.author_user_tag || null;
     },
     
     formattedTimestamp() {
       try {
         const date = new Date(this.message.timestamp);
-        if (this.zoomLevel > 2) {
-          return format(date, 'MMM d, HH:mm');
-        }
-        return format(date, 'HH:mm');
+        return format(date, 'PPpp');
       } catch (error) {
         return '';
       }
     },
     
-    messagePreview() {
-      if (!this.message.content) return '';
-      
-      const maxLength = this.zoomLevel > 2.5 ? 120 : 60;
-      const content = this.message.content.replace(/\s+/g, ' ').trim();
-      
-      if (content.length <= maxLength) {
-        return content;
-      }
-      
-      return content.substring(0, maxLength - 3) + '...';
+    rawContent() {
+      return (this.message.content || '').replace(/\s+/g, ' ').trim();
+    },
+    truncatedContent() {
+      const limit = 250;
+      if (this.rawContent.length <= limit) return this.rawContent;
+      return this.rawContent.substring(0, limit) + '...';
+    },
+    fullContentHeight() {
+      // Rough estimate: lines based on width and characters per line
+      const innerWidth = this.nodeWidth - (this.contentPadding * 2);
+      const charsPerLine = Math.max(20, Math.floor(innerWidth / 7));
+      const lines = Math.ceil(this.rawContent.length / charsPerLine);
+      return Math.min(600, Math.max(42, lines * 16));
     },
     
     isOwnMessage() {
-      // This should check against current user - placeholder for now
-      return this.message.author && this.message.author.uid === 'current-user-id';
+      const currentUserId = this.$store?.getters['auth/user']?.uid;
+      const authorId = this.message.content_author || this.message.author?.uid;
+      return currentUserId && authorId && currentUserId === authorId;
     },
     
     isUnread() {
-      // Check if message is unread for current user
-      return this.message.read_status && !this.message.read_status['current-user-id'];
+      // Prefer normalized is_read flag from store
+      if (this.message.is_read !== undefined && this.message.is_read !== null) {
+        return this.message.is_read === false;
+      }
+      // Fallback to legacy read_status map
+      const currentUserId = this.$store?.getters['auth/user']?.uid;
+      if (this.message.read_status && currentUserId) {
+        return this.message.read_status[currentUserId] === false || this.message.read_status[currentUserId] === undefined;
+      }
+      return false;
     },
     
     isRootMessage() {
       return !this.message.parent_id;
+    },
+
+    // Manual load availability
+    canLoadParent() {
+      if (!this.message.parent_id) return false;
+      const parentLoaded = !!this.$store.getters['messages/getMessage'](this.message.parent_id);
+      return !parentLoaded;
+    },
+    canLoadChildren() {
+      const childIds = this.message.child_ids || [];
+      if (!childIds.length) return false;
+      // If any child id is not in store, allow loading
+      return childIds.some(id => !this.$store.getters['messages/getMessage'](id));
     }
   },
   
@@ -340,6 +323,15 @@ export default {
         message: this.message,
         event
       });
+    },
+    toggleExpand() {
+      this.isExpanded = !this.isExpanded;
+    },
+    emitLoadParent() {
+      this.$emit('load-more-up', { message: this.message });
+    },
+    emitLoadChildren() {
+      this.$emit('load-more-down', { message: this.message });
     }
   }
 };
@@ -357,10 +349,6 @@ export default {
 
 .node-background {
   transition: all 0.2s ease;
-}
-
-.node-selected .node-background {
-  filter: drop-shadow(0 4px 8px rgba(59, 130, 246, 0.3));
 }
 
 .node-hovered .node-background {
@@ -387,7 +375,34 @@ export default {
 
 .preview-text {
   font-weight: 400;
-  dominant-baseline: hanging;
+}
+
+.preview-container {
+  display: block;
+  color: var(--color-text-primary);
+  line-height: 1.3;
+}
+
+.preview-container .preview-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+}
+
+.expand-button {
+  margin-top: 6px;
+  padding: 2px 6px;
+  font-size: 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.expand-button:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
 }
 
 .visibility-text {
@@ -396,8 +411,73 @@ export default {
   letter-spacing: 0.5px;
 }
 
+/* MessageNode-aligned styles */
+.gnode-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.author-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.message-author {
+  font-weight: bold;
+}
+
+.message-author.current-user-name {
+  font-weight: 800;
+  color: var(--color-primary);
+}
+
+.author-user-tag {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.visibility-indicator {
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+  border-radius: var(--radius-pill);
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.visibility-indicator.public {
+  background-color: var(--color-success);
+  color: var(--color-text-inverse);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.message-timestamp {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.gnode-body .preview-text {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: var(--color-text-primary);
+}
+
 .simplified-node {
   transition: all 0.2s ease;
+}
+
+.load-button {
+  cursor: pointer;
 }
 
 .node-private .node-background {

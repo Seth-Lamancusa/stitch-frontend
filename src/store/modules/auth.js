@@ -1,6 +1,9 @@
-import { getFirebaseAuth, initializeFirebase } from '../../firebase.js'
-import { onAuthStateChanged } from 'firebase/auth'
 import WebSocketService from '../../services/WebSocketService'
+import { parseScopes, hasScope as hasScopeUtil, hasAnyScope as hasAnyScopeUtil } from '../../utils/scopes'
+
+// ------------------------------------------------------------
+// Auth store
+// ------------------------------------------------------------
 
 export default {
   namespaced: true,
@@ -8,8 +11,7 @@ export default {
   state: {
     user: null,
     isAuthenticated: false,
-    authReady: false,
-    wasRejectedForWhitelist: false
+    authReady: false
   },
   
   mutations: {
@@ -19,135 +21,73 @@ export default {
     },
     SET_AUTH_READY(state, ready) {
       state.authReady = ready;
-    },
-    SET_REJECTED_FOR_WHITELIST(state, rejected) {
-      console.log('[AUTH STORE] SET_REJECTED_FOR_WHITELIST called with:', rejected);
-      console.log('[AUTH STORE] Previous state:', state.wasRejectedForWhitelist);
-      state.wasRejectedForWhitelist = rejected;
-      console.log('[AUTH STORE] New state:', state.wasRejectedForWhitelist);
     }
   },
   
   actions: {
     async initAuth({ commit, dispatch }) {
       try {
-        await initializeFirebase();
-        const auth = getFirebaseAuth();
-        
-        return new Promise((resolve) => {
-          onAuthStateChanged(auth, async (firebaseUser) => {
-            console.log('[AUTH STORE] Firebase auth state changed, user:', firebaseUser ? firebaseUser.email : 'null');
-            if (firebaseUser) {
-              // User signed in - validate with backend
-              console.log('[AUTH STORE] User signed in, validating with backend');
-              await dispatch('validateUser', firebaseUser);
-            } else {
-              // No user - clear state
-              console.log('[AUTH STORE] No user, clearing state');
-              commit('SET_USER', null);
-              
-              // Clean up WebSocket connection when user signs out
-              WebSocketService.cleanup();
-            }
-            // Mark auth as ready after initial check
-            commit('SET_AUTH_READY', true);
-            resolve();
-          });
-        });
+        const token = localStorage.getItem('auth_token');
+        if (!token) {
+          commit('SET_USER', null);
+          commit('SET_AUTH_READY', true);
+          return;
+        }
+        await dispatch('validateExistingToken');
       } catch (error) {
         console.error('Auth initialization failed:', error);
         commit('SET_USER', null);
+      } finally {
         commit('SET_AUTH_READY', true);
       }
     },
 
-    async validateUser({ commit }, firebaseUser) {
+    async validateExistingToken({ commit }) {
       try {
-        console.log('[AUTH STORE] validateUser called for user:', firebaseUser.email);
-        const token = await firebaseUser.getIdToken();
-        console.log('[AUTH STORE] Got Firebase token, making API call');
-        const response = await fetch('/api/users/login', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        console.log('[AUTH STORE] API response status:', response.status);
-        if (response.ok) {
-          const userData = await response.json();
-          console.log('[AUTH STORE] User data from API:', userData);
-          // Set complete user data
-          
-          if (userData === null) {
-            // User not in database - sign out and set rejection state
-            console.log('[AUTH STORE] User not in database, signing out and setting rejection state');
-            const auth = getFirebaseAuth();
-            await auth.signOut();
-            commit('SET_USER', null);
-            commit('SET_REJECTED_FOR_WHITELIST', true);
-            return;
-          } else if (!userData.status || !['whitelisted', 'admin', 'import'].includes(userData.status)) {
-            // User has invalid status - sign out and set rejection state
-            console.log('[AUTH STORE] User has invalid status, signing out and setting rejection state');
-            const auth = getFirebaseAuth();
-            await auth.signOut();
-            commit('SET_USER', null);
-            commit('SET_REJECTED_FOR_WHITELIST', true);
-            return;
-          } else {
-            // User exists in database with valid status - use their data
-            console.log('[AUTH STORE] User validated successfully, setting user data');
-            commit('SET_USER', {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              displayName: userData.display_name || firebaseUser.displayName,
-              photoURL: firebaseUser.photoURL,
-              user_tag: userData.user_tag || '',
-              phone_number: userData.phone_number || null,
-              status: userData.status
-            });
-            
-            // Clear rejection state on successful login
-            commit('SET_REJECTED_FOR_WHITELIST', false);
-          
-            // Initialize WebSocket connection for authenticated user
-            try {
-              console.log('[AUTH STORE] Initializing WebSocket connection for authenticated user');
-              await WebSocketService.initialize();
-            } catch (error) {
-              console.error('[AUTH STORE] Failed to initialize WebSocket connection:', error);
-            }
-          }
-        } else if (response.status === 302) {
-          // Silent logout redirect - no error messages
-          const responseData = await response.json().catch(() => ({}));
-          if (responseData.detail && responseData.detail.includes('SILENT_LOGOUT')) {
-            console.log('[AUTH STORE] Silent logout detected, clearing session');
-            // Clear session silently
-            commit('SET_USER', null);
-            commit('SET_AUTH_READY', true);
-            localStorage.removeItem('auth_token');
-            // Redirect to login page
-            this.$router?.push('/login');
-            return;
-          }
-        } else {
-          // For other errors (like 403), sign out and set rejection state
-          console.log('[AUTH STORE] Backend returned error, signing out and setting rejection state');
-          const auth = getFirebaseAuth();
-          await auth.signOut();
+        const token = localStorage.getItem('auth_token');
+        if (!token) {
           commit('SET_USER', null);
-          commit('SET_REJECTED_FOR_WHITELIST', true);
+          return;
+        }
+        const response = await fetch('/api/users/me', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) {
+          localStorage.removeItem('auth_token');
+          commit('SET_USER', null);
+          WebSocketService.cleanup();
+          return;
+        }
+        const userData = await response.json();
+        const contacts = Array.isArray(userData.contacts) ? userData.contacts : [];
+        const primaryEmail = contacts.find(c => c.type === 'email');
+        const primaryEmailValue = primaryEmail && typeof primaryEmail.value === 'string' && primaryEmail.value.trim() ? primaryEmail.value : null;
+        const isEmailVerified = !!(primaryEmail && primaryEmail.verified);
+        const primaryPhone = contacts.find(c => c.type === 'phone');
+        const primaryPhoneValue = primaryPhone && typeof primaryPhone.value === 'string' && primaryPhone.value.trim() ? primaryPhone.value : null;
+        const isPhoneVerified = !!(primaryPhone && primaryPhone.verified);
+        commit('SET_USER', {
+          uid: userData.uid,
+          displayName: userData.display_name,
+          user_tag: userData.user_tag || '',
+          scopes: userData.scopes || '',
+          contact: null,
+          contacts,
+          // Convenience mirrors for easy access in UI
+          phone_number: primaryPhoneValue,
+          email: primaryEmailValue,
+          is_email_verified: isEmailVerified,
+          is_phone_verified: isPhoneVerified
+        });
+        try {
+          await WebSocketService.initialize();
+        } catch (e) {
+          console.error('[AUTH STORE] WebSocket init failed:', e);
         }
       } catch (error) {
-        console.error('[AUTH STORE] User validation failed:', error);
-        console.log('[AUTH STORE] Signing out and cleaning up due to validation error');
-        // On error, sign out to be safe
-        const auth = getFirebaseAuth();
-        await auth.signOut();
+        console.error('[AUTH STORE] Token validation failed:', error);
+        localStorage.removeItem('auth_token');
         commit('SET_USER', null);
-        
-        // Clean up WebSocket connection on error
         WebSocketService.cleanup();
       }
     },
@@ -156,9 +96,7 @@ export default {
       try {
         // Clean up WebSocket connection before signing out
         WebSocketService.cleanup();
-        
-        const auth = getFirebaseAuth();
-        await auth.signOut();
+        localStorage.removeItem('auth_token');
         commit('SET_USER', null);
       } catch (error) {
         console.error('Error signing out:', error);
@@ -167,7 +105,7 @@ export default {
 
     async searchUsers({ }, query) {
       try {
-        const token = await getFirebaseAuth().currentUser.getIdToken();
+        const token = localStorage.getItem('auth_token');
         const response = await fetch(`/api/users/search?query=${encodeURIComponent(query)}&limit=15`, {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -186,30 +124,10 @@ export default {
       }
     },
 
-    async validateUserTag({ }, userTag) {
-      try {
-        const token = await getFirebaseAuth().currentUser.getIdToken();
-        const response = await fetch(`/api/users/validate-tag?tag=${encodeURIComponent(userTag)}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        if (!response.ok) {
-          return false;
-        }
-
-        const data = await response.json();
-        return data.valid || false;
-      } catch (error) {
-        console.error('Error validating user tag:', error);
-        return false;
-      }
-    },
 
     async updateProfile({ commit }, profileData) {
       try {
-        const token = await getFirebaseAuth().currentUser.getIdToken();
+        const token = localStorage.getItem('auth_token');
         const response = await fetch('/api/users/profile', {
           method: 'POST',
           headers: {
@@ -225,16 +143,48 @@ export default {
         }
 
         const result = await response.json();
-        
-        // Update the user in the store with the new profile data
-        const currentUser = this.state.auth.user;
-        if (currentUser && result.profile) {
-          commit('SET_USER', {
-            ...currentUser,
-            displayName: result.profile.display_name,
-            user_tag: result.profile.user_tag,
-            phone_number: result.profile.phone_number || null
+
+        // Immediately refresh full user state (including contacts/notify flags) from /me
+        try {
+          const meResp = await fetch('/api/users/me', {
+            headers: { 'Authorization': `Bearer ${token}` }
           });
+          if (meResp.ok) {
+            const userData = await meResp.json();
+            const contacts = Array.isArray(userData.contacts) ? userData.contacts : [];
+            const primaryEmail = contacts.find(c => c.type === 'email');
+            const primaryEmailValue = primaryEmail && typeof primaryEmail.value === 'string' && primaryEmail.value.trim() ? primaryEmail.value : null;
+            const isEmailVerified = !!(primaryEmail && primaryEmail.verified);
+            const primaryPhone = contacts.find(c => c.type === 'phone');
+            const primaryPhoneValue = primaryPhone && typeof primaryPhone.value === 'string' && primaryPhone.value.trim() ? primaryPhone.value : null;
+            const isPhoneVerified = !!(primaryPhone && primaryPhone.verified);
+            commit('SET_USER', {
+              uid: userData.uid,
+              displayName: userData.display_name,
+              user_tag: userData.user_tag || '',
+              scopes: userData.scopes || '',
+              contact: null,
+              contacts,
+              // Convenience mirrors for easy access in UI
+              phone_number: primaryPhoneValue,
+              email: primaryEmailValue,
+              is_email_verified: isEmailVerified,
+              is_phone_verified: isPhoneVerified
+            });
+          }
+        } catch (e) {
+          // Fallback: maintain previous behavior if /me fails
+          const currentUser = this.state.auth.user;
+          if (currentUser && result.profile) {
+            commit('SET_USER', {
+              ...currentUser,
+              displayName: result.profile.display_name,
+              user_tag: result.profile.user_tag,
+              phone_number: result.profile.phone_number ?? null,
+              email: result.profile.email ?? null,
+              contact: null
+            });
+          }
         }
 
         return result;
@@ -244,32 +194,19 @@ export default {
       }
     },
 
-    async forceLogoutWithMessage({ commit, state }, router = null) {
+    async forceLogoutWithMessage({ commit }, router = null) {
       try {
         console.log('[AUTH STORE] Force logout with unauthorized message');
-        console.log('[AUTH STORE] Current rejection state before:', state.wasRejectedForWhitelist);
         console.log('[AUTH STORE] Router passed:', !!router);
         console.log('[AUTH STORE] Current location:', window.location.pathname);
-        
-        // Sign out from Firebase
-        const auth = getFirebaseAuth();
-        if (auth && auth.currentUser) {
-          console.log('[AUTH STORE] Signing out current Firebase user');
-          await auth.signOut();
-        }
         
         // Clear user state
         commit('SET_USER', null);
         commit('SET_AUTH_READY', true);
         
-        // Set rejection state to trigger the banner
-        commit('SET_REJECTED_FOR_WHITELIST', true);
-        console.log('[AUTH STORE] Set rejection state to true');
-        console.log('[AUTH STORE] Current rejection state after:', state.wasRejectedForWhitelist);
-        
         localStorage.removeItem('auth_token');
         
-        // Redirect to the public page to show whitelist rejection banner
+        // Redirect to the public page
         if (window.location.pathname !== '/public') {
           console.log('[AUTH STORE] Redirecting to /public from:', window.location.pathname);
           console.log('[AUTH STORE] Router available:', !!router);
@@ -289,7 +226,6 @@ export default {
         // Even if logout fails, clear local state
         commit('SET_USER', null);
         commit('SET_AUTH_READY', true);
-        commit('SET_REJECTED_FOR_WHITELIST', true);
         localStorage.removeItem('auth_token');
       }
     }
@@ -299,15 +235,27 @@ export default {
     user: state => state.user,
     isAuthenticated: state => state.isAuthenticated,
     authReady: state => state.authReady,
-    wasRejectedForWhitelist: state => state.wasRejectedForWhitelist,
-    isAdmin: state => state.user?.status === 'admin',
-    isWhitelisted: state => state.user && ['whitelisted', 'admin', 'import'].includes(state.user.status),
-    // Check if user has any platform access (whitelisted or admin)
-    hasPlatformAccess: state => {
-      return state.user && ['whitelisted', 'admin', 'import'].includes(state.user.status);
+    // Scopes helpers
+    scopesSet: state => parseScopes(state.user ? state.user.scopes : ''),
+    hasScope: state => (name) => state.user ? hasScopeUtil(state.user.scopes, name) : false,
+    hasAnyScope: state => (names) => state.user ? hasAnyScopeUtil(state.user.scopes, names) : false,
+
+    // Common role-style flags derived from scopes
+    isAdmin: (state, getters) => getters.hasScope('admin'),
+    // Interaction capability: can the user create/write messages
+    canInteract: (state, getters) => getters.hasAnyScope(['msg.write', 'admin']),
+
+    // Capability predicates
+    canDeleteMessage: (state, getters) => (message) => {
+      if (!state.user || !message) return false;
+      if (getters.hasScope('admin')) return true;
+      if (!getters.hasScope('msg.write')) return false;
+      const currentUid = state.user.uid;
+      const currentTag = state.user.user_tag || null;
+      const isAuthorByUid = (message.content_author && message.content_author === currentUid) ||
+                            (message.author && message.author.uid && message.author.uid === currentUid);
+      const isAuthorByTag = currentTag && message.author_user_tag && message.author_user_tag === currentTag;
+      return !!(isAuthorByUid || isAuthorByTag);
     },
-    
-    // Legacy getters for backward compatibility
-    canInteract: state => state.user && ['whitelisted', 'admin', 'import'].includes(state.user.status)
   }
 }

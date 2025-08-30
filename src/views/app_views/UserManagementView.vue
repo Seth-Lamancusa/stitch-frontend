@@ -1,5 +1,5 @@
 <template>
-  <AppViewLayout>
+  <TabViewLayout>
     <!-- Admin Access Denied Notice -->
     <div v-if="!isAdmin && authReady" class="access-denied-notice">
       <div class="denial-content">
@@ -27,7 +27,7 @@
               <span class="breadcrumb-current">User Management</span>
             </div>
             <h1>User Management</h1>
-            <p class="view-subtitle">Manage user accounts, permissions, and whitelist status</p>
+            <p class="view-subtitle">Manage user accounts and permissions</p>
           </div>
         </div>
 
@@ -64,18 +64,12 @@
               <div class="stat-value">{{ userStats.total_users }}</div>
               <div class="stat-label">Total Users</div>
             </div>
-            <div class="stat-card">
-              <div class="stat-value">{{ userStats.whitelisted_users }}</div>
-              <div class="stat-label">Whitelisted</div>
-            </div>
+            
             <div class="stat-card">
               <div class="stat-value">{{ userStats.admin_users }}</div>
               <div class="stat-label">Admins</div>
             </div>
-            <div class="stat-card import-card">
-              <div class="stat-value">{{ userStats.import_users }}</div>
-              <div class="stat-label">Import Users</div>
-            </div>
+            
           </div>
         </div>
 
@@ -98,16 +92,15 @@
       @close="closeCreateUserModal"
       @user-created="handleUserCreated"
     />
-  </AppViewLayout>
+  </TabViewLayout>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter } from 'vue-router';
-import AppViewLayout from '../../components/layouts/AppViewLayout.vue';
+import TabViewLayout from '../../components/layouts/TabViewLayout.vue';
 import UserList from '../../components/UserList.vue';
-import CreateUserModal from '../../components/CreateUserModal.vue';
 import AdminService from '../../services/AdminService';
 
 const store = useStore();
@@ -142,9 +135,7 @@ const loadUserStats = async () => {
       // Use the actual stats from the API
       userStats.value = {
         total_users: response.stats.total_users || 0,
-        whitelisted_users: response.stats.total_whitelisted || 0,
-        admin_users: response.stats.total_admin || 0,
-        import_users: response.stats.total_import || 0
+        admin_users: response.stats.total_admin || 0
       };
     }
   } catch (err) {

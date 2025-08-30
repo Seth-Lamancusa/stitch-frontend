@@ -16,6 +16,12 @@
         <p class="warning-text">
           Are you sure you want to delete this message?
         </p>
+        <p v-if="relationHint" class="relation-hint">
+          {{ relationHint }}
+        </p>
+        <p v-if="disallowReason" class="disallow-hint">
+          {{ disallowReason }}
+        </p>
         
         <!-- Delete descendants toggle -->
         <div class="delete-option">
@@ -46,7 +52,7 @@
         <button 
           class="delete-btn" 
           @click.stop="handleConfirm" 
-          :disabled="isDeleting"
+          :disabled="isDeleting || disallowConfirm"
         >
           {{ isDeleting ? 'Deleting...' : (deleteDescendants ? 'Delete Message & Replies' : 'Delete Message') }}
         </button>
@@ -56,7 +62,7 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 
 // Props
 const props = defineProps({
@@ -71,6 +77,18 @@ const props = defineProps({
   isDeleting: {
     type: Boolean,
     default: false
+  },
+  relation: {
+    type: String,
+    default: null // 'above' | 'below' | null
+  },
+  disallowConfirm: {
+    type: Boolean,
+    default: false
+  },
+  disallowReason: {
+    type: String,
+    default: ''
   }
 });
 
@@ -79,6 +97,18 @@ const emit = defineEmits(['cancel', 'confirm']);
 
 // Local state for delete descendants toggle
 const deleteDescendants = ref(false);
+
+// Human-readable hint for relation to centered message
+const relationHint = computed(() => {
+  if (!props.relation) return null;
+  if (props.relation === 'above') {
+    return 'Note: The currently centered message is above this one. You will not be able to navigate downward past the deletion point afterwards.';
+  }
+  if (props.relation === 'below') {
+    return 'Note: The currently centered message is below this one. You will not be able to navigate upward past the deletion point afterwards.';
+  }
+  return null;
+});
 
 // Reset toggle when modal is hidden (operation completed)
 watch(() => props.show, (newShow, oldShow) => {
@@ -199,6 +229,18 @@ const handleConfirm = () => {
   padding: var(--space-sm);
   border-radius: var(--radius-sm);
   border: 1px solid rgba(220, 38, 38, 0.3);
+}
+
+.relation-hint {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.disallow-hint {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  margin-top: 0;
 }
 
 .modal-footer {

@@ -3,7 +3,6 @@ import messages from './modules/messages'
 import auth from './modules/auth'
 import ui from './modules/ui'
 import navigation from './modules/navigation'
-import bots from './modules/bots'
 import graphView from './modules/graphView'
 
 /**
@@ -20,7 +19,6 @@ const store = createStore({
     messages,
     navigation,
     ui,
-    bots,
     graphView
   }
 })

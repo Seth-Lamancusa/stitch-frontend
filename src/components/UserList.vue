@@ -18,7 +18,7 @@
           <div class="user-info">
             <div class="user-main-info">
               <h3 class="user-name">{{ user.display_name || 'No Display Name' }}</h3>
-              <div class="user-email">{{ user.email }}</div>
+              <div class="user-email">{{ userEmail(user) }}</div>
               <div v-if="user.user_tag" class="user-tag">@{{ user.user_tag }}</div>
             </div>
             <div class="user-metadata">
@@ -36,26 +36,20 @@
           <div class="user-status">
             <div class="status-badges">
               <span 
-                v-if="user.status === 'admin'" 
+                v-if="(user.scopes || '').split(' ').includes('admin')" 
                 class="status-badge admin-badge" 
                 title="Admin"
               >
                 Admin
               </span>
               <span 
-                v-else-if="user.status === 'whitelisted'" 
+                v-else-if="(user.scopes || '').split(' ').includes('msg.write')" 
                 class="status-badge whitelist-badge" 
-                title="Whitelisted"
+                title="Can write"
               >
-                Whitelisted
+                Writer
               </span>
-              <span 
-                v-else-if="user.status === 'import'" 
-                class="status-badge import-badge" 
-                title="Import"
-              >
-                Import
-              </span>
+              
               <span 
                 v-else 
                 class="status-badge guest-badge" 
@@ -70,7 +64,7 @@
                 <!-- Status update functionality could go here in the future -->
                 <!-- <select class="status-dropdown">
                   <option value="guest">Guest</option>
-                  <option value="whitelisted">Whitelisted</option>
+                  <option value="msg.write">Writer</option>
                   <option value="admin">Admin</option>
                 </select> -->
                 
@@ -230,7 +224,8 @@ const loadMoreUsers = () => {
 };
 
 const confirmDeleteUser = (user) => {
-  const confirmMessage = `Are you sure you want to delete user "${user.display_name}" (${user.email})?\n\nThis action cannot be undone and will permanently remove:\n- The user account\n- All messages authored by this user\n- All user relationships and saved data`;
+  const emailStr = userEmail(user) || 'no-email';
+  const confirmMessage = `Are you sure you want to delete user "${user.display_name}" (${emailStr})?\n\nThis action cannot be undone and will permanently remove:\n- The user account\n- All messages authored by this user\n- All user relationships and saved data`;
   
   if (confirm(confirmMessage)) {
     deleteUser(user);
@@ -285,6 +280,18 @@ defineExpose({
   loadUsers,
   refresh: () => loadUsers(true)
 });
+
+// Helpers
+function userEmail(u) {
+  try {
+    // Prefer contacts[] email
+    if (Array.isArray(u.contacts)) {
+      const c = u.contacts.find(c => c && c.type === 'email' && typeof c.value === 'string' && c.value.trim());
+      if (c) return c.value;
+    }
+  } catch (e) {}
+  return '';
+}
 </script>
 
 <style scoped>
@@ -406,10 +413,7 @@ defineExpose({
   color: var(--color-text-inverse);
 }
 
-.import-badge {
-  background: var(--color-warning, #f59e0b);
-  color: var(--color-text-inverse);
-}
+ 
 
 .whitelist-badge {
   background: var(--color-success, #10b981);

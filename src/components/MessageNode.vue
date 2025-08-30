@@ -71,9 +71,9 @@
             Recipients {{ typeof message.recipients === 'string' ? '' : `(${deduplicatedRecipients.length})` }}
           </button>
           
-          <!-- Delete button - shows for admins (all messages) or authors (own messages), but not in list view -->
+          <!-- Delete button - scope-based capability: admin or msg.write + author -->
           <button 
-            v-if="(isAdmin || isUserAuthor) && !isSelectionMode && !inListView" 
+            v-if="canDeleteMessage(message) && !isSelectionMode && !inListView" 
             @click.stop="$emit('delete', message)" 
             class="delete-icon-button"
             :title="isAdmin ? 'Admin: Delete this message and all replies' : 'Delete this message and all replies'"
@@ -173,6 +173,7 @@
                   action.customClass?.()
                 ]"
                 :title="action.text"
+                :disabled="action.disabled?.()"
               >
                 <span v-if="action.loading?.()" class="loading-indicator"></span>
                 <span v-else class="action-emoji">{{ action.emoji }}</span>
@@ -252,6 +253,7 @@
               action.customClass?.()
             ]"
             :title="action.text"
+            :disabled="action.disabled?.()"
           >
             <span class="action-emoji">{{ action.emoji }}</span>
             <span class="action-text">{{ action.text }}</span>
@@ -270,10 +272,10 @@ import FormattedContent from './FormattedContent/index.vue';
 import { initFormatters } from './FormattedContent/init';
 import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch, toRef } from 'vue';
 import { useStore } from 'vuex';
+import { useRoute } from 'vue-router';
 import { memoize } from 'lodash-es';
 import MessageService from '../services/MessageService.js';
 import UserService from '../services/UserService.js';
-import { useAudioPlayback } from '../services/AudioPlaybackService.js';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 
 export default {
@@ -324,13 +326,14 @@ export default {
   
   setup(props, { emit }) {
     const store = useStore();
+    const route = useRoute();
     const currentUser = computed(() => store.getters['auth/user']);
     const isAdmin = computed(() => store.getters['auth/isAdmin']);
+    const canDeleteMessage = (message) => store.getters['auth/canDeleteMessage'](message);
     
-    // Audio playback
-    const { playbackState, toggleReadOutLoud } = useAudioPlayback();
-    const isPlaying = computed(() => playbackState.currentlyPlaying === props.message.id && !playbackState.isLoading);
-    const isLoading = computed(() => playbackState.currentlyPlaying === props.message.id && playbackState.isLoading);
+    // Removed read-out-loud audio playback feature
+    const isPlaying = computed(() => false);
+    const isLoading = computed(() => false);
 
 
     // Selection mode state
@@ -360,6 +363,9 @@ export default {
     // Global action bar state from store
     const showActionBar = computed(() => store.getters['navigation/isActionBarOpen'](props.message.id));
     
+    // Whether this message is currently the centered one in the URL
+    const isCentered = computed(() => String(route.params.id) === String(props.message.id));
+
     // Define unified message actions with standardized attributes
     const messageActions = computed(() => [
       {
@@ -370,7 +376,8 @@ export default {
         mobileVisible: true,
         adminOnly: false,
         handler: () => emit('reply', props.message.id),
-        condition: () => !props.inListView
+        condition: () => !props.inListView,
+        disabled: () => !currentUser.value
       },
       {
         id: 'save',
@@ -397,19 +404,7 @@ export default {
         condition: () => !props.inListView,
         active: () => isTextCopied.value
       },
-      {
-        id: 'read-aloud',
-        emoji: isPlaying.value ? '⏹️' : '🔊',
-        text: isPlaying.value ? 'Stop' : 'Read',
-        desktopVisible: false,
-        mobileVisible: false,
-        adminOnly: false,
-        handler: () => toggleReadOutLoud(props.message.id),
-        condition: () => !props.inListView,
-        disabled: () => isLoading.value,
-        loading: () => isLoading.value,
-        active: () => isPlaying.value
-      },
+      
       {
         id: 'links',
         emoji: '🔗',
@@ -430,6 +425,19 @@ export default {
         handler: copyMessageJson,
         condition: () => !props.inListView,
         active: () => isJsonCopied.value
+      }
+      ,
+      {
+        id: 'center',
+        emoji: '🎯',
+        text: isCentered.value ? 'Centered' : 'Center',
+        desktopVisible: false,
+        mobileVisible: false,
+        adminOnly: false,
+        handler: () => { if (!isCentered.value) emit('center', props.message.id); },
+        condition: () => !props.inListView,
+        disabled: () => isCentered.value,
+        active: () => isCentered.value
       }
     ]);
     
@@ -1106,6 +1114,7 @@ export default {
     });
     
     return {
+      isCentered,
       // Props for template access
       message: toRef(props, 'message'),
       displayMode: toRef(props, 'displayMode'),
@@ -1119,6 +1128,7 @@ export default {
       isUserAuthor,
       isPublic,
       isAdmin,
+      canDeleteMessage,
       isMessageUnread,
       hasReplies: computed(() => props.message.child_ids?.length > 0),
       isEndOfBranch,
@@ -1170,7 +1180,6 @@ export default {
       shouldShowMenuButton,
       isPlaying,
       isLoading,
-      toggleReadOutLoud,
       openEditModal,
     };
   },
@@ -1840,8 +1849,8 @@ export default {
 .action-button.active,
 .mobile-action-button.active,
 .desktop-menu-button.active {
-  background-color: var(--color-success);
-  border-color: var(--color-success);
+  background-color: #bdbdbd;
+  border-color: #bdbdbd;
   color: var(--color-text-inverse);
   transform: scale(1.05);
 }
@@ -1909,9 +1918,14 @@ export default {
   border: none;
 }
 
-.desktop-menu-button.active {
-  background-color: var(--color-success);
-  border: none;
+/* Suppress hover/animation for disabled desktop menu entries */
+.desktop-menu-button:disabled,
+.desktop-menu-button:disabled:hover {
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+  cursor: default;
+  transform: none;
 }
 
 /* .reformat-icon {
@@ -2140,6 +2154,15 @@ export default {
     transform: none;
   }
   
+  /* Suppress hover/animation for disabled floating menu entries */
+  .fab-button:disabled:hover,
+  .fab-button:disabled:active {
+    background-color: transparent;
+    transform: none;
+    opacity: 0.6;
+    cursor: default;
+  }
+  
   /* Add loading indicator for save button */
   .fab-button .loading-indicator {
     width: 16px;
@@ -2172,12 +2195,7 @@ export default {
 }
 
 /* Minimal styling for the new button */
-.read-out-loud-button {
-  margin-left: 8px;
-  background: none;
-  border: none;
-  cursor: pointer;
-}
+ 
 
 
 @media (max-width: 480px) {
