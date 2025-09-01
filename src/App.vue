@@ -3,6 +3,7 @@ import { onMounted, onBeforeUnmount } from 'vue';
 import RecipientsModal from './components/modals/RecipientsModal.vue';
 import LinksModal from './components/modals/LinksModal.vue';
 import EditMessageModal from './components/modals/EditMessageModal.vue';
+import IdleOverlay from './components/IdleOverlay.vue';
 
 // More robust height calculation for the entire app
 const setAppHeight = () => {
@@ -28,6 +29,7 @@ onBeforeUnmount(() => {
     <RecipientsModal />
     <LinksModal />
     <EditMessageModal />
+    <IdleOverlay />
   </div>
 </template>
 

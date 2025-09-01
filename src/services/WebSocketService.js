@@ -10,7 +10,6 @@ const WebSocketService = {
   userId: null,
   messageCallback: null,
   pingInterval: null,
-  heartbeatInterval: null,
   idleTimer: null,
   debugMode: true, // Enable debug logging by default
   authToken: null,
@@ -24,7 +23,6 @@ const WebSocketService = {
   reconnectDelay: 1000,
   
   // Activity-based reconnect
-  activityHandlersInstalled: false,
   lastActivityReconnectAt: 0,
   activityReconnectCooldownMs: 5000,
   
@@ -36,8 +34,7 @@ const WebSocketService = {
   // Connection health monitoring
   lastPingTime: null,
   pingTimeoutMs: 60000, // 1 minute
-  heartbeatIntervalMs: 45000, // 45 seconds (avoid conflict with server ping)
-  idleTimeoutMs: 60000, // 1 minute of user inactivity
+  idleTimeoutMs: 120000, // 2 minutes of user inactivity
   
   // Debug logging helper
   log(...messages) {
@@ -121,44 +118,13 @@ const WebSocketService = {
       this.error('Error during idle timeout close:', e);
     } finally {
       this.stopIdleTimer();
+      try { 
+        // Surface idle overlay
+        store.dispatch('ui/enterIdle');
+      } catch (e) {}
     }
   },
   
-  installActivityReconnectHandlers() {
-    if (this.activityHandlersInstalled) return;
-    const handler = this.maybeActivityReconnect.bind(this);
-    this._activityHandlerRef = handler;
-    try {
-      window.addEventListener('visibilitychange', handler);
-      window.addEventListener('focus', handler);
-      window.addEventListener('click', handler);
-      window.addEventListener('keydown', handler);
-      window.addEventListener('mousemove', handler);
-      this.activityHandlersInstalled = true;
-      this.log('Installed activity-based reconnect handlers');
-    } catch (e) {
-      // ignore
-    }
-  },
-  
-  removeActivityReconnectHandlers() {
-    if (!this.activityHandlersInstalled) return;
-    const handler = this._activityHandlerRef;
-    try {
-      window.removeEventListener('visibilitychange', handler);
-      window.removeEventListener('focus', handler);
-      window.removeEventListener('click', handler);
-      window.removeEventListener('keydown', handler);
-      window.removeEventListener('mousemove', handler);
-    } catch (e) {
-      // ignore
-    }
-    this.activityHandlersInstalled = false;
-    this._activityHandlerRef = null;
-  },
-  warn(...messages) {
-    console.warn('[WebSocket]', ...messages);
-  },
   
   error(...messages) {
     console.error('[WebSocket]', ...messages);
@@ -238,8 +204,7 @@ const WebSocketService = {
         this.isInitialized = true;
         this.log(`Global connection established for user ${user.uid}`);
         
-        // Install activity-based auto-reconnect handlers
-        this.installActivityReconnectHandlers();
+        // Activity-based auto-reconnect removed; manual reconnect via idle overlay will be used
       } catch (error) {
         this.error('Failed to connect:', error);
         this.cleanup();
@@ -262,10 +227,7 @@ const WebSocketService = {
       this.pingInterval = null;
     }
     
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
-    }
+    
 
     // Stop idle timeout
     this.stopIdleTimer();
@@ -276,9 +238,6 @@ const WebSocketService = {
       this.unsubscribeFunction();
       this.unsubscribeFunction = null;
     }
-    
-    // Remove activity listeners
-    this.removeActivityReconnectHandlers();
     
     // Disconnect WebSocket
     if (this.connection) {
@@ -294,41 +253,7 @@ const WebSocketService = {
     this.log('Cleanup completed');
   },
   
-  /**
-   * Start heartbeat monitoring
-   */
-  startHeartbeat() {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-    }
-    
-    this.heartbeatInterval = setInterval(() => {
-      if (this.connection && this.connection.readyState === WebSocket.OPEN) {
-        try {
-          this.connection.send(JSON.stringify({
-            type: 'heartbeat',
-            timestamp: Date.now()
-          }));
-          this.log('Sent heartbeat');
-        } catch (error) {
-          this.error('Error sending heartbeat:', error);
-        }
-      }
-    }, this.heartbeatIntervalMs);
-    
-    this.log('Heartbeat monitoring started');
-  },
   
-  /**
-   * Stop heartbeat monitoring
-   */
-  stopHeartbeat() {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
-      this.log('Heartbeat monitoring stopped');
-    }
-  },
   
   /**
    * Check if incoming message is next in the currently visible branch
@@ -546,8 +471,7 @@ const WebSocketService = {
         this.log('WebSocket connection state: OPEN');
         this.connectionEstablished = true;
         
-        // Start heartbeat monitoring
-        this.startHeartbeat();
+        // JSON heartbeat removed; rely on text ping/pong only
         // Start idle timeout monitoring
         this.startIdleTimer();
         
@@ -580,18 +504,8 @@ const WebSocketService = {
           if (data.type === 'connection_established') {
             this.userId = data.user_id;
             this.log(`Connection established for user ${this.userId}`);
-          } else if (data.type === 'heartbeat_ack') {
-            this.log('Received heartbeat acknowledgment');
-            this.lastPingTime = Date.now();
-          } else if (data.type === 'new_reply') {
-            this.log(`===== NEW REPLY RECEIVED =====`);
-            this.log(`Message ID: ${data.data?.id}`);
-            this.log(`Parent ID: ${data.data?.parent_id}`);
-            this.log(`Author: ${data.data?.author_display_name || data.data?.author_user_tag || data.data?.content_author}`);
-            this.log(`Content: "${data.data?.content?.substring(0, 50)}${data.data?.content?.length > 50 ? '...' : ''}"`);
-            this.log(`Recipients: ${data.data?.recipients?.length || 0} - ${data.data?.recipients?.map(r => r.user_tag || r.uid || r).join(', ') || 'none'}`);
-            
-            // Process all new_reply messages where current user is a recipient
+          } else if (data.type === 'new_message') {
+            // Unified event type -> route to message handler
             if (this.messageCallback) {
               this.log(`Passing message to callback`);
               this.messageCallback(data.data);
@@ -621,8 +535,6 @@ const WebSocketService = {
         this.userId = null;
         this.connectionEstablished = false;
         
-        // Stop heartbeat monitoring
-        this.stopHeartbeat();
         // Stop idle timeout monitoring
         this.stopIdleTimer();
         
@@ -700,8 +612,7 @@ const WebSocketService = {
   disconnectUser() {
     this.log(`DisconnectUser called`);
     
-    // Stop heartbeat monitoring
-    this.stopHeartbeat();
+    // No JSON heartbeat to stop
     
     if (this.connection) {
       this.log(`Disconnecting user ${this.userId}`);

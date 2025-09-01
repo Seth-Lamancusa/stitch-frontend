@@ -6,7 +6,10 @@ export default {
     success: null,
     messageNotification: null,
     showDeleteConfirm: false,
-    messageToDelete: null
+    messageToDelete: null,
+    // Idle overlay state
+    isIdle: false,
+    idleSince: null,
   },
   
   mutations: {
@@ -31,6 +34,11 @@ export default {
     REQUEST_MESSAGE_DELETE(state, message) {
       // This mutation is observed by the DeleteConfirmModal component
       // No state changes needed here as the modal handles its own state
+    }
+    ,
+    SET_IDLE(state, { isIdle, idleSince }) {
+      state.isIdle = !!isIdle;
+      state.idleSince = isIdle ? (idleSince || Date.now()) : null;
     }
   },
   
@@ -61,6 +69,13 @@ export default {
     
     hideDeleteConfirm({ commit }) {
       commit('SET_DELETE_CONFIRM', { show: false, message: null });
+    },
+    // Idle actions
+    enterIdle({ commit }) {
+      commit('SET_IDLE', { isIdle: true, idleSince: Date.now() });
+    },
+    exitIdle({ commit }) {
+      commit('SET_IDLE', { isIdle: false, idleSince: null });
     }
   },
   
@@ -70,5 +85,8 @@ export default {
     messageNotification: state => state.messageNotification,
     showDeleteConfirm: state => state.showDeleteConfirm,
     messageToDelete: state => state.messageToDelete
+    ,
+    isIdle: state => state.isIdle,
+    idleSince: state => state.idleSince
   }
 }
