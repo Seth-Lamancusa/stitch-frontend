@@ -25,11 +25,11 @@ Planned changes
    - Current handling special-cases `new_reply`; replace with unified `new_message` branch and route to `handleIncomingMessage(data.data)`.
 
 2) Remove JSON heartbeat writes.
-   - Current code sends JSON `{type: 'heartbeat'}` at an interval; remove to keep wire format simple (text ping/pong only).
+   - Remove sending `{type: 'heartbeat'}`; wire format is text ping/pong only.
    - Keep receiving text `ping` and reply `pong`. Optionally send client `ping` as text if needed.
 
 3) Idle behavior changes.
-   - Keep idle timer that closes WS after 60s inactivity.
+   - Keep idle timer that closes WS after 120s inactivity.
    - Remove activity-based auto-reconnect handlers.
    - On idle close, set global idle state and show overlay; only a manual button initiates reconnect.
 
@@ -84,38 +84,34 @@ Components & mounting
 
 ---
 
-### HMAC Webhook Configuration (Slack-style)
+### HMAC Webhook Configuration (Simplified)
 
 Model
-- Slack-style shared secret configured by the user; backend signs each webhook request using HMAC SHA-256 over the raw body.
-- Headers:
-  - `X-Stitch-Signature: sha256=<hex(hmac_sha256(secret, raw_body_bytes))>`
-  - `X-Stitch-Key-Id: <key identifier>` (optional; defaults to user UID if not set)
+- Shared secret configured by the developer; backend signs each webhook request using HMAC SHA-256 over the string `ts + "\n" + raw_body`.
+
+Headers
+- `X-Stitch-Timestamp: <epoch_ms>` (milliseconds since epoch)
+- `X-Stitch-Signature: sha256=<hex(hmac_sha256(secret, ts + "\n" + raw_body_bytes))>`
 
 Frontend UX
-- Where: `ProfileEditModal` and a read-only section on bots/integrations page if applicable.
+- Where: `ProfileEditModal` and a read-only section on integrations page if applicable.
 - Fields:
   - Endpoint URL (existing)
   - Endpoint Signing Secret (write-only input)
-  - Key ID (optional, text)
 - Behavior:
   - Autogenerate a strong secret client-side when enabling endpoint notifications; display it once with a copy button and a hint to store it securely (cannot be shown again).
-  - Provide a Rotate action that generates a new secret and one-time displays it; prior secret handling per backend grace/rotation policy.
-  - On save, include `endpoint_signing_secret` and optional `endpoint_key_id` (and `endpoint` when changed) in `POST /api/users/profile`.
+  - Provide a Rotate action that generates a new secret and one-time displays it.
+  - On save, include `endpoint_signing_secret` (and `endpoint` when changed) in `POST /api/users/profile`.
   - Never display the saved secret after submission. Optionally show a one-time confirmation toast.
-  - Surface a short explainer plus a copyable verification snippet link (bot-side) in docs.
 
 Open questions for backend
-1) Signature envelope: any timestamp or version prefix like Slack? e.g. `v0:timestamp:hash` to protect against replay.
-2) Replay protection: should clients verify a timestamp header and enforce a permissible skew window?
-3) Key rotation: when rotating `endpoint_signing_secret`, how are overlapping signatures handled? Any grace period/dual-secret support?
-4) Key ID: if omitted, confirm default is user UID. Any constraints/length limits?
-5) Webhook retries: delivery retry policy/backoff headers clients should expect?
-6) Expected response codes for success (200–299) vs suppression; handling of non-2xx.
+1) Replay protection: confirm bots verify timestamp skew (recommend ≤ 5 minutes).
+2) Webhook retries: delivery retry policy/backoff headers clients should expect?
+3) Expected response codes for success (200–299) vs suppression; handling of non-2xx.
 
 References
 - Profile POST: `src/store/modules/auth.js` -> `updateProfile()` already posts to `/api/users/profile` and refreshes `/api/users/me`.
-- Profile UI: `src/components/modals/ProfileEditModal.vue` has endpoint and notify toggles; we will add secret and key-id inputs.
+- Profile UI: `src/components/modals/ProfileEditModal.vue` has endpoint and notify toggles; we add the secret input.
 
 ---
 
