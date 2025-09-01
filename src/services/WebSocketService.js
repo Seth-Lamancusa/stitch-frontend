@@ -11,6 +11,7 @@ const WebSocketService = {
   messageCallback: null,
   pingInterval: null,
   heartbeatInterval: null,
+  idleTimer: null,
   debugMode: true, // Enable debug logging by default
   authToken: null,
   connectionEstablished: false,
@@ -36,6 +37,7 @@ const WebSocketService = {
   lastPingTime: null,
   pingTimeoutMs: 60000, // 1 minute
   heartbeatIntervalMs: 45000, // 45 seconds (avoid conflict with server ping)
+  idleTimeoutMs: 60000, // 1 minute of user inactivity
   
   // Debug logging helper
   log(...messages) {
@@ -46,6 +48,9 @@ const WebSocketService = {
   
   maybeActivityReconnect() {
     try {
+      // Any user activity resets the idle timer
+      this.resetIdleTimer();
+
       const now = Date.now();
       if (now - this.lastActivityReconnectAt < this.activityReconnectCooldownMs) {
         return;
@@ -59,6 +64,63 @@ const WebSocketService = {
       }
     } catch (e) {
       // no-op
+    }
+  },
+
+  // Idle timeout helpers
+  startIdleTimer() {
+    try {
+      if (this.idleTimer) {
+        clearTimeout(this.idleTimer);
+      }
+      // Only start when connected
+      if (this.connection && this.connection.readyState === WebSocket.OPEN) {
+        this.idleTimer = setTimeout(() => {
+          this.handleIdleTimeout();
+        }, this.idleTimeoutMs);
+        this.log(`Idle timer started (${this.idleTimeoutMs}ms)`);
+      }
+    } catch (e) {
+      // ignore
+    }
+  },
+
+  resetIdleTimer() {
+    try {
+      if (!this.connection || this.connection.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      if (this.idleTimer) {
+        clearTimeout(this.idleTimer);
+      }
+      this.idleTimer = setTimeout(() => {
+        this.handleIdleTimeout();
+      }, this.idleTimeoutMs);
+      // Do not log on every activity to avoid noise
+    } catch (e) {
+      // ignore
+    }
+  },
+
+  stopIdleTimer() {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+      this.log('Idle timer stopped');
+    }
+  },
+
+  handleIdleTimeout() {
+    this.log('Idle timeout reached — closing WebSocket connection');
+    try {
+      if (this.connection && this.connection.readyState === WebSocket.OPEN) {
+        // Clean close with normal code; activity handlers will reconnect on next activity
+        this.connection.close(1000, 'Idle timeout');
+      }
+    } catch (e) {
+      this.error('Error during idle timeout close:', e);
+    } finally {
+      this.stopIdleTimer();
     }
   },
   
@@ -204,6 +266,9 @@ const WebSocketService = {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
+
+    // Stop idle timeout
+    this.stopIdleTimer();
     
     // Remove message handler
     if (this.unsubscribeFunction) {
@@ -483,6 +548,8 @@ const WebSocketService = {
         
         // Start heartbeat monitoring
         this.startHeartbeat();
+        // Start idle timeout monitoring
+        this.startIdleTimer();
         
         // Reset connection attempts on successful connection
         this.connectionAttempts = 0;
@@ -556,6 +623,8 @@ const WebSocketService = {
         
         // Stop heartbeat monitoring
         this.stopHeartbeat();
+        // Stop idle timeout monitoring
+        this.stopIdleTimer();
         
         // Only clear the promise if it's our current one
         if (this.connectionPromise && !event.wasClean) {
