@@ -99,7 +99,8 @@ Frontend UX
   - Endpoint Signing Secret (write-only input)
   - Key ID (optional, text)
 - Behavior:
-  - Provide a "Generate strong secret" helper that fills the input locally.
+  - Autogenerate a strong secret client-side when enabling endpoint notifications; display it once with a copy button and a hint to store it securely (cannot be shown again).
+  - Provide a Rotate action that generates a new secret and one-time displays it; prior secret handling per backend grace/rotation policy.
   - On save, include `endpoint_signing_secret` and optional `endpoint_key_id` (and `endpoint` when changed) in `POST /api/users/profile`.
   - Never display the saved secret after submission. Optionally show a one-time confirmation toast.
   - Surface a short explainer plus a copyable verification snippet link (bot-side) in docs.
@@ -164,7 +165,7 @@ References
 
 ### Notes
 
-- Do not persist or display the HMAC secret after submission.
+- Do not display the HMAC secret after submission; only one-time reveal on create/rotate with an explicit hint to copy and store securely.
 - Keep existing auto-mark-as-read behavior in thread view after refresh.
 - Ensure WS close on idle uses code 1000; avoid retry loops until manual reconnect.
 
