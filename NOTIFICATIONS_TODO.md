@@ -4,10 +4,9 @@ This document captures the plan and open questions for completing the notificati
 
 ### Scope
 - Single WebSocket event type: `new_message`
-- Idle overlay and manual reconnect flow
+- Activity-based reconnect on user interaction; no idle overlay
 - HMAC webhook configuration UX (Slack-style model)
 - Ping/pong handling (text), remove custom JSON heartbeat
-- Idle modal includes email and phone fields like profile
 - Refresh/reconnect mirrors app load/refresh and refreshes unread counts
 
 ---
@@ -29,37 +28,24 @@ Planned changes
    - Keep receiving text `ping` and reply `pong`. Optionally send client `ping` as text if needed.
 
 3) Idle behavior changes.
-   - Keep idle timer that closes WS after 120s inactivity.
-   - Remove activity-based auto-reconnect handlers.
-   - On idle close, set global idle state and show overlay; only a manual button initiates reconnect.
+   - Remove idle timer and overlay.
+   - Keep lightweight activity-based reconnect and connection health checks.
 
 References
 - URL build and connect: `src/services/WebSocketService.js` (connectUser)
-- Idle timeout: `idleTimeoutMs`, `handleIdleTimeout()`
-- Current activity reconnect hooks: `installActivityReconnectHandlers()`
+- Activity reconnect handler: `maybeActivityReconnect()` wired in `src/App.vue`
 
 ---
 
 ### Idle Overlay & Manual Reconnect
 
-User experience
-- App-wide dimming overlay with a centered modal:
-  - Title: "Session inactive. Message notifs going to email / SMS."
-  - Fields: Email, Phone (same validation and gating as profile modal)
-  - Notify checkboxes: email, phone, endpoint
-  - Primary action: "Refresh & reconnect"
-  - Secondary: "Close" (dismiss overlay without reconnect)
+Removed. System now silently attempts reconnect on activity and via health checks.
 
 State & store
-- Extend UI store with idle state:
-  - `ui.state.isIdle: boolean`
-  - `ui.state.idleSince: number | null`
-  - Mutations: `SET_IDLE(isIdle: boolean, idleSince?: number)`
-  - Actions: `enterIdle()`, `exitIdle()`
+- Idle overlay state removed (`isIdle`, `idleSince`, related actions/mutations).
 
 Triggering overlay
-- `WebSocketService.handleIdleTimeout()` dispatches `ui/enterIdle`.
-- On reconnect success, dispatch `ui/exitIdle`.
+- N/A (overlay removed)
 
 Refresh & reconnect button behavior
 - Steps should mirror first-load for the current page:
@@ -77,10 +63,7 @@ References
 - Unread count: `messages/fetchUnreadMessageCount`, mutation `SET_UNREAD_MESSAGE_COUNT`
 
 Components & mounting
-- New component: `src/components/IdleOverlay.vue`
-  - Props/state from store; uses `auth/updateProfile` for notify toggles and contact fields.
-  - Includes email/phone inputs with validation parity to `ProfileEditModal.vue`.
-- Mount globally in `src/App.vue` so it overlays any route.
+- `src/components/IdleOverlay.vue` removed and not mounted in `src/App.vue`.
 
 ---
 
@@ -122,13 +105,13 @@ References
   - Only allow enabling notify on contacts where `verified == true` and `notify` toggles are enabled.
 - UI mirrors:
   - `ProfileEditModal.vue` already disables toggles based on `isEmailVerified` and per-contact verification.
-  - Idle overlay will reuse the same gating logic and update via `auth/updateProfile` with `{ notify: { email, phone, endpoint } }`.
+  - Idle overlay references removed; gating remains in profile modal.
 
 ---
 
 ### Error & Edge Cases
 
-- WebSocket unauthorized (1008): run token refresh path or force logout, then show idle overlay if still disconnected.
+- WebSocket unauthorized (1008): run token refresh path or force logout.
 - Unknown WS message types: ignore and log.
 - If reconnect fails from overlay: show inline error; keep overlay open. Allow retry.
 
@@ -137,10 +120,9 @@ References
 ### Tasks
 
 1) WebSocket: unify on `new_message`, remove JSON heartbeat, keep text ping/pong.
-2) Remove activity-based auto-reconnect; keep idle close; surface idle overlay.
-3) UI store: add `isIdle`, `idleSince` and actions.
-4) IdleOverlay component with email/phone fields, notify toggles, and "Refresh & reconnect".
-5) Mount IdleOverlay globally in `App.vue`.
+2) Remove idle overlay and idle timer; keep activity-based reconnect only.
+3) Remove idle overlay state/actions from UI store.
+4) Wire `maybeActivityReconnect` in `App.vue` for user interactions.
 6) Profile modal: add signing secret (write-only) + optional key ID; include in profile save payload.
 7) Define refresh sequence for each route and wire unread count refresh.
 8) Coordinate with backend on HMAC envelope (timestamp/version), replay protection, rotation.
@@ -155,7 +137,7 @@ References
   - Inbox route: dispatch `messages/fetchUserMessages({ page: 1 })`.
   - Public feed route: `MessageService.getPublicMessages` via `messages/fetchMessages({ mode: 'public' })`.
 - Unread count: dispatch `messages/fetchUnreadMessageCount()`.
-- On success: `ui/exitIdle` and close overlay.
+- On success: app resumes; no overlay.
 
 ---
 
@@ -163,5 +145,5 @@ References
 
 - Do not display the HMAC secret after submission; only one-time reveal on create/rotate with an explicit hint to copy and store securely.
 - Keep existing auto-mark-as-read behavior in thread view after refresh.
-- Ensure WS close on idle uses code 1000; avoid retry loops until manual reconnect.
+- Idle-based close logic removed.
 
