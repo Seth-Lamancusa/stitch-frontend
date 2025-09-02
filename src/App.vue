@@ -3,7 +3,7 @@ import { onMounted, onBeforeUnmount } from 'vue';
 import RecipientsModal from './components/modals/RecipientsModal.vue';
 import LinksModal from './components/modals/LinksModal.vue';
 import EditMessageModal from './components/modals/EditMessageModal.vue';
-import IdleOverlay from './components/IdleOverlay.vue';
+import WebSocketService from '@/services/WebSocketService';
 
 // More robust height calculation for the entire app
 const setAppHeight = () => {
@@ -11,13 +11,33 @@ const setAppHeight = () => {
   doc.style.setProperty('--app-height', `${window.innerHeight}px`);
 };
 
+const activityHandler = () => {
+  WebSocketService.maybeActivityReconnect();
+};
+
+const visibilityHandler = () => {
+  if (document.visibilityState === 'visible') {
+    WebSocketService.maybeActivityReconnect();
+  }
+};
+
 onMounted(() => {
   window.addEventListener('resize', setAppHeight);
   setAppHeight();
+  window.addEventListener('mousemove', activityHandler);
+  window.addEventListener('keydown', activityHandler);
+  window.addEventListener('click', activityHandler);
+  window.addEventListener('touchstart', activityHandler);
+  document.addEventListener('visibilitychange', visibilityHandler);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', setAppHeight);
+  window.removeEventListener('mousemove', activityHandler);
+  window.removeEventListener('keydown', activityHandler);
+  window.removeEventListener('click', activityHandler);
+  window.removeEventListener('touchstart', activityHandler);
+  document.removeEventListener('visibilitychange', visibilityHandler);
 });
 </script>
 
@@ -29,7 +49,6 @@ onBeforeUnmount(() => {
     <RecipientsModal />
     <LinksModal />
     <EditMessageModal />
-    <IdleOverlay />
   </div>
 </template>
 
