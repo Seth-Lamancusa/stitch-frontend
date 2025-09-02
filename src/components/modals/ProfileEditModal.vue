@@ -51,7 +51,6 @@ const notifyPrefs = ref({ email: false, phone: false, endpoint: false });
 // Endpoint signing secret management (write-only)
 const secretBusy = ref(false);
 const secretError = ref('');
-const secretSuccess = ref('');
 const generatedSecret = ref(''); // reveal-once buffer
 const hasJustRevealedSecret = ref(false);
 
@@ -81,8 +80,6 @@ const dismissRevealedSecret = () => {
 const copyRevealedSecret = async () => {
   try {
     await navigator.clipboard.writeText(generatedSecret.value);
-    secretSuccess.value = 'Copied to clipboard';
-    setTimeout(() => { secretSuccess.value = ''; }, 1500);
   } catch (e) {
     secretError.value = 'Failed to copy';
     setTimeout(() => { secretError.value = ''; }, 2000);
@@ -91,7 +88,6 @@ const copyRevealedSecret = async () => {
 
 const setOrRotateSigningSecret = async () => {
   secretError.value = '';
-  secretSuccess.value = '';
   if (!endpoint.value || !endpoint.value.trim()) {
     secretError.value = 'Add and verify an endpoint first';
     return;
@@ -110,8 +106,6 @@ const setOrRotateSigningSecret = async () => {
     }
     await store.dispatch('auth/updateProfile', payload);
     revealSecretOnce(newSecret);
-    secretSuccess.value = 'Signing secret updated. Store it securely — it cannot be shown again.';
-    setTimeout(() => { secretSuccess.value = ''; }, 2500);
   } catch (e) {
     secretError.value = e.message || 'Failed to update signing secret';
   } finally {
@@ -164,7 +158,6 @@ const resetForm = () => {
   generatedSecret.value = '';
   hasJustRevealedSecret.value = false;
   secretError.value = '';
-  secretSuccess.value = '';
 };
 
 onMounted(() => {
@@ -646,7 +639,6 @@ const cancelClose = () => {
                 <div class="field-hint">This value is write-only and cannot be viewed again after dismissal.</div>
                 <div class="field-hint">Requests will include headers X-Stitch-Timestamp and X-Stitch-Signature.</div>
                 <div class="field-error" v-if="secretError">{{ secretError }}</div>
-                <div class="field-hint" v-if="secretSuccess" style="color: var(--color-success, #10b981);">{{ secretSuccess }}</div>
               </div>
             </div>
           </div>

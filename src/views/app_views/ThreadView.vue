@@ -154,8 +154,8 @@
       :message="messageToDelete"
       :is-deleting="isDeleting"
       :relation="deleteRelation"
-      :disallow-confirm="isCenteredDeletion"
-      :disallow-reason="centeredDeletionReason"
+      :disallow-confirm="false"
+      :disallow-reason="centeredDeletionHint"
       @cancel="store.dispatch('ui/hideDeleteConfirm')"
       @confirm="deleteMessage"
     />
@@ -305,6 +305,13 @@ const isCenteredDeletion = computed(() => {
 const centeredDeletionReason = computed(() => {
   return isCenteredDeletion.value
     ? 'You cannot delete the currently centered message. Center a different message first.'
+    : '';
+});
+
+// New: friendly hint when deleting the centered message
+const centeredDeletionHint = computed(() => {
+  return isCenteredDeletion.value
+    ? 'Hint: Deleting the message you are viewing will close this thread and return you to your previous view.'
     : '';
 });
 
@@ -1118,22 +1125,23 @@ const deleteMessage = async (options) => {
   try {
     // Set deleting state to true
     isDeleting.value = true;
-    
-    // Safety guard: disallow deleting the centered message
-    if (String(deletedId) === String(messageId.value)) {
-      console.warn('[ThreadView] Prevented deletion of centered message');
-      store.commit('ui/SET_ERROR', 'Cannot delete the currently centered message.');
-      return;
-    }
 
     await store.dispatch('messages/deleteMessage', { messageId: deletedId, deleteDescendants });
     
-    // Stay in thread view after deleting off-center; if we deleted the currently centered message,
-    // the UI should have prevented it in MessageNode. When deleting, keep current route.
-    console.log('[ThreadView] Delete complete - staying in thread view');
-    
     // Hide confirmation modal after successful deletion
     store.commit('ui/SET_DELETE_CONFIRM', { show: false, message: null });
+
+    // If we deleted the currently centered message, navigate back to previous route (message list)
+    if (String(deletedId) === String(messageId.value)) {
+      const prevRoute = store.getters['navigation/previousRoute'];
+      const fallback = '/inbox';
+      console.log('[ThreadView] Centered message deleted - navigating back', { prevRoute, fallback });
+      router.push(prevRoute || fallback);
+      return;
+    }
+
+    // Otherwise, remain in thread view
+    console.log('[ThreadView] Delete complete - staying in thread view');
   } catch (error) {
     console.error('Error deleting message:', error);
     
