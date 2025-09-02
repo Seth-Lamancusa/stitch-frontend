@@ -36,6 +36,13 @@ const WebSocketService = {
   pingTimeoutMs: 60000, // 1 minute
   // Removed idle timeout; rely on activity-based reconnect only
   
+  // Idle disconnect handling
+  idleTimeoutId: null,
+  idleTimeoutMs: 2 * 60 * 1000, // 2 minutes
+  lastActivityAt: null,
+  activityListenerRegistered: false,
+  activityEvents: ['mousemove'], // per requirement: mouse movement triggers reconnect
+  
   // Debug logging helper
   log(...messages) {
     if (this.debugMode) {
@@ -136,6 +143,10 @@ const WebSocketService = {
         this.log('Registering message handler');
         this.unsubscribeFunction = this.handleNewMessage(this.handleIncomingMessage.bind(this));
         
+        // Set up activity listeners and idle timer
+        this.setupActivityListeners();
+        this.resetIdleTimer();
+
         // Connect to WebSocket server
         this.log(`Connecting to WebSocket server for user ${user.uid}`);
         await this.connectUser(authToken);
@@ -167,7 +178,12 @@ const WebSocketService = {
     
     
 
-    // No idle timer to stop
+    // Stop idle timer
+    if (this.idleTimeoutId) {
+      clearTimeout(this.idleTimeoutId);
+      this.idleTimeoutId = null;
+    }
+    this.teardownActivityListeners();
     
     // Remove message handler
     if (this.unsubscribeFunction) {
@@ -409,12 +425,19 @@ const WebSocketService = {
         this.connectionEstablished = true;
         
         // JSON heartbeat removed; rely on text ping/pong only
-        // No idle timer
+        // Reset idle timer on successful open
+        this.resetIdleTimer();
         
         // Reset connection attempts on successful connection
         this.connectionAttempts = 0;
         this.reconnectDelay = 1000; // Reset reconnect delay
         
+        // Clear any WS disconnected banner and refresh unread count
+        try {
+          store.dispatch('ui/clearWebsocketDisconnected');
+          store.dispatch('messages/fetchUnreadMessageCount');
+        } catch (e) {}
+
         resolve(); // Resolve the connection promise
       };
       
@@ -471,7 +494,7 @@ const WebSocketService = {
         this.userId = null;
         this.connectionEstablished = false;
         
-        // No idle timer
+        // No idle timer changes here
         
         // Only clear the promise if it's our current one
         if (this.connectionPromise && !event.wasClean) {
@@ -479,6 +502,13 @@ const WebSocketService = {
           reject(new Error(`Connection closed unexpectedly: code ${event.code}, reason: ${event.reason || 'none'}`));
         }
         
+        // Show persistent banner indicating WS disconnected with channels based on user notify prefs
+        try {
+          const user = store.getters['auth/user'];
+          const channels = this.getUserNotifyChannels(user);
+          store.dispatch('ui/setWebsocketDisconnected', { disconnected: true, channels });
+        } catch (e) {}
+
         // Handle authentication failures specifically: try refresh then reconnect
         if (event.code === 1008) {
           this.error('Authentication failed (1008). Attempting refresh and reconnect');
@@ -579,6 +609,12 @@ const WebSocketService = {
       this.pingInterval = null;
     }
     
+    // Stop idle timer
+    if (this.idleTimeoutId) {
+      clearTimeout(this.idleTimeoutId);
+      this.idleTimeoutId = null;
+    }
+
     // Clear connection promise
     this.connectionPromise = null;
     this.log(`DisconnectUser completed`);
@@ -644,6 +680,62 @@ const WebSocketService = {
     };
     
     return status;
+  }
+  ,
+  // Activity and idle helpers
+  setupActivityListeners() {
+    if (this.activityListenerRegistered) return;
+    const handler = this.handleActivity.bind(this);
+    this._activityHandler = handler;
+    try {
+      this.activityEvents.forEach(evt => window.addEventListener(evt, handler, { passive: true }));
+      this.activityListenerRegistered = true;
+      this.lastActivityAt = Date.now();
+    } catch (e) {}
+  },
+  teardownActivityListeners() {
+    if (!this.activityListenerRegistered) return;
+    try {
+      this.activityEvents.forEach(evt => window.removeEventListener(evt, this._activityHandler));
+    } catch (e) {}
+    this.activityListenerRegistered = false;
+    this._activityHandler = null;
+  },
+  handleActivity() {
+    this.lastActivityAt = Date.now();
+    // Clear WS disconnected banner immediately on activity
+    try { store.dispatch('ui/clearWebsocketDisconnected'); } catch (e) {}
+    // Attempt reconnect if not open
+    this.maybeActivityReconnect();
+    // Reset idle timer
+    this.resetIdleTimer();
+  },
+  resetIdleTimer() {
+    try {
+      if (this.idleTimeoutId) clearTimeout(this.idleTimeoutId);
+      this.idleTimeoutId = setTimeout(() => this.onIdleTimeout(), this.idleTimeoutMs);
+    } catch (e) {}
+  },
+  onIdleTimeout() {
+    // Disconnect intentionally due to idle
+    this.log('Idle timeout reached, disconnecting WebSocket');
+    try {
+      const user = store.getters['auth/user'];
+      const channels = this.getUserNotifyChannels(user);
+      store.dispatch('ui/setWebsocketDisconnected', { disconnected: true, channels });
+    } catch (e) {}
+    this.disconnectUser();
+  },
+  getUserNotifyChannels(user) {
+    try {
+      const contacts = (user && Array.isArray(user.contacts)) ? user.contacts : [];
+      const channels = [];
+      const hasEmail = !!contacts.find(c => c.type === 'email' && c.verified && c.notify);
+      const hasPhone = !!contacts.find(c => c.type === 'phone' && c.verified && c.notify);
+      if (hasPhone) channels.push('phone');
+      if (hasEmail) channels.push('email');
+      return channels;
+    } catch (e) { return []; }
   }
 };
 
