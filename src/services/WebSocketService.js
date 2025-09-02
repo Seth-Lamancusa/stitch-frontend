@@ -10,7 +10,7 @@ const WebSocketService = {
   userId: null,
   messageCallback: null,
   pingInterval: null,
-  idleTimer: null,
+  // Removed idle overlay/timer
   debugMode: true, // Enable debug logging by default
   authToken: null,
   connectionEstablished: false,
@@ -34,7 +34,7 @@ const WebSocketService = {
   // Connection health monitoring
   lastPingTime: null,
   pingTimeoutMs: 60000, // 1 minute
-  idleTimeoutMs: 120000, // 2 minutes of user inactivity
+  // Removed idle timeout; rely on activity-based reconnect only
   
   // Debug logging helper
   log(...messages) {
@@ -45,9 +45,6 @@ const WebSocketService = {
   
   maybeActivityReconnect() {
     try {
-      // Any user activity resets the idle timer
-      this.resetIdleTimer();
-
       const now = Date.now();
       if (now - this.lastActivityReconnectAt < this.activityReconnectCooldownMs) {
         return;
@@ -64,66 +61,7 @@ const WebSocketService = {
     }
   },
 
-  // Idle timeout helpers
-  startIdleTimer() {
-    try {
-      if (this.idleTimer) {
-        clearTimeout(this.idleTimer);
-      }
-      // Only start when connected
-      if (this.connection && this.connection.readyState === WebSocket.OPEN) {
-        this.idleTimer = setTimeout(() => {
-          this.handleIdleTimeout();
-        }, this.idleTimeoutMs);
-        this.log(`Idle timer started (${this.idleTimeoutMs}ms)`);
-      }
-    } catch (e) {
-      // ignore
-    }
-  },
-
-  resetIdleTimer() {
-    try {
-      if (!this.connection || this.connection.readyState !== WebSocket.OPEN) {
-        return;
-      }
-      if (this.idleTimer) {
-        clearTimeout(this.idleTimer);
-      }
-      this.idleTimer = setTimeout(() => {
-        this.handleIdleTimeout();
-      }, this.idleTimeoutMs);
-      // Do not log on every activity to avoid noise
-    } catch (e) {
-      // ignore
-    }
-  },
-
-  stopIdleTimer() {
-    if (this.idleTimer) {
-      clearTimeout(this.idleTimer);
-      this.idleTimer = null;
-      this.log('Idle timer stopped');
-    }
-  },
-
-  handleIdleTimeout() {
-    this.log('Idle timeout reached — closing WebSocket connection');
-    try {
-      if (this.connection && this.connection.readyState === WebSocket.OPEN) {
-        // Clean close with normal code; activity handlers will reconnect on next activity
-        this.connection.close(1000, 'Idle timeout');
-      }
-    } catch (e) {
-      this.error('Error during idle timeout close:', e);
-    } finally {
-      this.stopIdleTimer();
-      try { 
-        // Surface idle overlay
-        store.dispatch('ui/enterIdle');
-      } catch (e) {}
-    }
-  },
+  // Removed idle timeout helpers and overlay dispatch
   
   
   error(...messages) {
@@ -204,7 +142,7 @@ const WebSocketService = {
         this.isInitialized = true;
         this.log(`Global connection established for user ${user.uid}`);
         
-        // Activity-based auto-reconnect removed; manual reconnect via idle overlay will be used
+        // Activity-based reconnect enabled via global activity handlers
       } catch (error) {
         this.error('Failed to connect:', error);
         this.cleanup();
@@ -229,8 +167,7 @@ const WebSocketService = {
     
     
 
-    // Stop idle timeout
-    this.stopIdleTimer();
+    // No idle timer to stop
     
     // Remove message handler
     if (this.unsubscribeFunction) {
@@ -472,8 +409,7 @@ const WebSocketService = {
         this.connectionEstablished = true;
         
         // JSON heartbeat removed; rely on text ping/pong only
-        // Start idle timeout monitoring
-        this.startIdleTimer();
+        // No idle timer
         
         // Reset connection attempts on successful connection
         this.connectionAttempts = 0;
@@ -535,8 +471,7 @@ const WebSocketService = {
         this.userId = null;
         this.connectionEstablished = false;
         
-        // Stop idle timeout monitoring
-        this.stopIdleTimer();
+        // No idle timer
         
         // Only clear the promise if it's our current one
         if (this.connectionPromise && !event.wasClean) {
