@@ -703,6 +703,7 @@ const closeModal = () => {
   console.log('[RecipientsModal] closeModal called');
   clearSearch();
   // Reset any loading states
+  isAddingRecipients.value = false;
   isRemovingFromSingle.value = false;
   isRemovingFromDescendants.value = false;
   showRemoveConfirm.value = false;
@@ -765,6 +766,9 @@ const onAddRecipientsComplete = async () => {
       count: props.existingRecipients?.length || 0,
       recipients: props.existingRecipients
     });
+
+    // Close the modal only after successful add
+    closeModal();
   } catch (error) {
     console.error('[RecipientsModal] Error clearing recipients:', error);
   } finally {
