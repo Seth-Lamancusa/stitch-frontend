@@ -90,7 +90,8 @@ export default {
           phone_number: primaryPhoneValue,
           email: primaryEmailValue,
           is_email_verified: isEmailVerified,
-          is_phone_verified: isPhoneVerified
+          is_phone_verified: isPhoneVerified,
+          has_endpoint_signing_secret: !!userData.has_endpoint_signing_secret
         });
         try {
           await WebSocketService.initialize();
@@ -184,7 +185,8 @@ export default {
               phone_number: primaryPhoneValue,
               email: primaryEmailValue,
               is_email_verified: isEmailVerified,
-              is_phone_verified: isPhoneVerified
+              is_phone_verified: isPhoneVerified,
+              has_endpoint_signing_secret: !!userData.has_endpoint_signing_secret
             });
           }
         } catch (e) {
