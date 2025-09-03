@@ -1,4 +1,5 @@
 import WebSocketService from '../../services/WebSocketService'
+import TokenManager from '../../services/TokenManager'
 import { parseScopes, hasScope as hasScopeUtil, hasAnyScope as hasAnyScopeUtil } from '../../utils/scopes'
 
 // ------------------------------------------------------------
@@ -29,7 +30,18 @@ export default {
       try {
         const token = localStorage.getItem('auth_token');
         if (!token) {
-          commit('SET_USER', null);
+          // Attempt proactive refresh if a refresh token exists
+          const refresh = localStorage.getItem('refresh_token');
+          if (refresh) {
+            const newAccess = await TokenManager.refreshAccessToken();
+            if (newAccess) {
+              await dispatch('validateExistingToken');
+            } else {
+              commit('SET_USER', null);
+            }
+          } else {
+            commit('SET_USER', null);
+          }
           commit('SET_AUTH_READY', true);
           return;
         }
@@ -54,6 +66,7 @@ export default {
         });
         if (!response.ok) {
           localStorage.removeItem('auth_token');
+          localStorage.removeItem('refresh_token');
           commit('SET_USER', null);
           WebSocketService.cleanup();
           return;
@@ -87,6 +100,7 @@ export default {
       } catch (error) {
         console.error('[AUTH STORE] Token validation failed:', error);
         localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
         commit('SET_USER', null);
         WebSocketService.cleanup();
       }
@@ -97,6 +111,7 @@ export default {
         // Clean up WebSocket connection before signing out
         WebSocketService.cleanup();
         localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
         commit('SET_USER', null);
       } catch (error) {
         console.error('Error signing out:', error);
@@ -205,6 +220,7 @@ export default {
         commit('SET_AUTH_READY', true);
         
         localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
         
         // Redirect to the public page
         if (window.location.pathname !== '/public') {
@@ -227,6 +243,7 @@ export default {
         commit('SET_USER', null);
         commit('SET_AUTH_READY', true);
         localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
       }
     }
   },

@@ -80,15 +80,23 @@ const WebSocketService = {
       this.log('Attempting token refresh due to authentication failure');
       const newAccess = await TokenManager.refreshAccessToken();
       if (!newAccess) {
-        this.error('Token refresh failed, forcing logout');
-        try { await store.dispatch('auth/forceLogoutWithMessage'); } catch (e) {}
+        this.error('Token refresh failed; keeping session and showing WS disconnected banner');
+        try {
+          const user = store.getters['auth/user'];
+          const channels = this.getUserNotifyChannels(user);
+          await store.dispatch('ui/setWebsocketDisconnected', { disconnected: true, channels });
+        } catch (e) {}
         return;
       }
       this.log('Token refresh succeeded, reconnecting with new token');
       await this.connectUser(newAccess);
     } catch (e) {
       this.error('Error during refresh-and-reconnect:', e);
-      try { await store.dispatch('auth/forceLogoutWithMessage'); } catch (err) {}
+      try {
+        const user = store.getters['auth/user'];
+        const channels = this.getUserNotifyChannels(user);
+        await store.dispatch('ui/setWebsocketDisconnected', { disconnected: true, channels });
+      } catch (err) {}
     }
   },
   
@@ -516,6 +524,15 @@ const WebSocketService = {
           return;
         }
 
+        // Some proxies/browsers report handshake/auth failures as 1006 with empty reason
+        // If we have no established connection yet and close quickly with 1006, attempt a refresh once
+        const likelyHandshakeFailure = !this.connectionEstablished && event.code === 1006;
+        if (likelyHandshakeFailure) {
+          this.error('Possible handshake/auth failure (1006). Attempting refresh and reconnect');
+          this.attemptRefreshAndReconnect();
+          return;
+        }
+
         // Determine if we should reconnect
         const shouldReconnect = !event.wasClean && 
                                this.connectionAttempts < this.maxReconnectAttempts &&
@@ -547,6 +564,10 @@ const WebSocketService = {
       
       socket.onerror = (error) => {
         this.error(`WebSocket error for user ${this.userId}:`, error);
+        // If error occurs before open and we haven't established connection, try refresh once
+        if (!this.connectionEstablished) {
+          this.attemptRefreshAndReconnect();
+        }
         reject(error);
       };
       
