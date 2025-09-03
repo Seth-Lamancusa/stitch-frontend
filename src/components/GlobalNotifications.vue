@@ -2,7 +2,7 @@
   <div class="global-notifications">
     <!-- WebSocket Disconnected Persistent Banner -->
     <transition name="notification">
-      <div v-if="wsDisconnected" class="notification error-notification" @click="dismissWsBanner">
+      <div v-if="wsDisconnected" class="notification message-notification" @click="dismissWsBanner">
         <div class="notification-icon">⚠️</div>
         <div class="notification-content">
           <div class="notification-message">
