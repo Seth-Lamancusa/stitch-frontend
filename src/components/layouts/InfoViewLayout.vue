@@ -12,7 +12,6 @@
           <li><router-link to="/home" :class="{ active: currentRoute === '/home' }">Home</router-link></li>
           <!-- <li><router-link to="/architecture" :class="{ active: currentRoute === '/architecture' }">Architecture</router-link></li> -->
           <li><router-link to="/features" :class="{ active: currentRoute === '/features' }">Features</router-link></li>
-          <li><router-link to="/requests" :class="{ active: currentRoute === '/requests' }">Join Waitlist</router-link></li>
           <li><router-link to="/terms" :class="{ active: currentRoute === '/terms' }">Terms</router-link></li>
           <li><router-link to="/public" class="login-btn">Go to Stitch</router-link></li>
         </ul>

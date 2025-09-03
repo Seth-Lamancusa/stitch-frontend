@@ -105,6 +105,7 @@ const setOrRotateSigningSecret = async () => {
       payload.endpoint = endpoint.value.trim();
     }
     await store.dispatch('auth/updateProfile', payload);
+    // After successful write, the auth store refreshes /me and sets has_endpoint_signing_secret
     revealSecretOnce(newSecret);
   } catch (e) {
     secretError.value = e.message || 'Failed to update signing secret';
@@ -124,6 +125,8 @@ const isEndpointVerified = computed(() => !!((user.value?.contacts || []).some(c
 const hasSavedEmail = computed(() => !!(user.value?.email));
 const hasSavedPhone = computed(() => !!(user.value?.phone_number));
 const hasSavedEndpoint = computed(() => !!((user.value?.contacts || []).find(c => c.type === 'endpoint')?.value));
+// Signing secret presence flag from /me
+const hasEndpointSigningSecret = computed(() => !!(user.value?.has_endpoint_signing_secret));
 
 // Reset form whenever modal is opened
 watch(() => props.isOpen, (isOpen) => {
@@ -625,6 +628,7 @@ const cancelClose = () => {
                     {{ secretBusy ? 'Saving…' : (hasSavedEndpoint ? 'Rotate Secret' : 'Create Secret') }}
                   </div>
                 </button>
+                <span v-if="hasEndpointSigningSecret" class="verified-badge" title="Signing secret exists">✓</span>
                 <span class="field-hint" v-if="!isEndpointVerified">Verify endpoint to enable</span>
               </div>
             </div>
