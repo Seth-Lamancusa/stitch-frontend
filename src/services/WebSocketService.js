@@ -49,6 +49,11 @@ const WebSocketService = {
       console.log('[WebSocket]', ...messages);
     }
   },
+  warn(...messages) {
+    if (this.debugMode) {
+      console.warn('[WebSocket]', ...messages);
+    }
+  },
   
   maybeActivityReconnect() {
     try {
@@ -74,6 +79,42 @@ const WebSocketService = {
   error(...messages) {
     console.error('[WebSocket]', ...messages);
   },
+  showWsDisconnectedBanner() {
+    try {
+      const user = store.getters['auth/user'];
+      const channels = this.getUserNotifyChannels(user);
+      store.dispatch('ui/setWebsocketDisconnected', { disconnected: true, channels });
+    } catch (e) {}
+  },
+  clearWsDisconnectedBanner() {
+    try {
+      store.dispatch('ui/clearWebsocketDisconnected');
+    } catch (e) {}
+  },
+  stopPingInterval() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+  },
+  stopIdleTimer() {
+    if (this.idleTimeoutId) {
+      clearTimeout(this.idleTimeoutId);
+      this.idleTimeoutId = null;
+    }
+  },
+  clearClientSideHandlers() {
+    this.stopPingInterval();
+    this.stopIdleTimer();
+    this.teardownActivityListeners();
+  },
+  removeMessageSubscription() {
+    if (this.unsubscribeFunction) {
+      this.log('Removing message handler');
+      this.unsubscribeFunction();
+      this.unsubscribeFunction = null;
+    }
+  },
   
   async attemptRefreshAndReconnect() {
     try {
@@ -82,9 +123,7 @@ const WebSocketService = {
       if (!newAccess) {
         this.error('Token refresh failed; keeping session and showing WS disconnected banner');
         try {
-          const user = store.getters['auth/user'];
-          const channels = this.getUserNotifyChannels(user);
-          await store.dispatch('ui/setWebsocketDisconnected', { disconnected: true, channels });
+          this.showWsDisconnectedBanner();
         } catch (e) {}
         return;
       }
@@ -93,9 +132,7 @@ const WebSocketService = {
     } catch (e) {
       this.error('Error during refresh-and-reconnect:', e);
       try {
-        const user = store.getters['auth/user'];
-        const channels = this.getUserNotifyChannels(user);
-        await store.dispatch('ui/setWebsocketDisconnected', { disconnected: true, channels });
+        this.showWsDisconnectedBanner();
       } catch (err) {}
     }
   },
@@ -178,33 +215,15 @@ const WebSocketService = {
   cleanup() {
     this.log('Cleanup called');
     
-    // Clear intervals
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval);
-      this.pingInterval = null;
-    }
-    
-    
-
-    // Stop idle timer
-    if (this.idleTimeoutId) {
-      clearTimeout(this.idleTimeoutId);
-      this.idleTimeoutId = null;
-    }
-    this.teardownActivityListeners();
-    
     // Remove message handler
-    if (this.unsubscribeFunction) {
-      this.log('Removing message handler');
-      this.unsubscribeFunction();
-      this.unsubscribeFunction = null;
-    }
+    this.removeMessageSubscription();
     
-    // Disconnect WebSocket
+    // Disconnect WebSocket or clear local handlers
     if (this.connection) {
       this.log(`Disconnecting user ${this.userId || 'unknown'}`);
       this.disconnectUser();
     } else {
+      this.clearClientSideHandlers();
       this.log('No active connection to clean up');
     }
     
@@ -442,7 +461,7 @@ const WebSocketService = {
         
         // Clear any WS disconnected banner and refresh unread count
         try {
-          store.dispatch('ui/clearWebsocketDisconnected');
+          this.clearWsDisconnectedBanner();
           store.dispatch('messages/fetchUnreadMessageCount');
         } catch (e) {}
 
@@ -512,9 +531,7 @@ const WebSocketService = {
         
         // Show persistent banner indicating WS disconnected with channels based on user notify prefs
         try {
-          const user = store.getters['auth/user'];
-          const channels = this.getUserNotifyChannels(user);
-          store.dispatch('ui/setWebsocketDisconnected', { disconnected: true, channels });
+          this.showWsDisconnectedBanner();
         } catch (e) {}
 
         // Handle authentication failures specifically: try refresh then reconnect
@@ -623,18 +640,8 @@ const WebSocketService = {
       this.log(`No active connection to disconnect`);
     }
     
-    // Clear ping interval
-    if (this.pingInterval) {
-      this.log(`Clearing ping interval`);
-      clearInterval(this.pingInterval);
-      this.pingInterval = null;
-    }
-    
-    // Stop idle timer
-    if (this.idleTimeoutId) {
-      clearTimeout(this.idleTimeoutId);
-      this.idleTimeoutId = null;
-    }
+    // Clear timers and activity listeners
+    this.clearClientSideHandlers();
 
     // Clear connection promise
     this.connectionPromise = null;
@@ -725,7 +732,7 @@ const WebSocketService = {
   handleActivity() {
     this.lastActivityAt = Date.now();
     // Clear WS disconnected banner immediately on activity
-    try { store.dispatch('ui/clearWebsocketDisconnected'); } catch (e) {}
+    try { this.clearWsDisconnectedBanner(); } catch (e) {}
     // Attempt reconnect if not open
     this.maybeActivityReconnect();
     // Reset idle timer
@@ -741,9 +748,7 @@ const WebSocketService = {
     // Disconnect intentionally due to idle
     this.log('Idle timeout reached, disconnecting WebSocket');
     try {
-      const user = store.getters['auth/user'];
-      const channels = this.getUserNotifyChannels(user);
-      store.dispatch('ui/setWebsocketDisconnected', { disconnected: true, channels });
+      this.showWsDisconnectedBanner();
     } catch (e) {}
     this.disconnectUser();
   },

@@ -584,6 +584,24 @@ export default {
           });
         }
         
+        // If the current user is a recipient of this new message, mark it as read for them immediately
+        try {
+          const currentUserId = rootState.auth?.user?.uid;
+          const recipientsArray = Array.isArray(newMessage?.recipients) ? newMessage.recipients : processedRecipients;
+          const isSelfRecipient = Array.isArray(recipientsArray) && !!currentUserId && recipientsArray.some(r => {
+            if (!r) return false;
+            if (typeof r === 'string') return r === currentUserId;
+            if (typeof r === 'object') return r.uid === currentUserId;
+            return false;
+          });
+          if (isSelfRecipient && newMessage?.id) {
+            // Fire and await to ensure backend state is consistent; internal action will avoid count drift for self-authored
+            await dispatch('markMessageAsRead', newMessage.id);
+          }
+        } catch (e) {
+          console.warn('[Messages Store] Failed to auto-mark sent message as read:', e);
+        }
+        
         // No need to subscribe here, ThreadView handles WebSocket subscriptions
         
         return newMessage;
@@ -933,19 +951,21 @@ export default {
     },
     
     // Mark a message as read and update unread count
-    async markMessageAsRead({ commit, state }, messageId) {
+    async markMessageAsRead({ commit, state, rootState }, messageId) {
       console.log(`[Store] markMessageAsRead called for message ${messageId}`);
       
       try {
         // Check if message is currently unread before making API call
         const message = state.messages[messageId];
         const wasUnread = isMessageUnread(message);
+        const isAuthoredByCurrentUser = !!(message && rootState?.auth?.user && message.content_author === rootState.auth.user.uid);
         
         console.log(`[Store] Message ${messageId} check:`, {
           exists: !!message,
           currentReadStatus: message?.is_read,
           wasUnread,
-          willCallAPI: wasUnread
+          willCallAPI: wasUnread,
+          isAuthoredByCurrentUser
         });
         
         if (wasUnread) {
@@ -955,14 +975,19 @@ export default {
           commit('UPDATE_MESSAGE_READ_STATUS', { messageId, isRead: true });
           
           // If the message was previously unread, decrement the unread count
-          commit('SET_UNREAD_MESSAGE_COUNT', Math.max(0, state.unreadMessageCount - 1));
+          // Skip decrement for self-authored messages to avoid count drift
+          if (!isAuthoredByCurrentUser) {
+            commit('SET_UNREAD_MESSAGE_COUNT', Math.max(0, state.unreadMessageCount - 1));
+          }
           
-          // Decrement unread_count_in_thread if it exists on this message
-          if (message.unread_count_in_thread && message.unread_count_in_thread > 0) {
-            commit('UPDATE_MESSAGE_THREAD_COUNT', { 
-              messageId, 
-              unreadCountInThread: message.unread_count_in_thread - 1 
-            });
+          // Decrement unread_count_in_thread if it exists on this message and not self-authored
+          if (!isAuthoredByCurrentUser) {
+            if (message && message.unread_count_in_thread && message.unread_count_in_thread > 0) {
+              commit('UPDATE_MESSAGE_THREAD_COUNT', { 
+                messageId, 
+                unreadCountInThread: message.unread_count_in_thread - 1 
+              });
+            }
           }
         } else {
           console.log(`[Store] Skipping API call for message ${messageId} - already read or not found`);

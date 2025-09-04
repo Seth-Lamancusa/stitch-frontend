@@ -21,7 +21,9 @@
             <user-search-input
               :initial-user="initialAuthor"
               @user-selected="handleAuthorSelected"
+              @text-updated="handleAuthorTextUpdated"
             />
+            <p v-if="authorValidationError" class="error-text">{{ authorValidationError }}</p>
           </div>
         </div>
         <div v-else class="loading-container">
@@ -30,7 +32,7 @@
       </div>
       <div class="modal-footer">
         <button @click="closeModal" class="cancel-btn">Cancel</button>
-        <button @click="saveChanges" class="save-btn" :disabled="isSaving">
+        <button @click="saveChanges" class="save-btn" :disabled="isSaving || !canSave">
           <span v-if="isSaving" class="spinner"></span>
           {{ isSaving ? 'Saving...' : 'Save Changes' }}
         </button>
@@ -59,6 +61,18 @@ export default {
     const selectedAuthor = ref(null);
     const initialAuthor = ref(null);
     const isSaving = ref(false);
+    const authorText = ref('');
+    const authorValidationError = ref('');
+    const canSave = computed(() => {
+      // Content change or author change present
+      const hasChanges = (
+        editableContent.value !== (messageToEdit.value?.content || '') ||
+        (selectedAuthor.value && selectedAuthor.value.uid !== messageToEdit.value?.content_author)
+      );
+      // Author must be valid (if changed)
+      const authorValid = !authorValidationError.value;
+      return hasChanges && authorValid;
+    });
 
     watch(messageToEdit, (newMessage) => {
       if (newMessage) {
@@ -78,6 +92,36 @@ export default {
 
     const handleAuthorSelected = (user) => {
       selectedAuthor.value = user;
+      authorValidationError.value = '';
+    };
+
+    const handleAuthorTextUpdated = (text) => {
+      authorText.value = text || '';
+      // Accept only values that match the pattern "Name (@tag)" or just "@tag"
+      // Extract @tag from the text and compare with selectedAuthor
+      const atIndex = authorText.value.lastIndexOf('(@');
+      let extractedTag = null;
+      if (authorText.value.startsWith('@')) {
+        extractedTag = authorText.value.slice(1).trim();
+      } else if (atIndex !== -1 && authorText.value.endsWith(')')) {
+        extractedTag = authorText.value.substring(atIndex + 2, authorText.value.length - 1).trim();
+      }
+
+      if (!extractedTag) {
+        // If author changed away from initial and not a resolvable tag, block save
+        if (selectedAuthor.value && selectedAuthor.value.user_tag) {
+          authorValidationError.value = '';
+        } else {
+          authorValidationError.value = 'Please select a user from search so the @tag is valid.';
+        }
+        return;
+      }
+
+      if (!selectedAuthor.value || selectedAuthor.value.user_tag !== extractedTag) {
+        authorValidationError.value = 'Please select a user from search so the @tag is valid.';
+      } else {
+        authorValidationError.value = '';
+      }
     };
 
     const saveChanges = async () => {
@@ -100,7 +144,7 @@ export default {
             messageToEdit.value.id,
             payload
           );
-          store.dispatch('messages/updateMessage', updatedMessage, { root: true });
+          store.commit('messages/SET_MESSAGE', updatedMessage, { root: true });
           closeModal();
         } catch (error) {
           console.error('Failed to update message:', error);
@@ -119,8 +163,11 @@ export default {
       editableContent,
       initialAuthor,
       isSaving,
+      canSave,
+      authorValidationError,
       closeModal,
       handleAuthorSelected,
+      handleAuthorTextUpdated,
       saveChanges,
     };
   },
