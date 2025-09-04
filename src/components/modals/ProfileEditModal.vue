@@ -493,6 +493,24 @@ const confirmClose = () => {
 const cancelClose = () => {
   showUnsavedConfirm.value = false;
 };
+
+// Delete account (simple)
+const deleteBusy = ref(false);
+const deleteError = ref('');
+const deleteAccount = async () => {
+  if (deleteBusy.value) return;
+  deleteError.value = '';
+  if (!window.confirm('This will permanently delete your account. Continue?')) return;
+  try {
+    deleteBusy.value = true;
+    await store.dispatch('auth/deleteOwnAccount');
+    emit('close');
+  } catch (e) {
+    deleteError.value = e.message || 'Failed to delete account';
+  } finally {
+    deleteBusy.value = false;
+  }
+};
 </script>
 
 <template>
@@ -548,10 +566,12 @@ const cancelClose = () => {
                   @keydown="handleKeydown"
                   @blur="validateEmail"
                 />
-                <span v-if="isEmailVerified" class="status-badge ok">Verified</span>
-                <label class="notify-toggle" :class="{ disabled: !isEmailVerified }">
-                  <input type="checkbox" v-model="notifyPrefs.email" :disabled="!isEmailVerified" /><span class="notify-text">Notify</span>
-                </label>
+                <div class="notify-group">
+                  <label class="notify-toggle" :class="{ disabled: !isEmailVerified }">
+                    <input type="checkbox" v-model="notifyPrefs.email" :disabled="!isEmailVerified" /><span class="notify-text">Notify</span>
+                  </label>
+                  <span v-if="isEmailVerified" class="status-badge ok">Verified</span>
+                </div>
               </div>
             </div>
             <div class="field-error" v-if="emailError">{{ emailError }}</div>
@@ -575,10 +595,12 @@ const cancelClose = () => {
                   @keydown="handleKeydown"
                   @blur="validatePhoneNumber"
                 />
-                <span v-if="isPhoneVerified" class="status-badge ok">Verified</span>
-                <label class="notify-toggle" :class="{ disabled: !isPhoneVerified || !isEmailVerified }">
-                  <input type="checkbox" v-model="notifyPrefs.phone" :disabled="!isPhoneVerified || !isEmailVerified" /><span class="notify-text">Notify</span>
-                </label>
+                <div class="notify-group">
+                  <label class="notify-toggle" :class="{ disabled: !isPhoneVerified || !isEmailVerified }">
+                    <input type="checkbox" v-model="notifyPrefs.phone" :disabled="!isPhoneVerified || !isEmailVerified" /><span class="notify-text">Notify</span>
+                  </label>
+                  <span v-if="isPhoneVerified" class="status-badge ok">Verified</span>
+                </div>
               </div>
             </div>
             <div class="field-error" v-if="phoneNumberError">{{ phoneNumberError }}</div>
@@ -604,10 +626,12 @@ const cancelClose = () => {
                   placeholder="https://bot.example.com/hook"
                   @keydown="handleKeydown"
                 />
-                <span v-if="isEndpointVerified" class="status-badge ok">Verified</span>
-                <label class="notify-toggle" :class="{ disabled: !isEndpointVerified || !isEmailVerified }">
-                  <input type="checkbox" v-model="notifyPrefs.endpoint" :disabled="!isEndpointVerified || !isEmailVerified" /><span class="notify-text">Notify</span>
-                </label>
+                <div class="notify-group">
+                  <label class="notify-toggle" :class="{ disabled: !isEndpointVerified || !isEmailVerified }">
+                    <input type="checkbox" v-model="notifyPrefs.endpoint" :disabled="!isEndpointVerified || !isEmailVerified" /><span class="notify-text">Notify</span>
+                  </label>
+                  <span v-if="isEndpointVerified" class="status-badge ok">Verified</span>
+                </div>
               </div>
             </div>
             <div class="verify-row warn" v-if="!isEndpointVerified && hasSavedEndpoint"> 
@@ -682,8 +706,22 @@ const cancelClose = () => {
           <div v-if="errorMessage" class="error-message">
             {{ errorMessage }}
           </div>
+          <!-- Danger Zone (simple) -->
+          <div class="form-group" style="border-top:1px solid var(--color-border); padding-top: var(--space-sm); margin-top: 16px;">
+            <h4 style="margin: 0 0 8px 0; color: var(--color-error);">Danger zone</h4>
+            <div class="field-hint">Deleting your account is permanent and cannot be undone.</div>
+            <div class="field-error" v-if="deleteError" style="margin-top: 6px;">{{ deleteError }}</div>
+            <div style="display:flex; justify-content:flex-end; margin-top: 10px;">
+              <button class="update-btn" :disabled="deleteBusy" style="background: #ef4444;" @click="deleteAccount">
+                <div class="button-inner">
+                  <div v-if="deleteBusy" class="spinner"></div>
+                  {{ deleteBusy ? 'Deleting…' : 'Delete account' }}
+                </div>
+              </button>
+            </div>
+          </div>
         </div>
-        
+
         <div class="modal-footer">
           <div class="error-message footer-message" v-if="noChangesMessage">
             <span>{{ noChangesMessage }}</span>
@@ -998,7 +1036,8 @@ const cancelClose = () => {
 .code-input { max-width: 120px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-input-background); color: var(--color-text); }
 .verification-message { font-size: var(--font-size-xs); color: var(--color-text-secondary); margin: 6px 0; }
 .verified-badge { color: var(--color-success, #10b981); margin-left: 6px; font-size: 14px; }
-.notify-toggle { display:inline-grid; grid-auto-flow: column; align-items:center; column-gap:0; font-size: 12px; }
+.notify-group { display: inline-flex; align-items: center; gap: 8px; }
+.notify-toggle { display:inline-grid; grid-auto-flow: column; align-items:center; column-gap: 6px; font-size: 12px; padding: 2px 4px; }
 .notify-toggle input[type="checkbox"] { margin: 0; padding: 0; }
 .notify-text { display: inline-block; line-height: 1; }
 .notify-toggle.disabled { opacity: 0.6; }
@@ -1016,4 +1055,15 @@ const cancelClose = () => {
 .confirm-title { font-weight: 600; margin-bottom: 6px; }
 .confirm-text { font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: 12px; }
 .confirm-actions { display: flex; gap: 12px; justify-content: flex-end; }
+@media (max-width: 600px) {
+  .modal-container { width: 96%; max-width: 560px; max-height: 86vh; }
+  .form-row { flex-direction: column; align-items: stretch; gap: 6px; }
+  .form-row label { min-width: 0; width: 100%; }
+  .control { flex-direction: column; align-items: stretch; gap: 6px; }
+  .notify-group { align-self: flex-start; }
+  .status-badge { align-self: flex-start; }
+  .notify-toggle { align-self: flex-start; }
+  .verify-row { align-items: flex-start; flex-wrap: wrap; }
+  .code-input { max-width: 100%; }
+}
 </style> 

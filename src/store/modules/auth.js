@@ -54,6 +54,38 @@ export default {
       }
     },
 
+    async deleteOwnAccount({ commit }) {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) throw new Error('Not authenticated');
+
+        const resp = await fetch('/api/users/me', {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!resp.ok) {
+          const data = await resp.json().catch(() => ({}));
+          throw new Error(data.detail || 'Failed to delete account');
+        }
+
+        // Cleanup local state and tokens
+        WebSocketService.cleanup();
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
+        commit('SET_USER', null);
+        commit('SET_AUTH_READY', true);
+
+        // Redirect to public page
+        if (window.location.pathname !== '/public') {
+          window.location.href = '/public';
+        }
+        return { success: true };
+      } catch (e) {
+        console.error('[AUTH STORE] deleteOwnAccount failed:', e);
+        throw e;
+      }
+    },
+
     async validateExistingToken({ commit }) {
       try {
         const token = localStorage.getItem('auth_token');
