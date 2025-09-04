@@ -204,19 +204,13 @@ const WebSocketService = {
       this.log('Attempting token refresh due to authentication failure');
       const newAccess = await TokenManager.refreshAccessToken();
       if (!newAccess) {
-        this.error('Token refresh failed; keeping session and showing WS disconnected banner');
-        try {
-          this.showWsDisconnectedBanner();
-        } catch (e) {}
+        this.error('Token refresh failed; skipping WS disconnected banner');
         return;
       }
       this.log('Token refresh succeeded, reconnecting with new token');
       await this.connectUser(newAccess);
     } catch (e) {
       this.error('Error during refresh-and-reconnect:', e);
-      try {
-        this.showWsDisconnectedBanner();
-      } catch (err) {}
     }
   },
   
