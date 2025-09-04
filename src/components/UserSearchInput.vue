@@ -29,7 +29,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['user-selected']);
+const emit = defineEmits(['user-selected', 'text-updated']);
 
 const store = useStore();
 const searchQuery = ref('');
@@ -47,6 +47,7 @@ watch(() => props.initialUser, (newUser) => {
 
 const handleInput = (event) => {
   searchQuery.value = event.target.value;
+  emit('text-updated', searchQuery.value);
   if (debounceTimer) {
     clearTimeout(debounceTimer);
   }
@@ -66,6 +67,7 @@ const selectUser = (user) => {
   searchQuery.value = `${user.display_name} (@${user.user_tag})`;
   showSearchResults.value = false;
   emit('user-selected', user);
+  emit('text-updated', searchQuery.value);
 };
 </script>
 

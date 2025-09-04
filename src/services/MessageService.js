@@ -203,5 +203,14 @@ export default {
 
   // Removed: updateMessage (no server endpoint)
 
-  // Removed: adminUpdateMessage (no server endpoint)
+  // Admin update message (update content and/or author)
+  async adminUpdateMessage(id, { content, content_author } = {}) {
+    const headers = getAuthHeaders();
+    const body = {};
+    if (typeof content === 'string') body.content = content;
+    if (content_author) body.content_author = content_author;
+    const response = await axios.patch(`${apiBaseUrl}/messages/${id}`, body, { headers });
+    // Normalize to previous shape where consumers expect a MessageResponse object
+    return response.data;
+  },
 };
