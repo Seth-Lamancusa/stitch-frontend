@@ -82,7 +82,7 @@
             <span class="auth-loading-spinner"></span>
           </span>
         </div>
-        <button v-if="user" @click="openApiKeysModal" class="logout-btn" title="Manage API Keys">API Keys</button>
+        <button v-if="user" @click="openApiKeysModal" class="logout-btn" title="Developer tools">Dev</button>
         <button v-if="user" @click="logout" class="logout-btn">Logout</button>
         <template v-else>
           <LoginButton />
@@ -512,6 +512,15 @@ const closeApiKeysModal = () => {
 
 /* Mobile responsive styles */
 @media (max-width: 768px) {
+  .verify-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+  .verify-link {
+    align-self: flex-start;
+  }
   .app-header {
     padding: 0 12px; /* Reduce header padding */
     flex-wrap: nowrap; /* Prevent wrapping */
@@ -613,6 +622,10 @@ const closeApiKeysModal = () => {
 }
 
 @media (max-width: 480px) {
+  .verify-banner {
+    padding: 6px 8px;
+    gap: 6px;
+  }
   .app-header {
     padding: 0 8px; /* Even less padding on very narrow screens */
     min-height: 56px; /* Ensure minimum height */
@@ -704,7 +717,7 @@ const closeApiKeysModal = () => {
 }
 
 /* Stack layout vertically on very narrow screens - much better UX */
-@media (max-width: 380px) {
+@media (max-width: 360px) {
   .app-header {
     flex-direction: column; /* Stack everything vertically */
     padding: 8px;

@@ -21,6 +21,8 @@ const WebSocketService = {
   connectionAttempts: 0,
   maxReconnectAttempts: 5,
   reconnectDelay: 1000,
+  // Jitter settings for reconnection backoff (mobile robustness)
+  reconnectJitterMaxMs: 500,
   
   // Activity-based reconnect
   lastActivityReconnectAt: 0,
@@ -41,7 +43,15 @@ const WebSocketService = {
   idleTimeoutMs: 2 * 60 * 1000, // 2 minutes
   lastActivityAt: null,
   activityListenerRegistered: false,
-  activityEvents: ['mousemove'], // per requirement: mouse movement triggers reconnect
+  // Expanded activity events to better capture mobile activity
+  activityEvents: ['mousemove', 'touchstart', 'touchmove', 'keydown', 'scroll'],
+
+  // Network/visibility robustness
+  networkVisibilityListenerRegistered: false,
+  isOnline: typeof navigator !== 'undefined' ? !!navigator.onLine : true,
+  pendingDisconnectedBanner: false,
+  bannerSuppressionUntil: 0,
+  bannerSuppressionMs: 8000,
   
   // Debug logging helper
   log(...messages) {
@@ -79,9 +89,24 @@ const WebSocketService = {
   error(...messages) {
     console.error('[WebSocket]', ...messages);
   },
+  maybeShowWsDisconnectedBanner() {
+    // If offline or hidden, defer banner to avoid noisy UX on mobile
+    const now = Date.now();
+    const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    if (!this.isOnline || isHidden || now < this.bannerSuppressionUntil) {
+      this.pendingDisconnectedBanner = true;
+      return;
+    }
+    this.pendingDisconnectedBanner = false;
+    this.showWsDisconnectedBanner();
+  },
   showWsDisconnectedBanner() {
     try {
       const user = store.getters['auth/user'];
+      // Do not show WS disconnected banner if there is no authenticated user
+      if (!user) {
+        return;
+      }
       const channels = this.getUserNotifyChannels(user);
       store.dispatch('ui/setWebsocketDisconnected', { disconnected: true, channels });
     } catch (e) {}
@@ -90,6 +115,64 @@ const WebSocketService = {
     try {
       store.dispatch('ui/clearWebsocketDisconnected');
     } catch (e) {}
+  },
+  setupNetworkVisibilityListeners() {
+    if (this.networkVisibilityListenerRegistered) return;
+    this._handleOnline = this.handleOnline.bind(this);
+    this._handleOffline = this.handleOffline.bind(this);
+    this._handleVisibility = this.handleVisibilityChange.bind(this);
+    try {
+      window.addEventListener('online', this._handleOnline);
+      window.addEventListener('offline', this._handleOffline);
+      document.addEventListener('visibilitychange', this._handleVisibility);
+      this.networkVisibilityListenerRegistered = true;
+    } catch (e) {}
+  },
+  teardownNetworkVisibilityListeners() {
+    if (!this.networkVisibilityListenerRegistered) return;
+    try {
+      window.removeEventListener('online', this._handleOnline);
+      window.removeEventListener('offline', this._handleOffline);
+      document.removeEventListener('visibilitychange', this._handleVisibility);
+    } catch (e) {}
+    this.networkVisibilityListenerRegistered = false;
+    this._handleOnline = null;
+    this._handleOffline = null;
+    this._handleVisibility = null;
+  },
+  handleOnline() {
+    this.isOnline = true;
+    this.bannerSuppressionUntil = Date.now() + this.bannerSuppressionMs;
+    // Attempt reconnect when coming online if not connected
+    this.clearWsDisconnectedBanner();
+    const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
+    if (!isOpen) {
+      const token = TokenManager.accessToken;
+      if (token) this.connectUser(token);
+    }
+    if (this.pendingDisconnectedBanner) {
+      // Re-evaluate banner after suppression
+      setTimeout(() => this.maybeShowWsDisconnectedBanner(), this.bannerSuppressionMs);
+    }
+  },
+  handleOffline() {
+    this.isOnline = false;
+    // Suppress banner for a short time to avoid churn when toggling connectivity
+    this.bannerSuppressionUntil = Date.now() + this.bannerSuppressionMs;
+  },
+  handleVisibilityChange() {
+    const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    if (!isHidden) {
+      // Visible: try to reconnect if needed
+      const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
+      if (!isOpen && this.isOnline) {
+        const token = TokenManager.accessToken;
+        if (token) this.connectUser(token);
+      }
+      // Clear banner when app is foregrounded
+      this.clearWsDisconnectedBanner();
+      if (this.pendingDisconnectedBanner) this.maybeShowWsDisconnectedBanner();
+    }
   },
   stopPingInterval() {
     if (this.pingInterval) {
@@ -190,6 +273,7 @@ const WebSocketService = {
         
         // Set up activity listeners and idle timer
         this.setupActivityListeners();
+        this.setupNetworkVisibilityListeners();
         this.resetIdleTimer();
 
         // Connect to WebSocket server
@@ -226,6 +310,7 @@ const WebSocketService = {
       this.clearClientSideHandlers();
       this.log('No active connection to clean up');
     }
+    this.teardownNetworkVisibilityListeners();
     
     // Reset state
     this.isInitialized = false;
@@ -454,6 +539,23 @@ const WebSocketService = {
         // JSON heartbeat removed; rely on text ping/pong only
         // Reset idle timer on successful open
         this.resetIdleTimer();
+        // Start ping watchdog to keep connection alive and detect stalls
+        try {
+          this.stopPingInterval();
+          this.pingInterval = setInterval(() => {
+            try {
+              if (this.connection && this.connection.readyState === WebSocket.OPEN) {
+                // Send lightweight ping
+                this.connection.send('ping');
+                // If we haven't heard back in too long, force reconnect
+                if (this.lastPingTime && (Date.now() - this.lastPingTime) > this.pingTimeoutMs * 2) {
+                  this.error('Ping timeout exceeded; forcing reconnect');
+                  this.connection.close(4000, 'Ping timeout');
+                }
+              }
+            } catch (e) {}
+          }, Math.max(30000, Math.floor(this.pingTimeoutMs / 2)));
+        } catch (e) {}
         
         // Reset connection attempts on successful connection
         this.connectionAttempts = 0;
@@ -480,6 +582,7 @@ const WebSocketService = {
           if (event.data === 'ping') {
             this.log('Received ping from server, sending pong');
             socket.send('pong');
+            this.lastPingTime = Date.now();
             return;
           }
           
@@ -531,7 +634,7 @@ const WebSocketService = {
         
         // Show persistent banner indicating WS disconnected with channels based on user notify prefs
         try {
-          this.showWsDisconnectedBanner();
+          this.maybeShowWsDisconnectedBanner();
         } catch (e) {}
 
         // Handle authentication failures specifically: try refresh then reconnect
@@ -555,14 +658,17 @@ const WebSocketService = {
                                this.connectionAttempts < this.maxReconnectAttempts &&
                                event.code !== 1000 && // Normal closure
                                event.code !== 1001 && // Going away
-                               this.isInitialized; // Only reconnect if we're supposed to be connected
+                               this.isInitialized && // Only reconnect if we're supposed to be connected
+                               this.isOnline; // Avoid reconnect loops while offline
         
         if (shouldReconnect) {
           this.log(`Connection closed unexpectedly, attempting to reconnect (attempt ${this.connectionAttempts} of ${this.maxReconnectAttempts})`);
           
           // Use exponential backoff for reconnection
           this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000); // Max 30 seconds
-          this.log(`Reconnecting in ${this.reconnectDelay}ms`);
+          const jitter = Math.floor(Math.random() * Math.min(this.reconnectJitterMaxMs, Math.floor(this.reconnectDelay / 2)));
+          const delay = this.reconnectDelay + jitter;
+          this.log(`Reconnecting in ${delay}ms (base=${this.reconnectDelay}ms, jitter=${jitter}ms)`);
           
           setTimeout(async () => {
             try {
@@ -573,7 +679,7 @@ const WebSocketService = {
             } catch (err) {
               this.error(`Reconnection attempt failed: ${err.message}`);
             }
-          }, this.reconnectDelay);
+          }, delay);
         } else if (this.connectionAttempts >= this.maxReconnectAttempts) {
           this.error(`Max reconnection attempts (${this.maxReconnectAttempts}) exceeded`);
         }

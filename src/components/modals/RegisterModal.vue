@@ -7,23 +7,28 @@
       </div>
       <div class="modal-content">
         <div class="panel">
-          <label>Email</label>
-          <input v-model="email" type="email" placeholder="you@example.com" />
-          <label>Phone (optional)</label>
-          <input v-model="phone" type="tel" placeholder="+1 555 123 4567" />
-          <label>Tag</label>
+          <label for="register-email">Email</label>
+          <input v-model="email" type="email" placeholder="you@example.com" id="register-email" name="email" autocomplete="email" autocapitalize="off" spellcheck="false" />
+          <label for="register-phone">Phone (optional)</label>
+          <input v-model="phone" type="tel" placeholder="+1 555 123 4567" id="register-phone" name="tel" autocomplete="tel" inputmode="tel" />
+          <label for="register-username">Tag</label>
           <input 
             v-model="userTag" 
             type="text" 
             placeholder="unique, numbers, letters, underscores, and hyphens only" 
             pattern="[A-Za-z0-9_-]*" 
             title="Only letters, numbers, underscores, and hyphens are allowed"
+            id="register-username"
+            name="username"
+            autocomplete="username"
+            autocapitalize="off"
+            spellcheck="false"
             @input="onTagInput"
           />
-          <label>Display name</label>
-          <input v-model="displayName" type="text" placeholder="Display name" />
-          <label>Password</label>
-          <input v-model="password" type="password" placeholder="••••••••" />
+          <label for="register-nickname">Display name</label>
+          <input v-model="displayName" type="text" placeholder="Display name" id="register-nickname" name="nickname" autocomplete="nickname" />
+          <label for="register-password">Password</label>
+          <input v-model="password" type="password" placeholder="••••••••" id="register-password" name="new-password" autocomplete="new-password" />
           <p class="hint">Minimum 8 characters, must include a letter and a number.</p>
           <hr class="hr">
           <div class="notify">

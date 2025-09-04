@@ -1,9 +1,15 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
+import { useStore } from 'vuex';
+import { useAuthentication } from '@/composables/useAuthentication';
 import ApiKeysService from '@/services/ApiKeysService';
 
 const props = defineProps({ isOpen: Boolean });
 const emit = defineEmits(['close']);
+
+const store = useStore();
+const user = computed(() => store.getters['auth/user']);
+const { requestEndpointVerification: requestEndpointChallenge, verifyEndpointWithChallenge } = useAuthentication();
 
 const loading = ref(false);
 const errorMessage = ref('');
@@ -12,6 +18,51 @@ const creating = ref(false);
 const newKeyLabel = ref('');
 const newKeyScopes = ref('');
 const createdKeyToken = ref('');
+
+// Webhook/endpoint state
+const endpoint = ref('');
+const endpointVerificationMessage = ref('');
+const verifyingEndpoint = ref(false);
+const secretBusy = ref(false);
+const secretError = ref('');
+const generatedSecret = ref('');
+const hasJustRevealedSecret = ref(false);
+
+const isEndpointVerified = computed(() => !!((user.value?.contacts || []).some(c => c.type === 'endpoint' && c.verified)));
+const hasSavedEndpoint = computed(() => !!((user.value?.contacts || []).find(c => c.type === 'endpoint')?.value));
+const hasEndpointSigningSecret = computed(() => !!(user.value?.has_endpoint_signing_secret));
+
+function base64UrlEncode(bytes) {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  const b64 = btoa(binary).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+  return b64;
+}
+
+function generateStrongSecret(lengthBytes = 32) {
+  const arr = new Uint8Array(lengthBytes);
+  (window.crypto || window.msCrypto).getRandomValues(arr);
+  return base64UrlEncode(arr);
+}
+
+const revealSecretOnce = (secret) => {
+  generatedSecret.value = secret;
+  hasJustRevealedSecret.value = true;
+};
+
+const dismissRevealedSecret = () => {
+  generatedSecret.value = '';
+  hasJustRevealedSecret.value = false;
+};
+
+const copyRevealedSecret = async () => {
+  try {
+    await navigator.clipboard.writeText(generatedSecret.value);
+  } catch (e) {
+    secretError.value = 'Failed to copy';
+    setTimeout(() => { secretError.value = ''; }, 2000);
+  }
+};
 
 async function loadKeys() {
   try {
@@ -37,10 +88,10 @@ async function revoke(credId) {
   }
 }
 
-onMounted(() => { if (props.isOpen) loadKeys(); });
+onMounted(() => { if (props.isOpen) { loadKeys(); resetDevForm(); } });
 
 watch(() => props.isOpen, (open) => {
-  if (open) loadKeys();
+  if (open) { loadKeys(); resetDevForm(); }
 });
 
 async function createKey() {
@@ -57,6 +108,69 @@ async function createKey() {
     errorMessage.value = e?.message || 'Failed to create key';
   } finally {
     creating.value = false;
+  }
+}
+
+function resetDevForm() {
+  endpoint.value = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
+  endpointVerificationMessage.value = '';
+  generatedSecret.value = '';
+  hasJustRevealedSecret.value = false;
+  secretError.value = '';
+}
+
+async function saveEndpoint() {
+  try {
+    const originalEndpoint = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
+    const next = (endpoint.value || '').trim();
+    if (next === originalEndpoint) return;
+    const payload = { endpoint: next || null };
+    await store.dispatch('auth/updateProfile', payload);
+    resetDevForm();
+  } catch (e) {
+    endpointVerificationMessage.value = e.message || 'Failed to update endpoint';
+  }
+}
+
+async function verifyEndpointFlow() {
+  endpointVerificationMessage.value = '';
+  try {
+    const next = (endpoint.value || '').trim();
+    if (!next) {
+      endpointVerificationMessage.value = 'Enter an endpoint URL first';
+      return;
+    }
+    verifyingEndpoint.value = true;
+    await requestEndpointChallenge(next);
+    await verifyEndpointWithChallenge({ endpoint: next });
+    endpointVerificationMessage.value = 'Endpoint verified';
+  } catch (e) {
+    endpointVerificationMessage.value = e.message || 'Failed to verify endpoint';
+  } finally {
+    verifyingEndpoint.value = false;
+  }
+}
+
+async function setOrRotateSigningSecret() {
+  secretError.value = '';
+  if (!endpoint.value || !endpoint.value.trim()) {
+    secretError.value = 'Add and verify an endpoint first';
+    return;
+  }
+  try {
+    secretBusy.value = true;
+    const newSecret = generateStrongSecret(32);
+    const payload = { endpoint_signing_secret: newSecret };
+    const originalEndpoint = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
+    if (endpoint.value !== originalEndpoint) {
+      payload.endpoint = endpoint.value.trim();
+    }
+    await store.dispatch('auth/updateProfile', payload);
+    revealSecretOnce(newSecret);
+  } catch (e) {
+    secretError.value = e.message || 'Failed to update signing secret';
+  } finally {
+    secretBusy.value = false;
   }
 }
 </script>
@@ -86,6 +200,47 @@ async function createKey() {
             <div v-if="createdKeyToken" class="new-key-warning">
               <div class="note">Copy your new API key now. It will not be shown again.</div>
               <div class="mono token">{{ createdKeyToken }}</div>
+            </div>
+          </div>
+
+          <div class="create-box">
+            <div class="row header small">Webhook Endpoint</div>
+            <div class="create-grid">
+              <label for="endpointUrl">Endpoint URL</label>
+              <div class="endpoint-control">
+                <input id="endpointUrl" placeholder="https://bot.example.com/hook" v-model="endpoint" />
+                <span v-if="isEndpointVerified" class="status-badge ok">Verified</span>
+                <button class="secondary" @click="saveEndpoint">Save</button>
+              </div>
+
+              <label>Verification</label>
+              <div class="endpoint-verify">
+                <button class="secondary" @click="verifyEndpointFlow" :disabled="verifyingEndpoint || !endpoint">{{ verifyingEndpoint ? 'Verifying…' : 'Verify' }}</button>
+                <span class="verify-tip">We POST a nonce to your endpoint; it must echo it back as JSON {nonce:"..."} or plaintext.</span>
+              </div>
+              <div class="verification-message" v-if="endpointVerificationMessage">{{ endpointVerificationMessage }}</div>
+
+              <label>Signing Secret</label>
+              <div class="endpoint-secret">
+                <button class="primary" @click="setOrRotateSigningSecret" :disabled="secretBusy || !isEndpointVerified">
+                  <span v-if="secretBusy" class="spinner small"></span>
+                  {{ secretBusy ? 'Saving…' : (hasSavedEndpoint ? 'Rotate Secret' : 'Create Secret') }}
+                </button>
+                <span v-if="hasEndpointSigningSecret" class="verified-badge" title="Signing secret exists">✓</span>
+                <span class="field-hint" v-if="!isEndpointVerified">Verify endpoint to enable</span>
+              </div>
+
+              <div v-if="hasJustRevealedSecret" class="reveal-once">
+                <div class="note">Copy your secret now (shown once):</div>
+                <div class="reveal-actions">
+                  <button class="secondary" @click="copyRevealedSecret">Copy</button>
+                  <button class="secondary" @click="dismissRevealedSecret">Dismiss</button>
+                </div>
+                <input readonly :value="generatedSecret" class="mono" />
+                <div class="field-hint">This value is write-only and cannot be viewed again after dismissal.</div>
+                <div class="field-hint">Requests will include headers X-Stitch-Timestamp and X-Stitch-Signature.</div>
+                <div class="error" v-if="secretError">{{ secretError }}</div>
+              </div>
             </div>
           </div>
           <div class="table">
@@ -134,6 +289,19 @@ async function createKey() {
 .create-box{ border:1px solid var(--color-border); border-radius:8px; padding:12px; margin-bottom:12px; }
 .create-grid{ display:grid; grid-template-columns: 120px 1fr; gap:8px 12px; align-items:center; }
 .create-grid input{ width:100%; padding:6px 8px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-input-background); color:var(--color-text); }
+.endpoint-control{ display:flex; align-items:center; gap:8px; }
+.endpoint-control .secondary{ padding:6px 10px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-surface); color:var(--color-text); cursor:pointer; }
+.endpoint-verify{ display:flex; align-items:center; gap:8px; }
+.endpoint-verify .secondary{ padding:6px 10px; border:1px solid var(--color-border); border-radius:6px; background:var(--color-surface); color:var(--color-text); cursor:pointer; }
+.endpoint-secret{ display:flex; align-items:center; gap:8px; }
+.endpoint-secret .primary{ background: var(--color-primary); color: var(--color-text-inverse); border:none; padding:6px 10px; border-radius:6px; cursor:pointer; }
+.verified-badge { color: var(--color-success, #10b981); margin-left: 6px; font-size: 14px; }
+.status-badge{ font-size:11px; padding:2px 6px; border-radius:10px; border:1px solid var(--color-border); color: var(--color-text-secondary); }
+.status-badge.ok{ background: rgba(16,185,129,.12); color: var(--color-success, #10b981); border-color: rgba(16,185,129,.35); }
+.verify-tip{ font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+.verification-message{ font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+.reveal-once{ display:flex; flex-direction:column; gap:6px; grid-column: 1 / -1; }
+.spinner.small{ width:12px; height:12px; border:2px solid rgba(0,0,0,0.3); border-top-color: var(--color-text-inverse); border-radius:50%; animation: spin 1s linear infinite; display:inline-block; margin-right:4px; vertical-align: middle; }
 .row.header.small{ font-weight:600; border-bottom:1px solid var(--color-border); padding-bottom:6px; margin-bottom:10px; }
 .table{ display:grid; grid-auto-rows:minmax(32px,auto); row-gap:8px; }
 .row{ display:grid; grid-template-columns: 1.2fr 1.2fr 1fr 1fr auto; align-items:center; gap:12px; padding:8px 4px; border-bottom:1px dashed var(--color-border); }
@@ -147,6 +315,13 @@ async function createKey() {
 .modal-footer{ display:flex; padding:var(--space-md) var(--space-lg); border-top:1px solid var(--color-border); }
 .button-group{ display:flex; gap:var(--space-md); margin-left:auto; }
 .cancel-btn{ background-color: transparent; color: var(--color-text); padding: var(--space-xs) var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-size: var(--font-size-sm); font-weight: 500; }
+
+@media (max-width: 600px){
+  .create-grid{ grid-template-columns: 1fr; }
+  .endpoint-control{ flex-direction: column; align-items: stretch; }
+  .endpoint-verify{ flex-direction: column; align-items: flex-start; }
+  .endpoint-secret{ flex-direction: column; align-items: flex-start; }
+}
 </style>
 
 
