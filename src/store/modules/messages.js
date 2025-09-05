@@ -1,6 +1,6 @@
 import MessageService from '../../services/MessageService'
 import UserService from '../../services/UserService'
-import WebSocketService from '../../services/WebSocketService'
+import WebSocketService from '../../services/ws/WebSocketService'
 
 // Add a flag to track if initial fetch has been done
 let initialUnreadCountFetched = false;

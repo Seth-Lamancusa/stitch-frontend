@@ -3,7 +3,7 @@ import { onMounted, onBeforeUnmount } from 'vue';
 import RecipientsModal from './components/modals/RecipientsModal.vue';
 import LinksModal from './components/modals/LinksModal.vue';
 import EditMessageModal from './components/modals/EditMessageModal.vue';
-import WebSocketService from '@/services/WebSocketService';
+import WebSocketService from '@/services/ws/WebSocketService';
 
 // More robust height calculation for the entire app
 const setAppHeight = () => {

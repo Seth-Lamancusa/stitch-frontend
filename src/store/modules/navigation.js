@@ -227,7 +227,6 @@ export default {
     isReplyMessageLoading: state => state.isLoadingReplyMessage,
     
     previousRoute: state => {
-      console.log(`[Navigation Store] Getting previous route: "${state.previousRoute}"`);
       return state.previousRoute;
     },
     
@@ -250,23 +249,13 @@ export default {
     recipientsModalExistingRecipients: (state, getters, rootState, rootGetters) => {
       // Make this getter dynamic - always return current recipients from the message data
       const messageId = state.recipientsModal.messageId;
-      console.log('[Navigation Store] recipientsModalExistingRecipients getter called with messageId:', messageId);
       
       if (!messageId) {
-        console.log('[Navigation Store] recipientsModalExistingRecipients: no messageId, returning stored recipients:', state.recipientsModal.existingRecipients);
         return state.recipientsModal.existingRecipients;
       }
       
       const message = rootGetters['messages/getMessage'](messageId);
       const recipients = message && message.recipients ? message.recipients : state.recipientsModal.existingRecipients;
-      console.log('[Navigation Store] recipientsModalExistingRecipients getter result:', {
-        messageId,
-        hasMessage: !!message,
-        messageRecipients: message?.recipients,
-        storedRecipients: state.recipientsModal.existingRecipients,
-        finalRecipients: recipients,
-        recipientsCount: recipients?.length || 0
-      });
       return recipients;
     },
     recipientsModalMessageId: state => state.recipientsModal.messageId,
@@ -321,9 +310,7 @@ export default {
     },
     
     // Reply recipient actions (for new messages)
-    addRecipient({ commit, state }, recipient) {
-      console.log('[Navigation Store] addRecipient called with:', recipient);
-      
+    addRecipient({ commit, state }, recipient) {      
       // Check if we're in add mode or new message mode
       const isAddMode = state.recipientsModal.isAddMode;
       
@@ -335,30 +322,17 @@ export default {
     },
     
     removeRecipient({ commit, state }, index) {
-      console.log('[Navigation Store] removeRecipient called with index:', index);
-      
       // Check if we're in add mode or new message mode
       const isAddMode = state.recipientsModal.isAddMode;
-      
-      console.log('[Navigation Store] removeRecipient debug:', {
-        isAddMode,
-        recipientsModalState: state.recipientsModal,
-        addModeRecipients: state.addModeRecipients,
-        replyRecipients: state.replySettings.recipients
-      });
-      
+            
       if (isAddMode) {
-        console.log('[Navigation Store] Removing from addModeRecipients at index:', index);
         commit('REMOVE_ADD_MODE_RECIPIENT', index);
       } else {
-        console.log('[Navigation Store] Removing from replyRecipients at index:', index);
         commit('REMOVE_REPLY_RECIPIENT', index);
       }
     },
     
-    toggleRecipientVisibility({ commit, state }, index) {
-      console.log('[Navigation Store] toggleRecipientVisibility called with index:', index);
-      
+    toggleRecipientVisibility({ commit, state }, index) {      
       // Check if we're in add mode or new message mode
       const isAddMode = state.recipientsModal.isAddMode;
       
@@ -370,8 +344,6 @@ export default {
     },
     
     clearRecipients({ commit, state }) {
-      console.log('[Navigation Store] clearRecipients called');
-      
       // Check if we're in add mode or new message mode
       const isAddMode = state.recipientsModal.isAddMode;
       
@@ -383,20 +355,15 @@ export default {
     },
     
     setPreviousRoute({ commit }, route) {
-      console.log(`[Navigation Store] Setting previous route to: "${route}"`);
       commit('SET_PREVIOUS_ROUTE', route);
     },
     
     async setActiveTab({ commit, dispatch }, tab) {
-      console.log(`[Navigation Store] Setting active tab to: "${tab}"`);
-      
       // Set the tab immediately for responsive UI
       commit('SET_ACTIVE_TAB', tab);
      
       // Clear message cache when switching tabs to trigger fresh load
-      console.log('[Navigation Store] Clearing message cache for tab switch');
       await dispatch('messages/clearCache', {}, { root: true });
-      console.log('[Navigation Store] Message cache cleared');
     },
     
     syncReplySettings({ commit, state, rootGetters, rootState }, messageId) {

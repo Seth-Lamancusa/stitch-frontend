@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { useStore } from 'vuex';
-import WebSocketService from '@/services/WebSocketService';
+import WebSocketService from '@/services/ws/WebSocketService';
 
 const store = useStore();
 

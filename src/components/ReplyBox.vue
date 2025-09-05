@@ -540,17 +540,10 @@ const autoResizeTextarea = () => {
   if (!textarea) return;
   
   // Check if there's actual content
-  const hasContent = content.value.trim().length > 0;
-  
-  console.log('[ReplyBox] autoResizeTextarea called:', {
-    hasContent,
-    contentLength: content.value.length,
-    contentValue: JSON.stringify(content.value)
-  });
+  const hasContent = content.value.trim().length > 0; 
   
   if (!hasContent) {
     // No content - reset everything
-    console.log('[ReplyBox] No content - resetting everything');
     hasMultipleLines.value = false;
     isTextareaExpanded.value = false;
     userHasManuallyToggled.value = false;
@@ -572,43 +565,21 @@ const autoResizeTextarea = () => {
   const singleLineThreshold = 49; // Allow some buffer for line-height
   const heightExceedsMinimum = naturalHeight > singleLineThreshold;
   
-  console.log('[ReplyBox] Height measurements:', {
-    minHeight,
-    naturalHeight,
-    singleLineThreshold,
-    heightDifference: naturalHeight - singleLineThreshold,
-    hasNewlines,
-    heightExceedsMinimum,
-    padding: 'right: 36px (for toggle), top: 4px, bottom: 8px, minHeight: 36px'
-  });
-  
   // Only consider it multi-line if there are actual newlines OR significant height difference
   hasMultipleLines.value = hasNewlines || heightExceedsMinimum;
-  
-  console.log('[ReplyBox] Multi-line detection result:', {
-    hasMultipleLines: hasMultipleLines.value,
-    isTextareaExpanded: isTextareaExpanded.value
-  });
   
   // Auto-expand when multi-line is detected (unless user has manually toggled)
   if (hasMultipleLines.value && !isTextareaExpanded.value && !userHasManuallyToggled.value) {
     isTextareaExpanded.value = true;
-    console.log('[ReplyBox] Auto-expanded textarea for multi-line content');
   } else if (!hasMultipleLines.value && isTextareaExpanded.value) {
     isTextareaExpanded.value = false;
     userHasManuallyToggled.value = false; // Reset manual toggle when content becomes single line
-    console.log('[ReplyBox] Auto-collapsed textarea for single-line content');
   }
   
   let newHeight;
   if (isTextareaExpanded.value) {
     // Expanded mode: use natural height up to max
     newHeight = Math.min(Math.max(naturalHeight, minHeight), maxHeight);
-    console.log('[ReplyBox] Expanded height calculation:', {
-      naturalHeight,
-      newHeight,
-      maxHeight
-    });
   } else {
     // Collapsed mode: single line only
     newHeight = minHeight;
@@ -619,28 +590,16 @@ const autoResizeTextarea = () => {
   // Show scrollbar only when content actually overflows
   if (isTextareaExpanded.value && newHeight >= maxHeight) {
     textarea.style.overflowY = 'auto';
-    console.log('[ReplyBox] Showing scrollbar (expanded at max height)');
   } else {
     textarea.style.overflowY = 'hidden';
-    console.log('[ReplyBox] Hiding scrollbar');
   }
   
-  console.log('[ReplyBox] Final state:', {
-    finalHeight: newHeight,
-    overflowY: textarea.style.overflowY,
-    hasMultipleLines: hasMultipleLines.value,
-    isExpanded: isTextareaExpanded.value
-  });
 };
 
 // Toggle textarea expansion
 const toggleTextareaExpansion = () => {
   isTextareaExpanded.value = !isTextareaExpanded.value;
   userHasManuallyToggled.value = true;
-  console.log('[ReplyBox] Manual toggle:', { 
-    isTextareaExpanded: isTextareaExpanded.value,
-    userHasManuallyToggled: userHasManuallyToggled.value
-  });
   // Trigger resize after state change
   nextTick(() => {
     autoResizeTextarea();
@@ -662,10 +621,6 @@ const sendReply = async () => {
     
     // Handle add recipients mode
     if (isAddRecipientsMode.value) {
-      console.log('[ReplyBox] Adding recipients to existing message', {
-        messageId: addRecipientsMessageId.value,
-        recipientsCount: recipients.value.length
-      });
       if (!addRecipientsMessageId.value || recipients.value.length === 0) {
         throw new Error('No message or recipients to add');
       }
@@ -686,11 +641,6 @@ const sendReply = async () => {
       return;
     }
     
-    console.log('[ReplyBox] Starting to send message', {
-      parentId: props.targetId,
-      isPrivate: !isPublic.value,
-      recipientsCount: recipients.value.length
-    });
     
     // Create a new message using the store action
     const newMessage = await store.dispatch('messages/sendReply', {
@@ -702,10 +652,6 @@ const sendReply = async () => {
       content_author: currentUser.uid
     });
     
-    console.log('[ReplyBox] Message sent successfully', {
-      messageId: newMessage?.id,
-      response: newMessage
-    });
     
     // Clear the input
     content.value = '';
@@ -751,7 +697,6 @@ const sendReply = async () => {
             parentId: props.targetId,
             childId: newMessage.id
           });
-          console.log('[ReplyBox] Added child relationship:', props.targetId, '->', newMessage.id);
           
           // Always set this as branch_child, regardless of whether it's the first reply
           // Set immediately without rechecking child_ids to avoid race conditions
@@ -759,7 +704,6 @@ const sendReply = async () => {
             messageId: props.targetId,
             childId: newMessage.id
           });
-          console.log('[ReplyBox] Set as branch_child for parent:', props.targetId);
         }
         
         // 4. Force re-render the thread to show the new message
@@ -769,7 +713,6 @@ const sendReply = async () => {
         // 5. Force reload the branch path in case it's not already updated
         // This needs to be done after a short delay to ensure store is updated
         setTimeout(() => {
-          console.log('[ReplyBox] Reloading thread after sending reply');
           if (store.state.navigation && store.state.navigation.currentRoute) {
             const currentThreadId = store.state.navigation.currentRoute.params.id;
             if (currentThreadId) {
@@ -780,7 +723,6 @@ const sendReply = async () => {
           // 6. Only hide the reply box after ensuring all UI updates are processed
           // This prevents prematurely closing the reply box before the UI updates
           if (!props.isNewThread) {
-            console.log('[ReplyBox] Hiding reply box after successful send');
             setTimeout(() => {
               store.dispatch('navigation/clearReplyingTo');
             }, 150); // Short delay to ensure UI updates complete

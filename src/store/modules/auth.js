@@ -1,4 +1,4 @@
-import WebSocketService from '../../services/WebSocketService'
+import WebSocketService from '../../services/ws/WebSocketService'
 import TokenManager from '../../services/TokenManager'
 import { parseScopes, hasScope as hasScopeUtil, hasAnyScope as hasAnyScopeUtil } from '../../utils/scopes'
 

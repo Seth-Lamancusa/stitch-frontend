@@ -106,10 +106,6 @@ const threads = computed(() => {
   
   // Use local state for saved and link modes (to avoid polluting global store)
   if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
-    console.log(`[MessageList] threads computed for ${props.mode}:`, {
-      localMessagesLength: localMessages.value.length,
-      localMessages: localMessages.value
-    });
     return localMessages.value;
   }
   
@@ -233,14 +229,12 @@ const viewMessage = (messageId) => {
   // For link modes, emit event to close modal before navigation
   // Don't set previous route for link navigation to preserve original route
   if (props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
-    console.log(`[MessageList] Navigation from link mode (${props.mode}) - NOT setting previous route to preserve original`);
     emit('messageClicked', messageId);
     router.push({ path: `/messages/${messageId}` });
     return;
   }
   
   // Store current route before navigation (only for non-link modes)
-  console.log(`[MessageList] Navigation from mode "${props.mode}" - setting previous route to: "${route.path}"`);
   store.dispatch('navigation/setPreviousRoute', route.path);
   router.push({ path: `/messages/${messageId}` });
 };
@@ -255,12 +249,10 @@ const confirmDeleteMessage = (message) => {
 // Create a new message thread
 const createNewThread = () => {
   // Store current route before navigation
-  console.log(`[MessageList] Creating new thread - setting previous route to: "${route.path}"`);
   store.dispatch('navigation/setPreviousRoute', route.path);
   
   // Simply navigate to the new thread route
   router.push('/new-thread');
-  console.log('Navigating to new thread route');
 };
 
 // Handle the new message button click
@@ -346,24 +338,17 @@ function getThreadMessages(threadId) {
 const loadMessages = async () => {
   // Skip loading if already loading or all loaded
   if (isLoading.value || isAllLoaded.value) {
-    console.log(`[MessageList] Skipping load - already loading: ${isLoading.value}, all loaded: ${isAllLoaded.value}`);
     return;
   }
   
   // Skip for saved/inbox modes if no user (requires authentication)
   if ((props.mode === 'saved' || props.mode === 'inbox') && !user.value) {
-    console.log('[MessageList] Skipping load for', props.mode, '- no user logged in');
     return;
   }
   
   // Generate a unique request ID to prevent race conditions
   const requestId = ++currentRequestId.value;
-  console.log(`[MessageList] Starting request ${requestId} for mode: ${props.mode}`, {
-    skip: currentSkip.value,
-    limit: pageSize.value,
-    sourceMessageId: props.sourceMessageId,
-    showAllLinks: props.showAllLinks
-  });
+  
   
   // Set loading state based on mode
   if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
@@ -395,34 +380,20 @@ const loadMessages = async () => {
       mode: props.mode,
       ...fetchParams
     });
-    
-    // Check if this request is still current (not superseded by a newer request)
-    if (requestId !== currentRequestId.value) {
-      console.log(`[MessageList] Request ${requestId} superseded by ${currentRequestId.value}, ignoring response`);
-      return;
-    }
-    
+
     if (response) {
-      console.log(`[MessageList] Request ${requestId} response for ${props.mode}:`, {
-        messageCount: response.messages?.length || 0,
-        has_more: response.has_more,
-        total: response.total,
-        currentSkip: currentSkip.value
-      });
+      
       
       // Handle response based on mode
       if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
         // For saved, public, and link modes, use local state
         if (currentSkip.value === 0) {
           // First load - replace local messages
-          console.log(`[MessageList] Request ${requestId} first load - replacing local messages:`, response.messages?.length || 0);
           localMessages.value = response.messages || [];
         } else {
-          // Subsequent loads - append to local messages
-          console.log(`[MessageList] Request ${requestId} appending to local messages:`, response.messages?.length || 0);
+          // Subsequent loads - append to local messages          
           localMessages.value = [...localMessages.value, ...(response.messages || [])];
         }
-        console.log(`[MessageList] Request ${requestId} local messages after update: ${localMessages.value.length}`);
       }
       // Store modes (inbox/admin) are handled by the store action itself
       
@@ -432,28 +403,17 @@ const loadMessages = async () => {
         currentSkip.value += response.messages.length;
       }
       
-      console.log(`[MessageList] Request ${requestId} complete - new state:`, {
-        isAllLoaded: isAllLoaded.value,
-        currentSkip: currentSkip.value,
-        totalMessages: localMessages.value.length || store.getters['messages/getLoadedMessages'].length
-      });
+      
     }
   } catch (error) {
-    // Check if this request is still current before handling error
-    if (requestId !== currentRequestId.value) {
-      console.log(`[MessageList] Request ${requestId} superseded during error, ignoring`);
-      return;
-    }
-    console.error(`[MessageList] Request ${requestId} error loading ${props.mode} messages:`, error);
+    
+    console.error(`[MessageList] Error loading ${props.mode} messages:`, error);
   } finally {
     // Only clear loading state if this is still the current request
     if (requestId === currentRequestId.value) {
       if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
         localLoadingState.value = false;
       }
-      console.log(`[MessageList] Request ${requestId} loading state cleared`);
-    } else {
-      console.log(`[MessageList] Request ${requestId} was superseded, not clearing loading state`);
     }
   }
 };
@@ -478,11 +438,9 @@ watch(user, (newUser, oldUser) => {
   if (props.mode === 'inbox' || props.mode === 'saved') {
     if (newUser && !oldUser) {
       // User just logged in, start loading messages
-      console.log('User logged in, starting to load messages');
       loadMessages();
     } else if (!newUser && oldUser) {
-      // User logged out, reset state
-      console.log('User logged out, resetting message list state');
+      // User logged out, reset state 
       isAllLoaded.value = false;
       currentSkip.value = 0;
     }
@@ -498,7 +456,7 @@ onUnmounted(() => {
   // Clear any open action bars when MessageList is unmounted
   store.dispatch('navigation/closeActiveActionBar');
   
-  console.log('[MessageList] Component unmounted, canceling pending requests');
+  
 });
 
 // Add computed properties for delete confirmation modal
