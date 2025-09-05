@@ -46,7 +46,7 @@ const WebSocketService = {
   activityListenerRegistered: false,
   idleTimerGeneration: 0,
   // Delay idle banner to allow brief reconnection window
-  idleBannerDelayMs: 3000,
+  idleBannerDelayMs: 6000,
   idleBannerTimeoutId: null,
   // Expanded activity events to better capture mobile activity
   activityEvents: ['mousemove', 'pointermove', 'touchstart', 'touchmove', 'keydown', 'scroll', 'wheel'],
