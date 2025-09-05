@@ -70,6 +70,19 @@
             <span class="meta-pill__icon">👥</span>
             <span class="meta-pill__text">Draft Recipients ({{ recipients.length }})</span>
           </button>
+
+          <!-- Add to tree toggle for replies/new threads -->
+          <button 
+            class="toolbar-control meta-pill" 
+            @click="toggleAddToTree"
+            :disabled="!canInteract"
+            :aria-pressed="replyAddToTree"
+            aria-label="Toggle add recipients to tree"
+            title="Add recipients to visible tree"
+          >
+            <span class="meta-pill__icon">🌳</span>
+            <span class="meta-pill__text">{{ replyAddToTree ? 'Add to tree: ON' : 'Add to tree: OFF' }}</span>
+          </button>
           
           <!-- Prompt Bot Response button - only shown when replying to a message -->
           <button 
@@ -193,6 +206,20 @@
           <p class="modal-description">
             Select one or more bots to add as recipients to this message.
           </p>
+
+          <!-- Add to tree toggle inside Bot Prompt Modal -->
+          <div class="toolbar-left" style="margin-bottom: 8px;">
+            <button 
+              class="toolbar-control meta-pill" 
+              @click="toggleAddToTree"
+              :aria-pressed="replyAddToTree"
+              aria-label="Toggle add recipients to tree"
+              title="Add recipients to visible tree"
+            >
+              <span class="meta-pill__icon">🌳</span>
+              <span class="meta-pill__text">{{ replyAddToTree ? 'Add to tree: ON' : 'Add to tree: OFF' }}</span>
+            </button>
+          </div>
           
           <div class="bot-options">
             <!-- Main bots -->
@@ -365,6 +392,10 @@ const isPublic = computed({
 });
 const recipients = computed(() => store.getters['navigation/replyRecipients']);
 const isReplying = computed(() => store.getters['navigation/isReplying']);
+const replyAddToTree = computed({
+  get: () => store.getters['navigation/replyAddToTree'],
+  set: (v) => store.dispatch('navigation/setReplyAddToTree', v)
+});
 
 // Centralized validation logic
 const canSendReply = computed(() => {
@@ -624,7 +655,11 @@ const sendReply = async () => {
       if (!addRecipientsMessageId.value || recipients.value.length === 0) {
         throw new Error('No message or recipients to add');
       }
-      await MessageService.addRecipientsToMessage(addRecipientsMessageId.value, recipients.value, false);
+      await MessageService.addRecipientsToMessage(
+        addRecipientsMessageId.value,
+        recipients.value,
+        { addToTree: replyAddToTree.value, notifyForId: true }
+      );
       // Clear the form and exit add recipients mode
       content.value = '';
       store.dispatch('navigation/clearAddRecipientsMode');
@@ -643,6 +678,16 @@ const sendReply = async () => {
     
     
     // Create a new message using the store action
+    // For replies/new threads: if adding to tree is enabled and replying to an existing message,
+    // perform bulk add first (without single-message notify), then send reply.
+    if (props.targetId && replyAddToTree.value && recipients.value.length > 0) {
+      await MessageService.addRecipientsToMessage(
+        props.targetId,
+        recipients.value,
+        { addToTree: true, notifyForId: false }
+      );
+    }
+
     const newMessage = await store.dispatch('messages/sendReply', {
       parentId: props.targetId, // Will be null for new threads
       content: content.value,
@@ -753,6 +798,10 @@ const sendReply = async () => {
     isSending.value = false;
   }
 };
+// Toggle add-to-tree
+const toggleAddToTree = () => {
+  replyAddToTree.value = !replyAddToTree.value;
+};
 
 
 
@@ -849,7 +898,11 @@ const addSelectedBotsToMessage = async () => {
       public: true,
       visible: true
     }));
-    await MessageService.addRecipientsToMessage(props.targetId, recipientsToAdd, false);
+    await MessageService.addRecipientsToMessage(
+      props.targetId,
+      recipientsToAdd,
+      { addToTree: replyAddToTree.value, notifyForId: true }
+    );
     // Refresh message data
     await store.dispatch('messages/loadMessageRadius', { 
       messageId: props.targetId, 

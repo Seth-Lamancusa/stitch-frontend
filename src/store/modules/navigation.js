@@ -11,6 +11,8 @@ export default {
       isPublic: true,
       recipients: []  // Recipients for new message drafts
     },
+    // Whether replies should add staged recipients to the visible tree by default
+    replyAddToTree: false,
     // Separate state for add mode recipients
     addModeRecipients: [], // Recipients being staged for adding to existing message
     // Global state for mobile floating action bars
@@ -67,6 +69,10 @@ export default {
     
     SET_REPLY_RECIPIENTS(state, recipients) {
       state.replySettings.recipients = recipients;
+    },
+
+    SET_REPLY_ADD_TO_TREE(state, value) {
+      state.replyAddToTree = !!value;
     },
     
     ADD_REPLY_RECIPIENT(state, recipient) {
@@ -213,6 +219,7 @@ export default {
     
     // Add mode recipients getters
     addModeRecipients: state => state.addModeRecipients,
+    replyAddToTree: state => state.replyAddToTree,
     
     replyTargetId: state => state.replyingToMessageId,
     
@@ -307,6 +314,10 @@ export default {
       if (recipients !== undefined) {
         commit('SET_REPLY_RECIPIENTS', recipients);
       }
+    },
+
+    setReplyAddToTree({ commit }, value) {
+      commit('SET_REPLY_ADD_TO_TREE', value);
     },
     
     // Reply recipient actions (for new messages)
