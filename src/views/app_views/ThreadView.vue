@@ -1039,7 +1039,7 @@ const closeRecipientsModal = () => {
   store.dispatch('navigation/hideRecipientsModal');
 };
 
-const handleAddRecipients = async (recipients, propagateToDescendants = false) => {
+const handleAddRecipients = async (recipients, addToTree = false) => {
   
   
   if (!recipients || recipients.length === 0) {
@@ -1056,7 +1056,11 @@ const handleAddRecipients = async (recipients, propagateToDescendants = false) =
       return;
     }
 
-    const response = await MessageService.addRecipientsToMessage(messageId, recipients, propagateToDescendants);
+    const response = await MessageService.addRecipientsToMessage(
+      messageId,
+      recipients,
+      { addToTree, notifyForId: true }
+    );
     
     
     
@@ -1198,6 +1202,11 @@ const loadMoreParents = async () => {
       messageId: firstMessageId,
       depth: 5
     });
+    
+    // Re-align branch path so newly loaded parents point down to the previous root
+    if (firstMessageId) {
+      await store.dispatch('messages/prepareBranchPath', firstMessageId);
+    }
     
     // Render thread but preserve scroll position AND branch path
     await renderThread(true, true);
