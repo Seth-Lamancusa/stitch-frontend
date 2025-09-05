@@ -67,6 +67,14 @@
               >
                 Upload File
               </button>
+              <button 
+                v-if="isAdmin"
+                @click="inputMethod = 'audio'" 
+                :class="{ active: inputMethod === 'audio' }"
+                class="input-method-tab"
+              >
+                Audio
+              </button>
             </div>
           
             <!-- Text Input -->
@@ -106,6 +114,50 @@ The format will be auto-detected once you paste your conversation."
               </label>
               <p class="file-upload-hint">
                 Upload markdown files from Cursor or plain text conversation files
+              </p>
+            </div>
+
+            <!-- Audio Upload (Admin only) -->
+            <div v-if="inputMethod === 'audio' && isAdmin" class="file-upload-container">
+              <input 
+                type="file" 
+                ref="audioInput"
+                accept="audio/*,.mp3,.wav,.m4a"
+                @change="handleAudioFileSelect"
+                :disabled="isImporting"
+                class="file-input"
+                id="audio-file-input"
+              />
+              <label for="audio-file-input" class="file-upload-label" :class="{ 'disabled': isImporting }">
+                <span v-if="!audioFileName">Choose Audio (.mp3, .wav, .m4a)</span>
+                <span v-else>{{ audioFileName }}</span>
+                <span class="file-icon">🎧</span>
+              </label>
+
+              <div class="model-selection-container" style="margin-top: var(--space-sm)">
+                <label class="model-selection-label">Speakers expected</label>
+                <input 
+                  type="number" 
+                  min="1" 
+                  step="1"
+                  v-model.number="speakersExpected"
+                  class="model-selection-dropdown"
+                  :disabled="isImporting"
+                  required
+                />
+              </div>
+
+              <div style="display:flex; gap: var(--space-sm); justify-content:center; margin-top: var(--space-sm)">
+                <button 
+                  @click="transcribeAudio"
+                  :disabled="!selectedAudioFile || !isValidSpeakersExpected || isImporting"
+                  class="import-button"
+                >
+                  {{ isImporting ? 'Transcribing...' : 'Transcribe Audio' }}
+                </button>
+              </div>
+              <p class="file-upload-hint">
+                Audio transcription is admin-only. After transcription, speakers will be mapped to users.
               </p>
             </div>
           </div>
@@ -170,72 +222,52 @@ The format will be auto-detected once you paste your conversation."
         <div v-else class="admin-builder-mode">
           <h3>Custom Conversation Builder</h3>
           <p class="admin-mode-description">
-            Build a conversation message by message. Select a user as the author for each message.
+            Build a conversation message by message. Use + controls to insert messages; speakers are mapped above.
           </p>
 
-          <!-- Message Builder -->
-          <div class="message-builder">
-            <h4>Add Message</h4>
-            
-            <!-- Author Selection -->
-            <div class="author-selection-container">
-              <label class="author-selection-label">Message Author:</label>
-              <div class="author-input-wrapper">
-                <div class="input-wrapper" :class="{ 'valid': isAuthorValid === true, 'invalid': isAuthorValid === false, 'searching': isSearchingAuthor }">
+          <!-- Speaker Mapping Toggle -->
+          <div class="conversation-settings" v-if="builtMessages.length > 0">
+            <div class="setting-group" style="display:flex; align-items:center; gap: var(--space-sm); margin-bottom: var(--space-sm)">
+              <label class="setting-label" style="margin:0">Use Speaker Mapping</label>
+              <input type="checkbox" v-model="speakerMappingEnabled" :disabled="isImporting" />
+              <span class="setting-hint">Auto-on after transcription; off enables per-message author selection</span>
+            </div>
+          </div>
+
+          <!-- Speaker Mapping (after audio transcription) -->
+          <div v-if="builtMessages.length > 0 && showSpeakerMappingPanel" class="conversation-settings">
+            <h4>Speaker Mapping</h4>
+            <div class="setting-group">
+              <div v-for="sid in uniqueSpeakerIds" :key="sid" style="display:flex; align-items:center; gap: var(--space-sm); margin-bottom: var(--space-sm)">
+                <div style="min-width: 80px; font-weight:600; color: var(--color-primary)">Speaker {{ sid }}</div>
+                <div style="flex:1; position:relative">
                   <input 
-                    v-model="newMessageAuthor" 
-                    @input="searchAuthors"
-                    @keydown.enter.prevent="selectFirstAuthor" 
-                    @keydown.escape="clearAuthorSearch"
-                    placeholder="Search users by username or tag..." 
+                    :placeholder="'Search user for speaker ' + sid + '...'"
                     class="author-input"
-                    ref="authorInput"
+                    :value="speakerSearchQuery[sid] || ''"
+                    @input="onSpeakerSearchInput(sid, $event)"
                     :disabled="isImporting"
                   />
-                  <div v-if="isSearchingAuthor" class="search-indicator" title="Searching...">
+                  <div v-if="speakerIsSearching[sid]" class="search-indicator" title="Searching...">
                     <div class="spinner"></div>
                   </div>
-                  <div v-else-if="isAuthorValid === true" class="valid-indicator" title="Valid user">✓</div>
-                  <div v-else-if="isAuthorValid === false" class="invalid-indicator" title="Invalid user">✗</div>
-                </div>
-                
-                <!-- Author Search Results -->
-                <div v-if="showAuthorResults && authorSearchResults.length > 0" class="author-search-results">
-                  <div 
-                    v-for="user in authorSearchResults" 
-                    :key="user.uid" 
-                    class="author-search-result"
-                    @click="selectAuthor(user)"
-                  >
-                    <span class="author-name">{{ user.display_name }}</span>
-                    <span class="author-tag">@{{ user.user_tag }}</span>
+                  <div v-if="(speakerSearchResults[sid] || []).length > 0" class="author-search-results">
+                    <div 
+                      v-for="u in speakerSearchResults[sid]"
+                      :key="u.uid"
+                      class="author-search-result"
+                      @click="selectSpeakerUser(sid, u)"
+                    >
+                      <span class="author-name">{{ u.display_name }}</span>
+                      <span class="author-tag">@{{ u.user_tag }}</span>
+                    </div>
                   </div>
                 </div>
+                <div style="min-width: 180px; color: var(--color-text-secondary)">
+                  <span v-if="speakerRegistry[sid]">Assigned: {{ speakerRegistry[sid].display_name }} (@{{ speakerRegistry[sid].user_tag }})</span>
+                  <span v-else>Not assigned</span>
+                </div>
               </div>
-            </div>
-
-            <!-- Message Content -->
-            <div class="message-content-container">
-              <label class="message-content-label">Message Content:</label>
-              <textarea 
-                v-model="newMessageContent"
-                class="message-content-textarea"
-                placeholder="Enter the message content..."
-                rows="4"
-                :disabled="isImporting"
-              />
-            </div>
-
-            <!-- Add Message Button -->
-            <div class="add-message-container">
-              <button 
-                @click="addBuilderMessage"
-                :disabled="!canAddBuilderMessage || isImporting"
-                class="add-message-button"
-              >
-                <span class="add-icon">➕</span>
-                Add Message
-              </button>
             </div>
           </div>
 
@@ -253,13 +285,34 @@ The format will be auto-detected once you paste your conversation."
             </div>
             
             <div class="built-messages-list">
+              <!-- Insert at beginning -->
+              <div style="display:flex; justify-content:center; margin-bottom: var(--space-xs)">
+                <button class="add-inline-btn" :disabled="isImporting || builtMessages.length >= 50" @click="insertEmptyBuiltMessage(0)" title="Add message at start">+</button>
+              </div>
               <div 
                 v-for="(msg, index) in builtMessages" 
                 :key="index" 
                 class="built-message"
               >
                 <div class="built-message-header">
-                  <span class="built-message-author">{{ msg.authorName }} (@{{ msg.authorTag }})</span>
+                  <span class="built-message-author">
+                    <template v-if="speakerMappingEnabled">
+                      <template v-if="speakerRegistry[msg.speakerId]">
+                        {{ speakerRegistry[msg.speakerId].display_name }} (@{{ speakerRegistry[msg.speakerId].user_tag }})
+                      </template>
+                      <template v-else>
+                        Speaker {{ msg.speakerId }} (unassigned)
+                      </template>
+                    </template>
+                    <template v-else>
+                      <template v-if="msg.authorUid">
+                        {{ msg.authorName }} (@{{ msg.authorTag }})
+                      </template>
+                      <template v-else>
+                        Author (unassigned)
+                      </template>
+                    </template>
+                  </span>
                   <button 
                     @click="removeBuiltMessage(index)"
                     class="remove-message-button"
@@ -268,9 +321,55 @@ The format will be auto-detected once you paste your conversation."
                     ×
                   </button>
                 </div>
-                <div class="built-message-content">{{ msg.content }}</div>
+                
+                <!-- Per-message chooser: speaker dropdown (mapping on) OR author search (mapping off) -->
+                <div v-if="speakerMappingEnabled" style="display:flex; align-items:center; gap: var(--space-sm); margin: var(--space-xxs) 0 var(--space-xs) 0">
+                  <label class="setting-label" style="margin:0">Speaker:</label>
+                  <select v-model="msg.speakerId" class="author-input" :disabled="isImporting">
+                    <option v-for="sid in uniqueSpeakerIds" :key="sid" :value="sid">
+                      {{ sid }} — {{ (speakerRegistry[sid] && speakerRegistry[sid].display_name) ? speakerRegistry[sid].display_name : 'unassigned' }}
+                    </option>
+                  </select>
+                </div>
+                <div v-else class="author-input-wrapper" style="margin: var(--space-xxs) 0 var(--space-xs) 0">
+                  <input 
+                    :placeholder="'Search author...'"
+                    class="author-input"
+                    :value="msgAuthorSearchQuery[index] || ''"
+                    @input="onMessageAuthorSearchInput(index, $event)"
+                    :disabled="isImporting"
+                  />
+                  <div v-if="msgAuthorIsSearching[index]" class="search-indicator" title="Searching...">
+                    <div class="spinner"></div>
+                  </div>
+                  <div v-if="(msgAuthorSearchResults[index] || []).length > 0" class="author-search-results">
+                    <div 
+                      v-for="u in msgAuthorSearchResults[index]"
+                      :key="u.uid"
+                      class="author-search-result"
+                      @click="selectMessageAuthor(index, u)"
+                    >
+                      <span class="author-name">{{ u.display_name }}</span>
+                      <span class="author-tag">@{{ u.user_tag }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="built-message-content" style="background:transparent; padding:0">
+                  <textarea 
+                    v-model="msg.content"
+                    class="message-content-textarea"
+                    rows="3"
+                    :disabled="isImporting"
+                    placeholder="Edit message content..."
+                  />
+                </div>
+                <!-- Insert between -->
+                <div style="display:flex; justify-content:center; margin-top: var(--space-xxs)">
+                  <button class="add-inline-btn" :disabled="isImporting || builtMessages.length >= 50" @click="insertEmptyBuiltMessage(index + 1)" title="Add message here">+</button>
+                </div>
               </div>
             </div>
+
           </div>
 
           <!-- Conversation Settings for Admin Mode -->
@@ -381,6 +480,7 @@ import RecipientsModal from '../../components/modals/RecipientsModal.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
 import { useBrowserCapabilities } from '../../composables/useBrowserCapabilities.js';
 import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
+import TranscriptionService from '../../services/TranscriptionService.js';
 
 // Setup store and routing
 const store = useStore();
@@ -398,13 +498,17 @@ const {
 // Refs
 const fileInput = ref(null);
 const authorInput = ref(null);
+const audioInput = ref(null);
 
 // UI State
 const inputMethod = ref('text');
 const importText = ref('');
 const uploadedFileName = ref('');
+const audioFileName = ref('');
+const selectedAudioFile = ref(null);
+const speakersExpected = ref(null);
 const selectedBot = ref('');
-const isPublic = ref(true);
+const isPublic = ref(false);
 const recipients = ref([]);
 const showRecipientSelector = ref(false);
 
@@ -416,12 +520,21 @@ const openRecipientSelector = () => {
 
 // Admin Mode State
 const adminMode = ref(false);
+const speakerMappingEnabled = ref(false);
 
 // Admin Builder State
 const newMessageAuthor = ref('');
 const newMessageContent = ref('');
 const selectedAuthor = ref(null);
 const builtMessages = ref([]);
+const speakerRegistry = ref({});
+const speakerSearchResults = ref({});
+const speakerSearchQuery = ref({});
+const speakerIsSearching = ref({});
+// Per-message author search state when mapping is off
+const msgAuthorSearchResults = ref({});
+const msgAuthorSearchQuery = ref({});
+const msgAuthorIsSearching = ref({});
 
 // Author Search State
 const authorSearchResults = ref([]);
@@ -446,8 +559,8 @@ const featuredBots = ref([]);
 // Computed property for admin status (scope-derived)
 const isAdmin = computed(() => store.getters['auth/isAdmin']);
 
-// Permission: require msg.write or admin
-const hasImportPermissions = computed(() => store.getters['auth/hasAnyScope'](['msg.write', 'admin']));
+// Permission: require msg.write to enable import (route is admin-only)
+const hasImportPermissions = computed(() => store.getters['auth/hasScope']('msg.write'));
 
 // Computed property for import button state
 const canImport = computed(() => {
@@ -455,14 +568,25 @@ const canImport = computed(() => {
   
   if (adminMode.value) {
     // In admin mode, check built messages
-    return builtMessages.value.length > 0 && 
-           builtMessages.value.length <= 30 &&
-           importErrors.value.length === 0;
+    // Require all detected speakers to be assigned (mapping ON) or authors set per message (mapping OFF)
+    if (speakerMappingEnabled.value) {
+      const allAssigned = uniqueSpeakerIds.value.every(id => !!speakerRegistry.value[id]);
+      return builtMessages.value.length > 0 && 
+             builtMessages.value.length <= 50 &&
+             importErrors.value.length === 0 &&
+             allAssigned;
+    } else {
+      const allHaveAuthors = builtMessages.value.every(m => !!m.authorUid);
+      return builtMessages.value.length > 0 && 
+             builtMessages.value.length <= 50 &&
+             importErrors.value.length === 0 &&
+             allHaveAuthors;
+    }
   } else {
     // In normal mode, check parsed messages
     return selectedBot.value && 
            parsedMessages.value.length > 0 && 
-           parsedMessages.value.length <= 30 &&
+           parsedMessages.value.length <= 50 &&
            importErrors.value.length === 0;
   }
 });
@@ -471,17 +595,17 @@ const canImport = computed(() => {
 const canAddBuilderMessage = computed(() => {
   return selectedAuthor.value && 
          newMessageContent.value.trim().length > 0 &&
-         builtMessages.value.length < 30;
+         builtMessages.value.length < 50;
 });
 
 // Computed property for permission error message
 const importPermissionMessage = computed(() => {
   if (!user.value) {
-    return 'You need to log in with write permission to use this feature';
+    return 'Log in with write permission to import';
   } else if (store.getters['auth/hasScope']('msg.write')) {
     return 'Write permission is already granted';
   } else {
-    return 'Write permission required';
+    return 'Write permission required to import';
   }
 });
 
@@ -495,12 +619,25 @@ const toggleAdminMode = () => {
   
   // Clear all state when switching modes
   clearAllState();
+
+  // When entering admin mode manually, bootstrap with one empty message
+  if (adminMode.value) {
+    builtMessages.value = [{ content: '', speakerId: 'A' }];
+    speakerRegistry.value = { 'A': null };
+    speakerSearchResults.value = { 'A': [] };
+    speakerSearchQuery.value = { 'A': '' };
+    speakerIsSearching.value = { 'A': false };
+    speakerMappingEnabled.value = false; // default OFF for manual mode
+  }
 };
 
 const clearAllState = () => {
   // Clear normal mode state
   importText.value = '';
   uploadedFileName.value = '';
+  audioFileName.value = '';
+  selectedAudioFile.value = null;
+  speakersExpected.value = null;
   selectedBot.value = '';
   parsedMessages.value = [];
   
@@ -510,6 +647,10 @@ const clearAllState = () => {
   selectedAuthor.value = null;
   builtMessages.value = [];
   clearAuthorSearch();
+  speakerRegistry.value = {};
+  speakerSearchResults.value = {};
+  speakerSearchQuery.value = {};
+  speakerIsSearching.value = {};
   
   // Clear common state
   importErrors.value = [];
@@ -519,6 +660,42 @@ const clearAllState = () => {
   if (fileInput.value) {
     fileInput.value.value = '';
   }
+  if (audioInput.value) {
+    audioInput.value.value = '';
+  }
+};
+
+// Per-message author search handlers (mapping OFF)
+const onMessageAuthorSearchInput = (index, event) => {
+  const query = (event.target.value || '').trim();
+  msgAuthorSearchQuery.value = { ...msgAuthorSearchQuery.value, [index]: query };
+  if (!query) {
+    msgAuthorSearchResults.value = { ...msgAuthorSearchResults.value, [index]: [] };
+    msgAuthorIsSearching.value = { ...msgAuthorIsSearching.value, [index]: false };
+    return;
+  }
+  msgAuthorIsSearching.value = { ...msgAuthorIsSearching.value, [index]: true };
+  setTimeout(async () => {
+    try {
+      const results = await store.dispatch('auth/searchUsers', query);
+      msgAuthorSearchResults.value = { ...msgAuthorSearchResults.value, [index]: results || [] };
+    } catch (e) {
+      msgAuthorSearchResults.value = { ...msgAuthorSearchResults.value, [index]: [] };
+    } finally {
+      msgAuthorIsSearching.value = { ...msgAuthorIsSearching.value, [index]: false };
+    }
+  }, 250);
+};
+
+const selectMessageAuthor = (index, user) => {
+  const msg = builtMessages.value[index];
+  if (!msg) return;
+  msg.authorUid = user.uid;
+  msg.authorName = user.display_name;
+  msg.authorTag = user.user_tag;
+  msgAuthorSearchResults.value = { ...msgAuthorSearchResults.value, [index]: [] };
+  msgAuthorIsSearching.value = { ...msgAuthorIsSearching.value, [index]: false };
+  msgAuthorSearchQuery.value = { ...msgAuthorSearchQuery.value, [index]: `${user.display_name} (@${user.user_tag})` };
 };
 
 // Author Search Methods
@@ -635,14 +812,35 @@ const clearBuiltMessages = () => {
   importErrors.value = [];
 };
 
+const insertEmptyBuiltMessage = (index) => {
+  if (isImporting.value || builtMessages.value.length >= 50) return;
+  const newMsg = speakerMappingEnabled.value
+    ? { content: '', speakerId: uniqueSpeakerIds.value[0] || 'A' }
+    : { content: '', authorUid: null, authorName: null, authorTag: null };
+  builtMessages.value.splice(index, 0, newMsg);
+};
+
 const convertBuiltMessagesToImportFormat = () => {
-  return builtMessages.value.map((msg, index) => ({
-    role: 'user', // We'll handle the author assignment in the import logic
-    content: msg.content,
-    authorUid: msg.authorUid, // Include author info for import processing
-    authorName: msg.authorName,
-    authorTag: msg.authorTag
-  }));
+  if (speakerMappingEnabled.value) {
+    return builtMessages.value.map((msg) => {
+      const assigned = speakerRegistry.value[msg.speakerId] || null;
+      return {
+        role: 'user',
+        content: msg.content,
+        authorUid: assigned ? assigned.uid : null,
+        authorName: assigned ? assigned.display_name : null,
+        authorTag: assigned ? assigned.user_tag : null
+      };
+    });
+  } else {
+    return builtMessages.value.map((msg) => ({
+      role: 'user',
+      content: msg.content,
+      authorUid: msg.authorUid || null,
+      authorName: msg.authorName || null,
+      authorTag: msg.authorTag || null
+    }));
+  }
 };
 
 // Import Button Text
@@ -707,6 +905,99 @@ const getFormatIcon = () => {
     default:
       return '💬';
   }
+};
+
+// Audio transcription helpers
+const handleAudioFileSelect = (event) => {
+  const file = event.target.files[0];
+  selectedAudioFile.value = file || null;
+  audioFileName.value = file ? file.name : '';
+};
+
+const transcribeAudio = async () => {
+  if (!isAdmin.value || !selectedAudioFile.value || !(Number.isInteger(speakersExpected.value) && speakersExpected.value > 0)) return;
+  try {
+    isImporting.value = true;
+    importSuccess.value = false;
+    loadingMessage.value = 'Transcribing audio...';
+    loadingSubmessage.value = 'This may take a few moments';
+
+    const resp = await TranscriptionService.transcribe(selectedAudioFile.value, {
+      speakers_expected: speakersExpected.value
+    });
+
+    const utterances = Array.isArray(resp.utterances) ? resp.utterances : [];
+    // Build messages with speakerId clusters
+    builtMessages.value = utterances.map(u => ({
+      content: u.utterance || '',
+      speakerId: u.speaker || 'A',
+      authorUid: null,
+      authorName: null,
+      authorTag: null
+    })).filter(m => m.content);
+
+    // Initialize speaker registry for all detected speakers
+    const ids = [...new Set(builtMessages.value.map(m => m.speakerId))];
+    const initial = {};
+    const q = {};
+    const sr = {};
+    const ss = {};
+    ids.forEach(id => { initial[id] = null; q[id] = ''; sr[id] = []; ss[id] = false; });
+    speakerRegistry.value = initial;
+    speakerSearchQuery.value = q;
+    speakerSearchResults.value = sr;
+    speakerIsSearching.value = ss;
+
+    // Switch to Admin Builder to replace the transcribe UI with the editor
+    adminMode.value = true;
+    speakerMappingEnabled.value = true;
+
+    isImporting.value = false;
+  } catch (error) {
+    console.error('[ImportView] Transcription failed:', error);
+    store.commit('ui/SET_ERROR', error?.response?.data?.detail || error.message || 'Transcription failed');
+    isImporting.value = false;
+  }
+};
+
+const uniqueSpeakerIds = computed(() => {
+  // Only include defined speaker IDs
+  const ids = builtMessages.value.map(m => m.speakerId).filter(id => !!id);
+  return [...new Set(ids)];
+});
+
+const hasAudioSpeakers = computed(() => uniqueSpeakerIds.value.length > 0);
+const showSpeakerMappingPanel = computed(() => speakerMappingEnabled.value && hasAudioSpeakers.value);
+
+// Validate required speakers expected input
+const isValidSpeakersExpected = computed(() => Number.isInteger(speakersExpected.value) && speakersExpected.value > 0);
+
+const onSpeakerSearchInput = (sid, event) => {
+  const query = (event.target.value || '').trim();
+  speakerSearchQuery.value = { ...speakerSearchQuery.value, [sid]: query };
+  if (!query) {
+    speakerSearchResults.value = { ...speakerSearchResults.value, [sid]: [] };
+    speakerIsSearching.value = { ...speakerIsSearching.value, [sid]: false };
+    return;
+  }
+  speakerIsSearching.value = { ...speakerIsSearching.value, [sid]: true };
+  // Debounce minimal
+  setTimeout(async () => {
+    try {
+      const results = await store.dispatch('auth/searchUsers', query);
+      speakerSearchResults.value = { ...speakerSearchResults.value, [sid]: results || [] };
+      speakerIsSearching.value = { ...speakerIsSearching.value, [sid]: false };
+    } catch (e) {
+      speakerSearchResults.value = { ...speakerSearchResults.value, [sid]: [] };
+      speakerIsSearching.value = { ...speakerIsSearching.value, [sid]: false };
+    }
+  }, 250);
+};
+
+const selectSpeakerUser = (sid, user) => {
+  speakerRegistry.value = { ...speakerRegistry.value, [sid]: user };
+  speakerSearchResults.value = { ...speakerSearchResults.value, [sid]: [] };
+  speakerSearchQuery.value = { ...speakerSearchQuery.value, [sid]: `${user.display_name} (@${user.user_tag})` };
 };
 
 // Auto-detection and parsing logic
@@ -1245,6 +1536,16 @@ watch(() => store.getters['navigation/replyRecipients'], (newRecipients) => {
   font-weight: 600;
   color: var(--color-text);
   font-size: var(--font-size-sm);
+}
+
+.add-inline-btn {
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  padding: 0;
+  transition: all var(--transition-fast);
+  line-height: .6em;
+  min-width: 1.4em;
+  height: 1.4em;
 }
 
 .model-selection-dropdown {

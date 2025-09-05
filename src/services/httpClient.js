@@ -24,8 +24,16 @@ export function installAxiosAuthInterceptor(axiosInstance) {
 
       // Attempt refresh
       try {
+        const tokenBefore = TokenManager.accessToken;
         const newAccess = await TokenManager.refreshAccessToken();
         if (!newAccess) {
+          // If another caller refreshed and rotated tokens, retry with the updated token
+          const tokenAfter = TokenManager.accessToken;
+          if (tokenAfter && tokenAfter !== tokenBefore) {
+            originalRequest.headers = originalRequest.headers || {};
+            originalRequest.headers['Authorization'] = `Bearer ${tokenAfter}`;
+            return axiosInstance.request(originalRequest);
+          }
           await store.dispatch('auth/forceLogoutWithMessage');
           return Promise.reject(error);
         }

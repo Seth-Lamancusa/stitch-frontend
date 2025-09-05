@@ -27,10 +27,21 @@ function installFetchAuthInterceptor() {
       if (init && init._retry) return response;
       // If this was the refresh endpoint itself, do not attempt to refresh again
       if (url.includes('/api/auth/sessions/refresh')) return response;
+      const tokenBefore = TokenManager.accessToken;
       const newAccess = await TokenManager.refreshAccessToken();
       if (!newAccess) {
+        // If another caller refreshed and rotated tokens, retry with the updated token
+        const tokenAfter = TokenManager.accessToken;
+        if (tokenAfter && tokenAfter !== tokenBefore) {
+          try {
+            const newHeaders = new Headers(init && init.headers ? init.headers : undefined);
+            newHeaders.set('Authorization', `Bearer ${tokenAfter}`);
+            const retryInit = { ...init, headers: newHeaders, _retry: true };
+            return await originalFetch(url || input, retryInit);
+          } catch (_) {}
+        }
         try {
-          // Force logout if refresh failed
+          // Force logout if refresh truly failed and token did not change
           await store.dispatch('auth/forceLogoutWithMessage');
         } catch (e) {}
         return response;

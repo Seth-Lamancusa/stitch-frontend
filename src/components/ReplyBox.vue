@@ -12,7 +12,8 @@
       class="reply-sheet"
       :class="{ 
         'reply-sheet--raised': isKeyboardVisible,
-        'reply-sheet--visible': isReplying || isNewThread 
+        'reply-sheet--visible': isReplying || isNewThread,
+        'reply-sheet--closing': isReplyBoxClosing
       }"
       ref="replySheet"
       role="dialog"
@@ -170,6 +171,7 @@
     <div 
       v-if="showBotModal" 
       class="modal-overlay"
+      :class="{ 'closing': botModalIsClosing }"
       @click="closeBotPromptModal"
     >
       <div 
@@ -189,36 +191,26 @@
         
         <div class="modal-content">
           <p class="modal-description">
-            Select a bot to prompt for a response to this message.
+            Select one or more bots to add as recipients to this message.
           </p>
           
           <div class="bot-options">
             <!-- Main bots -->
             <div class="main-bot-options">
-              <button 
+              <div 
                 v-for="bot in mainBots" 
                 :key="bot.uid"
                 class="bot-option-button"
-                :class="{ 
-                  'confirm-state': botConfirmStates[bot.uid] === 'confirm',
-                  'loading': botPromptStates[bot.uid] === 'loading',
-                  'success': botPromptStates[bot.uid] === 'success',
-                  'error': botPromptStates[bot.uid] === 'error'
-                }"
-                @click="handleBotSelection(bot)"
-                :disabled="botPromptStates[bot.uid] === 'loading'"
+                :class="{ 'bot-selected': isBotSelected(bot) }"
+                @click="toggleBotSelected(bot)"
               >
                 <span class="bot-option-icon">
-                  <span v-if="botPromptStates[bot.uid] === 'loading'" class="bot-loading-spinner"></span>
-                  <span v-else-if="botPromptStates[bot.uid] === 'success'">✓</span>
-                  <span v-else-if="botPromptStates[bot.uid] === 'error'">✗</span>
-                  <span v-else-if="botConfirmStates[bot.uid] === 'confirm'">?</span>
-                  <span v-else>+</span>
+                  <input type="checkbox" :checked="isBotSelected(bot)" @click.stop @change="toggleBotSelected(bot)" />
                 </span>
                 <span class="bot-option-text">
-                  {{ botConfirmStates[bot.uid] === 'confirm' ? 'Confirm?' : bot.display_name }}
+                  {{ bot.display_name }}
                 </span>
-              </button>
+              </div>
             </div>
             
             <!-- Advanced bots dropdown -->
@@ -235,33 +227,42 @@
               </span>
               
               <div v-if="showAdvancedBotsModal" class="advanced-bot-list">
-                <button 
+                <div 
                   v-for="bot in advancedBots" 
                   :key="bot.uid"
                   class="bot-option-button advanced-bot-button"
-                  :class="{ 
-                    'confirm-state': botConfirmStates[bot.uid] === 'confirm',
-                    'loading': botPromptStates[bot.uid] === 'loading',
-                    'success': botPromptStates[bot.uid] === 'success',
-                    'error': botPromptStates[bot.uid] === 'error'
-                  }"
-                  @click="handleBotSelection(bot)"
-                  :disabled="botPromptStates[bot.uid] === 'loading'"
+                  :class="{ 'bot-selected': isBotSelected(bot) }"
+                  @click="toggleBotSelected(bot)"
                 >
                   <span class="bot-option-icon">
-                    <span v-if="botPromptStates[bot.uid] === 'loading'" class="bot-loading-spinner"></span>
-                    <span v-else-if="botPromptStates[bot.uid] === 'success'">✓</span>
-                    <span v-else-if="botPromptStates[bot.uid] === 'error'">✗</span>
-                    <span v-else-if="botConfirmStates[bot.uid] === 'confirm'">?</span>
-                    <span v-else>+</span>
+                    <input type="checkbox" :checked="isBotSelected(bot)" @click.stop @change="toggleBotSelected(bot)" />
                   </span>
                   <span class="bot-option-text">
-                    {{ botConfirmStates[bot.uid] === 'confirm' ? 'Confirm?' : bot.display_name }}
+                    {{ bot.display_name }}
                   </span>
-                </button>
+                </div>
               </div>
             </div>
           </div>
+        </div>
+        <div class="modal-footer">
+          <button 
+            class="add-button"
+            :class="{ 'success': addBotsSuccess }"
+            :disabled="isAddingBots || selectedBotsList.length === 0"
+            @click.stop="addSelectedBotsToMessage"
+          >
+            <span v-if="isAddingBots" class="button-loading"><span class="bot-loading-spinner"></span><span>Adding...</span></span>
+            <span v-else-if="addBotsSuccess">Added!</span>
+            <span v-else>Add</span>
+          </button>
+          <button 
+            class="cancel-button"
+            :disabled="isAddingBots"
+            @click.stop="closeBotPromptModal"
+          >
+            Cancel
+          </button>
         </div>
       </div>
     </div>
@@ -273,6 +274,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useStore } from 'vuex';
 import RecipientsModal from './modals/RecipientsModal.vue';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
+import MessageService from '../services/MessageService.js';
 
 const props = defineProps({
   targetId: {
@@ -340,8 +342,13 @@ const advancedBots = computed(() => featuredBots.value.filter(bot => bot.advance
 const showAdvancedBotsModal = ref(false);
 
 const showBotModal = ref(false); // Track if bot selection modal is open
-const botConfirmStates = ref({}); // Track which bots are in confirm state
-const botPromptStates = ref({}); // Track loading/success/error states for each bot
+const selectedBots = ref({}); // Map of botUid -> boolean
+const isAddingBots = ref(false);
+const addBotsSuccess = ref(false);
+const addBotsError = ref(null);
+const selectedBotsList = computed(() => featuredBots.value.filter(bot => !!selectedBots.value[bot.uid]));
+const botModalIsClosing = ref(false);
+const isReplyBoxClosing = ref(false);
 
 // Add recipients mode
 const isAddRecipientsMode = computed(() => store.getters['navigation/isAddRecipientsMode']);
@@ -659,20 +666,23 @@ const sendReply = async () => {
         messageId: addRecipientsMessageId.value,
         recipientsCount: recipients.value.length
       });
-      
-      // Adding recipients via API is not supported
-      throw new Error('Adding recipients is not supported');
-      
+      if (!addRecipientsMessageId.value || recipients.value.length === 0) {
+        throw new Error('No message or recipients to add');
+      }
+      await MessageService.addRecipientsToMessage(addRecipientsMessageId.value, recipients.value, false);
       // Clear the form and exit add recipients mode
       content.value = '';
       store.dispatch('navigation/clearAddRecipientsMode');
-      
+      // Refresh the message data to reflect new recipients
+      await store.dispatch('messages/loadMessageRadius', { 
+        messageId: addRecipientsMessageId.value, 
+        radius: 1 
+      });
       // Show success message
       showSendSuccess.value = true;
       setTimeout(() => {
         showSendSuccess.value = false;
       }, 2000);
-      
       return;
     }
     
@@ -851,81 +861,78 @@ const closeRecipientSelector = (event) => {
 const showBotPromptModal = () => {
   dismissMobileKeyboard();
   showBotModal.value = true;
-  // Reset all confirm states when opening modal
-  botConfirmStates.value = {};
+  // Reset selection & states when opening modal
+  selectedBots.value = {};
+  isAddingBots.value = false;
+  addBotsSuccess.value = false;
+  addBotsError.value = null;
+  botModalIsClosing.value = false;
+  isReplyBoxClosing.value = false;
 };
 
 const closeBotPromptModal = () => {
   showBotModal.value = false;
-  // Reset all confirm states when closing modal
-  botConfirmStates.value = {};
+  // Reset selection & states when closing modal
+  selectedBots.value = {};
+  isAddingBots.value = false;
+  addBotsSuccess.value = false;
+  addBotsError.value = null;
+  botModalIsClosing.value = false;
+  isReplyBoxClosing.value = false;
 };
 
-const handleBotSelection = async (bot) => {
-  // If bot is in loading state, ignore clicks
-  if (botPromptStates.value[bot.uid] === 'loading') {
-    return;
-  }
-  
-  // If bot is already in confirm state, execute the prompt
-  if (botConfirmStates.value[bot.uid] === 'confirm') {
-    await confirmBotPrompt(bot);
-    return;
-  }
-  
-  // Otherwise, reset all other confirm states and set this one to confirm
-  botConfirmStates.value = {};
-  botConfirmStates.value[bot.uid] = 'confirm';
+const isBotSelected = (bot) => {
+  return !!selectedBots.value[bot.uid];
 };
 
-const confirmBotPrompt = async (bot) => {
+const toggleBotSelected = (bot) => {
+  const current = !!selectedBots.value[bot.uid];
+  selectedBots.value = { ...selectedBots.value, [bot.uid]: !current };
+};
+
+const addSelectedBotsToMessage = async () => {
   if (!props.targetId) {
-    console.error('[ReplyBox] Cannot prompt bot: no target message ID');
+    addBotsError.value = 'No target message ID';
     return;
   }
-  
+  const bots = selectedBotsList.value;
+  if (!bots || bots.length === 0) return;
   try {
-    // Set loading state
-    botPromptStates.value[bot.uid] = 'loading';
-    // Clear confirm state
-    botConfirmStates.value[bot.uid] = null;
-    
-    // Import MessageService dynamically
-    const MessageService = (await import('../services/MessageService.js')).default;
-    
-    // Not supported: adding recipients via API
-    throw new Error('Adding recipients is not supported');
-    
-    console.log(`[ReplyBox] Successfully prompted ${bot.display_name} for response`);
-    
-    // Refresh the message data so RecipientsModal shows the new recipient if open
+    isAddingBots.value = true;
+    addBotsError.value = null;
+    const recipientsToAdd = bots.map(bot => ({
+      uid: bot.uid,
+      display_name: bot.display_name,
+      user_tag: bot.user_tag,
+      public: true,
+      visible: true
+    }));
+    await MessageService.addRecipientsToMessage(props.targetId, recipientsToAdd, false);
+    // Refresh message data
     await store.dispatch('messages/loadMessageRadius', { 
       messageId: props.targetId, 
       radius: 1 
     });
-    console.log(`[ReplyBox] Refreshed message data after adding ${bot.display_name} as recipient`);
-    
-    // Clear loading state on success
-    botPromptStates.value[bot.uid] = null;
-    
-    // Close the bot prompt modal immediately
-    closeBotPromptModal();
-    
-    // Also close the reply box if not in new thread mode
-    if (!props.isNewThread) {
-      hideBottomSheet();
-    }
-    
-  } catch (error) {
-    console.error(`[ReplyBox] Error prompting ${bot.display_name}:`, error);
-    
-    // Set error state
-    botPromptStates.value[bot.uid] = 'error';
-    
-    // Clear error state after 3 seconds
+    addBotsSuccess.value = true;
+    // Brief success state, then quick fade-out before closing
     setTimeout(() => {
-      botPromptStates.value[bot.uid] = null;
-    }, 3000);
+      botModalIsClosing.value = true;
+      isReplyBoxClosing.value = true; // Start reply box fade-out at same time
+      setTimeout(() => {
+        addBotsSuccess.value = false;
+        closeBotPromptModal();
+        if (!props.isNewThread) {
+          hideBottomSheet();
+        }
+        botModalIsClosing.value = false;
+        isReplyBoxClosing.value = false;
+      }, 150);
+    }, 300);
+  } catch (error) {
+    console.error('[ReplyBox] Error adding bot recipients:', error);
+    addBotsError.value = error?.response?.data?.detail || error?.message || 'Failed to add recipients';
+  } finally {
+    isAddingBots.value = false;
   }
 };
 
@@ -1080,6 +1087,10 @@ defineExpose({
 
 .reply-sheet--raised {
   transform: translateY(-8px);
+}
+
+.reply-sheet--closing {
+  animation: reply-sheet-fade-out 150ms ease forwards;
 }
 
 /* Sheet handle */
@@ -1553,6 +1564,10 @@ defineExpose({
   z-index: 1000; /* Higher explicit z-index */
 }
 
+.modal-overlay.closing {
+  animation: quick-fade-out 150ms ease forwards;
+}
+
 .recipient-modal {
   position: relative; /* Change from fixed to relative */
   max-width: 450px;
@@ -1586,14 +1601,43 @@ defineExpose({
   margin-top: var(--space-lg);
 }
 
-.done-button {
-  padding: var(--space-xs) var(--space-md);
+.add-button {
+  padding: 10px 20px;
   background-color: var(--color-primary);
   color: var(--color-text-inverse);
   border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+  border-radius: var(--radius-md);
   font-weight: 500;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.add-button:hover:not(:disabled) {
+  background-color: var(--color-primary-dark);
+  transform: translateY(-1px);
+}
+
+.add-button:disabled {
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.add-button.success {
+  background-color: var(--color-success);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Keep success state stable on hover */
+.add-button.success:hover {
+  background-color: var(--color-success);
+  transform: none;
+}
+
+.modal-footer .add-button {
+  margin-right: 8px;
 }
 
 .close-button {
@@ -1880,6 +1924,22 @@ defineExpose({
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+@keyframes quick-fade-out {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes reply-sheet-fade-out {
+  0% { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% { 
+    opacity: 0;
+    transform: translateY(20px);
+  }
 }
 
 /* Make scrollbar invisible until in use */

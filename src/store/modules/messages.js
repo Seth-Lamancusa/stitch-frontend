@@ -471,10 +471,10 @@ export default {
     // REMOVED setBranchPath - no longer needed since in_branch_path flags are unused
     
     // Unified traversal loader
-    async loadTraversal({ commit, state }, { messageId, up_depth = 0, down_depth = 0, get_replies = true }) {
+    async loadTraversal({ commit, state }, { messageId, up_depth = 0, down_depth = 0, get_replies = true, get_children = false }) {
       if (!messageId) return [];
       try {
-        const response = await MessageService.traverseFrom(messageId, { up_depth, down_depth, get_replies });
+        const response = await MessageService.traverseFrom(messageId, { up_depth, down_depth, get_replies, get_children });
         const data = response?.data || {};
         const combined = [];
         if (data.origin) combined.push(data.origin);
@@ -490,18 +490,18 @@ export default {
     },
     
     // Load parent branch - delegate to unified traversal
-    async loadMessageBranchUp({ dispatch }, { messageId, depth = 1, get_replies = true }) {
-      return dispatch('loadTraversal', { messageId, up_depth: depth, down_depth: 0, get_replies });
+    async loadMessageBranchUp({ dispatch }, { messageId, depth = 1, get_replies = true, get_children = true }) {
+      return dispatch('loadTraversal', { messageId, up_depth: depth, down_depth: 0, get_replies, get_children });
     },
     
     // Load child branch - delegate to unified traversal
-    async loadMessageBranchDown({ dispatch }, { messageId, depth = 1, get_replies = true }) {
-      return dispatch('loadTraversal', { messageId, up_depth: 0, down_depth: depth, get_replies });
+    async loadMessageBranchDown({ dispatch }, { messageId, depth = 1, get_replies = true, get_children = true }) {
+      return dispatch('loadTraversal', { messageId, up_depth: 0, down_depth: depth, get_replies, get_children });
     },
     
     // Load radius - delegate to unified traversal
-    async loadMessageRadius({ dispatch }, { messageId, radius, get_replies = true }) {
-      return dispatch('loadTraversal', { messageId, up_depth: radius, down_depth: radius, get_replies });
+    async loadMessageRadius({ dispatch }, { messageId, radius, get_replies = true, get_children = true }) {
+      return dispatch('loadTraversal', { messageId, up_depth: radius, down_depth: radius, get_replies, get_children });
     },
     
     // Send a reply to a message
