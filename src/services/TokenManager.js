@@ -1,4 +1,7 @@
 class TokenManager {
+  static debug = true;
+  static inFlightRefreshPromise = null;
+  static lastSuccessfulRefreshAt = 0;
   static get accessToken() {
     return localStorage.getItem('auth_token');
   }
@@ -23,29 +26,58 @@ class TokenManager {
   }
 
   static async refreshAccessToken() {
+    // Deduplicate concurrent refresh attempts: reuse a single in-flight promise
+    if (this.inFlightRefreshPromise) {
+      try { return await this.inFlightRefreshPromise; } catch { return null; }
+    }
+
     const rt = this.refreshToken;
-    if (!rt) return null;
-    try {
-      const resp = await fetch('/api/auth/sessions/refresh', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: rt }),
-        _skipAuth: true
-      });
-      if (!resp.ok) return null;
-      const data = await resp.json();
-      if (data && data.access_token) {
-        this.accessToken = data.access_token;
-        if (data.refresh_token) this.refreshToken = data.refresh_token;
-        return data.access_token;
+    if (!rt) {
+      if (this.debug) console.warn('[TokenManager] No refresh_token present');
+      return null;
+    }
+
+    this.inFlightRefreshPromise = (async () => {
+      try {
+        const resp = await fetch('/api/auth/sessions/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: rt }),
+          _skipAuth: true
+        });
+        if (!resp.ok) {
+          if (this.debug) console.warn('[TokenManager] Refresh failed', resp.status);
+          return null;
+        }
+        const data = await resp.json();
+        if (data && data.access_token) {
+          this.accessToken = data.access_token;
+          if (data.refresh_token) this.refreshToken = data.refresh_token;
+          this.lastSuccessfulRefreshAt = Date.now();
+          if (this.debug) console.log('[TokenManager] Refresh succeeded');
+          return data.access_token;
+        }
+        if (this.debug) console.warn('[TokenManager] Refresh response missing access_token');
+        return null;
+      } catch (e) {
+        if (this.debug) console.error('[TokenManager] Refresh error', e);
+        return null;
       }
-      return null;
-    } catch {
-      return null;
+    })();
+
+    try {
+      return await this.inFlightRefreshPromise;
+    } finally {
+      this.inFlightRefreshPromise = null;
     }
   }
 }
 
 export default TokenManager;
+
+// Optional: expose for console debugging in dev
+if (typeof window !== 'undefined') {
+  try { window.TokenManager = TokenManager; } catch (e) {}
+}
 
 

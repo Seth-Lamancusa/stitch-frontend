@@ -40,11 +40,15 @@ const WebSocketService = {
   
   // Idle disconnect handling
   idleTimeoutId: null,
-  idleTimeoutMs: 2 * 60 * 1000, // 2 minutes
+  idleTimeoutMs: 3 * 60 * 1000, // 2 minutes
   lastActivityAt: null,
   activityListenerRegistered: false,
+  idleTimerGeneration: 0,
+  // Delay idle banner to allow brief reconnection window
+  idleBannerDelayMs: 3000,
+  idleBannerTimeoutId: null,
   // Expanded activity events to better capture mobile activity
-  activityEvents: ['mousemove', 'touchstart', 'touchmove', 'keydown', 'scroll'],
+  activityEvents: ['mousemove', 'pointermove', 'touchstart', 'touchmove', 'keydown', 'scroll', 'wheel'],
 
   // Network/visibility robustness
   networkVisibilityListenerRegistered: false,
@@ -56,7 +60,12 @@ const WebSocketService = {
   // Debug logging helper
   log(...messages) {
     if (this.debugMode) {
-      console.log('[WebSocket]', ...messages);
+      try {
+        const status = this.getConnectionStatus?.();
+        console.log('[WebSocket]', ...messages, status ? { status } : '');
+      } catch (_) {
+        console.log('[WebSocket]', ...messages);
+      }
     }
   },
   warn(...messages) {
@@ -76,7 +85,11 @@ const WebSocketService = {
       if (!isOpen) {
         this.log('Activity detected and WS not open; attempting reconnect');
         const token = TokenManager.accessToken;
-        if (token) this.connectUser(token);
+        if (this.tokenRefreshInProgress) {
+          this.warn('Skipping activity reconnect during token refresh');
+          return;
+        }
+        if (token) this.safeConnect(token);
       }
     } catch (e) {
       // no-op
@@ -95,6 +108,17 @@ const WebSocketService = {
     const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
     if (!this.isOnline || isHidden || now < this.bannerSuppressionUntil) {
       this.pendingDisconnectedBanner = true;
+      // If we're in a time-based suppression window, schedule a check
+      if (now < this.bannerSuppressionUntil) {
+        const remaining = this.bannerSuppressionUntil - now;
+        if (this.idleBannerTimeoutId) {
+          clearTimeout(this.idleBannerTimeoutId);
+        }
+        this.idleBannerTimeoutId = setTimeout(() => {
+          this.idleBannerTimeoutId = null;
+          this.maybeShowWsDisconnectedBanner();
+        }, remaining);
+      }
       return;
     }
     this.pendingDisconnectedBanner = false;
@@ -114,6 +138,12 @@ const WebSocketService = {
   clearWsDisconnectedBanner() {
     try {
       store.dispatch('ui/clearWebsocketDisconnected');
+      // Cancel any scheduled idle banner
+      if (this.idleBannerTimeoutId) {
+        clearTimeout(this.idleBannerTimeoutId);
+        this.idleBannerTimeoutId = null;
+      }
+      this.pendingDisconnectedBanner = false;
     } catch (e) {}
   },
   setupNetworkVisibilityListeners() {
@@ -148,7 +178,7 @@ const WebSocketService = {
     const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
     if (!isOpen) {
       const token = TokenManager.accessToken;
-      if (token) this.connectUser(token);
+      if (token) this.safeConnect(token);
     }
     if (this.pendingDisconnectedBanner) {
       // Re-evaluate banner after suppression
@@ -167,7 +197,7 @@ const WebSocketService = {
       const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
       if (!isOpen && this.isOnline) {
         const token = TokenManager.accessToken;
-        if (token) this.connectUser(token);
+        if (token) this.safeConnect(token);
       }
       // Clear banner when app is foregrounded
       this.clearWsDisconnectedBanner();
@@ -190,6 +220,11 @@ const WebSocketService = {
     this.stopPingInterval();
     this.stopIdleTimer();
     this.teardownActivityListeners();
+    // Clear any pending idle banner timer
+    if (this.idleBannerTimeoutId) {
+      clearTimeout(this.idleBannerTimeoutId);
+      this.idleBannerTimeoutId = null;
+    }
   },
   removeMessageSubscription() {
     if (this.unsubscribeFunction) {
@@ -200,8 +235,17 @@ const WebSocketService = {
   },
   
   async attemptRefreshAndReconnect() {
+    if (this.tokenRefreshInProgress) {
+      this.warn('Token refresh already in progress; skipping duplicate attempt');
+      return;
+    }
+    this.tokenRefreshInProgress = true;
     try {
       this.log('Attempting token refresh due to authentication failure');
+      try {
+        const rt = TokenManager.refreshToken;
+        if (!rt) this.warn('No refresh token present at refresh time');
+      } catch (_) {}
       const newAccess = await TokenManager.refreshAccessToken();
       if (!newAccess) {
         this.error('Token refresh failed; skipping WS disconnected banner');
@@ -211,6 +255,10 @@ const WebSocketService = {
       await this.connectUser(newAccess);
     } catch (e) {
       this.error('Error during refresh-and-reconnect:', e);
+    }
+    finally {
+      this.tokenRefreshInProgress = false;
+      this.lastTokenRefresh = Date.now();
     }
   },
   
@@ -681,10 +729,6 @@ const WebSocketService = {
       
       socket.onerror = (error) => {
         this.error(`WebSocket error for user ${this.userId}:`, error);
-        // If error occurs before open and we haven't established connection, try refresh once
-        if (!this.connectionEstablished) {
-          this.attemptRefreshAndReconnect();
-        }
         reject(error);
       };
       
@@ -804,12 +848,36 @@ const WebSocketService = {
       userId: this.userId,
       connectionAttempts: this.connectionAttempts,
       lastPingTime: this.lastPingTime,
-      hasAuthToken: !!this.authToken
+      hasAuthToken: !!this.authToken,
+      hasRefreshToken: (() => { try { return !!TokenManager.refreshToken; } catch (_) { return undefined; } })(),
+      authTokenPrefix: this.authToken ? this.authToken.slice(0, 10) : null,
     };
     
     return status;
   }
   ,
+  // Internal helper to avoid unhandled promise rejections on fire-and-forget connects
+  safeConnect(token) {
+    try {
+      const p = this.connectUser(token);
+      if (p && typeof p.catch === 'function') {
+        p.catch(err => this.warn('connectUser error suppressed', err?.message || err));
+      }
+    } catch (e) {
+      this.warn('safeConnect threw synchronously', e?.message || e);
+    }
+  },
+  // Debug helper to print a one-shot status line
+  debugStatus(label = 'status') {
+    try {
+      const s = this.getConnectionStatus();
+      console.log('[WebSocket][debug]', label, s);
+      return s;
+    } catch (e) {
+      console.log('[WebSocket][debug]', label, 'failed to get status', e);
+      return null;
+    }
+  },
   // Activity and idle helpers
   setupActivityListeners() {
     if (this.activityListenerRegistered) return;
@@ -841,14 +909,42 @@ const WebSocketService = {
   resetIdleTimer() {
     try {
       if (this.idleTimeoutId) clearTimeout(this.idleTimeoutId);
-      this.idleTimeoutId = setTimeout(() => this.onIdleTimeout(), this.idleTimeoutMs);
+      this.idleTimerGeneration = (this.idleTimerGeneration || 0) + 1;
+      const generation = this.idleTimerGeneration;
+      const timeoutMs = this.idleTimeoutMs;
+      this.idleTimeoutId = setTimeout(() => {
+        // Guard against stale timers or recent activity just before firing
+        const now = Date.now();
+        const lastActivity = this.lastActivityAt || 0;
+        const timeSinceActivity = now - lastActivity;
+        if (generation !== this.idleTimerGeneration) return;
+        if (timeSinceActivity < timeoutMs - 250) {
+          // Recent activity detected; reschedule defensively
+          this.resetIdleTimer();
+          return;
+        }
+        this.onIdleTimeout();
+      }, this.idleTimeoutMs);
     } catch (e) {}
   },
   onIdleTimeout() {
-    // Disconnect intentionally due to idle
-    this.log('Idle timeout reached, disconnecting WebSocket');
+    // Double-check inactivity to avoid false positives from throttled timers
     try {
-      this.showWsDisconnectedBanner();
+      const now = Date.now();
+      const lastActivity = this.lastActivityAt || 0;
+      const timeSinceActivity = now - lastActivity;
+      if (timeSinceActivity < this.idleTimeoutMs - 250) {
+        this.warn('Idle timer fired but recent activity detected; resetting timer');
+        this.resetIdleTimer();
+        return;
+      }
+    } catch (e) {}
+    this.log('Idle timeout reached, disconnecting WebSocket; suppressing banner briefly');
+    try {
+      const now = Date.now();
+      const delay = Math.max(0, this.idleBannerDelayMs || 3000);
+      this.bannerSuppressionUntil = now + delay;
+      this.pendingDisconnectedBanner = true;
     } catch (e) {}
     this.disconnectUser();
   },
@@ -866,3 +962,8 @@ const WebSocketService = {
 };
 
 export default WebSocketService;
+
+// Optional: expose for console debugging in dev
+if (typeof window !== 'undefined') {
+  try { window.WebSocketService = WebSocketService; } catch (e) {}
+}

@@ -1,5 +1,5 @@
 <template>
-  <div v-if="isVisible" class="modal-overlay" @click.self="closeModal">
+  <div v-if="isVisible" class="modal-overlay" :class="{ 'closing': isClosing }" @click.self="closeModal">
     <div class="recipient-modal">
       <div class="modal-header">
         <h3>{{ isActuallyAddingToExisting ? 'Add Recipients' : 'Recipients (new message)' }}</h3>
@@ -415,6 +415,7 @@ const recipientToRemove = ref(null); // Track which recipient is being removed
 const isRemovingFromSingle = ref(false); // Track if removing from single message
 const isRemovingFromDescendants = ref(false); // Track if removing from descendants
 let searchTimeout = null;
+const isClosing = ref(false); // Quick closing fade-out state
 
 
 // Helper function to deduplicate and reconcile recipient data
@@ -711,6 +712,15 @@ const closeModal = () => {
   emit('close');
 };
 
+// Trigger a brief fade-out before closing
+const closeWithFade = () => {
+  isClosing.value = true;
+  setTimeout(() => {
+    isClosing.value = false;
+    closeModal();
+  }, 150);
+};
+
 const handleDone = async () => {
   console.log('[RecipientsModal] handleDone called');
   console.log('[RecipientsModal] Current recipients:', recipients.value);
@@ -766,9 +776,19 @@ const onAddRecipientsComplete = async () => {
       count: props.existingRecipients?.length || 0,
       recipients: props.existingRecipients
     });
-
-    // Close the modal only after successful add
-    closeModal();
+    // Brief success flash before closing
+    isAddingRecipients.value = false;
+    const doneButton = document.querySelector('.add-button');
+    if (doneButton) {
+      doneButton.classList.add('success');
+      setTimeout(() => {
+        doneButton.classList.remove('success');
+        // Close with quick fade-out after success
+        closeWithFade();
+      }, 300);
+    } else {
+      closeWithFade();
+    }
   } catch (error) {
     console.error('[RecipientsModal] Error clearing recipients:', error);
   } finally {
@@ -1116,6 +1136,10 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   padding: 20px;
 }
 
+.modal-overlay.closing {
+  animation: quick-fade-out 150ms ease forwards;
+}
+
 /* Recipient modal */
 .recipient-modal {
   background-color: var(--color-surface);
@@ -1275,6 +1299,11 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+@keyframes quick-fade-out {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 .spinner-small {
@@ -1710,6 +1739,17 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   background-color: var(--color-border);
   color: var(--color-text-secondary);
   cursor: not-allowed;
+  transform: none;
+}
+
+.add-button.success {
+  background-color: var(--color-success);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Keep success state stable on hover */
+.add-button.success:hover {
+  background-color: var(--color-success);
   transform: none;
 }
 

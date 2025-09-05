@@ -14,11 +14,33 @@ import TermsView from './views/info_views/TermsView.vue';
 import FeaturesView from './views/info_views/FeaturesView.vue';
 import MessageListView from './views/app_views/MessageListView.vue';
 import PasswordResetView from './views/app_views/PasswordResetView.vue';
+import store from './store';
 
 const routes = [
   {
     path: '/',
     redirect: '/home'
+  },
+  {
+    path: '/import',
+    name: 'import',
+    component: ImportView,
+    beforeEnter: async (to, from, next) => {
+      // Ensure auth is initialized before gate check
+      try {
+        if (!store.getters['auth/authReady']) {
+          await store.dispatch('auth/initAuth');
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      if (store.getters['auth/isAdmin']) {
+        next();
+      } else {
+        next({ path: '/public' });
+      }
+    }
   },
   {
     path: '/reset-password',

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import TokenManager from './TokenManager';
+import store from '../store';
 
 const apiBaseUrl = '/api';
 
@@ -36,22 +37,32 @@ class ImportService {
     let transformedMessages;
     
     if (isAdminMode) {
-      // ADMIN MODE: Use specified authors and add previous message author as recipient
+      // ADMIN MODE: Add all unique authors as recipients on messages they didn't write
       console.log('[ImportService] Using admin mode - custom authors detected');
-      
-      transformedMessages = messages.map((msg, index) => {
+
+      // Get unique author UIDs from the conversation
+      const uniqueAuthorUids = Array.from(new Set(
+        messages.map(m => m.authorUid).filter(Boolean)
+      ));
+
+      transformedMessages = messages.map((msg) => {
+        if (!msg.content || !msg.content.trim()) {
+          throw new Error('Empty message content is not allowed');
+        }
+        if (!msg.authorUid) {
+          throw new Error('All messages must have an assigned author');
+        }
+
         // Start with base recipients
         const messageRecipients = [...recipients];
-        
-        // Add previous message's author as recipient (so they can see the reply)
-        if (index > 0) {
-          const previousAuthorUid = messages[index - 1].authorUid;
-          // Only add if not already in recipients
-          if (!messageRecipients.some(r => r.uid === previousAuthorUid)) {
-            messageRecipients.push({ uid: previousAuthorUid, public: true });
+
+        // Add every other unique author as a recipient
+        for (const uid of uniqueAuthorUids) {
+          if (uid && uid !== msg.authorUid && !messageRecipients.some(r => r && r.uid === uid)) {
+            messageRecipients.push({ uid, public: true });
           }
         }
-        
+
         return {
           content: msg.content,
           content_author: msg.authorUid,
@@ -61,43 +72,44 @@ class ImportService {
         };
       });
     } else {
-      // NORMAL MODE: Use traditional user/bot alternating logic
+      // NORMAL MODE: Add both participants (user and bot) to each message's recipients, excluding the author
       if (!selectedBot || !selectedBot.uid) {
         throw new Error('Bot selection is required for normal imports');
       }
 
-      transformedMessages = messages.map((msg, index) => {
-        
-        if (msg.role === 'user') {
-          // For user messages: add the bot as a recipient so bot can see the message
-          const messageRecipients = [
-            ...recipients, // Include any additional recipients specified
-            { uid: selectedBot.uid, public: true } // Add bot as recipient
-          ];
-          
-          return {
-            content: msg.content,
-            content_author: currentUserUid,
-            public: isPublic,
-            recipients: messageRecipients,
-            attachments: []
-          };
-        } else {
-          // For bot messages: add the user as a recipient so user can see the message
-          const messageRecipients = [
-            ...recipients // Include any additional recipients specified
-          ];
+      // Resolve current user from store
+      const currentUser = store.getters && store.getters['auth/user'];
+      const currentUserUid = currentUser && currentUser.uid ? currentUser.uid : null;
+      if (!currentUserUid) {
+        throw new Error('Must be logged in to import conversation');
+      }
 
-          messageRecipients.push({ uid: currentUserUid, public: true });
-          
-          return {
-            content: msg.content,
-            content_author: selectedBot.uid,
-            public: isPublic,
-            recipients: messageRecipients,
-            attachments: []
-          };
+      const participantUids = Array.from(new Set([
+        currentUserUid,
+        selectedBot.uid
+      ].filter(Boolean)));
+
+      transformedMessages = messages.map((msg) => {
+        const isUserMessage = msg.role === 'user';
+        const contentAuthor = isUserMessage ? currentUserUid : selectedBot.uid;
+
+        // Start with base recipients
+        const messageRecipients = [...recipients];
+
+        // Add all other participants as recipients, excluding the author
+        for (const uid of participantUids) {
+          if (uid !== contentAuthor && !messageRecipients.some(r => r && r.uid === uid)) {
+            messageRecipients.push({ uid, public: true });
+          }
         }
+
+        return {
+          content: msg.content,
+          content_author: contentAuthor,
+          public: isPublic,
+          recipients: messageRecipients,
+          attachments: []
+        };
       });
     }
     

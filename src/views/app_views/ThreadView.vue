@@ -1483,7 +1483,7 @@ const closeProfileModal = () => {
   flex-direction: column;
   padding-left: 80px;
   padding-right: 80px;
-  padding-bottom: calc(100px + 100vh); /* Add space at bottom for the reply box plus a screen's worth of scrollable space */
+  padding-bottom: calc(100px + 50vh); /* Add space at bottom for the reply box plus a screen's worth of scrollable space */
   gap: 20px; /* Consistent gap between elements */
   overflow-y: auto;
   overflow-x: hidden;

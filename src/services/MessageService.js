@@ -122,17 +122,17 @@ export default {
   },
   
   // Load messages via unified traversal endpoint
-  async traverseFrom(messageId, { up_depth = 2, down_depth = 2, get_replies = true } = {}) {
+  async traverseFrom(messageId, { up_depth = 2, down_depth = 2, get_replies = true, get_children = false } = {}) {
     const headers = getAuthHeaders();
-    const url = `${apiBaseUrl}/messages/traverse-from/${messageId}?up_depth=${up_depth}&down_depth=${down_depth}&get_replies=${get_replies}`;
+    const url = `${apiBaseUrl}/messages/traverse-from/${messageId}?up_depth=${up_depth}&down_depth=${down_depth}&get_replies=${get_replies}&get_children=${get_children}`;
     const response = await axios.get(url, { headers });
     return response;
   },
   
   // Load parent branch with specified depth (via unified traversal)
-  async loadBranchUp(messageId, depth = 2, get_replies = true) {
+  async loadBranchUp(messageId, depth = 2, get_replies = true, get_children = true) {
     const headers = getAuthHeaders();
-    const response = await this.traverseFrom(messageId, { up_depth: depth, down_depth: 0, get_replies });
+    const response = await this.traverseFrom(messageId, { up_depth: depth, down_depth: 0, get_replies, get_children });
     const data = response.data || {};
     const combined = [];
     if (data.origin) combined.push(data.origin);
@@ -144,9 +144,9 @@ export default {
   },
   
   // Load child branch with specified depth (via unified traversal)
-  async loadBranchDown(messageId, depth = 2, get_replies = true) {
+  async loadBranchDown(messageId, depth = 2, get_replies = true, get_children = true) {
     const headers = getAuthHeaders();
-    const response = await this.traverseFrom(messageId, { up_depth: 0, down_depth: depth, get_replies });
+    const response = await this.traverseFrom(messageId, { up_depth: 0, down_depth: depth, get_replies, get_children });
     const data = response.data || {};
     const combined = [];
     if (data.origin) combined.push(data.origin);
@@ -158,9 +158,9 @@ export default {
   },
   
   // Load messages within a radius of a target message (both parents and children) via unified traversal
-  async loadMessageRadius(messageId, radius = 5, get_replies = true) {
+  async loadMessageRadius(messageId, radius = 5, get_replies = true, get_children = true) {
     const headers = getAuthHeaders();
-    const response = await this.traverseFrom(messageId, { up_depth: radius, down_depth: radius, get_replies });
+    const response = await this.traverseFrom(messageId, { up_depth: radius, down_depth: radius, get_replies, get_children });
     const data = response.data || {};
     const combined = [];
     if (data.origin) combined.push(data.origin);
