@@ -13,7 +13,7 @@ This document captures the plan and open questions for completing the notificati
 
 ### WebSocket
 
-- Endpoint: `ws(s)://{host}/ws/user/{token}/{view_id}`
+- Endpoint: `ws(s)://{host}/ws/user/{token}`
 - Authorization: `token` includes `msg.read`
 - Events from backend: `connection_established`, `new_message` (single type)
 - Health: server may send text `ping`; client should respond with `pong`

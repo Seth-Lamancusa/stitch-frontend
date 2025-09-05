@@ -1,5 +1,6 @@
 import store from '../store';
 import TokenManager from './TokenManager';
+import logger from './logger';
 
 /**
  * Install a 401 -> refresh token -> retry once interceptor on an axios instance.
@@ -8,11 +9,35 @@ import TokenManager from './TokenManager';
 export function installAxiosAuthInterceptor(axiosInstance) {
   if (!axiosInstance || !axiosInstance.interceptors) return;
 
+  // Stamp start time for duration metrics
+  axiosInstance.interceptors.request.use((config) => {
+    try { config.metadata = { start: Date.now() }; } catch (_) {}
+    return config;
+  });
+
   axiosInstance.interceptors.response.use(
-    (response) => response,
+    (response) => {
+      try {
+        const started = response?.config?.metadata?.start || Date.now();
+        const durationMs = Date.now() - started;
+        const method = (response?.config?.method || 'get').toUpperCase();
+        const url = response?.config?.url || '';
+        const status = response?.status;
+        logger.info(`HTTP ${method} ${url} -> ${status} in ${durationMs}ms`);
+      } catch (_) {}
+      return response;
+    },
     async (error) => {
       const status = error?.response?.status;
       const originalRequest = error?.config || {};
+
+      try {
+        const started = originalRequest?.metadata?.start || Date.now();
+        const durationMs = Date.now() - started;
+        const method = (originalRequest?.method || 'get').toUpperCase();
+        const url = originalRequest?.url || '';
+        logger.warn(`HTTP ${method} ${url} -> ${status || 'ERR'} in ${durationMs}ms`);
+      } catch (_) {}
 
       // If not unauthorized, or already retried, just propagate
       if (status !== 401 || originalRequest._retry) {

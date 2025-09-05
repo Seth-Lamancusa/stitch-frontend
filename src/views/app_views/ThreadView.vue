@@ -455,26 +455,12 @@ const ensureCorrectScroll = async () => {
   // Find the target message element
   const messageElement = document.querySelector(`[data-message-id="${targetId}"]`);
   if (!messageElement) {
-    console.log(`[ThreadView] Could not find element with data-message-id="${targetId}"`);
+    
     // Show container even if we can't find the target message
     isContainerVisible.value = true;
     shouldShowMarkers.value = true;
     return;
   }
-  
-  // Log all messages to see if they are properly rendered
-  const allMessages = document.querySelectorAll('.message-node');
-  console.log(`[ThreadView] Found ${allMessages.length} total message nodes`);
-  console.log('[ThreadView] All messages:', Array.from(allMessages).map((msg, i) => {
-    const id = msg.getAttribute('data-message-id');
-    return {
-      index: i,
-      id,
-      isTarget: id == targetId,
-      top: msg.getBoundingClientRect().top,
-      offsetTop: msg.offsetTop
-    };
-  }));
   
   // Log detailed information about the elements and their positions
   const containerRect = messageList.value.getBoundingClientRect();
@@ -497,7 +483,7 @@ const ensureCorrectScroll = async () => {
   const adjustedPosition = alternateTop - 70; // Adjust 70px up to show a bit more context
   messageList.value.scrollTop = adjustedPosition;
   
-  console.log(`[ThreadView] Scroll complete, showing container and attaching markers`);
+  
   
   // Show the container and attach markers after scroll is complete
   isContainerVisible.value = true;
@@ -507,23 +493,22 @@ const ensureCorrectScroll = async () => {
 // Simplified thread rendering function - used for incremental updates
 const renderThread = async (preserveScroll = false, preserveBranchPath = true) => {
   try {
-    console.log(`[ThreadView] ⭐️ RENDER THREAD called for messageId: ${messageId.value} (preserveScroll: ${preserveScroll}, preserveBranchPath: ${preserveBranchPath})`);
+    
     
     // Guard against missing messageId
     if (!messageId.value) {
-      console.log(`[ThreadView] No messageId to render`);
+      
       return;
     }
     
     // Prepare branch paths - but only if not asked to preserve existing branch path
     if (!preserveBranchPath) {
-      console.log(`[ThreadView] 🛑 Calling prepareBranchPath with messageId: ${messageId.value}`);
+      
       await store.dispatch('messages/prepareBranchPath', messageId.value);
     }
     
     // Get displayed messages
     const messages = displayedMessages.value;
-    console.log(`[ThreadView] Thread rendered with ${messages.length} messages, first message: ${messages.length > 0 ? messages[0].id : 'none'}`);
     
     // For incremental updates (preserveScroll = true), ensure container remains visible
     if (preserveScroll && !isContainerVisible.value) {
@@ -567,27 +552,25 @@ const bottomMarkerState = computed(() => {
 
 // Lifecycle hooks
 onMounted(async () => {
-  console.log(`[ThreadView] 🔧 MOUNT onMounted starting with messageId: ${messageId.value}`);
+  
   
   // Enable thread view mode for auto-marking messages as read
   store.commit('messages/SET_THREAD_VIEW_MODE', true);
-  console.log('[ThreadView] 🔧 MOUNT Thread view mode enabled');
   
   // Add reload detection
   window.addEventListener('beforeunload', () => {
-    console.log('[ThreadView] 🚨 PAGE RELOAD DETECTED!');
-    console.trace('[ThreadView] Reload stack trace:');
+    
   });
   
   // Wait for auth to be ready before proceeding - auth store handles initialization
   if (!isAuthReady.value) {
-    console.log(`[ThreadView] 🔧 MOUNT Auth not ready, waiting...`);
+    
     await new Promise((resolve) => {
       const unwatch = store.watch(
         () => store.getters['auth/authReady'],
         (newValue) => {
           if (newValue) {
-            console.log(`[ThreadView] 🔧 MOUNT Auth ready now`);
+            
             unwatch();
             resolve();
           }
@@ -598,11 +581,11 @@ onMounted(async () => {
   
   // Use loadInitialContent for initial thread loading
   if (messageId.value) {
-    console.log(`[ThreadView] 🔧 MOUNT Calling loadInitialContent for messageId: ${messageId.value}`);
+    
     await loadInitialContent(messageId.value);
     
     // After initial content is loaded and rendered, ensure correct scroll position
-    console.log(`[ThreadView] 🔧 MOUNT loadInitialContent complete, ensuring correct scroll position`);
+    
     ensureCorrectScroll();
   }
   
@@ -614,7 +597,7 @@ onMounted(async () => {
   // Note: WebSocket callback is handled globally by WebSocketService.initialize()
   // No need to register a component-specific callback here
   
-  console.log(`[ThreadView] 🔧 MOUNT onMounted complete`);
+  
   
   // No whitelist rejection state anymore
 });
@@ -622,7 +605,6 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   // Disable thread view mode to stop auto-marking
   store.commit('messages/SET_THREAD_VIEW_MODE', false);
-  console.log('[ThreadView] 🔧 UNMOUNT Thread view mode disabled');
   
   // Clean up listeners
   if (unsubscribeMessages) {
@@ -655,11 +637,9 @@ onBeforeUnmount(() => {
 
 // Watch for route changes - use loadInitialContent for new thread IDs
 watch(messageId, async (newId, oldId) => {
-  console.log(`[ThreadView] 👀 WATCH messageId changed from ${oldId} to ${newId}, triggered by:`, new Error().stack);
   if (newId) {
     // Handle shallow updates where we only want to update the URL/scroll
     if (suppressRouteReload.value) {
-      console.log('[ThreadView] 👀 WATCH messageId shallow update – skipping loadInitialContent');
       suppressRouteReload.value = false;
       // Keep existing content; do not adjust scroll on shallow URL updates
       return;
@@ -679,31 +659,16 @@ watch(messageId, async (newId, oldId) => {
 // Watch for branch changes (sibling navigation) - removed selection mode clearing to preserve selections
 // when navigating up/down branches
 watch(() => displayedMessages.value.length > 0 ? displayedMessages.value[0].id : null, (newFirstMessageId, oldFirstMessageId) => {
-  console.log('[ThreadView] 🔄 BRANCH WATCHER fired:', {
-    newFirstMessageId,
-    oldFirstMessageId,
-    displayedMessagesLength: displayedMessages.value.length,
-    hasMessages: displayedMessages.value.length > 0,
-    willTriggerAutoMark: newFirstMessageId && oldFirstMessageId && newFirstMessageId !== oldFirstMessageId
-  });
   
   if (newFirstMessageId && oldFirstMessageId && newFirstMessageId !== oldFirstMessageId) {
     // Branch changed (sibling navigation) - no longer clearing selection mode
-    console.log('[ThreadView] ✅ Branch changed detected!', {
-      from: oldFirstMessageId,
-      to: newFirstMessageId,
-      threadViewMode: store.getters['messages/isThreadViewMode']
-    });
+    
     
     // Auto-mark newly visible branch as read after sibling navigation
-    console.log('[ThreadView] 🔄 BRANCH CHANGE triggering auto-mark for visible branch');
+    
     store.dispatch('messages/markVisibleBranchAsRead', newFirstMessageId);
   } else {
-    console.log('[ThreadView] ❌ Branch change conditions not met:', {
-      hasNewId: !!newFirstMessageId,
-      hasOldId: !!oldFirstMessageId,
-      idsAreDifferent: newFirstMessageId !== oldFirstMessageId
-    });
+    
   }
 });
 
@@ -712,7 +677,7 @@ watch(() => store.getters['auth/user'], async (newUser, oldUser) => {
   // Detect transition from guest -> logged-in
   if (!oldUser && newUser && messageId.value) {
     try {
-      console.log('[ThreadView] 👤 LOGIN detected on ThreadView - hydrating read state');
+      
 
       // Reload current thread radius to hydrate user-specific fields (e.g., is_read, recipients)
       await store.dispatch('messages/loadMessageRadius', {
@@ -748,7 +713,6 @@ const backToList = async () => {
   // Get the previous route
   const prevRoute = store.getters['navigation/previousRoute'];
   
-  console.log(`[ThreadView] Back button clicked - previous route: "${prevRoute}", using: "${prevRoute || '/inbox'}"`);
   
   // Navigate back to the previous route - keep cache for faster return
   router.push(prevRoute || '/inbox'); // Fallback to inbox if no previous route
@@ -1076,10 +1040,10 @@ const closeRecipientsModal = () => {
 };
 
 const handleAddRecipients = async (recipients, propagateToDescendants = false) => {
-  console.log('[ThreadView] handleAddRecipients called with', recipients, 'propagate:', propagateToDescendants);
+  
   
   if (!recipients || recipients.length === 0) {
-    console.log('[ThreadView] No recipients to add');
+    
     recipientsModalRef.value?.onAddRecipientsError(new Error('No recipients provided'));
     return;
   }
@@ -1094,7 +1058,7 @@ const handleAddRecipients = async (recipients, propagateToDescendants = false) =
 
     const response = await MessageService.addRecipientsToMessage(messageId, recipients, propagateToDescendants);
     
-    console.log('[ThreadView] Recipients added successfully', response.data);
+    
     
     // Refresh the message data to get updated recipients list
     await store.dispatch('messages/loadMessageRadius', { 
@@ -1113,7 +1077,7 @@ const handleAddRecipients = async (recipients, propagateToDescendants = false) =
 };
 
 const handleRecipientRemoved = (recipientUid) => {
-  console.log('[ThreadView] handleRecipientRemoved called with', recipientUid);
+  
 };
 
 const deleteMessage = async (options) => {
@@ -1135,13 +1099,12 @@ const deleteMessage = async (options) => {
     if (String(deletedId) === String(messageId.value)) {
       const prevRoute = store.getters['navigation/previousRoute'];
       const fallback = '/inbox';
-      console.log('[ThreadView] Centered message deleted - navigating back', { prevRoute, fallback });
       router.push(prevRoute || fallback);
       return;
     }
 
     // Otherwise, remain in thread view
-    console.log('[ThreadView] Delete complete - staying in thread view');
+    
   } catch (error) {
     console.error('Error deleting message:', error);
     
@@ -1156,8 +1119,6 @@ const deleteMessage = async (options) => {
       // Navigate back since the current thread no longer exists
       const prevRoute = store.getters['navigation/previousRoute'];
       const defaultRoute = '/feed';
-      
-      console.log(`[ThreadView] Error navigation - previous route: "${prevRoute}", using: "${prevRoute || defaultRoute}"`);
       
       router.push(prevRoute || defaultRoute);
     } else if (error.response?.status === 403) {
@@ -1226,7 +1187,7 @@ const loadMoreParents = async () => {
         }
       }
       
-      console.log(`[ThreadView] Found reference message: ${referenceMessage?.getAttribute('data-message-id')}`);
+      
     }
     
     // Get first message before loading
@@ -1243,7 +1204,7 @@ const loadMoreParents = async () => {
     
     // Auto-mark newly visible messages as read (only new messages from parent loading)
     if (firstMessageId && displayedMessages.value.length > 0) {
-      console.log('[ThreadView] 🔄 LOAD PARENTS triggering auto-mark for visible branch');
+      
       store.dispatch('messages/markVisibleBranchAsRead', displayedMessages.value[0].id);
     }
     
@@ -1299,7 +1260,7 @@ const loadMoreChildren = async () => {
     
     // Auto-mark newly visible messages as read (only new messages from children loading)
     if (lastMessageId && displayedMessages.value.length > 0) {
-      console.log('[ThreadView] 🔄 LOAD CHILDREN triggering auto-mark for visible branch');
+      
       store.dispatch('messages/markVisibleBranchAsRead', displayedMessages.value[0].id);
     }
     

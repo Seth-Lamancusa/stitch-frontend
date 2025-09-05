@@ -1,5 +1,9 @@
-import store from '../store';
-import TokenManager from './TokenManager';
+import store from '../../store';
+import TokenManager from '../../services/TokenManager';
+import WebSocketClient from './WebSocketClient';
+import IdleManager from './IdleManager';
+import NetworkVisibility from './NetworkVisibility';
+import ReconnectBackoff from './ReconnectBackoff';
 
 const WS_BASE_URL = '/ws'
 
@@ -20,9 +24,6 @@ const WebSocketService = {
   unsubscribeFunction: null,
   connectionAttempts: 0,
   maxReconnectAttempts: 5,
-  reconnectDelay: 1000,
-  // Jitter settings for reconnection backoff (mobile robustness)
-  reconnectJitterMaxMs: 500,
   
   // Activity-based reconnect
   lastActivityReconnectAt: 0,
@@ -148,27 +149,52 @@ const WebSocketService = {
   },
   setupNetworkVisibilityListeners() {
     if (this.networkVisibilityListenerRegistered) return;
-    this._handleOnline = this.handleOnline.bind(this);
-    this._handleOffline = this.handleOffline.bind(this);
-    this._handleVisibility = this.handleVisibilityChange.bind(this);
-    try {
-      window.addEventListener('online', this._handleOnline);
-      window.addEventListener('offline', this._handleOffline);
-      document.addEventListener('visibilitychange', this._handleVisibility);
-      this.networkVisibilityListenerRegistered = true;
-    } catch (e) {}
+    this.netVis = new NetworkVisibility({
+      onOnline: async () => {
+        this.isOnline = true;
+        this.bannerSuppressionUntil = Date.now() + this.bannerSuppressionMs;
+        this.clearWsDisconnectedBanner();
+        const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
+        if (!isOpen) {
+          let token = TokenManager.accessToken || await this.getFreshAuthToken();
+          if (this.shouldRefreshToken()) {
+            try {
+              const refreshed = await TokenManager.refreshAccessToken();
+              if (refreshed) {
+                this.lastTokenRefresh = Date.now();
+                token = refreshed;
+              }
+            } catch (e) {}
+          }
+          if (token) this.safeConnect(token);
+        }
+        if (this.pendingDisconnectedBanner) {
+          setTimeout(() => this.maybeShowWsDisconnectedBanner(), this.bannerSuppressionMs);
+        }
+      },
+      onOffline: () => {
+        this.isOnline = false;
+        this.bannerSuppressionUntil = Date.now() + this.bannerSuppressionMs;
+      },
+      onVisible: () => {
+        const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
+        if (!isOpen && this.isOnline) {
+          const token = TokenManager.accessToken;
+          if (token) this.safeConnect(token);
+        }
+        this.clearWsDisconnectedBanner();
+        if (this.pendingDisconnectedBanner) this.maybeShowWsDisconnectedBanner();
+      },
+      onHidden: () => {}
+    });
+    this.netVis.start();
+    this.networkVisibilityListenerRegistered = true;
   },
   teardownNetworkVisibilityListeners() {
     if (!this.networkVisibilityListenerRegistered) return;
-    try {
-      window.removeEventListener('online', this._handleOnline);
-      window.removeEventListener('offline', this._handleOffline);
-      document.removeEventListener('visibilitychange', this._handleVisibility);
-    } catch (e) {}
+    try { this.netVis?.stop(); } catch (e) {}
     this.networkVisibilityListenerRegistered = false;
-    this._handleOnline = null;
-    this._handleOffline = null;
-    this._handleVisibility = null;
+    this.netVis = null;
   },
   handleOnline() {
     this.isOnline = true;
@@ -235,6 +261,10 @@ const WebSocketService = {
   },
   
   async attemptRefreshAndReconnect() {
+    if (!this.isOnline) {
+      this.warn('Skipping token refresh while offline');
+      return;
+    }
     if (this.tokenRefreshInProgress) {
       this.warn('Token refresh already in progress; skipping duplicate attempt');
       return;
@@ -519,175 +549,75 @@ const WebSocketService = {
   // Connection method - returns a promise that resolves when connected
   async connectUser(token) {
     this.log(`ConnectUser called with token starting with: ${token ? token.substring(0, 10) + '...' : 'null'}`);
-    
+
     // If already connected with the same token, do nothing
-    if (this.connection && 
-        this.connectionEstablished &&
-        this.authToken === token && 
-        this.connection.readyState === WebSocket.OPEN) {
+    if (this.client && this.client.isOpen && this.authToken === token) {
       this.log(`Already connected with token ${token.substring(0, 10)}...`);
       return Promise.resolve();
     }
-    
-    // If connected with a different token, disconnect first
-    if (this.connection) {
-      this.log('Already connected with a different token, disconnecting first');
-      this.disconnectUser();
-    }
-    
-    // Increment connection attempts
-    this.connectionAttempts++;
-    this.log(`Connection attempt ${this.connectionAttempts} of ${this.maxReconnectAttempts}`);
-    
-    // Store auth token
-    this.authToken = token;
-    
-    // Create a new connection promise
-    this.connectionPromise = new Promise((resolve, reject) => {
-      
-      // Build WebSocket URL using current window location
-      let wsUrl;
-      try {
-        // Get current protocol and host from window.location
-        const isSecure = window.location.protocol === 'https:';
-        const wsProtocol = isSecure ? 'wss:' : 'ws:';
-        const host = window.location.host;
-        
-        // Generate a random view ID for this connection
-        const viewId = `view_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-        
-        // Construct WebSocket URL
-        wsUrl = `${wsProtocol}//${host}${WS_BASE_URL}/user/${token}/${viewId}`;
-        
-        this.log(`WebSocket URL constructed: ${wsUrl.replace(token, '[TOKEN]')}`);
-      } catch (e) {
-        this.error(`Error constructing WebSocket URL: ${e}`);
-        reject(new Error(`Failed to construct WebSocket URL: ${e.message}`));
-        return;
-      }
-      
-      this.log(`Connecting to ${wsUrl.replace(token, '[TOKEN]')}`);
-      const socket = new WebSocket(wsUrl);
-      
-      // Track connection state
-      this.log('WebSocket connection state: CONNECTING');
-      
-      // Set up event handlers
-      socket.onopen = () => {
-        this.log(`Connection opened with token ${token.substring(0, 10)}...`);
-        this.log('WebSocket connection state: OPEN');
+
+    // Ensure client exists
+    if (!this.client) {
+      this.client = new WebSocketClient({
+        buildUrl: (t) => {
+          const isSecure = window.location.protocol === 'https:';
+          const wsProtocol = isSecure ? 'wss:' : 'ws:';
+          const host = window.location.host;
+          return `${wsProtocol}//${host}${WS_BASE_URL}/user/${t}`;
+        },
+        logger: console,
+        pingIntervalMs: Math.max(30000, Math.floor(this.pingTimeoutMs / 2)),
+        pingTimeoutMs: this.pingTimeoutMs,
+      });
+
+      // Wire client events
+      this.client.on('open', () => {
         this.connectionEstablished = true;
-        
-        // JSON heartbeat removed; rely on text ping/pong only
-        // Reset idle timer on successful open
+        this.connection = this.client.socket;
         this.resetIdleTimer();
-        // Start ping watchdog to keep connection alive and detect stalls
-        try {
-          this.stopPingInterval();
-          this.pingInterval = setInterval(() => {
-            try {
-              if (this.connection && this.connection.readyState === WebSocket.OPEN) {
-                // Send lightweight ping
-                this.connection.send('ping');
-                // If we haven't heard back in too long, force reconnect
-                if (this.lastPingTime && (Date.now() - this.lastPingTime) > this.pingTimeoutMs * 2) {
-                  this.error('Ping timeout exceeded; forcing reconnect');
-                  this.connection.close(4000, 'Ping timeout');
-                }
-              }
-            } catch (e) {}
-          }, Math.max(30000, Math.floor(this.pingTimeoutMs / 2)));
-        } catch (e) {}
-        
-        // Reset connection attempts on successful connection
         this.connectionAttempts = 0;
-        this.reconnectDelay = 1000; // Reset reconnect delay
-        
-        // Clear any WS disconnected banner and refresh unread count
+        try { this.backoff?.reset(); } catch (e) {}
         try {
           this.clearWsDisconnectedBanner();
           store.dispatch('messages/fetchUnreadMessageCount');
         } catch (e) {}
+      });
 
-        resolve(); // Resolve the connection promise
-      };
-      
-      socket.onmessage = (event) => {
+      this.client.on('json', (data) => {
         try {
-          // Handle ping/pong
-          if (event.data === 'pong') {
-            this.log('Received pong from server');
-            this.lastPingTime = Date.now();
-            return;
-          }
-          
-          if (event.data === 'ping') {
-            this.log('Received ping from server, sending pong');
-            socket.send('pong');
-            this.lastPingTime = Date.now();
-            return;
-          }
-          
-          this.log(`Received message: ${event.data.substring(0, 100)}${event.data.length > 100 ? '...' : ''}`);
-          
-          const data = JSON.parse(event.data);
-          
-          if (data.type === 'connection_established') {
+          if (data?.type === 'connection_established') {
             this.userId = data.user_id;
             this.log(`Connection established for user ${this.userId}`);
-          } else if (data.type === 'new_message') {
-            // Unified event type -> route to message handler
-            if (this.messageCallback) {
-              this.log(`Passing message to callback`);
-              this.messageCallback(data.data);
-            } else {
-              this.log(`No message callback registered`);
-            }
-          } else if (data.type === 'message_updated') {
-            this.log(`===== MESSAGE UPDATED =====`);
-            this.log(`Message ID: ${data.data?.id}`);
-            store.commit('messages/SET_MESSAGE', data.data);
-          } else if (data.type === 'error') {
-            this.error('Server error:', data.message);
-          } else {
-            this.log(`Unknown message type: ${data.type}`);
+            return;
           }
-        } catch (error) {
-          this.error('Error handling message:', error);
+          if (data?.type === 'new_message') {
+            if (this.messageCallback) {
+              this.messageCallback(data.data);
+            }
+            return;
+          }
+          if (data?.type === 'error') {
+            this.error('Server error:', data.message);
+            return;
+          }
+        } catch (e) {
+          this.error('Error handling JSON message:', e);
         }
-      };
-      
-      socket.onclose = (event) => {
-        this.log(`Connection closed for user ${this.userId}`, event.code, event.reason);
-        this.log('WebSocket connection state: CLOSED');
-        this.log(`Clean close: ${event.wasClean}, Code: ${event.code}, Reason: ${event.reason || 'none'}`);
-        
+      });
+
+      this.client.on('close', (event) => {
         this.connection = null;
         this.userId = null;
         this.connectionEstablished = false;
-        
-        // No idle timer changes here
-        
-        // Only clear the promise if it's our current one
-        if (this.connectionPromise && !event.wasClean) {
-          this.connectionPromise = null;
-          reject(new Error(`Connection closed unexpectedly: code ${event.code}, reason: ${event.reason || 'none'}`));
-        }
-        
-        // Show persistent banner indicating WS disconnected with channels based on user notify prefs
-        try {
-          this.maybeShowWsDisconnectedBanner();
-        } catch (e) {}
 
-        // Handle authentication failures specifically: try refresh then reconnect
+        try { this.maybeShowWsDisconnectedBanner(); } catch (e) {}
+
         if (event.code === 1008) {
           this.error('Authentication failed (1008). Attempting refresh and reconnect');
           this.attemptRefreshAndReconnect();
           return;
         }
 
-        // Some proxies/browsers report handshake/auth failures as 1006 with empty reason
-        // If we have no established connection yet and close quickly with 1006, attempt a refresh once
         const likelyHandshakeFailure = !this.connectionEstablished && event.code === 1006;
         if (likelyHandshakeFailure) {
           this.error('Possible handshake/auth failure (1006). Attempting refresh and reconnect');
@@ -695,63 +625,42 @@ const WebSocketService = {
           return;
         }
 
-        // Determine if we should reconnect
-        const shouldReconnect = !event.wasClean && 
-                               this.connectionAttempts < this.maxReconnectAttempts &&
-                               event.code !== 1000 && // Normal closure
-                               event.code !== 1001 && // Going away
-                               this.isInitialized && // Only reconnect if we're supposed to be connected
-                               this.isOnline; // Avoid reconnect loops while offline
-        
+        const shouldReconnect = !event.wasClean &&
+                               event.code !== 1000 &&
+                               event.code !== 1001 &&
+                               this.isInitialized &&
+                               this.isOnline;
         if (shouldReconnect) {
-          this.log(`Connection closed unexpectedly, attempting to reconnect (attempt ${this.connectionAttempts} of ${this.maxReconnectAttempts})`);
-          
-          // Use exponential backoff for reconnection
-          this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000); // Max 30 seconds
-          const jitter = Math.floor(Math.random() * Math.min(this.reconnectJitterMaxMs, Math.floor(this.reconnectDelay / 2)));
-          const delay = this.reconnectDelay + jitter;
-          this.log(`Reconnecting in ${delay}ms (base=${this.reconnectDelay}ms, jitter=${jitter}ms)`);
-          
+          this.connectionAttempts++;
+          if (!this.backoff) this.backoff = new ReconnectBackoff({ initialMs: 1000, maxMs: 30000, jitterMs: 500, maxAttempts: this.maxReconnectAttempts });
+          const delay = this.backoff.nextDelay();
+          if (delay == null) { this.error(`Max reconnection attempts (${this.maxReconnectAttempts}) exceeded`); return; }
           setTimeout(async () => {
             try {
-              let tokenToUse = this.authToken || TokenManager.accessToken;
-              
-              this.log(`Attempting reconnection with ${tokenToUse === this.authToken ? 'existing' : 'fresh'} token`);
+              const tokenToUse = this.authToken || TokenManager.accessToken;
               await this.connectUser(tokenToUse);
             } catch (err) {
               this.error(`Reconnection attempt failed: ${err.message}`);
             }
           }, delay);
-        } else if (this.connectionAttempts >= this.maxReconnectAttempts) {
-          this.error(`Max reconnection attempts (${this.maxReconnectAttempts}) exceeded`);
         }
-      };
-      
-      socket.onerror = (error) => {
-        this.error(`WebSocket error for user ${this.userId}:`, error);
-        reject(error);
-      };
-      
-      // Store the connection
-      this.connection = socket;
-      
-    });
-    
+      });
+
+      this.client.on('error', (err) => {
+        this.error('WebSocket client error:', err);
+      });
+    }
+
+    // Track token and connect
+    this.authToken = token;
+    this.connectionAttempts++;
+    this.connectionPromise = this.client.connect(token);
     return this.connectionPromise;
   },
   
   // For backward compatibility
   async connectToThread(threadId, messageId) {
-    this.warn('connectToThread is deprecated, use connectUser instead');
-    
-    // If we have a token, use that to connect
-    const token = localStorage.getItem('auth_token');
-    if (token) {
-      return this.connectUser(token);
-    }
-    
-    // Otherwise, do nothing - user must be authenticated to receive updates
-    this.warn('Cannot connect to WebSocket: No authentication token available');
+    // deprecated: no-op retained for compatibility
     return Promise.resolve();
   },
   
@@ -761,17 +670,11 @@ const WebSocketService = {
     
     // No JSON heartbeat to stop
     
-    if (this.connection) {
+    if (this.client && this.client.socket) {
       this.log(`Disconnecting user ${this.userId}`);
       
       try {
-        // Check if connection is still open before trying to close
-        if (this.connection.readyState === WebSocket.OPEN) {
-          this.log(`Closing WebSocket connection`);
-          this.connection.close(1000, "User disconnected intentionally");
-        } else {
-          this.log(`Connection already closed (state: ${this.connection.readyState})`);
-        }
+        this.client.disconnect(1000, "User disconnected intentionally");
       } catch (e) {
         this.error('Error closing connection:', e);
       }
@@ -812,8 +715,7 @@ const WebSocketService = {
   
   // For backward compatibility - does nothing now as we subscribe to all messages for the user
   async updateSelectedMessage(messageId) {
-    // No-op - we're now subscribed to all messages for the user
-    this.log(`updateSelectedMessage called but not needed anymore (messageId: ${messageId})`);
+    // deprecated: no-op retained for compatibility
     return;
   },
   
@@ -881,21 +783,21 @@ const WebSocketService = {
   // Activity and idle helpers
   setupActivityListeners() {
     if (this.activityListenerRegistered) return;
-    const handler = this.handleActivity.bind(this);
-    this._activityHandler = handler;
-    try {
-      this.activityEvents.forEach(evt => window.addEventListener(evt, handler, { passive: true }));
-      this.activityListenerRegistered = true;
-      this.lastActivityAt = Date.now();
-    } catch (e) {}
+    this.idleManager = new IdleManager({
+      timeoutMs: this.idleTimeoutMs,
+      events: this.activityEvents,
+      onActivity: () => this.handleActivity(),
+      onTimeout: () => this.onIdleTimeout()
+    });
+    this.idleManager.start();
+    this.activityListenerRegistered = true;
+    this.lastActivityAt = Date.now();
   },
   teardownActivityListeners() {
     if (!this.activityListenerRegistered) return;
-    try {
-      this.activityEvents.forEach(evt => window.removeEventListener(evt, this._activityHandler));
-    } catch (e) {}
+    try { this.idleManager?.stop(); } catch (e) {}
     this.activityListenerRegistered = false;
-    this._activityHandler = null;
+    this.idleManager = null;
   },
   handleActivity() {
     this.lastActivityAt = Date.now();
@@ -907,25 +809,7 @@ const WebSocketService = {
     this.resetIdleTimer();
   },
   resetIdleTimer() {
-    try {
-      if (this.idleTimeoutId) clearTimeout(this.idleTimeoutId);
-      this.idleTimerGeneration = (this.idleTimerGeneration || 0) + 1;
-      const generation = this.idleTimerGeneration;
-      const timeoutMs = this.idleTimeoutMs;
-      this.idleTimeoutId = setTimeout(() => {
-        // Guard against stale timers or recent activity just before firing
-        const now = Date.now();
-        const lastActivity = this.lastActivityAt || 0;
-        const timeSinceActivity = now - lastActivity;
-        if (generation !== this.idleTimerGeneration) return;
-        if (timeSinceActivity < timeoutMs - 250) {
-          // Recent activity detected; reschedule defensively
-          this.resetIdleTimer();
-          return;
-        }
-        this.onIdleTimeout();
-      }, this.idleTimeoutMs);
-    } catch (e) {}
+    try { this.idleManager?.reset(); } catch (e) {}
   },
   onIdleTimeout() {
     // Double-check inactivity to avoid false positives from throttled timers

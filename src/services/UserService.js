@@ -25,7 +25,6 @@ export default {
    */
   async updateProfile(profileData) {
     try {
-      console.log('[UserService] Updating profile with data:', profileData);
       const token = TokenManager.accessToken;
       
       if (!token) {
@@ -38,7 +37,6 @@ export default {
         }
       });
       
-      console.log('[UserService] Profile update response:', response.data);
       return response.data;
     } catch (error) {
       console.error('[UserService] Error updating profile:', error);
@@ -55,14 +53,12 @@ export default {
    */
   async searchUsers(query, limit = 15) {
     try {
-      console.log('[Service] Searching users with query:', query, 'limit:', limit);
       const token = TokenManager.accessToken;
       
       if (!token) {
         throw new Error('No authentication token available');
       }
       
-      console.log('[Service] Making API request to:', '/users/search');
       const response = await apiClient.get('/users/search', {
         params: { query, limit },
         headers: {
@@ -70,7 +66,6 @@ export default {
         }
       });
       
-      console.log('[Service] API response:', response.data);
       if (!response.data.users) {
         console.error('[Service] Missing users array in response:', response.data);
         return [];
@@ -109,13 +104,7 @@ export default {
         }
       });
       
-      console.log('[DEBUG] UserService - fetchUserMessages response:', {
-        messagesCount: response.data?.messages?.length || 0,
-        has_more: response.data?.has_more,
-        total: response.data?.total,
-        skip,
-        limit
-      });
+      
       
       return response;
     } catch (error) {
@@ -141,9 +130,7 @@ export default {
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
-      } catch (error) {
-        console.log('No authentication token available - proceeding as guest');
-      }
+      } catch (error) {}
       
       const response = await apiClient.get(`/links/messages/${messageId}/incoming`, {
         headers,
@@ -178,9 +165,7 @@ export default {
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
-      } catch (error) {
-        console.log('No authentication token available - proceeding as guest');
-      }
+      } catch (error) {}
       
       const response = await apiClient.get(`/links/messages/${messageId}/outgoing`, {
         headers,
@@ -219,14 +204,7 @@ export default {
         }
       });
       
-      console.log('[DEBUG] UserService - getSavedMessages response:', {
-        fullResponse: response.data,
-        messagesCount: response.data?.messages?.length || 0,
-        has_more: response.data?.has_more,
-        total: response.data?.total,
-        skip,
-        limit
-      });
+      
       
       // Return the response as-is since backend already returns the correct format
       return response.data;
@@ -254,7 +232,6 @@ export default {
           }
         });
         
-        console.log('[DEBUG] UserService - getUnreadMessageCount response:', response.data);
         return response;
       } catch (error) {
         console.error('Error getting unread message count:', error);
@@ -269,7 +246,7 @@ export default {
      */
     async markMessageAsRead(messageId) {
       try {
-        console.log('[UserService] Marking message as read:', messageId);
+        
         const token = TokenManager.accessToken;
         
         if (!token) {
@@ -283,7 +260,6 @@ export default {
           }
         });
         
-        console.log('[UserService] Mark as read response:', response.data);
         return response;
       } catch (error) {
         console.error('Error marking message as read:', error);
@@ -298,7 +274,7 @@ export default {
      */
     async batchMarkAsRead(messageIds) {
       try {
-        console.log('[UserService] Batch marking messages as read:', messageIds.length, 'messages');
+        
         const token = TokenManager.accessToken;
         
         if (!token) {
@@ -312,7 +288,6 @@ export default {
           }
         });
         
-        console.log('[UserService] Batch mark as read response:', response.data);
         return response;
       } catch (error) {
         console.error('Error batch marking messages as read:', error);
@@ -327,7 +302,7 @@ export default {
      */
     async markMessageAsUnread(messageId) {
       try {
-        console.log('[UserService] Marking message as unread:', messageId);
+        
         const token = TokenManager.accessToken;
         
         if (!token) {
@@ -340,7 +315,6 @@ export default {
           }
         });
         
-        console.log('[UserService] Mark as unread response:', response.data);
         return response;
       } catch (error) {
         console.error('Error marking message as unread:', error);
@@ -355,7 +329,7 @@ export default {
      */
     async saveMessage(messageId) {
       try {
-        console.log('[UserService] Saving message:', messageId);
+        
         const token = localStorage.getItem('auth_token');
         
         if (!token) {
@@ -368,7 +342,6 @@ export default {
           }
         });
         
-        console.log('[UserService] Save message response:', response.data);
         return response;
       } catch (error) {
         console.error('Error saving message:', error);
@@ -383,7 +356,7 @@ export default {
      */
     async unsaveMessage(messageId) {
       try {
-        console.log('[UserService] Unsaving message:', messageId);
+        
         const token = localStorage.getItem('auth_token');
         
         if (!token) {
@@ -396,7 +369,6 @@ export default {
           }
         });
         
-        console.log('[UserService] Unsave message response:', response.data);
         return response;
       } catch (error) {
         console.error('Error unsaving message:', error);
@@ -422,7 +394,7 @@ export default {
           }
         });
         
-        console.log('[DEBUG] UserService - getSavedMessagesCount response:', response.data);
+        
         return response;
       } catch (error) {
         console.error('Error getting saved messages count:', error);
@@ -491,11 +463,10 @@ export default {
      */
     async submitWaitlistApplication(applicationData) {
       try {
-        console.log('[UserService] Submitting waitlist application:', applicationData);
+        
         
         const response = await apiClient.post('/users/waitlist', applicationData);
         
-        console.log('[UserService] Waitlist application response:', response.data);
         return response.data;
       } catch (error) {
         console.error('[UserService] Error submitting waitlist application:', error);
@@ -512,7 +483,7 @@ export default {
      */
     async deleteUser(userId) {
       try {
-        console.log('[UserService] Deleting user:', userId);
+        
         const token = localStorage.getItem('auth_token');
         
         if (!token) {
@@ -526,7 +497,6 @@ export default {
           }
         });
         
-        console.log('[UserService] Delete user response:', response.data);
         return response.data;
       } catch (error) {
         console.error('[UserService] Error deleting user:', error);
