@@ -15,7 +15,7 @@ const WebSocketService = {
   messageCallback: null,
   pingInterval: null,
   // Removed idle overlay/timer
-  debugMode: true, // Enable debug logging by default
+  debugMode: false, // Trim logging by default
   authToken: null,
   connectionEstablished: false,
 
@@ -281,17 +281,16 @@ const WebSocketService = {
         this.setupNetworkVisibilityListeners();
         this.resetIdleTimer();
 
-        // Connect to WebSocket server
+        // Connect to WebSocket server (non-blocking)
         this.log(`Connecting to WebSocket server for user ${user.uid}`);
-        await this.connectUser(authToken);
+        this.safeConnect(authToken);
         this.isInitialized = true;
-        this.log(`Global connection established for user ${user.uid}`);
+        this.log(`Global connection attempt started for user ${user.uid}`);
         
         // Activity-based reconnect enabled via global activity handlers
       } catch (error) {
-        this.error('Failed to connect:', error);
-        this.cleanup();
-        throw error;
+        this.error('Failed to start WebSocket connection:', error);
+        // Do not throw; allow app to continue mounting even if WS fails initially
       }
     } else {
       this.log('No authenticated user, skipping initialization');
@@ -364,7 +363,6 @@ const WebSocketService = {
    */
   handleIncomingMessage(messageData) {
     this.log('Received message:', messageData?.id ? `ID: ${messageData.id}` : 'Invalid message');
-    console.log('!!!!! messageData', messageData);
 
     // Skip if no message data
     if (!messageData || !messageData.id) {
@@ -378,7 +376,6 @@ const WebSocketService = {
     
     // Get current user for notification logic
     const user = store.getters['auth/user'];
-    console.log('!!!!! user', user);
     let isFromCurrentUser = false;
     let isToCurrentUser = false;
     
@@ -411,7 +408,6 @@ const WebSocketService = {
       // Only skip notification if message is next in the currently visible branch
       const isNextInBranch = this.isNextInVisibleBranch(messageData);
       const shouldNotify = !isNextInBranch;
-      console.log('!!!!! shouldNotify', shouldNotify);
       
       // Auto-mark as read if message is next in visible branch (user is actively viewing this thread)
       if (isNextInBranch) {

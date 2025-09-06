@@ -74,6 +74,7 @@ export function installAxiosAuthInterceptor(axiosInstance) {
         try { logger.info('[AUTH][axios] retrying request with new token', { url: originalRequest?.url }); } catch (_) {}
         return axiosInstance.request(originalRequest);
       } catch (e) {
+        try { logger.error('[AUTH][axios] error during refresh or retry; forcing logout', { url: originalRequest?.url, message: e?.message }); } catch (_) {}
         try { await store.dispatch('auth/forceLogoutWithMessage'); } catch {}
         return Promise.reject(error);
       }

@@ -394,10 +394,8 @@ export default {
       // Trace up through parent_id as far as we can go
       while (currentParentId && state.messages[currentParentId]) {
         const parentMessage = state.messages[currentParentId];
-        console.log(`[prepareBranchPath] 🌳 PREPARE_PATH tracing upward: found parent ${currentParentId} for child ${childMessage.id}`);
-        
+
         // Set this parent's branch_child to point to the child we came from
-        console.log(`[prepareBranchPath] 🌳 PREPARE_PATH setting branch_child of ${currentParentId} to ${childMessage.id}`);
         commit('SET_BRANCH_CHILD', { 
           messageId: currentParentId, 
           childId: childMessage.id 
@@ -409,13 +407,11 @@ export default {
         currentParentId = parentMessage.parent_id;
       }
       
-      console.log(`[prepareBranchPath] 🌳 PREPARE_PATH highest ancestor found: ${highestAncestor.id}`);
       
       // STEP 2: Now follow the branch path down, ensuring each node has branch_child set
       let currentMessage = highestAncestor;
       
-      // Log the downward path that will be created
-      console.log(`[prepareBranchPath] 🌳 PREPARE_PATH beginning downward traversal from ${highestAncestor.id}`);
+      
       
       // Trace downward, ensuring each node has a branch_child if it has children
       while (true) {
@@ -430,7 +426,6 @@ export default {
           if (childMessages.length > 0) {
             // Take the most recent child (last in sorted array)
             const mostRecentChild = childMessages[childMessages.length - 1];
-            console.log(`[prepareBranchPath] 🌳 PREPARE_PATH setting branch_child for ${currentMessage.id} to most recent child ${mostRecentChild.id} (timestamp: ${mostRecentChild.timestamp})`);
             
             commit('SET_BRANCH_CHILD', { 
               messageId: currentMessage.id, 
@@ -440,14 +435,12 @@ export default {
             // Get updated message reference
             currentMessage = state.messages[currentMessage.id];
           } else {
-            console.log(`[prepareBranchPath] 🌳 PREPARE_PATH no valid children found for ${currentMessage.id}`);
             break;
           }
         }
         
         // If message has no branch child (even after trying to set one), break
         if (!currentMessage.branch_child) {
-          console.log(`[prepareBranchPath] 🌳 PREPARE_PATH no branch_child for ${currentMessage.id}, ending traversal`);
           break;
         }
         
@@ -455,16 +448,13 @@ export default {
         
         // If child doesn't exist in the store, break
         if (!state.messages[childId]) {
-          console.log(`[prepareBranchPath] 🌳 PREPARE_PATH child ${childId} not found in store, ending traversal`);
           break;
         }
         
         // Move to the next message
-        console.log(`[prepareBranchPath] 🌳 PREPARE_PATH traversing to child ${childId}`);
         currentMessage = state.messages[childId];
       }
       
-      console.log(`[prepareBranchPath] 🌳 PREPARE_PATH complete for message ID: ${threadRootId}`);
       return true;
     },
     
@@ -502,6 +492,20 @@ export default {
     // Load radius - delegate to unified traversal
     async loadMessageRadius({ dispatch }, { messageId, radius, get_replies = true, get_children = true }) {
       return dispatch('loadTraversal', { messageId, up_depth: radius, down_depth: radius, get_replies, get_children });
+    },
+    
+    // Refresh all loaded ancestors of a message (only up to those present in the store)
+    async refreshLoadedAncestors({ dispatch, state }, { messageId, get_replies = true, get_children = true }) {
+      if (!messageId) return [];
+      let depth = 0;
+      let current = state.messages[messageId];
+      while (current && current.parent_id && state.messages[current.parent_id]) {
+        depth += 1;
+        current = state.messages[current.parent_id];
+      }
+      // If nothing loaded above, still reload origin to update its recipients
+      const up_depth = depth;
+      return dispatch('loadTraversal', { messageId, up_depth, down_depth: 0, get_replies, get_children });
     },
     
     // Send a reply to a message
@@ -1092,7 +1096,6 @@ export default {
         
         // If the sibling isn't loaded, load it before changing branch_child
         if (!isNewChildLoaded) {
-          console.log(`[navigateToSibling] Target sibling ${newChildId} not loaded, loading it first`);
           
           // We need to load this message before we can navigate to it
           try {
@@ -1267,18 +1270,14 @@ export default {
     // Helper action to mark visible branch messages as read
     async markVisibleBranchAsRead({ dispatch, getters }, messageId) {
       if (!messageId) return;
-      
-      console.log('[Store] markVisibleBranchAsRead called for message:', messageId);
-      
+            
       // Get visible branch messages
       const visibleMessages = getters.getVisibleBranchMessages(messageId);
       if (!visibleMessages || visibleMessages.length === 0) {
-        console.log('[Store] No visible messages found for branch');
         return;
       }
       
       const messageIds = visibleMessages.map(msg => msg.id);
-      console.log('[Store] Found', messageIds.length, 'visible messages in branch');
       
       // Fire batch mark action (async, don't await)
       dispatch('batchMarkAsRead', messageIds);
@@ -1445,21 +1444,17 @@ export default {
         console.warn(`[getVisibleBranchMessages] Message ${messageId} not found in store`);
         return [];
       }
-      
-      console.log(`[getVisibleBranchMessages] Starting with message ID: ${startingMessage.id}`);
-      
+            
       // STEP 1: First trace UPWARD to find the highest ancestor that's in the store
       let highestAncestor = startingMessage;
       let currentParentId = startingMessage.parent_id;
       
       // Trace up through parent_id as far as we can go
       while (currentParentId && state.messages[currentParentId]) {
-        console.log(`[getVisibleBranchMessages] Tracing upward: found parent ${currentParentId}`);
         highestAncestor = state.messages[currentParentId];
         currentParentId = highestAncestor.parent_id;
       }
       
-      console.log(`[getVisibleBranchMessages] Highest ancestor found: ${highestAncestor.id}`);
       
       // STEP 2: Now build the chain from highest ancestor down - NO STATE MODIFICATIONS
       // Start with the highest ancestor found
@@ -1472,7 +1467,6 @@ export default {
       while (true) {
         // If message has no branch child, break
         if (!currentMessage.branch_child) {
-          console.log(`[getVisibleBranchMessages] No branch_child found for ${currentMessage.id}, ending traversal`);
           break;
         }
         
@@ -1480,11 +1474,9 @@ export default {
         
         // If child doesn't exist in the store, break
         if (!state.messages[childId]) {
-          console.log(`[getVisibleBranchMessages] Child ${childId} not found in store, ending traversal`);
           break;
         }
         
-        console.log(`[getVisibleBranchMessages] Adding branch_child ${childId} to result`);
         
         // Add the branch child to the result
         result.push(state.messages[childId]);
@@ -1493,7 +1485,6 @@ export default {
         currentMessage = state.messages[childId];
       }
       
-      console.log(`[getVisibleBranchMessages] Final chain length: ${result.length}, from ${result[0].id} to ${result[result.length-1].id}`);
       
       return result;
     },

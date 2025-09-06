@@ -56,6 +56,7 @@ export default {
 
     async deleteOwnAccount({ commit }) {
       try {
+        console.warn('[AUTH] Deleting own account: initiating');
         const token = localStorage.getItem('auth_token');
         if (!token) throw new Error('Not authenticated');
 
@@ -69,6 +70,7 @@ export default {
         }
 
         // Cleanup local state and tokens
+        console.warn('[AUTH] Account deleted successfully; clearing local auth state and redirecting');
         WebSocketService.cleanup();
         localStorage.removeItem('auth_token');
         localStorage.removeItem('refresh_token');
@@ -81,7 +83,7 @@ export default {
         }
         return { success: true };
       } catch (e) {
-        console.error('[AUTH STORE] deleteOwnAccount failed:', e);
+        console.error('[AUTH] Delete account failed', e);
         throw e;
       }
     },
@@ -97,6 +99,7 @@ export default {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!response.ok) {
+          console.warn('[AUTH] /users/me returned non-OK; clearing tokens and user');
           localStorage.removeItem('auth_token');
           localStorage.removeItem('refresh_token');
           commit('SET_USER', null);
@@ -131,7 +134,7 @@ export default {
           console.error('[AUTH STORE] WebSocket init failed:', e);
         }
       } catch (error) {
-        console.error('[AUTH STORE] Token validation failed:', error);
+        console.error('[AUTH] Token validation threw error; clearing tokens and user', error);
         localStorage.removeItem('auth_token');
         localStorage.removeItem('refresh_token');
         commit('SET_USER', null);
@@ -142,12 +145,13 @@ export default {
     async signOut({ commit }) {
       try {
         // Clean up WebSocket connection before signing out
+        console.info('[AUTH] Programmatic sign out initiated');
         WebSocketService.cleanup();
         localStorage.removeItem('auth_token');
         localStorage.removeItem('refresh_token');
         commit('SET_USER', null);
       } catch (error) {
-        console.error('Error signing out:', error);
+        console.error('[AUTH] Error during sign out', error);
       }
     },
 
@@ -245,9 +249,10 @@ export default {
 
     async forceLogoutWithMessage({ commit }, router = null) {
       try {
-        console.log('[AUTH STORE] Force logout with unauthorized message');
-        console.log('[AUTH STORE] Router passed:', !!router);
-        console.log('[AUTH STORE] Current location:', window.location.pathname);
+        console.warn('[AUTH] Force logout due to unauthorized/refresh-fail', {
+          routerAvailable: !!router,
+          path: typeof window !== 'undefined' ? window.location.pathname : undefined
+        });
         
         // Clear user state
         commit('SET_USER', null);
@@ -258,21 +263,20 @@ export default {
         
         // Redirect to the public page
         if (window.location.pathname !== '/public') {
-          console.log('[AUTH STORE] Redirecting to /public from:', window.location.pathname);
-          console.log('[AUTH STORE] Router available:', !!router);
+          console.warn('[AUTH] Redirecting to /public from', window.location.pathname);
           // Use Vue router if available, otherwise fall back to hard redirect
           if (router) {
-            console.log('[AUTH STORE] Using Vue router to navigate');
+            console.info('[AUTH] Using Vue router to navigate');
             router.push('/public');
           } else {
-            console.log('[AUTH STORE] Using hard redirect');
+            console.info('[AUTH] Using hard redirect');
             window.location.href = '/public';
           }
         } else {
-          console.log('[AUTH STORE] Already on /public, no redirect needed');
+          console.info('[AUTH] Already on /public, no redirect needed');
         }
       } catch (error) {
-        console.error('Error during force logout:', error);
+        console.error('[AUTH] Error during force logout', error);
         // Even if logout fails, clear local state
         commit('SET_USER', null);
         commit('SET_AUTH_READY', true);
