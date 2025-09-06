@@ -1039,7 +1039,7 @@ const closeRecipientsModal = () => {
   store.dispatch('navigation/hideRecipientsModal');
 };
 
-const handleAddRecipients = async (recipients, propagateToDescendants = false) => {
+const handleAddRecipients = async (recipients, addToAncestors = true) => {
   
   
   if (!recipients || recipients.length === 0) {
@@ -1056,7 +1056,7 @@ const handleAddRecipients = async (recipients, propagateToDescendants = false) =
       return;
     }
 
-    const response = await MessageService.addRecipientsToMessage(messageId, recipients, propagateToDescendants);
+    const response = await MessageService.addRecipientsToMessage(messageId, recipients, addToAncestors, true);
     
     
     

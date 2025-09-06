@@ -9,7 +9,8 @@ export default {
     activeTab: 'public', // Track which navigation tab is active
     replySettings: {
       isPublic: true,
-      recipients: []  // Recipients for new message drafts
+      recipients: [],  // Recipients for new message drafts
+      addToAncestors: true, // Default: add staged recipients to all ancestors when sending
     },
     // Separate state for add mode recipients
     addModeRecipients: [], // Recipients being staged for adding to existing message
@@ -63,6 +64,10 @@ export default {
     
     SET_REPLY_PUBLIC(state, isPublic) {
       state.replySettings.isPublic = isPublic;
+    },
+
+    SET_REPLY_ADD_TO_ANCESTORS(state, value) {
+      state.replySettings.addToAncestors = !!value;
     },
     
     SET_REPLY_RECIPIENTS(state, recipients) {
@@ -210,6 +215,7 @@ export default {
     isReplying: state => state.isReplying,
     replyIsPublic: state => state.replySettings.isPublic,
     replyRecipients: state => state.replySettings.recipients,
+    replyAddToAncestors: state => state.replySettings.addToAncestors,
     
     // Add mode recipients getters
     addModeRecipients: state => state.addModeRecipients,
@@ -297,6 +303,10 @@ export default {
     
     updateReplyVisibility({ commit }, isPublic) {
       commit('SET_REPLY_PUBLIC', isPublic);
+    },
+
+    updateReplyAddToAncestors({ commit }, value) {
+      commit('SET_REPLY_ADD_TO_ANCESTORS', value);
     },
     
     // New unified action to update both visibility and recipients together
