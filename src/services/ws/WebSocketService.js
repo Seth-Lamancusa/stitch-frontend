@@ -45,18 +45,12 @@ const WebSocketService = {
   lastActivityAt: null,
   activityListenerRegistered: false,
   idleTimerGeneration: 0,
-  // Delay idle banner to allow brief reconnection window
-  idleBannerDelayMs: 6000,
-  idleBannerTimeoutId: null,
   // Expanded activity events to better capture mobile activity
   activityEvents: ['mousemove', 'pointermove', 'touchstart', 'touchmove', 'keydown', 'scroll', 'wheel'],
 
   // Network/visibility robustness
   networkVisibilityListenerRegistered: false,
   isOnline: typeof navigator !== 'undefined' ? !!navigator.onLine : true,
-  pendingDisconnectedBanner: false,
-  bannerSuppressionUntil: 0,
-  bannerSuppressionMs: 8000,
   
   // Debug logging helper
   log(...messages) {
@@ -103,57 +97,12 @@ const WebSocketService = {
   error(...messages) {
     console.error('[WebSocket]', ...messages);
   },
-  maybeShowWsDisconnectedBanner() {
-    // If offline or hidden, defer banner to avoid noisy UX on mobile
-    const now = Date.now();
-    const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
-    if (!this.isOnline || isHidden || now < this.bannerSuppressionUntil) {
-      this.pendingDisconnectedBanner = true;
-      // If we're in a time-based suppression window, schedule a check
-      if (now < this.bannerSuppressionUntil) {
-        const remaining = this.bannerSuppressionUntil - now;
-        if (this.idleBannerTimeoutId) {
-          clearTimeout(this.idleBannerTimeoutId);
-        }
-        this.idleBannerTimeoutId = setTimeout(() => {
-          this.idleBannerTimeoutId = null;
-          this.maybeShowWsDisconnectedBanner();
-        }, remaining);
-      }
-      return;
-    }
-    this.pendingDisconnectedBanner = false;
-    this.showWsDisconnectedBanner();
-  },
-  showWsDisconnectedBanner() {
-    try {
-      const user = store.getters['auth/user'];
-      // Do not show WS disconnected banner if there is no authenticated user
-      if (!user) {
-        return;
-      }
-      const channels = this.getUserNotifyChannels(user);
-      store.dispatch('ui/setWebsocketDisconnected', { disconnected: true, channels });
-    } catch (e) {}
-  },
-  clearWsDisconnectedBanner() {
-    try {
-      store.dispatch('ui/clearWebsocketDisconnected');
-      // Cancel any scheduled idle banner
-      if (this.idleBannerTimeoutId) {
-        clearTimeout(this.idleBannerTimeoutId);
-        this.idleBannerTimeoutId = null;
-      }
-      this.pendingDisconnectedBanner = false;
-    } catch (e) {}
-  },
+  
   setupNetworkVisibilityListeners() {
     if (this.networkVisibilityListenerRegistered) return;
     this.netVis = new NetworkVisibility({
       onOnline: async () => {
         this.isOnline = true;
-        this.bannerSuppressionUntil = Date.now() + this.bannerSuppressionMs;
-        this.clearWsDisconnectedBanner();
         const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
         if (!isOpen) {
           let token = TokenManager.accessToken || await this.getFreshAuthToken();
@@ -168,13 +117,10 @@ const WebSocketService = {
           }
           if (token) this.safeConnect(token);
         }
-        if (this.pendingDisconnectedBanner) {
-          setTimeout(() => this.maybeShowWsDisconnectedBanner(), this.bannerSuppressionMs);
-        }
+        
       },
       onOffline: () => {
         this.isOnline = false;
-        this.bannerSuppressionUntil = Date.now() + this.bannerSuppressionMs;
       },
       onVisible: () => {
         const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
@@ -182,8 +128,7 @@ const WebSocketService = {
           const token = TokenManager.accessToken;
           if (token) this.safeConnect(token);
         }
-        this.clearWsDisconnectedBanner();
-        if (this.pendingDisconnectedBanner) this.maybeShowWsDisconnectedBanner();
+        
       },
       onHidden: () => {}
     });
@@ -198,23 +143,17 @@ const WebSocketService = {
   },
   handleOnline() {
     this.isOnline = true;
-    this.bannerSuppressionUntil = Date.now() + this.bannerSuppressionMs;
     // Attempt reconnect when coming online if not connected
-    this.clearWsDisconnectedBanner();
     const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
     if (!isOpen) {
       const token = TokenManager.accessToken;
       if (token) this.safeConnect(token);
     }
-    if (this.pendingDisconnectedBanner) {
-      // Re-evaluate banner after suppression
-      setTimeout(() => this.maybeShowWsDisconnectedBanner(), this.bannerSuppressionMs);
-    }
+    
   },
   handleOffline() {
     this.isOnline = false;
-    // Suppress banner for a short time to avoid churn when toggling connectivity
-    this.bannerSuppressionUntil = Date.now() + this.bannerSuppressionMs;
+    // No banner handling
   },
   handleVisibilityChange() {
     const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
@@ -225,9 +164,7 @@ const WebSocketService = {
         const token = TokenManager.accessToken;
         if (token) this.safeConnect(token);
       }
-      // Clear banner when app is foregrounded
-      this.clearWsDisconnectedBanner();
-      if (this.pendingDisconnectedBanner) this.maybeShowWsDisconnectedBanner();
+      
     }
   },
   stopPingInterval() {
@@ -246,11 +183,7 @@ const WebSocketService = {
     this.stopPingInterval();
     this.stopIdleTimer();
     this.teardownActivityListeners();
-    // Clear any pending idle banner timer
-    if (this.idleBannerTimeoutId) {
-      clearTimeout(this.idleBannerTimeoutId);
-      this.idleBannerTimeoutId = null;
-    }
+    
   },
   removeMessageSubscription() {
     if (this.unsubscribeFunction) {
@@ -577,10 +510,7 @@ const WebSocketService = {
         this.resetIdleTimer();
         this.connectionAttempts = 0;
         try { this.backoff?.reset(); } catch (e) {}
-        try {
-          this.clearWsDisconnectedBanner();
-          store.dispatch('messages/fetchUnreadMessageCount');
-        } catch (e) {}
+        try { store.dispatch('messages/fetchUnreadMessageCount'); } catch (e) {}
       });
 
       this.client.on('json', (data) => {
@@ -610,7 +540,7 @@ const WebSocketService = {
         this.userId = null;
         this.connectionEstablished = false;
 
-        try { this.maybeShowWsDisconnectedBanner(); } catch (e) {}
+        
 
         if (event.code === 1008) {
           this.error('Authentication failed (1008). Attempting refresh and reconnect');
@@ -801,8 +731,7 @@ const WebSocketService = {
   },
   handleActivity() {
     this.lastActivityAt = Date.now();
-    // Clear WS disconnected banner immediately on activity
-    try { this.clearWsDisconnectedBanner(); } catch (e) {}
+    
     // Attempt reconnect if not open
     this.maybeActivityReconnect();
     // Reset idle timer
@@ -823,13 +752,7 @@ const WebSocketService = {
         return;
       }
     } catch (e) {}
-    this.log('Idle timeout reached, disconnecting WebSocket; suppressing banner briefly');
-    try {
-      const now = Date.now();
-      const delay = Math.max(0, this.idleBannerDelayMs || 3000);
-      this.bannerSuppressionUntil = now + delay;
-      this.pendingDisconnectedBanner = true;
-    } catch (e) {}
+    this.log('Idle timeout reached, disconnecting WebSocket');
     this.disconnectUser();
   },
   getUserNotifyChannels(user) {

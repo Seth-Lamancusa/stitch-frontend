@@ -85,13 +85,12 @@ export default {
   },
   
   // Add recipients to a message (or multiple messages)
-  // New semantics: addToTree expands to visible tree, notifyForId toggles single-message notification
-  async addRecipientsToMessage(messageIdOrIds, recipients, { addToTree = false, notifyForId = true } = {}) {
+  async addRecipientsToMessage(messageIdOrIds, recipients, addToAncestors = true, notifyOfLast = true) {
     const headers = getAuthHeaders();
     const body = Array.isArray(messageIdOrIds)
       ? { message_ids: messageIdOrIds, recipients }
       : { message_id: messageIdOrIds, recipients };
-    const params = { add_to_tree: addToTree, notify_for_id: notifyForId };
+    const params = { add_to_ancestors: addToAncestors, notify_of_last: notifyOfLast };
     return axios.post(`${apiBaseUrl}/recipients/add`, body, { headers, params });
   },
 

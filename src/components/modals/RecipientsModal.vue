@@ -264,16 +264,16 @@
       <div class="modal-footer">
         <!-- Add mode: Show "Add Recipients" button (disabled if no staged recipients) + "Cancel" button -->
         <div v-if="!isNewMessageMode">
-          <!-- Descendant propagation toggle -->
+          <!-- Ancestor propagation toggle -->
           <div class="descendants-toggle-container">
             <label class="descendants-toggle">
               <input 
                 type="checkbox" 
-                v-model="addToTree"
+                v-model="addToAncestors"
                 :disabled="isAddingRecipients"
               />
-              <span class="descendants-toggle-text">Add to tree</span>
-              <span class="descendants-toggle-hint" title="Also add recipients to all replies/children of this message">ⓘ</span>
+              <span class="descendants-toggle-text">Add to all ancestors</span>
+              <span class="descendants-toggle-hint" title="Also add recipients to all visible parents up to the visible root">ⓘ</span>
             </label>
           </div>
           
@@ -409,9 +409,7 @@ const showSearchResults = ref(false);
 const isTagValid = ref(null);
 const removingRecipientIds = ref(new Set()); // Track which recipients are being removed
 const isAddingRecipients = ref(false); // Track if we're adding recipients
-const addToTree = ref(false); // Track if we should add to tree
-const addToTreeTouched = ref(false); // Track if user manually toggled
-let computingAddToTreeDefault = false;
+const addToAncestors = ref(true); // Default ON per requirement
 const showRemoveConfirm = ref(false); // Track remove confirmation dialog
 const recipientToRemove = ref(null); // Track which recipient is being removed
 const isRemovingFromSingle = ref(false); // Track if removing from single message
@@ -726,15 +724,15 @@ const closeWithFade = () => {
 const handleDone = async () => {
   console.log('[RecipientsModal] handleDone called');
   console.log('[RecipientsModal] Current recipients:', recipients.value);
-  console.log('[RecipientsModal] Add to tree:', addToTree.value);
+  console.log('[RecipientsModal] Add to ancestors:', addToAncestors.value);
   
   // Set loading state
   isAddingRecipients.value = true;
   
   try {
-    // Emit add-recipients event with current recipients and descendant flag
+    // Emit add-recipients event with current recipients and ancestor flag (UI always notifies of origin)
     const recipientsToAdd = [...recipients.value];
-    emit('add-recipients', recipientsToAdd, addToTree.value);
+    emit('add-recipients', recipientsToAdd, addToAncestors.value);
     
     // Note: The parent component should call onAddRecipientsComplete() when done
     // The loading state will be cleared by the parent via that method
@@ -1102,8 +1100,6 @@ onMounted(async () => {
   } catch (e) {
     featuredBots.value = [];
   }
-  // Compute default add-to-tree when modal opens
-  computeAddToTreeDefault();
 });
 
 onBeforeUnmount(() => {
@@ -1122,95 +1118,6 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
     messageId: props.messageId
   });
 }, { deep: true, immediate: true });
-
-// Watchers to compute default Add to tree value
-watch(() => props.isVisible, (vis) => {
-  if (vis) computeAddToTreeDefault();
-});
-watch([() => props.messageId, recipients], () => {
-  computeAddToTreeDefault();
-});
-
-// Track manual toggle
-watch(addToTree, (val, prev) => {
-  if (!computingAddToTreeDefault && props.isVisible) {
-    addToTreeTouched.value = true;
-  }
-});
-
-function computeAddToTreeDefault() {
-  try {
-    if (!props.isAddMode || !props.isVisible) return;
-    if (addToTreeTouched.value) return;
-    const staged = recipients.value || [];
-    if (!staged.length) {
-      // No recipients staged; default OFF
-      computingAddToTreeDefault = true;
-      addToTree.value = false;
-      computingAddToTreeDefault = false;
-      return;
-    }
-    // Build loaded subgraph: climb to highest ancestor in store; then DFS down via child_ids
-    const getMsg = (id) => store.getters['messages/getMessage'](id);
-    let rootId = props.messageId;
-    if (!rootId) {
-      computingAddToTreeDefault = true;
-      addToTree.value = false;
-      computingAddToTreeDefault = false;
-      return;
-    }
-    let cur = getMsg(rootId);
-    while (cur && cur.parent_id) {
-      const parent = getMsg(cur.parent_id);
-      if (!parent) break;
-      cur = parent;
-    }
-    const highest = cur || getMsg(rootId);
-    if (!highest) {
-      computingAddToTreeDefault = true;
-      addToTree.value = false;
-      computingAddToTreeDefault = false;
-      return;
-    }
-    const visited = new Set();
-    const stack = [highest.id];
-    const nodes = [];
-    while (stack.length) {
-      const id = stack.pop();
-      if (visited.has(id)) continue;
-      visited.add(id);
-      const m = getMsg(id);
-      if (!m) continue;
-      nodes.push(m);
-      const children = Array.isArray(m.child_ids) ? m.child_ids : [];
-      for (const cid of children) {
-        if (!visited.has(cid)) stack.push(cid);
-      }
-    }
-    // Determine if any node lacks any staged recipient uid
-    const stagedUids = new Set(staged.map(r => r && r.uid).filter(Boolean));
-    let shouldAddToTree = false;
-    for (const m of nodes) {
-      const recips = Array.isArray(m.recipients) ? m.recipients : [];
-      const presentUids = new Set(recips.map(r => r && r.uid).filter(Boolean));
-      for (const uid of stagedUids) {
-        if (!presentUids.has(uid)) {
-          shouldAddToTree = true;
-          break;
-        }
-      }
-      if (shouldAddToTree) break;
-    }
-    computingAddToTreeDefault = true;
-    addToTree.value = shouldAddToTree;
-    computingAddToTreeDefault = false;
-  } catch (e) {
-    // Default OFF on error
-    computingAddToTreeDefault = true;
-    addToTree.value = false;
-    computingAddToTreeDefault = false;
-  }
-}
 </script>
 
 <style scoped>

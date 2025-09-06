@@ -91,7 +91,6 @@ const submitPassword = async () => {
   border-radius: var(--radius-md);
   width: 90%;
   max-width: 500px;
-  height: 70vh;
   max-height: 70vh;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   border: 1px solid var(--color-border);
