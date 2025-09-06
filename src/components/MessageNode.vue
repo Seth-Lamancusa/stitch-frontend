@@ -720,35 +720,22 @@ export default {
       // No longer automatically select the new target sibling
       // Selection will be handled by the navigateToSibling action
       // based on whether the previous sibling was selected
-      console.log(`[MessageNode] Sibling navigation: ${direction}, target: ${targetSiblingId}`);
     };
     
     // Check if this message has siblings that can be navigated to
     const hasSiblings = computed(() => {
-      console.log(`[MessageNode] Checking hasSiblings for message ${props.message.id}:`, {
-        parentId: props.message.parent_id,
-        hasParentId: !!props.message.parent_id
-      });
 
       if (!props.message.parent_id) {
-        console.log(`[MessageNode] No parent_id for message ${props.message.id}`);
         return false;
       }
       
       const parent = store.getters['messages/getMessage'](props.message.parent_id);
-      console.log(`[MessageNode] Parent message for ${props.message.id}:`, {
-        parentFound: !!parent,
-        parentChildIds: parent?.child_ids,
-        isArray: parent?.child_ids && Array.isArray(parent.child_ids)
-      });
 
       if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) {
-        console.log(`[MessageNode] Invalid parent data for message ${props.message.id}`);
         return false;
       }
       
       const hasSiblings = parent.child_ids.length > 1;
-      console.log(`[MessageNode] Message ${props.message.id} has siblings: ${hasSiblings} (${parent.child_ids.length} total children)`);
       return hasSiblings;
     });
 

@@ -25,6 +25,7 @@ export function useAuthentication() {
    */
   const logout = async () => {
     try {
+      console.info('[AUTH] Manual logout requested');
       TokenManager.accessToken = null;
       TokenManager.refreshToken = null;
       store.commit('auth/SET_USER', null);

@@ -1057,13 +1057,12 @@ const handleAddRecipients = async (recipients, addToAncestors = true) => {
     }
 
     const response = await MessageService.addRecipientsToMessage(messageId, recipients, addToAncestors, true);
-    
-    
-    
-    // Refresh the message data to get updated recipients list
-    await store.dispatch('messages/loadMessageRadius', { 
-      messageId: messageId, 
-      radius: 1 
+
+    // Refresh origin and all loaded ancestors to reflect recipient changes
+    await store.dispatch('messages/refreshLoadedAncestors', {
+      messageId: messageId,
+      get_replies: true,
+      get_children: true,
     });
     
     // Signal completion to the modal

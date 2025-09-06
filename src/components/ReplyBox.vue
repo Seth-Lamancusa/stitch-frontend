@@ -640,14 +640,16 @@ const sendReply = async () => {
         throw new Error('No message or recipients to add');
       }
       await MessageService.addRecipientsToMessage(addRecipientsMessageId.value, recipients.value, true, true);
+      // Refresh origin and loaded ancestors
+      await store.dispatch('messages/refreshLoadedAncestors', {
+        messageId: addRecipientsMessageId.value,
+        get_replies: true,
+        get_children: true,
+      });
       // Clear the form and exit add recipients mode
       content.value = '';
       store.dispatch('navigation/clearAddRecipientsMode');
-      // Refresh the message data to reflect new recipients
-      await store.dispatch('messages/loadMessageRadius', { 
-        messageId: addRecipientsMessageId.value, 
-        radius: 1 
-      });
+      // No need to radius reload; ancestors refresh already updated data
       // Show success message
       showSendSuccess.value = true;
       setTimeout(() => {
@@ -659,6 +661,12 @@ const sendReply = async () => {
     // DRAFT REPLY FLOW: If configured, bulk add draft recipients to ancestors of parent first (notify only for reply later)
     if (props.targetId && recipients.value.length > 0 && replyAddToAncestors.value) {
       await MessageService.addRecipientsToMessage(props.targetId, recipients.value, true, false);
+      // Refresh origin and loaded ancestors (no notify path)
+      await store.dispatch('messages/refreshLoadedAncestors', {
+        messageId: props.targetId,
+        get_replies: true,
+        get_children: true,
+      });
     }
     
     // Create a new message using the store action (normal notification for new reply)
@@ -725,10 +733,6 @@ const sendReply = async () => {
           });
         }
         
-        // 4. Force re-render the thread to show the new message
-        // This uses the global event bus to trigger a re-render in ThreadView
-        store.commit('messages/REFRESH_DIRECT_MESSAGES');
-        
         // 5. Force reload the branch path in case it's not already updated
         // This needs to be done after a short delay to ensure store is updated
         setTimeout(() => {
@@ -792,10 +796,11 @@ const addSelectedBotsToMessage = async () => {
       visible: true
     }));
     await MessageService.addRecipientsToMessage(props.targetId, recipientsToAdd, botAddToAncestors.value, true);
-    // Refresh message data
-    await store.dispatch('messages/loadMessageRadius', { 
-      messageId: props.targetId, 
-      radius: 1 
+    // Refresh origin and loaded ancestors to reflect bot adds
+    await store.dispatch('messages/refreshLoadedAncestors', {
+      messageId: props.targetId,
+      get_replies: true,
+      get_children: true,
     });
     addBotsSuccess.value = true;
     // Brief success state, then quick fade-out before closing
@@ -1609,7 +1614,7 @@ defineExpose({
 }
 
 .modal-description {
-  margin-bottom: var(--space-md);
+  margin-bottom: 0;
   color: var(--color-text);
 }
 
@@ -1971,6 +1976,34 @@ defineExpose({
   flex-direction: column;
   z-index: 1001;
   overflow-y: auto;
+}
+
+/* Small, subtle toggle for "Add to all ancestors" in bot modal */
+.ancestors-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  margin-bottom: 6px;
+  opacity: 0.8;
+}
+
+.ancestors-toggle label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.ancestors-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--color-primary);
+}
+
+.ancestors-toggle span {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 
 .bot-options {
