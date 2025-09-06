@@ -27,6 +27,7 @@ function installFetchAuthInterceptor() {
       if (init && init._retry) return response;
       // If this was the refresh endpoint itself, do not attempt to refresh again
       if (url.includes('/api/auth/sessions/refresh')) return response;
+      try { console.warn('[AUTH][fetch] 401 detected', { url }); } catch (_) {}
       const tokenBefore = TokenManager.accessToken;
       const newAccess = await TokenManager.refreshAccessToken();
       if (!newAccess) {
@@ -37,11 +38,13 @@ function installFetchAuthInterceptor() {
             const newHeaders = new Headers(init && init.headers ? init.headers : undefined);
             newHeaders.set('Authorization', `Bearer ${tokenAfter}`);
             const retryInit = { ...init, headers: newHeaders, _retry: true };
+            try { console.info('[AUTH][fetch] retrying request after peer refresh', { url }); } catch (_) {}
             return await originalFetch(url || input, retryInit);
           } catch (_) {}
         }
         try {
           // Force logout if refresh truly failed and token did not change
+          console.error('[AUTH][fetch] refresh failed; forcing logout', { url });
           await store.dispatch('auth/forceLogoutWithMessage');
         } catch (e) {}
         return response;
@@ -51,6 +54,7 @@ function installFetchAuthInterceptor() {
         const newHeaders = new Headers(init && init.headers ? init.headers : undefined);
         newHeaders.set('Authorization', `Bearer ${newAccess}`);
         const retryInit = { ...init, headers: newHeaders, _retry: true };
+        try { console.info('[AUTH][fetch] retrying request with new token', { url }); } catch (_) {}
         return await originalFetch(url || input, retryInit);
       } catch (e) {
         return response;

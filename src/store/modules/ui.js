@@ -6,9 +6,7 @@ export default {
     success: null,
     messageNotification: null,
     showDeleteConfirm: false,
-    messageToDelete: null,
-    websocketDisconnected: false,
-    websocketChannels: []
+    messageToDelete: null
   },
   
   mutations: {
@@ -33,11 +31,6 @@ export default {
     REQUEST_MESSAGE_DELETE(state, message) {
       // This mutation is observed by the DeleteConfirmModal component
       // No state changes needed here as the modal handles its own state
-    }
-    ,
-    SET_WEBSOCKET_DISCONNECTED(state, { disconnected, channels }) {
-      state.websocketDisconnected = !!disconnected;
-      state.websocketChannels = Array.isArray(channels) ? channels : [];
     }
   },
   
@@ -68,12 +61,6 @@ export default {
     
     hideDeleteConfirm({ commit }) {
       commit('SET_DELETE_CONFIRM', { show: false, message: null });
-    },
-    setWebsocketDisconnected({ commit }, { disconnected, channels }) {
-      commit('SET_WEBSOCKET_DISCONNECTED', { disconnected, channels });
-    },
-    clearWebsocketDisconnected({ commit }) {
-      commit('SET_WEBSOCKET_DISCONNECTED', { disconnected: false, channels: [] });
     }
   },
   
@@ -82,8 +69,6 @@ export default {
     success: state => state.success,
     messageNotification: state => state.messageNotification,
     showDeleteConfirm: state => state.showDeleteConfirm,
-    messageToDelete: state => state.messageToDelete,
-    websocketDisconnected: state => state.websocketDisconnected,
-    websocketChannels: state => state.websocketChannels
+    messageToDelete: state => state.messageToDelete
   }
 }

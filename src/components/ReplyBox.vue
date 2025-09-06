@@ -70,19 +70,6 @@
             <span class="meta-pill__icon">👥</span>
             <span class="meta-pill__text">Draft Recipients ({{ recipients.length }})</span>
           </button>
-
-          <!-- Add to tree toggle for replies/new threads -->
-          <button 
-            class="toolbar-control meta-pill" 
-            @click="toggleAddToTree"
-            :disabled="!canInteract"
-            :aria-pressed="replyAddToTree"
-            aria-label="Toggle add recipients to tree"
-            title="Add recipients to visible tree"
-          >
-            <span class="meta-pill__icon">🌳</span>
-            <span class="meta-pill__text">{{ replyAddToTree ? 'Add to tree: ON' : 'Add to tree: OFF' }}</span>
-          </button>
           
           <!-- Prompt Bot Response button - only shown when replying to a message -->
           <button 
@@ -206,19 +193,11 @@
           <p class="modal-description">
             Select one or more bots to add as recipients to this message.
           </p>
-
-          <!-- Add to tree toggle inside Bot Prompt Modal -->
-          <div class="toolbar-left" style="margin-bottom: 8px;">
-            <button 
-              class="toolbar-control meta-pill" 
-              @click="toggleAddToTree"
-              :aria-pressed="replyAddToTree"
-              aria-label="Toggle add recipients to tree"
-              title="Add recipients to visible tree"
-            >
-              <span class="meta-pill__icon">🌳</span>
-              <span class="meta-pill__text">{{ replyAddToTree ? 'Add to tree: ON' : 'Add to tree: OFF' }}</span>
-            </button>
+          <div class="ancestors-toggle" title="Also add recipients to all visible parents up to the visible root">
+            <label>
+              <input type="checkbox" v-model="botAddToAncestors" />
+              <span>Add to all ancestors</span>
+            </label>
           </div>
           
           <div class="bot-options">
@@ -376,6 +355,7 @@ const addBotsError = ref(null);
 const selectedBotsList = computed(() => featuredBots.value.filter(bot => !!selectedBots.value[bot.uid]));
 const botModalIsClosing = ref(false);
 const isReplyBoxClosing = ref(false);
+const botAddToAncestors = ref(true);
 
 // Add recipients mode
 const isAddRecipientsMode = computed(() => store.getters['navigation/isAddRecipientsMode']);
@@ -391,11 +371,8 @@ const isPublic = computed({
   set: (value) => store.dispatch('navigation/updateReplyVisibility', value)
 });
 const recipients = computed(() => store.getters['navigation/replyRecipients']);
+const replyAddToAncestors = computed(() => store.getters['navigation/replyAddToAncestors']);
 const isReplying = computed(() => store.getters['navigation/isReplying']);
-const replyAddToTree = computed({
-  get: () => store.getters['navigation/replyAddToTree'],
-  set: (v) => store.dispatch('navigation/setReplyAddToTree', v)
-});
 
 // Centralized validation logic
 const canSendReply = computed(() => {
@@ -552,16 +529,23 @@ const handleTextareaBlur = () => {
 
 const handleTextareaKeyDown = (event) => {
   if (event.key === 'Enter') {
-    if (event.shiftKey && content.value.trim() !== '') {
-      // Prevent the newline from being added
-      event.preventDefault();
-      // Send the message if we can
-      if (canSendReply.value) {
-        sendReply();
-      }
+    const isMobile = window.innerWidth <= 768;
+    // Mobile: Enter should create a newline; Shift+Enter also newline (default)
+    if (isMobile) {
       return;
     }
-    // Allow Enter key to create new lines (default behavior)
+
+    // Desktop behavior:
+    // - Shift+Enter inserts a newline (default)
+    if (event.shiftKey) {
+      return;
+    }
+
+    // - Enter alone sends (when allowed), otherwise fall back to newline
+    if (canSendReply.value) {
+      event.preventDefault();
+      sendReply();
+    }
     return;
   }
 };
@@ -655,11 +639,7 @@ const sendReply = async () => {
       if (!addRecipientsMessageId.value || recipients.value.length === 0) {
         throw new Error('No message or recipients to add');
       }
-      await MessageService.addRecipientsToMessage(
-        addRecipientsMessageId.value,
-        recipients.value,
-        { addToTree: replyAddToTree.value, notifyForId: true }
-      );
+      await MessageService.addRecipientsToMessage(addRecipientsMessageId.value, recipients.value, true, true);
       // Clear the form and exit add recipients mode
       content.value = '';
       store.dispatch('navigation/clearAddRecipientsMode');
@@ -676,18 +656,12 @@ const sendReply = async () => {
       return;
     }
     
-    
-    // Create a new message using the store action
-    // For replies/new threads: if adding to tree is enabled and replying to an existing message,
-    // perform bulk add first (without single-message notify), then send reply.
-    if (props.targetId && replyAddToTree.value && recipients.value.length > 0) {
-      await MessageService.addRecipientsToMessage(
-        props.targetId,
-        recipients.value,
-        { addToTree: true, notifyForId: false }
-      );
+    // DRAFT REPLY FLOW: If configured, bulk add draft recipients to ancestors of parent first (notify only for reply later)
+    if (props.targetId && recipients.value.length > 0 && replyAddToAncestors.value) {
+      await MessageService.addRecipientsToMessage(props.targetId, recipients.value, true, false);
     }
-
+    
+    // Create a new message using the store action (normal notification for new reply)
     const newMessage = await store.dispatch('messages/sendReply', {
       parentId: props.targetId, // Will be null for new threads
       content: content.value,
@@ -798,12 +772,53 @@ const sendReply = async () => {
     isSending.value = false;
   }
 };
-// Toggle add-to-tree
-const toggleAddToTree = () => {
-  replyAddToTree.value = !replyAddToTree.value;
+
+// Bot prompt add: add to ancestors and notify of origin
+const addSelectedBotsToMessage = async () => {
+  if (!props.targetId) {
+    addBotsError.value = 'No target message ID';
+    return;
+  }
+  const bots = selectedBotsList.value;
+  if (!bots || bots.length === 0) return;
+  try {
+    isAddingBots.value = true;
+    addBotsError.value = null;
+    const recipientsToAdd = bots.map(bot => ({
+      uid: bot.uid,
+      display_name: bot.display_name,
+      user_tag: bot.user_tag,
+      public: true,
+      visible: true
+    }));
+    await MessageService.addRecipientsToMessage(props.targetId, recipientsToAdd, botAddToAncestors.value, true);
+    // Refresh message data
+    await store.dispatch('messages/loadMessageRadius', { 
+      messageId: props.targetId, 
+      radius: 1 
+    });
+    addBotsSuccess.value = true;
+    // Brief success state, then quick fade-out before closing
+    setTimeout(() => {
+      botModalIsClosing.value = true;
+      isReplyBoxClosing.value = true; // Start reply box fade-out at same time
+      setTimeout(() => {
+        addBotsSuccess.value = false;
+        closeBotPromptModal();
+        if (!props.isNewThread) {
+          hideBottomSheet();
+        }
+        botModalIsClosing.value = false;
+        isReplyBoxClosing.value = false;
+      }, 150);
+    }, 300);
+  } catch (error) {
+    console.error('[ReplyBox] Error adding bot recipients:', error);
+    addBotsError.value = error?.response?.data?.detail || error?.message || 'Failed to add recipients';
+  } finally {
+    isAddingBots.value = false;
+  }
 };
-
-
 
 // Helper function to get the best display name for an author
 const getAuthorDisplayName = (message) => {
@@ -879,56 +894,6 @@ const isBotSelected = (bot) => {
 const toggleBotSelected = (bot) => {
   const current = !!selectedBots.value[bot.uid];
   selectedBots.value = { ...selectedBots.value, [bot.uid]: !current };
-};
-
-const addSelectedBotsToMessage = async () => {
-  if (!props.targetId) {
-    addBotsError.value = 'No target message ID';
-    return;
-  }
-  const bots = selectedBotsList.value;
-  if (!bots || bots.length === 0) return;
-  try {
-    isAddingBots.value = true;
-    addBotsError.value = null;
-    const recipientsToAdd = bots.map(bot => ({
-      uid: bot.uid,
-      display_name: bot.display_name,
-      user_tag: bot.user_tag,
-      public: true,
-      visible: true
-    }));
-    await MessageService.addRecipientsToMessage(
-      props.targetId,
-      recipientsToAdd,
-      { addToTree: replyAddToTree.value, notifyForId: true }
-    );
-    // Refresh message data
-    await store.dispatch('messages/loadMessageRadius', { 
-      messageId: props.targetId, 
-      radius: 1 
-    });
-    addBotsSuccess.value = true;
-    // Brief success state, then quick fade-out before closing
-    setTimeout(() => {
-      botModalIsClosing.value = true;
-      isReplyBoxClosing.value = true; // Start reply box fade-out at same time
-      setTimeout(() => {
-        addBotsSuccess.value = false;
-        closeBotPromptModal();
-        if (!props.isNewThread) {
-          hideBottomSheet();
-        }
-        botModalIsClosing.value = false;
-        isReplyBoxClosing.value = false;
-      }, 150);
-    }, 300);
-  } catch (error) {
-    console.error('[ReplyBox] Error adding bot recipients:', error);
-    addBotsError.value = error?.response?.data?.detail || error?.message || 'Failed to add recipients';
-  } finally {
-    isAddingBots.value = false;
-  }
 };
 
 // Handle clicks outside reply box

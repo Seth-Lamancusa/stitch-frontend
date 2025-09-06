@@ -1,17 +1,6 @@
 <template>
   <div class="global-notifications">
-    <!-- WebSocket Disconnected Persistent Banner -->
-    <transition name="notification">
-      <div v-if="wsDisconnected" class="notification message-notification" @click="dismissWsBanner">
-        <div class="notification-icon">⚠️</div>
-        <div class="notification-content">
-          <div class="notification-message">
-            Websocket disconnected. Notifying {{ channelList }} of new direct messages. Move mouse to reconnect. Refresh may be needed for latest messages to display.
-          </div>
-        </div>
-        <button class="notification-close" @click.stop="dismissWsBanner">×</button>
-      </div>
-    </transition>
+    
     <!-- Error Notification -->
     <transition name="notification">
       <div v-if="error" class="notification error-notification" @click="clearError">
@@ -60,13 +49,7 @@ const router = useRouter();
 const error = computed(() => store.getters['ui/error']);
 const success = computed(() => store.getters['ui/success']);
 const messageNotification = computed(() => store.getters['ui/messageNotification']);
-const wsDisconnected = computed(() => store.getters['ui/websocketDisconnected']);
-const wsChannels = computed(() => store.getters['ui/websocketChannels']);
-const channelList = computed(() => {
-  const chans = wsChannels.value || [];
-  if (!chans.length) return 'phone, email';
-  return chans.join(', ');
-});
+ 
 
 // Auto-clear success messages
 watch(success, (newSuccess) => {
@@ -108,10 +91,7 @@ const clearMessageNotification = () => {
   store.dispatch('ui/clearMessageNotification');
 };
 
-// Dismiss WS disconnected banner (triggers transition animation)
-const dismissWsBanner = () => {
-  try { store.dispatch('ui/clearWebsocketDisconnected'); } catch (e) {}
-};
+ 
 
 // Handle clicking on message notification - navigate to the message
 const handleMessageClick = () => {

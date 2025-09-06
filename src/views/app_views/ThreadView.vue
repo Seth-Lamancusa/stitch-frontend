@@ -1039,7 +1039,7 @@ const closeRecipientsModal = () => {
   store.dispatch('navigation/hideRecipientsModal');
 };
 
-const handleAddRecipients = async (recipients, addToTree = false) => {
+const handleAddRecipients = async (recipients, propagateToDescendants = false) => {
   
   
   if (!recipients || recipients.length === 0) {
@@ -1056,11 +1056,7 @@ const handleAddRecipients = async (recipients, addToTree = false) => {
       return;
     }
 
-    const response = await MessageService.addRecipientsToMessage(
-      messageId,
-      recipients,
-      { addToTree, notifyForId: true }
-    );
+    const response = await MessageService.addRecipientsToMessage(messageId, recipients, propagateToDescendants);
     
     
     
@@ -1830,3 +1826,7 @@ const closeProfileModal = () => {
   }
 }
 </style>
+
+
+
+
