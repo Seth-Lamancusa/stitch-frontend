@@ -301,6 +301,17 @@
         
         <!-- New message mode: Only show "Done" button -->
         <div v-else>
+          <div class="descendants-toggle-container">
+            <label class="descendants-toggle">
+              <input 
+                type="checkbox" 
+                v-model="storeAddToAncestors"
+                :disabled="isAddingRecipients"
+              />
+              <span class="descendants-toggle-text">Add to all ancestors</span>
+              <span class="descendants-toggle-hint" title="Also add recipients to all visible parents up to the visible root">ⓘ</span>
+            </label>
+          </div>
           <button 
             @click.stop="handleDoneOrCancel" 
             class="done-button" 
@@ -416,6 +427,11 @@ const isRemovingFromSingle = ref(false); // Track if removing from single messag
 const isRemovingFromDescendants = ref(false); // Track if removing from descendants
 let searchTimeout = null;
 const isClosing = ref(false); // Quick closing fade-out state
+// For new message mode: bind ancestors toggle to store
+const storeAddToAncestors = computed({
+  get: () => store.getters['navigation/replyAddToAncestors'],
+  set: (val) => store.dispatch('navigation/updateReplyAddToAncestors', val)
+});
 
 
 // Helper function to deduplicate and reconcile recipient data
