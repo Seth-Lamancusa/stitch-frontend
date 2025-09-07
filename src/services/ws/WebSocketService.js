@@ -41,7 +41,7 @@ const WebSocketService = {
   
   // Idle disconnect handling
   idleTimeoutId: null,
-  idleTimeoutMs: 3 * 60 * 1000, // 2 minutes
+  idleTimeoutMs: 3 * 60 * 1000, // 3 minutes
   lastActivityAt: null,
   activityListenerRegistered: false,
   idleTimerGeneration: 0,
@@ -130,7 +130,10 @@ const WebSocketService = {
         }
         
       },
-      onHidden: () => {}
+      onHidden: () => {
+        // Disconnect when tab becomes hidden, app is minimized, or page is backgrounded
+        this.disconnectUser();
+      }
     });
     this.netVis.start();
     this.networkVisibilityListenerRegistered = true;
@@ -503,6 +506,8 @@ const WebSocketService = {
       this.client.on('open', () => {
         this.connectionEstablished = true;
         this.connection = this.client.socket;
+        // Ensure activity listeners are active after reconnects
+        this.setupActivityListeners();
         this.resetIdleTimer();
         this.connectionAttempts = 0;
         try { this.backoff?.reset(); } catch (e) {}
