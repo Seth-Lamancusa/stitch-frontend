@@ -71,17 +71,7 @@
             <span class="meta-pill__text">Draft Recipients ({{ recipients.length }})</span>
           </button>
           
-          <!-- Prompt Bot Response button - only shown when replying to a message -->
-          <button 
-            v-if="targetId"
-            class="toolbar-control meta-pill" 
-            @click="showBotPromptModal"
-            :disabled="!canInteract"
-            aria-label="Prompt bot for response"
-          >
-            <span class="meta-pill__icon">🤖</span>
-            <span class="meta-pill__text">Prompt Bot Response</span>
-          </button>
+          <!-- Prompt moved to MessageNode. Keeping spacing consistent. -->
         </div>
 
 
@@ -167,111 +157,7 @@
       @done="closeRecipientSelector"
     />
     
-    <!-- Bot Prompt Modal -->
-    <div 
-      v-if="showBotModal" 
-      class="modal-overlay"
-      :class="{ 'closing': botModalIsClosing }"
-      @click="closeBotPromptModal"
-    >
-      <div 
-        class="bot-prompt-modal"
-        @click.stop
-      >
-        <div class="modal-header">
-          <h3>Prompt Bot Response</h3>
-          <button 
-            class="close-button"
-            @click="closeBotPromptModal"
-            aria-label="Close bot prompt modal"
-          >
-            ×
-          </button>
-        </div>
-        
-        <div class="modal-content">
-          <p class="modal-description">
-            Select one or more bots to add as recipients to this message.
-          </p>
-          <div class="ancestors-toggle" title="Also add recipients to all visible parents up to the visible root">
-            <label>
-              <input type="checkbox" v-model="botAddToAncestors" />
-              <span>Add to all ancestors</span>
-            </label>
-          </div>
-          
-          <div class="bot-options">
-            <!-- Main bots -->
-            <div class="main-bot-options">
-              <div 
-                v-for="bot in mainBots" 
-                :key="bot.uid"
-                class="bot-option-button"
-                :class="{ 'bot-selected': isBotSelected(bot) }"
-                @click="toggleBotSelected(bot)"
-              >
-                <span class="bot-option-icon">
-                  <input type="checkbox" :checked="isBotSelected(bot)" @click.stop @change="toggleBotSelected(bot)" />
-                </span>
-                <span class="bot-option-text">
-                  {{ bot.display_name }}
-                </span>
-              </div>
-            </div>
-            
-            <!-- Advanced bots dropdown -->
-            <div v-if="advancedBots.length > 0" class="advanced-bot-options">
-              <span class="advanced-bots-inline">
-                <button 
-                  class="advanced-bots-toggle"
-                  @click="showAdvancedBotsModal = !showAdvancedBotsModal"
-                  :aria-expanded="showAdvancedBotsModal"
-                >
-                  <span class="advanced-bots-text">Advanced ({{ advancedBots.length }})</span>
-                  <span class="advanced-bots-icon" :class="{ 'expanded': showAdvancedBotsModal }">▼</span>
-                </button>
-              </span>
-              
-              <div v-if="showAdvancedBotsModal" class="advanced-bot-list">
-                <div 
-                  v-for="bot in advancedBots" 
-                  :key="bot.uid"
-                  class="bot-option-button advanced-bot-button"
-                  :class="{ 'bot-selected': isBotSelected(bot) }"
-                  @click="toggleBotSelected(bot)"
-                >
-                  <span class="bot-option-icon">
-                    <input type="checkbox" :checked="isBotSelected(bot)" @click.stop @change="toggleBotSelected(bot)" />
-                  </span>
-                  <span class="bot-option-text">
-                    {{ bot.display_name }}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button 
-            class="add-button"
-            :class="{ 'success': addBotsSuccess }"
-            :disabled="isAddingBots || selectedBotsList.length === 0"
-            @click.stop="addSelectedBotsToMessage"
-          >
-            <span v-if="isAddingBots" class="button-loading"><span class="bot-loading-spinner"></span><span>Adding...</span></span>
-            <span v-else-if="addBotsSuccess">Added!</span>
-            <span v-else>Add</span>
-          </button>
-          <button 
-            class="cancel-button"
-            :disabled="isAddingBots"
-            @click.stop="closeBotPromptModal"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- Bot Prompt Modal moved to global component -->
   </div>
 </template>
 
@@ -339,23 +225,7 @@ const hasMultipleLines = ref(false);
 const userHasManuallyToggled = ref(false);
 
 // Featured bots for prompt modal
-import FeaturedBotsService from '../services/FeaturedBotsService.js';
-const featuredBots = ref([]);
-const mainBots = computed(() => featuredBots.value.filter(bot => !bot.advanced));
-const advancedBots = computed(() => featuredBots.value.filter(bot => bot.advanced));
-
-// Advanced bots dropdown state
-const showAdvancedBotsModal = ref(false);
-
-const showBotModal = ref(false); // Track if bot selection modal is open
-const selectedBots = ref({}); // Map of botUid -> boolean
-const isAddingBots = ref(false);
-const addBotsSuccess = ref(false);
-const addBotsError = ref(null);
-const selectedBotsList = computed(() => featuredBots.value.filter(bot => !!selectedBots.value[bot.uid]));
-const botModalIsClosing = ref(false);
-const isReplyBoxClosing = ref(false);
-const botAddToAncestors = ref(true);
+// Prompt bot response moved to global modal; remove local states
 
 // Add recipients mode
 const isAddRecipientsMode = computed(() => store.getters['navigation/isAddRecipientsMode']);
@@ -777,53 +647,7 @@ const sendReply = async () => {
   }
 };
 
-// Bot prompt add: add to ancestors and notify of origin
-const addSelectedBotsToMessage = async () => {
-  if (!props.targetId) {
-    addBotsError.value = 'No target message ID';
-    return;
-  }
-  const bots = selectedBotsList.value;
-  if (!bots || bots.length === 0) return;
-  try {
-    isAddingBots.value = true;
-    addBotsError.value = null;
-    const recipientsToAdd = bots.map(bot => ({
-      uid: bot.uid,
-      display_name: bot.display_name,
-      user_tag: bot.user_tag,
-      public: true,
-      visible: true
-    }));
-    await MessageService.addRecipientsToMessage(props.targetId, recipientsToAdd, botAddToAncestors.value, true);
-    // Refresh origin and loaded ancestors to reflect bot adds
-    await store.dispatch('messages/refreshLoadedAncestors', {
-      messageId: props.targetId,
-      get_replies: true,
-      get_children: true,
-    });
-    addBotsSuccess.value = true;
-    // Brief success state, then quick fade-out before closing
-    setTimeout(() => {
-      botModalIsClosing.value = true;
-      isReplyBoxClosing.value = true; // Start reply box fade-out at same time
-      setTimeout(() => {
-        addBotsSuccess.value = false;
-        closeBotPromptModal();
-        if (!props.isNewThread) {
-          hideBottomSheet();
-        }
-        botModalIsClosing.value = false;
-        isReplyBoxClosing.value = false;
-      }, 150);
-    }, 300);
-  } catch (error) {
-    console.error('[ReplyBox] Error adding bot recipients:', error);
-    addBotsError.value = error?.response?.data?.detail || error?.message || 'Failed to add recipients';
-  } finally {
-    isAddingBots.value = false;
-  }
-};
+// Bot prompt add moved to global modal
 
 // Helper function to get the best display name for an author
 const getAuthorDisplayName = (message) => {
@@ -868,38 +692,7 @@ const closeRecipientSelector = (event) => {
   showRecipientSelector.value = false;
 };
 
-// Bot prompt methods
-const showBotPromptModal = () => {
-  dismissMobileKeyboard();
-  showBotModal.value = true;
-  // Reset selection & states when opening modal
-  selectedBots.value = {};
-  isAddingBots.value = false;
-  addBotsSuccess.value = false;
-  addBotsError.value = null;
-  botModalIsClosing.value = false;
-  isReplyBoxClosing.value = false;
-};
-
-const closeBotPromptModal = () => {
-  showBotModal.value = false;
-  // Reset selection & states when closing modal
-  selectedBots.value = {};
-  isAddingBots.value = false;
-  addBotsSuccess.value = false;
-  addBotsError.value = null;
-  botModalIsClosing.value = false;
-  isReplyBoxClosing.value = false;
-};
-
-const isBotSelected = (bot) => {
-  return !!selectedBots.value[bot.uid];
-};
-
-const toggleBotSelected = (bot) => {
-  const current = !!selectedBots.value[bot.uid];
-  selectedBots.value = { ...selectedBots.value, [bot.uid]: !current };
-};
+// Bot prompt methods removed (handled by global modal)
 
 // Handle clicks outside reply box
 const handleClickOutside = (event) => {
@@ -927,12 +720,6 @@ onMounted(async () => {
   nextTick(() => {
     autoResizeTextarea();
   });
-  // Load featured bots (mocked)
-  try {
-    featuredBots.value = await FeaturedBotsService.listFeaturedBots();
-  } catch (e) {
-    featuredBots.value = [];
-  }
 });
 
 // Watch content changes to ensure textarea resizes properly
