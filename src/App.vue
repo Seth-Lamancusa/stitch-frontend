@@ -2,6 +2,7 @@
 import { onMounted, onBeforeUnmount } from 'vue';
 import RecipientsModal from './components/modals/RecipientsModal.vue';
 import LinksModal from './components/modals/LinksModal.vue';
+import BotPromptModal from './components/modals/BotPromptModal.vue';
 import EditMessageModal from './components/modals/EditMessageModal.vue';
 import WebSocketService from '@/services/ws/WebSocketService';
 
@@ -49,6 +50,7 @@ onBeforeUnmount(() => {
     <RecipientsModal />
     <LinksModal />
     <EditMessageModal />
+    <BotPromptModal />
   </div>
 </template>
 

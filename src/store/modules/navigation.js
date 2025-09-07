@@ -36,6 +36,9 @@ export default {
     messageForLinks: null,
     editMessageModalVisible: false,
     messageToEdit: null,
+    // Global Bot Prompt modal state
+    botPromptModalVisible: false,
+    botPromptTargetMessageId: null,
   },
   
   mutations: {
@@ -204,6 +207,15 @@ export default {
     SET_MESSAGE_TO_EDIT(state, message) {
       state.messageToEdit = message;
     },
+    // Global Bot Prompt modal mutations
+    SHOW_BOT_PROMPT_MODAL(state, { messageId }) {
+      state.botPromptModalVisible = true;
+      state.botPromptTargetMessageId = messageId;
+    },
+    HIDE_BOT_PROMPT_MODAL(state) {
+      state.botPromptModalVisible = false;
+      state.botPromptTargetMessageId = null;
+    },
   },
   
   getters: {
@@ -269,6 +281,9 @@ export default {
     messageForLinks: (state) => state.messageForLinks,
     editMessageModalVisible: (state) => state.editMessageModalVisible,
     messageToEdit: (state) => state.messageToEdit,
+    // Bot Prompt modal getters
+    botPromptModalVisible: (state) => state.botPromptModalVisible,
+    botPromptTargetMessageId: (state) => state.botPromptTargetMessageId,
   },
   
   actions: {
@@ -533,6 +548,13 @@ export default {
     hideEditMessageModal({ commit }) {
       commit('SET_EDIT_MESSAGE_MODAL_VISIBLE', false);
       commit('SET_MESSAGE_TO_EDIT', null);
+    },
+    // Bot Prompt modal actions
+    showBotPromptModal({ commit }, { messageId }) {
+      commit('SHOW_BOT_PROMPT_MODAL', { messageId });
+    },
+    hideBotPromptModal({ commit }) {
+      commit('HIDE_BOT_PROMPT_MODAL');
     },
   }
 };

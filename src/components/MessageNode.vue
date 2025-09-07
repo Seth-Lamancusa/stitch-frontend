@@ -380,6 +380,17 @@ export default {
         disabled: () => !currentUser.value
       },
       {
+        id: 'prompt',
+        emoji: '🤖',
+        text: 'Prompt',
+        desktopVisible: true,
+        mobileVisible: true,
+        adminOnly: false,
+        handler: openPromptModal,
+        condition: () => !props.inListView,
+        disabled: () => !currentUser.value
+      },
+      {
         id: 'save',
         emoji: '🔖',
         text: isMessageSaved.value ? 'Saved' : 'Save',
@@ -397,8 +408,8 @@ export default {
         id: 'copy-text',
         emoji: '📝',
         text: isTextCopied.value ? 'Copied!' : 'Copy',
-        desktopVisible: true,
-        mobileVisible: true,
+        desktopVisible: false,
+        mobileVisible: false,
         adminOnly: false,
         handler: copyMessageText,
         condition: () => !props.inListView,
@@ -561,6 +572,13 @@ export default {
       const result = publicValue === 1 || publicValue === true;
       return result;
     });
+    
+    // Insert openPromptModal here
+    const openPromptModal = () => {
+      store.dispatch('navigation/clearReplyingTo');
+      dismissMobileKeyboard();
+      store.dispatch('navigation/showBotPromptModal', { messageId: props.message.id });
+    };
     
     const isUserRecipient = computed(() => {
       if (!currentUser.value) return false;

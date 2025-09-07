@@ -24,6 +24,10 @@ const WebSocketService = {
   unsubscribeFunction: null,
   connectionAttempts: 0,
   maxReconnectAttempts: 5,
+  // Prevent hammering refresh/connect on handshake failures
+  refreshCooldownMs: 2 * 60 * 1000, // 2 minutes
+  lastRefreshAttemptAt: null,
+  isConnecting: false,
   
   // Activity-based reconnect
   lastActivityReconnectAt: 0,
@@ -201,6 +205,13 @@ const WebSocketService = {
       this.warn('Skipping token refresh while offline');
       return;
     }
+    const now = Date.now();
+    if (this.lastRefreshAttemptAt && (now - this.lastRefreshAttemptAt) < this.refreshCooldownMs) {
+      this.warn('Refresh cooldown active; scheduling backoff reconnect instead of refreshing again');
+      const tokenToUse = this.authToken || TokenManager.accessToken;
+      this.scheduleReconnect(tokenToUse);
+      return;
+    }
     if (this.tokenRefreshInProgress) {
       this.warn('Token refresh already in progress; skipping duplicate attempt');
       return;
@@ -217,14 +228,33 @@ const WebSocketService = {
         this.error('Token refresh failed; skipping WS disconnected banner');
         return;
       }
-      this.log('Token refresh succeeded, reconnecting with new token');
-      await this.connectUser(newAccess);
+      this.log('Token refresh succeeded, scheduling reconnect with new token');
+      this.scheduleReconnect(newAccess);
     } catch (e) {
       this.error('Error during refresh-and-reconnect:', e);
     }
     finally {
       this.tokenRefreshInProgress = false;
       this.lastTokenRefresh = Date.now();
+      this.lastRefreshAttemptAt = Date.now();
+    }
+  },
+
+  // Centralized backoff-aware reconnect scheduler
+  scheduleReconnect(token) {
+    try {
+      if (!this.backoff) this.backoff = new ReconnectBackoff({ initialMs: 1000, maxMs: 30000, jitterMs: 500, maxAttempts: this.maxReconnectAttempts });
+      const delay = this.backoff.nextDelay();
+      if (delay == null) { this.error(`Max reconnection attempts (${this.maxReconnectAttempts}) exceeded`); return; }
+      setTimeout(async () => {
+        try {
+          await this.connectUser(token);
+        } catch (err) {
+          this.error(`Reconnection attempt failed: ${err.message}`);
+        }
+      }, delay);
+    } catch (e) {
+      this.warn('scheduleReconnect failed', e?.message || e);
     }
   },
   
@@ -488,6 +518,12 @@ const WebSocketService = {
       return Promise.resolve();
     }
 
+    // Prevent overlapping connect attempts with the same token
+    if (this.isConnecting && this.authToken === token && this.connectionPromise) {
+      this.warn('Connect already in progress; reusing existing promise');
+      return this.connectionPromise;
+    }
+
     // Ensure client exists
     if (!this.client) {
       this.client = new WebSocketClient({
@@ -512,6 +548,7 @@ const WebSocketService = {
         this.connectionAttempts = 0;
         try { this.backoff?.reset(); } catch (e) {}
         try { store.dispatch('messages/fetchUnreadMessageCount'); } catch (e) {}
+        this.isConnecting = false;
       });
 
       this.client.on('json', (data) => {
@@ -537,9 +574,11 @@ const WebSocketService = {
       });
 
       this.client.on('close', (event) => {
+        this.warn('Socket closed', { code: event?.code, reason: event?.reason, wasClean: event?.wasClean });
         this.connection = null;
         this.userId = null;
         this.connectionEstablished = false;
+        this.isConnecting = false;
 
         
 
@@ -551,8 +590,14 @@ const WebSocketService = {
 
         const likelyHandshakeFailure = !this.connectionEstablished && event.code === 1006;
         if (likelyHandshakeFailure) {
-          this.error('Possible handshake/auth failure (1006). Attempting refresh and reconnect');
-          this.attemptRefreshAndReconnect();
+          this.error('Possible handshake/auth failure (1006). Attempting guarded refresh/reconnect');
+          const now = Date.now();
+          if (!this.lastRefreshAttemptAt || (now - this.lastRefreshAttemptAt) >= this.refreshCooldownMs) {
+            this.attemptRefreshAndReconnect();
+          } else {
+            const tokenToUse = this.authToken || TokenManager.accessToken;
+            this.scheduleReconnect(tokenToUse);
+          }
           return;
         }
 
@@ -563,17 +608,8 @@ const WebSocketService = {
                                this.isOnline;
         if (shouldReconnect) {
           this.connectionAttempts++;
-          if (!this.backoff) this.backoff = new ReconnectBackoff({ initialMs: 1000, maxMs: 30000, jitterMs: 500, maxAttempts: this.maxReconnectAttempts });
-          const delay = this.backoff.nextDelay();
-          if (delay == null) { this.error(`Max reconnection attempts (${this.maxReconnectAttempts}) exceeded`); return; }
-          setTimeout(async () => {
-            try {
-              const tokenToUse = this.authToken || TokenManager.accessToken;
-              await this.connectUser(tokenToUse);
-            } catch (err) {
-              this.error(`Reconnection attempt failed: ${err.message}`);
-            }
-          }, delay);
+          const tokenToUse = this.authToken || TokenManager.accessToken;
+          this.scheduleReconnect(tokenToUse);
         }
       });
 
@@ -585,6 +621,7 @@ const WebSocketService = {
     // Track token and connect
     this.authToken = token;
     this.connectionAttempts++;
+    this.isConnecting = true;
     this.connectionPromise = this.client.connect(token);
     return this.connectionPromise;
   },

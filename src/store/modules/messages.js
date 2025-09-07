@@ -544,13 +544,6 @@ export default {
           console.log('[Messages Store] Final processed recipients:', processedRecipients);
         }
         
-        // Only add the author as recipient in private messages with no recipients
-        // to ensure they can see their own message
-        if (isPrivate && processedRecipients.length === 0 && effectiveAuthor) {
-          // Add author as full recipient object
-          processedRecipients.push({ uid: effectiveAuthor, public: true });
-          console.log('[Messages Store] Added author as recipient:', effectiveAuthor);
-        }
         
         // Make API call to create the reply
         console.log('[Messages Store] Calling MessageService.sendReply with:', {
