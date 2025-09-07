@@ -10,6 +10,8 @@ export default class NetworkVisibility {
     this._boundOnline = this._handleOnline.bind(this);
     this._boundOffline = this._handleOffline.bind(this);
     this._boundVisibility = this._handleVisibility.bind(this);
+    this._boundPageShow = this._handlePageShow.bind(this);
+    this._boundPageHide = this._handlePageHide.bind(this);
     this._active = false;
   }
 
@@ -19,6 +21,9 @@ export default class NetworkVisibility {
       window.addEventListener('online', this._boundOnline);
       window.addEventListener('offline', this._boundOffline);
       document.addEventListener('visibilitychange', this._boundVisibility);
+      // Support mobile Safari/backgrounding and BFCache restores
+      window.addEventListener('pageshow', this._boundPageShow);
+      window.addEventListener('pagehide', this._boundPageHide);
     } catch (_) {}
     this._active = true;
   }
@@ -29,6 +34,8 @@ export default class NetworkVisibility {
       window.removeEventListener('online', this._boundOnline);
       window.removeEventListener('offline', this._boundOffline);
       document.removeEventListener('visibilitychange', this._boundVisibility);
+      window.removeEventListener('pageshow', this._boundPageShow);
+      window.removeEventListener('pagehide', this._boundPageHide);
     } catch (_) {}
     this._active = false;
   }
@@ -46,6 +53,16 @@ export default class NetworkVisibility {
   _handleVisibility() {
     const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
     try { hidden ? this.onHidden() : this.onVisible(); } catch (_) {}
+  }
+
+  _handlePageShow(event) {
+    // Treat BFCache restore or app foregrounding as visible
+    try { this.onVisible(); } catch (_) {}
+  }
+
+  _handlePageHide(event) {
+    // Treat tab switch, app backgrounding, or navigation away as hidden
+    try { this.onHidden(); } catch (_) {}
   }
 }
 
