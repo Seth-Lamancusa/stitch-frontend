@@ -301,9 +301,6 @@ const replyHeaderText = computed(() => {
 });
 
 // Methods
-//
-// Keep mobile keyboard open for Public toggle and avoid double toggles
-const ignoreNextClick = ref(false);
 
 const handleVisibilityPointerDown = (event) => {
   // Prevent focus from leaving the textarea (keeps mobile keyboard open)
@@ -313,16 +310,7 @@ const handleVisibilityPointerDown = (event) => {
 const handleVisibilityToggle = (source) => {
   if (!props.canInteract) return;
 
-  if (source === 'click' && ignoreNextClick.value) {
-    return;
-  }
-
   isPublic.value = !isPublic.value;
-
-  if (source === 'touch') {
-    ignoreNextClick.value = true;
-    setTimeout(() => { ignoreNextClick.value = false; }, 400);
-  }
 
   // Maintain keyboard visibility by restoring textarea focus on mobile
   if (typeof window !== 'undefined' && window.innerWidth <= 768 && replyTextarea.value) {
