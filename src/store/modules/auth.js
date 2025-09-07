@@ -1,5 +1,6 @@
 import WebSocketService from '../../services/ws/WebSocketService'
 import TokenManager from '../../services/TokenManager'
+import axios from 'axios'
 import { parseScopes, hasScope as hasScopeUtil, hasAnyScope as hasAnyScopeUtil } from '../../utils/scopes'
 
 // ------------------------------------------------------------
@@ -60,12 +61,9 @@ export default {
         const token = localStorage.getItem('auth_token');
         if (!token) throw new Error('Not authenticated');
 
-        const resp = await fetch('/api/users/me', {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!resp.ok) {
-          const data = await resp.json().catch(() => ({}));
+        const resp = await axios.delete('/api/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!resp || resp.status < 200 || resp.status >= 300) {
+          const data = (resp && resp.data) || {};
           throw new Error(data.detail || 'Failed to delete account');
         }
 
@@ -95,18 +93,32 @@ export default {
           commit('SET_USER', null);
           return;
         }
-        const response = await fetch('/api/users/me', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!response.ok) {
-          console.warn('[AUTH] /users/me returned non-OK; clearing tokens and user');
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('refresh_token');
-          commit('SET_USER', null);
-          WebSocketService.cleanup();
-          return;
+        let response;
+        try {
+          response = await axios.get('/api/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
+        } catch (err) {
+          // Attempt refresh then retry once
+          try {
+            const newAccess = await TokenManager.refreshAccessToken();
+            if (!newAccess) {
+              console.warn('[AUTH] /users/me non-OK and refresh failed; clearing tokens');
+              localStorage.removeItem('auth_token');
+              localStorage.removeItem('refresh_token');
+              commit('SET_USER', null);
+              WebSocketService.cleanup();
+              return;
+            }
+            response = await axios.get('/api/users/me', { headers: { 'Authorization': `Bearer ${newAccess}` } });
+          } catch (_e) {
+            console.warn('[AUTH] /users/me retry after refresh failed; clearing tokens');
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('refresh_token');
+            commit('SET_USER', null);
+            WebSocketService.cleanup();
+            return;
+          }
         }
-        const userData = await response.json();
+        const userData = response && response.data ? response.data : {};
         const contacts = Array.isArray(userData.contacts) ? userData.contacts : [];
         const primaryEmail = contacts.find(c => c.type === 'email');
         const primaryEmailValue = primaryEmail && typeof primaryEmail.value === 'string' && primaryEmail.value.trim() ? primaryEmail.value : null;
@@ -158,17 +170,10 @@ export default {
     async searchUsers({ }, query) {
       try {
         const token = localStorage.getItem('auth_token');
-        const response = await fetch(`/api/users/search?query=${encodeURIComponent(query)}&limit=15`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
+        const response = await axios.get(`/api/users/search?query=${encodeURIComponent(query)}&limit=15`, {
+          headers: { 'Authorization': `Bearer ${token}` }
         });
-
-        if (!response.ok) {
-          throw new Error(`Search failed: ${response.statusText}`);
-        }
-
-        const data = await response.json();
+        const data = response && response.data ? response.data : {};
         return data.users || [];
       } catch (error) {
         console.error('Error searching users:', error);
@@ -180,29 +185,23 @@ export default {
     async updateProfile({ commit }, profileData) {
       try {
         const token = localStorage.getItem('auth_token');
-        const response = await fetch('/api/users/profile', {
-          method: 'POST',
+        const response = await axios.post('/api/users/profile', profileData, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(profileData)
+          }
         });
-
-        if (!response.ok) {
-          const errorData = await response.json();
+        if (!response || response.status < 200 || response.status >= 300) {
+          const errorData = (response && response.data) || {};
           throw new Error(errorData.detail || 'Failed to update profile');
         }
-
-        const result = await response.json();
+        const result = response.data;
 
         // Immediately refresh full user state (including contacts/notify flags) from /me
         try {
-          const meResp = await fetch('/api/users/me', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (meResp.ok) {
-            const userData = await meResp.json();
+          const meResp = await axios.get('/api/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
+          if (meResp && meResp.status >= 200 && meResp.status < 300) {
+            const userData = meResp.data;
             const contacts = Array.isArray(userData.contacts) ? userData.contacts : [];
             const primaryEmail = contacts.find(c => c.type === 'email');
             const primaryEmailValue = primaryEmail && typeof primaryEmail.value === 'string' && primaryEmail.value.trim() ? primaryEmail.value : null;
