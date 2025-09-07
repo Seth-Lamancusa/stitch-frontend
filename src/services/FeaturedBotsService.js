@@ -1,6 +1,6 @@
 // Lightweight service to fetch featured bots. Falls back to mocked data.
 // Shape: { uid: string, display_name: string, user_tag: string, advanced: boolean }
-
+import axios from 'axios';
 const MOCK_FEATURED_BOTS = [
   { uid: '39daf2ca', display_name: 'Claude', user_tag: 'claude', advanced: false },
   { uid: '2ae49e27', display_name: 'ChatGPT', user_tag: 'chatgpt', advanced: false },
@@ -11,13 +11,9 @@ const MOCK_FEATURED_BOTS = [
 
 async function fetchFeaturedBotsFromApi() {
   try {
-    const response = await fetch('/featured_bots', { credentials: 'include' });
-    if (response.ok) {
-      const data = await response.json();
-      if (Array.isArray(data)) {
-        return data;
-      }
-    }
+    const response = await axios.get('/featured_bots', { withCredentials: true });
+    const data = response && response.data ? response.data : null;
+    if (Array.isArray(data)) return data;
   } catch (_err) {
     // Silently fall back to mock
   }

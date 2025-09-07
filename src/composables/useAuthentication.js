@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useStore } from 'vuex';
 import TokenManager from '../services/TokenManager';
+import axios from 'axios';
 
 /**
  * Composable for managing authentication state and operations
@@ -38,16 +39,8 @@ export function useAuthentication() {
   const signInWithPassword = async (identifier, password) => {
     try {
       error.value = null;
-      const resp = await fetch('/api/auth/password/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier, password })
-      });
-      if (!resp.ok) {
-        const info = await resp.json().catch(() => ({}));
-        throw new Error(info.detail || 'Invalid credentials');
-      }
-      const data = await resp.json();
+      const resp = await axios.post('/api/auth/password/login', { identifier, password });
+      const data = resp && resp.data ? resp.data : {};
       const token = data.access_token;
       if (!token) throw new Error('Missing access token');
       TokenManager.accessToken = token;
@@ -61,16 +54,8 @@ export function useAuthentication() {
 
   const registerWithPassword = async ({ email, password, user_tag, display_name, phone, endpoint, notify }) => {
     error.value = null;
-    const resp = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, user_tag, display_name, phone, endpoint, notify })
-    });
-    if (!resp.ok) {
-      const info = await resp.json().catch(() => ({}));
-      throw new Error(info.detail || 'Registration failed');
-    }
-    const data = await resp.json();
+    const resp = await axios.post('/api/auth/register', { email, password, user_tag, display_name, phone, endpoint, notify });
+    const data = resp && resp.data ? resp.data : {};
     const token = data.access_token;
     if (!token) throw new Error('Missing access token');
     TokenManager.accessToken = token;
@@ -80,19 +65,12 @@ export function useAuthentication() {
 
   const changePassword = async ({ current_password, new_password }) => {
     error.value = null;
-    const resp = await fetch('/api/auth/password/change', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
+    const resp = await axios.post('/api/auth/password/change', { current_password, new_password }, {
+      headers: {
         'Authorization': `Bearer ${TokenManager.accessToken}`
-      },
-      body: JSON.stringify({ current_password, new_password })
+      }
     });
-    if (!resp.ok) {
-      const info = await resp.json().catch(() => ({}));
-      throw new Error(info.detail || 'Password change failed');
-    }
-    const data = await resp.json();
+    const data = resp && resp.data ? resp.data : {};
     const token = data.access_token;
     if (!token) throw new Error('Missing access token');
     TokenManager.accessToken = token;
@@ -103,37 +81,27 @@ export function useAuthentication() {
   // Password reset: request and apply with code (email-only)
   const requestPasswordResetCode = async (email, user_tag) => {
     error.value = null;
-    const resp = await fetch('/api/auth/password/reset/request', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, user_tag })
-    });
-    if (!resp.ok) {
-      // Surface 409 specifically for multiple accounts
-      if (resp.status === 409) {
-        throw new Error('multiple_accounts_for_email');
-      }
-      const info = await resp.json().catch(() => ({}));
+    try {
+      const resp = await axios.post('/api/auth/password/reset/request', { email, user_tag });
+      return resp && resp.data ? resp.data : {};
+    } catch (e) {
+      if (e?.response?.status === 409) throw new Error('multiple_accounts_for_email');
+      const info = e?.response?.data || {};
       throw new Error(info.detail || 'Failed to request reset code');
     }
-    return await resp.json();
   };
 
   const resetPasswordWithCode = async ({ email, user_tag, code, new_password }) => {
     error.value = null;
-    const resp = await fetch('/api/auth/password/reset', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, user_tag, code, new_password })
-    });
-    if (!resp.ok) {
-      if (resp.status === 409) {
-        throw new Error('multiple_accounts_for_email');
-      }
-      const info = await resp.json().catch(() => ({}));
+    let resp;
+    try {
+      resp = await axios.post('/api/auth/password/reset', { email, user_tag, code, new_password });
+    } catch (e) {
+      if (e?.response?.status === 409) throw new Error('multiple_accounts_for_email');
+      const info = e?.response?.data || {};
       throw new Error(info.detail || 'Password reset failed');
     }
-    const data = await resp.json();
+    const data = resp && resp.data ? resp.data : {};
     const token = data.access_token;
     if (!token) throw new Error('Missing access token');
     TokenManager.accessToken = token;
@@ -144,36 +112,18 @@ export function useAuthentication() {
   // Contact verification: email and phone
   const requestEmailVerification = async (email) => {
     const token = localStorage.getItem('auth_token');
-    const resp = await fetch('/api/auth/contacts/email/request', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ email })
+    const resp = await axios.post('/api/auth/contacts/email/request', { email }, {
+      headers: { 'Authorization': `Bearer ${token}` }
     });
-    if (!resp.ok) {
-      const info = await resp.json().catch(() => ({}));
-      throw new Error(info.detail || 'Failed to request email verification');
-    }
-    return await resp.json();
+    return resp && resp.data ? resp.data : {};
   };
 
   const verifyEmailWithCode = async ({ email, code }) => {
     const token = localStorage.getItem('auth_token');
-    const resp = await fetch('/api/auth/contacts/email/verify', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ email, code })
+    const resp = await axios.post('/api/auth/contacts/email/verify', { email, code }, {
+      headers: { 'Authorization': `Bearer ${token}` }
     });
-    if (!resp.ok) {
-      const info = await resp.json().catch(() => ({}));
-      throw new Error(info.detail || 'Failed to verify email');
-    }
-    const result = await resp.json();
+    const result = resp && resp.data ? resp.data : {};
     // Email verification may add msg.write to user scopes; refresh access token to pick up new scopes
     await TokenManager.refreshAccessToken();
     await store.dispatch('auth/validateExistingToken');
@@ -182,36 +132,18 @@ export function useAuthentication() {
 
   const requestPhoneVerification = async (phone) => {
     const token = localStorage.getItem('auth_token');
-    const resp = await fetch('/api/auth/contacts/phone/request', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ phone })
+    const resp = await axios.post('/api/auth/contacts/phone/request', { phone }, {
+      headers: { 'Authorization': `Bearer ${token}` }
     });
-    if (!resp.ok) {
-      const info = await resp.json().catch(() => ({}));
-      throw new Error(info.detail || 'Failed to request phone verification');
-    }
-    return await resp.json();
+    return resp && resp.data ? resp.data : {};
   };
 
   const verifyPhoneWithCode = async ({ phone, code }) => {
     const token = localStorage.getItem('auth_token');
-    const resp = await fetch('/api/auth/contacts/phone/verify', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ phone, code })
+    const resp = await axios.post('/api/auth/contacts/phone/verify', { phone, code }, {
+      headers: { 'Authorization': `Bearer ${token}` }
     });
-    if (!resp.ok) {
-      const info = await resp.json().catch(() => ({}));
-      throw new Error(info.detail || 'Failed to verify phone');
-    }
-    const result = await resp.json();
+    const result = resp && resp.data ? resp.data : {};
     await store.dispatch('auth/validateExistingToken');
     return result;
   };
@@ -219,36 +151,18 @@ export function useAuthentication() {
   // Endpoint verification (request + verify)
   const requestEndpointVerification = async (endpointUrl) => {
     const token = localStorage.getItem('auth_token');
-    const resp = await fetch('/api/auth/contacts/endpoint/request', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ endpoint: endpointUrl })
+    const resp = await axios.post('/api/auth/contacts/endpoint/request', { endpoint: endpointUrl }, {
+      headers: { 'Authorization': `Bearer ${token}` }
     });
-    if (!resp.ok) {
-      const info = await resp.json().catch(() => ({}));
-      throw new Error(info.detail || 'Failed to request endpoint verification');
-    }
-    return await resp.json();
+    return resp && resp.data ? resp.data : {};
   };
 
   const verifyEndpointWithChallenge = async ({ endpoint }) => {
     const token = localStorage.getItem('auth_token');
-    const resp = await fetch('/api/auth/contacts/endpoint/verify', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ endpoint })
+    const resp = await axios.post('/api/auth/contacts/endpoint/verify', { endpoint }, {
+      headers: { 'Authorization': `Bearer ${token}` }
     });
-    if (!resp.ok) {
-      const info = await resp.json().catch(() => ({}));
-      throw new Error(info.detail || 'Failed to verify endpoint');
-    }
-    const result = await resp.json();
+    const result = resp && resp.data ? resp.data : {};
     await store.dispatch('auth/validateExistingToken');
     return result;
   };
