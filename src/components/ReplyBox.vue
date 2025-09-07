@@ -48,7 +48,9 @@
           <!-- Public visibility globe toggle -->
           <button 
             class="toolbar-control meta-pill visibility-globe-toggle" 
-            @click="isPublic = !isPublic"
+            @mousedown.prevent="handleVisibilityPointerDown"
+            @touchstart.stop.prevent="handleVisibilityToggle('touch')"
+            @click.stop.prevent="handleVisibilityToggle('click')"
             :class="{ 'active': isPublic }"
             :disabled="!canInteract"
             :aria-pressed="isPublic"
@@ -299,6 +301,39 @@ const replyHeaderText = computed(() => {
 });
 
 // Methods
+//
+// Keep mobile keyboard open for Public toggle and avoid double toggles
+const ignoreNextClick = ref(false);
+
+const handleVisibilityPointerDown = (event) => {
+  // Prevent focus from leaving the textarea (keeps mobile keyboard open)
+  event.preventDefault();
+};
+
+const handleVisibilityToggle = (source) => {
+  if (!props.canInteract) return;
+
+  if (source === 'click' && ignoreNextClick.value) {
+    return;
+  }
+
+  isPublic.value = !isPublic.value;
+
+  if (source === 'touch') {
+    ignoreNextClick.value = true;
+    setTimeout(() => { ignoreNextClick.value = false; }, 400);
+  }
+
+  // Maintain keyboard visibility by restoring textarea focus on mobile
+  if (typeof window !== 'undefined' && window.innerWidth <= 768 && replyTextarea.value) {
+    try {
+      replyTextarea.value.focus({ preventScroll: true });
+    } catch (e) {
+      replyTextarea.value.focus();
+    }
+    isKeyboardVisible.value = true;
+  }
+};
 
 const ensureReplyingActive = () => {
   if (!isReplying.value && props.targetId) {
@@ -971,9 +1006,11 @@ defineExpose({
   min-height: 36px;
 }
 
-.meta-pill:hover:not(:disabled) {
-  background-color: var(--color-hover-overlay);
-  border-color: var(--color-border-hover);
+@media (hover: hover) and (pointer: fine) {
+  .meta-pill:hover:not(:disabled) {
+    background-color: var(--color-hover-overlay);
+    border-color: var(--color-border-hover);
+  }
 }
 
 .meta-pill:disabled {
@@ -1003,6 +1040,18 @@ defineExpose({
 
 .visibility-globe-toggle.active .meta-pill__icon {
   filter: none;
+}
+/* Stabilize active state styles and avoid sticky hover color on touch */
+.visibility-globe-toggle:focus { outline: none; }
+.visibility-globe-toggle:focus-visible {
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 79, 140, 255), 0.2);
+}
+@media (hover: hover) and (pointer: fine) {
+  .visibility-globe-toggle.active:hover {
+    background-color: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-text-inverse);
+  }
 }
 
 /* Textarea container */
