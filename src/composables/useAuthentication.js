@@ -47,35 +47,76 @@ export function useAuthentication() {
       if (data.refresh_token) TokenManager.refreshToken = data.refresh_token;
       await store.dispatch('auth/validateExistingToken');
     } catch (e) {
-      error.value = e.message;
-      throw e;
+      const status = e?.response?.status;
+      const info = e?.response?.data || {};
+      if (status === 409 && info?.detail === 'multiple_accounts_for_email') {
+        // Surface a code the UI already knows how to render nicely
+        const friendly = 'multiple_accounts_for_email';
+        error.value = friendly;
+        throw new Error(friendly);
+      }
+      if (status === 401 && info?.detail === 'invalid_credentials') {
+        const friendly = 'Invalid tag/email/phone or password';
+        error.value = friendly;
+        throw new Error(friendly);
+      }
+      const fallback = info?.detail || e?.message || 'Login failed';
+      error.value = fallback;
+      throw new Error(fallback);
     }
   };
 
   const registerWithPassword = async ({ email, password, user_tag, display_name, phone, endpoint, notify }) => {
     error.value = null;
-    const resp = await axios.post('/api/auth/register', { email, password, user_tag, display_name, phone, endpoint, notify });
-    const data = resp && resp.data ? resp.data : {};
-    const token = data.access_token;
-    if (!token) throw new Error('Missing access token');
-    TokenManager.accessToken = token;
-    if (data.refresh_token) TokenManager.refreshToken = data.refresh_token;
-    await store.dispatch('auth/validateExistingToken');
+    try {
+      const resp = await axios.post('/api/auth/register', { email, password, user_tag, display_name, phone, endpoint, notify });
+      const data = resp && resp.data ? resp.data : {};
+      const token = data.access_token;
+      if (!token) throw new Error('Missing access token');
+      TokenManager.accessToken = token;
+      if (data.refresh_token) TokenManager.refreshToken = data.refresh_token;
+      await store.dispatch('auth/validateExistingToken');
+    } catch (e) {
+      if (e?.response?.status === 409) {
+        // Backend returns 409 when user_tag is already taken
+        throw new Error('user_tag_in_use');
+      }
+      const info = e?.response?.data || {};
+      throw new Error(info.detail || e.message || 'Registration failed');
+    }
   };
 
   const changePassword = async ({ current_password, new_password }) => {
     error.value = null;
-    const resp = await axios.post('/api/auth/password/change', { current_password, new_password }, {
-      headers: {
-        'Authorization': `Bearer ${TokenManager.accessToken}`
+    try {
+      const resp = await axios.post('/api/auth/password/change', { current_password, new_password }, {
+        headers: {
+          'Authorization': `Bearer ${TokenManager.accessToken}`
+        }
+      });
+      const data = resp && resp.data ? resp.data : {};
+      const token = data.access_token;
+      if (!token) throw new Error('Missing access token');
+      TokenManager.accessToken = token;
+      if (data.refresh_token) TokenManager.refreshToken = data.refresh_token;
+      await store.dispatch('auth/validateExistingToken');
+    } catch (e) {
+      const status = e?.response?.status;
+      const info = e?.response?.data || {};
+      if (status === 401 && info?.detail === 'invalid_current_password') {
+        const friendly = 'Invalid current password';
+        error.value = friendly;
+        throw new Error(friendly);
       }
-    });
-    const data = resp && resp.data ? resp.data : {};
-    const token = data.access_token;
-    if (!token) throw new Error('Missing access token');
-    TokenManager.accessToken = token;
-    if (data.refresh_token) TokenManager.refreshToken = data.refresh_token;
-    await store.dispatch('auth/validateExistingToken');
+      if (status === 400 && info?.detail === 'weak_password') {
+        const friendly = 'Password must be 8+ characters with a letter and number';
+        error.value = friendly;
+        throw new Error(friendly);
+      }
+      const fallback = info?.detail || e?.message || 'Change password failed';
+      error.value = fallback;
+      throw new Error(fallback);
+    }
   };
 
   // Password reset: request and apply with code (email-only)
