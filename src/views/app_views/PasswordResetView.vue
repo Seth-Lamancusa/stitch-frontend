@@ -6,12 +6,12 @@
       <input v-model="email" type="email" placeholder="you@example.com" />
       <div v-if="needsTag" class="tag-row">
         <label>User tag</label>
-        <input v-model="userTag" type="text" placeholder="your_tag (without @)" />
+        <input v-model="userTag" @input="onTagInput" type="text" placeholder="your_tag (without @)" />
         <p class="hint">Multiple accounts use this email. Enter your @tag to continue.</p>
       </div>
       <div class="row">
         <input v-model="code" type="text" placeholder="6-digit code" />
-        <button class="secondary" :disabled="busy || cooldown>0 || !email" @click="requestCode">
+        <button class="secondary" :disabled="busy || cooldown>0 || !email || (needsTag && !hasValidTag)" @click="requestCode">
           {{ cooldown>0 ? `Resend in ${cooldown}s` : 'Get code' }}
         </button>
       </div>
@@ -20,14 +20,14 @@
       <p class="hint">Minimum 8 characters, must include a letter and a number.</p>
       <p v-if="error" class="error">{{ error }}</p>
       <div class="actions">
-        <button class="primary" :disabled="busy" @click="reset">Reset password</button>
+        <button class="primary" :disabled="busy || (needsTag && !hasValidTag)" @click="reset">Reset password</button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthentication } from '@/composables/useAuthentication'
 
@@ -44,12 +44,27 @@ const error = ref('')
 const cooldown = ref(0)
 let timer = null
 
+const normalizeTag = (val) => {
+  let s = String(val || '')
+  // Remove leading '@'s
+  while (s.startsWith('@')) s = s.slice(1)
+  // Strip disallowed characters
+  s = s.replace(/[^A-Za-z0-9_-]/g, '')
+  return s
+}
+
+const hasValidTag = computed(() => normalizeTag(userTag.value).length > 0)
+
+const onTagInput = () => {
+  userTag.value = normalizeTag(userTag.value)
+}
+
 const requestCode = async () => {
   busy.value = true
   error.value = ''
   try {
     if (!email.value) throw new Error('Email required')
-    await requestPasswordResetCode(email.value, needsTag.value ? userTag.value : undefined)
+    await requestPasswordResetCode(email.value, needsTag.value ? normalizeTag(userTag.value) : undefined)
     cooldown.value = 30
     if (timer) clearInterval(timer)
     timer = setInterval(() => {
@@ -58,8 +73,14 @@ const requestCode = async () => {
     }, 1000)
   } catch (e) {
     if (e && e.message === 'multiple_accounts_for_email') {
-      needsTag.value = true
-      error.value = 'Multiple accounts match this email. Enter your @tag to continue.'
+      if (!needsTag.value) {
+        needsTag.value = true
+        error.value = 'Multiple accounts match this email. Enter your @tag to continue.'
+      } else if (hasValidTag.value) {
+        error.value = 'That tag does not match this email. Check spelling.'
+      } else {
+        error.value = 'Enter your @tag to continue.'
+      }
     } else {
       error.value = e.message || 'Failed to request code'
     }
@@ -73,12 +94,12 @@ const reset = async () => {
   error.value = ''
   try {
     if (!email.value || !code.value || !newPassword.value) throw new Error('All fields required')
-    await resetPasswordWithCode({ email: email.value, user_tag: needsTag.value ? userTag.value : undefined, code: code.value, new_password: newPassword.value })
+    await resetPasswordWithCode({ email: email.value, user_tag: needsTag.value ? normalizeTag(userTag.value) : undefined, code: code.value, new_password: newPassword.value })
     router.push('/inbox')
   } catch (e) {
     if (e && e.message === 'multiple_accounts_for_email') {
       needsTag.value = true
-      error.value = 'Multiple accounts match this email. Enter your @tag to continue.'
+      error.value = hasValidTag.value ? 'That tag does not match this email. Check spelling.' : 'Multiple accounts match this email. Enter your @tag to continue.'
     } else {
       error.value = e.message || 'Password reset failed'
     }

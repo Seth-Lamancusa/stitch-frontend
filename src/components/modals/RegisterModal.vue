@@ -25,6 +25,7 @@
             spellcheck="false"
             @input="onTagInput"
           />
+          <p v-if="tagError" class="error">{{ tagError }}</p>
           <label for="register-nickname">Display name</label>
           <input v-model="displayName" type="text" placeholder="Display name" id="register-nickname" name="nickname" autocomplete="nickname" />
           <label for="register-password">Password</label>
@@ -43,14 +44,14 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="primary" :disabled="busy" @click="submit">Create account</button>
+        <button class="primary" :disabled="busy || !canSubmit" @click="submit">Create account</button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useAuthentication } from '@/composables/useAuthentication'
 
 const props = defineProps({ isOpen: { type: Boolean, default: false } })
@@ -65,6 +66,7 @@ const password = ref('')
 const busy = ref(false)
 const error = ref('')
 const notify = ref({ email: false, phone: false, endpoint: false })
+const tagError = ref('')
 
 const { registerWithPassword } = useAuthentication()
 
@@ -79,19 +81,34 @@ watch(() => props.isOpen, (open) => {
     busy.value = false
     error.value = ''
     notify.value = { email: false, phone: false, endpoint: false }
+    tagError.value = ''
   }
 })
 
 const onClose = () => emit('close')
+
+const canSubmit = computed(() => {
+  const hasEmailPw = !!email.value && !!password.value
+  return hasEmailPw && !tagError.value
+})
+
+const validateTag = () => {
+  tagError.value = ''
+  const tag = (userTag.value || '').trim()
+  if (!tag) return true
+  if (!/^[A-Za-z0-9_-]+$/.test(tag)) {
+    tagError.value = 'Tag must contain only letters, numbers, underscores, and hyphens'
+    return false
+  }
+  return true
+}
 
 const submit = async () => {
   busy.value = true
   error.value = ''
   try {
     if (!email.value || !password.value) throw new Error('Email and password required')
-    if (userTag.value && !/^[A-Za-z0-9_-]+$/.test(userTag.value)) {
-      throw new Error('Tag must contain only letters, numbers, underscores, and hyphens')
-    }
+    if (!validateTag()) throw new Error(tagError.value)
     await registerWithPassword({
       email: email.value,
       password: password.value,
@@ -104,7 +121,12 @@ const submit = async () => {
     emit('success')
     emit('close')
   } catch (e) {
-    error.value = e.message || 'Registration failed'
+    if ((e && e.message) === 'user_tag_in_use') {
+      tagError.value = 'That tag is already taken'
+      error.value = ''
+    } else {
+      error.value = e.message || 'Registration failed'
+    }
   } finally {
     busy.value = false
   }
@@ -116,8 +138,8 @@ const selectNotify = (channel) => {
 }
 
 const onTagInput = () => {
-  // Strip any disallowed characters proactively
   userTag.value = (userTag.value || '').replace(/[^A-Za-z0-9_-]/g, '')
+  validateTag()
 }
 </script>
 

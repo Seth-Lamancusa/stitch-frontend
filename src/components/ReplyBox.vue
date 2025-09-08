@@ -212,6 +212,7 @@ const showSearchResults = ref(false);
 // Bottom sheet state
 const isKeyboardVisible = ref(false);
 const showSendSuccess = ref(false);
+const isReplyBoxClosing = ref(false);
 
 // Touch gesture state
 const touchStartY = ref(0);
@@ -220,6 +221,7 @@ const dragDistance = ref(0);
 
 // UI state
 const showRecipientSelector = ref(false);
+const showBotModal = ref(false);
 
 // Textarea expansion state
 const isTextareaExpanded = ref(false);
@@ -245,6 +247,7 @@ const isPublic = computed({
 const recipients = computed(() => store.getters['navigation/replyRecipients']);
 const replyAddToAncestors = computed(() => store.getters['navigation/replyAddToAncestors']);
 const isReplying = computed(() => store.getters['navigation/isReplying']);
+const botPromptModalVisible = computed(() => store.getters['navigation/botPromptModalVisible']);
 
 // Centralized validation logic
 const canSendReply = computed(() => {
@@ -341,10 +344,19 @@ const focusTextarea = () => {
 
 const hideBottomSheet = () => {
   isKeyboardVisible.value = false;
-  
-  // Clear replying state if not new thread
-  if (!props.isNewThread) {
-    store.dispatch('navigation/clearReplyingTo');
+
+  if (isReplying.value || props.isNewThread) {
+    isReplyBoxClosing.value = true;
+    setTimeout(() => {
+      isReplyBoxClosing.value = false;
+      if (!props.isNewThread) {
+        store.dispatch('navigation/clearReplyingTo');
+      }
+    }, 150);
+  } else {
+    if (!props.isNewThread) {
+      store.dispatch('navigation/clearReplyingTo');
+    }
   }
 };
 
@@ -720,7 +732,7 @@ const closeRecipientSelector = (event) => {
 // Handle clicks outside reply box
 const handleClickOutside = (event) => {
   // Don't close if any modal is open
-  if (showRecipientSelector.value || showBotModal.value) {
+  if (showRecipientSelector.value || botPromptModalVisible.value) {
     return;
   }
   
