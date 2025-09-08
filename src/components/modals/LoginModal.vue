@@ -8,7 +8,7 @@
       <div class="modal-content">
         <div class="panel">
           <label>Tag, Email, or Phone</label>
-          <input v-model="identifier" type="text" placeholder="@tag, email, or phone" />
+          <input v-model="identifier" type="text" placeholder="tag, email, or phone" />
           <label>Password</label>
           <input v-model="password" type="password" placeholder="••••••••" @keyup.enter="submitPassword" />
           <p class="hint">If your email is used by multiple accounts, sign in with your @tag.</p>
@@ -44,6 +44,23 @@ const error = ref('')
 const store = useStore()
 const { signInWithPassword } = useAuthentication()
 
+// Identifier validation
+// - tag: letters, numbers, hyphen, underscore (no leading @ in input)
+// - email: basic pattern user@host.tld
+// - phone: digits with optional leading +, 7-15 digits total
+const TAG_RE = /^[A-Za-z0-9_-]+$/
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+const PHONE_RE = /^\+?\d{7,15}$/
+
+const classifyIdentifier = (raw) => {
+  const v = String(raw || '').trim()
+  if (!v) return null
+  if (EMAIL_RE.test(v)) return 'email'
+  if (PHONE_RE.test(v)) return 'phone'
+  if (TAG_RE.test(v)) return 'tag'
+  return null
+}
+
 watch(() => props.isOpen, (open) => {
   if (open) {
     identifier.value = ''
@@ -59,7 +76,13 @@ const submitPassword = async () => {
   error.value = ''
   try {
     if (!identifier.value || !password.value) throw new Error('Identifier and password required')
-    await signInWithPassword(identifier.value, password.value)
+    const trimmed = identifier.value.trim()
+    const kind = classifyIdentifier(trimmed)
+    if (!kind) {
+      throw new Error('Enter a valid tag, email, or phone number')
+    }
+    const toSend = (kind === 'tag') ? (trimmed.startsWith('@') ? trimmed : `@${trimmed}`) : trimmed
+    await signInWithPassword(toSend, password.value)
     emit('success')
     emit('close')
   } catch (e) {
