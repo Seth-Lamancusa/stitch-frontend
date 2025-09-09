@@ -67,7 +67,10 @@ export default class WebSocketClient {
         this.socket = socket;
 
         socket.onopen = () => {
-          this._startHeartbeat();
+          // Client-side heartbeat disabled when pingIntervalMs <= 0; rely on server pings
+          if (this.pingIntervalMs > 0) {
+            this._startHeartbeat();
+          }
           this._emitter.emit('open');
           resolve();
         };
@@ -79,7 +82,7 @@ export default class WebSocketClient {
               return;
             }
             if (event.data === 'ping') {
-              socket.send('pong');
+              try { socket.send('pong'); } catch (_) {}
               this._lastPongAt = Date.now();
               return;
             }
