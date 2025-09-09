@@ -254,12 +254,13 @@ export default {
         }
         
         // Use consolidated endpoint that accepts single id or list
+        console.log('[UserService] markMessageAsRead -> POST /users/messages/mark-read', { message_id: messageId });
         const response = await apiClient.post('/users/messages/mark-read', { message_id: messageId }, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         });
-        
+        console.log('[UserService] markMessageAsRead response', { status: response?.status, data: response?.data });
         return response;
       } catch (error) {
         console.error('Error marking message as read:', error);
@@ -282,12 +283,13 @@ export default {
         }
         
         // Use consolidated endpoint that accepts list directly
+        console.log('[UserService] batchMarkAsRead -> POST /users/messages/mark-read', { ids: messageIds });
         const response = await apiClient.post('/users/messages/mark-read', messageIds, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         });
-        
+        console.log('[UserService] batchMarkAsRead response', { status: response?.status, data: response?.data });
         return response;
       } catch (error) {
         console.error('Error batch marking messages as read:', error);
@@ -309,12 +311,13 @@ export default {
           throw new Error('No authentication token available');
         }
         
+        console.log('[UserService] markMessageAsUnread -> POST /users/messages/:id/mark-unread', { message_id: messageId });
         const response = await apiClient.post(`/users/messages/${messageId}/mark-unread`, {}, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         });
-        
+        console.log('[UserService] markMessageAsUnread response', { status: response?.status, data: response?.data });
         return response;
       } catch (error) {
         console.error('Error marking message as unread:', error);
