@@ -12,7 +12,7 @@ const WebSocketService = {
   connection: null,
   connectionPromise: null,
   userId: null,
-  messageCallback: null,
+  messageListeners: new Set(),
   pingInterval: null,
   // Removed idle overlay/timer
   debugMode: false, // Trim logging by default
@@ -109,8 +109,8 @@ const WebSocketService = {
         this.isOnline = true;
         const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
         if (!isOpen) {
-          let token = TokenManager.accessToken || await this.getFreshAuthToken();
-          if (this.shouldRefreshToken()) {
+          let token = TokenManager.accessToken;
+          if (!token || this.shouldRefreshToken()) {
             try {
               const refreshed = await TokenManager.refreshAccessToken();
               if (refreshed) {
@@ -194,7 +194,7 @@ const WebSocketService = {
   },
   removeMessageSubscription() {
     if (this.unsubscribeFunction) {
-      this.log('Removing message handler');
+      this.log('Removing primary message handler');
       this.unsubscribeFunction();
       this.unsubscribeFunction = null;
     }
@@ -208,7 +208,8 @@ const WebSocketService = {
     const now = Date.now();
     if (this.lastRefreshAttemptAt && (now - this.lastRefreshAttemptAt) < this.refreshCooldownMs) {
       this.warn('Refresh cooldown active; scheduling backoff reconnect instead of refreshing again');
-      const tokenToUse = this.authToken || TokenManager.accessToken;
+      const tokenToUse = TokenManager.accessToken;
+      if (!tokenToUse) { this.warn('No token available during refresh cooldown; skipping reconnect'); return; }
       this.scheduleReconnect(tokenToUse);
       return;
     }
@@ -243,6 +244,7 @@ const WebSocketService = {
   // Centralized backoff-aware reconnect scheduler
   scheduleReconnect(token) {
     try {
+      if (!token) { this.warn('scheduleReconnect called without token; skipping'); return; }
       if (!this.backoff) this.backoff = new ReconnectBackoff({ initialMs: 1000, maxMs: 30000, jitterMs: 500, maxAttempts: this.maxReconnectAttempts });
       const delay = this.backoff.nextDelay();
       if (delay == null) { this.error(`Max reconnection attempts (${this.maxReconnectAttempts}) exceeded`); return; }
@@ -258,12 +260,7 @@ const WebSocketService = {
     }
   },
   
-  /**
-   * Retrieve auth token from localStorage
-   */
-  async getFreshAuthToken() {
-    return localStorage.getItem('auth_token');
-  },
+  
   
   /**
    * Check if token needs refresh
@@ -295,8 +292,17 @@ const WebSocketService = {
       this.log(`Initializing global connection for user ${user.uid}`);
       
       try {
-        // Get token from localStorage
-        const authToken = TokenManager.accessToken || await this.getFreshAuthToken();
+        // Get token via TokenManager exclusively
+        let authToken = TokenManager.accessToken;
+        if (!authToken || this.shouldRefreshToken()) {
+          try {
+            const refreshed = await TokenManager.refreshAccessToken();
+            if (refreshed) {
+              this.lastTokenRefresh = Date.now();
+              authToken = refreshed;
+            }
+          } catch (e) {}
+        }
         
         if (!authToken) {
           this.log('Failed to get fresh auth token');
@@ -305,9 +311,11 @@ const WebSocketService = {
         
         this.log('Got fresh auth token');
         
-        // Register message handler for store updates
+        // Register message handler for store updates via messages store action
         this.log('Registering message handler');
-        this.unsubscribeFunction = this.handleNewMessage(this.handleIncomingMessage.bind(this));
+        this.unsubscribeFunction = this.handleNewMessage((msg) => {
+          try { store.dispatch('messages/handleIncomingWsMessage', msg); } catch (e) { this.warn('dispatch handleIncomingWsMessage failed', e?.message || e); }
+        });
         
         // Set up activity listeners and idle timer
         this.setupActivityListeners();
@@ -352,6 +360,8 @@ const WebSocketService = {
     // Reset state
     this.isInitialized = false;
     this.connectionEstablished = false;
+    // Clear any dangling message listeners owned by this service
+    try { this.messageListeners && this.messageListeners.clear(); } catch (_) {}
     this.log('Cleanup completed');
   },
   
@@ -560,9 +570,13 @@ const WebSocketService = {
             return;
           }
           if (data?.type === 'new_message') {
-            if (this.messageCallback) {
-              this.messageCallback(data.data);
-            }
+            try {
+              if (this.messageListeners && this.messageListeners.size > 0) {
+                for (const cb of Array.from(this.messageListeners)) {
+                  try { cb(data.data); } catch (_) {}
+                }
+              }
+            } catch (_) {}
             return;
           }
           if (data?.type === 'error') {
@@ -585,20 +599,16 @@ const WebSocketService = {
 
         if (event.code === 1008) {
           this.error('Authentication failed (1008). Attempting refresh and reconnect');
+          this.authToken = null;
           this.attemptRefreshAndReconnect();
           return;
         }
 
         const likelyHandshakeFailure = !this.connectionEstablished && event.code === 1006;
         if (likelyHandshakeFailure) {
-          this.error('Possible handshake/auth failure (1006). Attempting guarded refresh/reconnect');
-          const now = Date.now();
-          if (!this.lastRefreshAttemptAt || (now - this.lastRefreshAttemptAt) >= this.refreshCooldownMs) {
-            this.attemptRefreshAndReconnect();
-          } else {
-            const tokenToUse = this.authToken || TokenManager.accessToken;
-            this.scheduleReconnect(tokenToUse);
-          }
+          this.error('Possible handshake/auth failure (1006). Forcing refresh-and-reconnect');
+          this.authToken = null;
+          this.attemptRefreshAndReconnect();
           return;
         }
 
@@ -609,7 +619,8 @@ const WebSocketService = {
                                this.isOnline;
         if (shouldReconnect) {
           this.connectionAttempts++;
-          const tokenToUse = this.authToken || TokenManager.accessToken;
+          const tokenToUse = TokenManager.accessToken;
+          if (!tokenToUse) { this.warn('Reconnect requested but no token available; skipping'); return; }
           this.scheduleReconnect(tokenToUse);
         }
       });
@@ -667,18 +678,14 @@ const WebSocketService = {
   // Register callback for new messages
   handleNewMessage(callback) {
     this.log(`HandleNewMessage called with callback: ${callback ? 'provided' : 'null'}`);
-    this.messageCallback = callback;
-    
+    if (callback && typeof callback === 'function') {
+      this.messageListeners.add(callback);
+    }
     // Return unsubscribe function
     return () => {
-      this.log(`Unsubscribe function called, removing message callback`);
-      this.messageCallback = null;
-      
-      // If no callback, we can disconnect
-      if (!this.messageCallback) {
-        this.log(`No active callbacks, disconnecting`);
-        this.disconnectUser();
-      }
+      this.log(`Unsubscribe called for a message listener`);
+      try { this.messageListeners.delete(callback); } catch (_) {}
+      // Do not auto-disconnect here; lifecycle is managed by initialize/cleanup
     };
   },
   
@@ -698,7 +705,16 @@ const WebSocketService = {
       const user = store.getters['auth/user'];
       if (user) {
         try {
-          const token = await this.getFreshAuthToken();
+          let token = TokenManager.accessToken;
+          if (!token || this.shouldRefreshToken()) {
+            try {
+              const refreshed = await TokenManager.refreshAccessToken();
+              if (refreshed) {
+                this.lastTokenRefresh = Date.now();
+                token = refreshed;
+              }
+            } catch (e) {}
+          }
           if (token) {
             await this.connectUser(token);
           }

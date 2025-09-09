@@ -12,6 +12,18 @@ export function installAxiosAuthInterceptor(axiosInstance) {
   // Stamp start time for duration metrics
   axiosInstance.interceptors.request.use((config) => {
     try { config.metadata = { start: Date.now() }; } catch (_) {}
+    // Attach Authorization header just-in-time from TokenManager unless explicitly skipped
+    try {
+      if (!config._skipAuth) {
+        const token = TokenManager.accessToken;
+        if (token) {
+          config.headers = config.headers || {};
+          if (!config.headers['Authorization']) {
+            config.headers['Authorization'] = `Bearer ${token}`;
+          }
+        }
+      }
+    } catch (_) {}
     return config;
   });
 

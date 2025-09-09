@@ -152,7 +152,7 @@ export function useAuthentication() {
 
   // Contact verification: email and phone
   const requestEmailVerification = async (email) => {
-    const token = localStorage.getItem('auth_token');
+    const token = TokenManager.accessToken;
     const resp = await axios.post('/api/auth/contacts/email/request', { email }, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
@@ -160,7 +160,7 @@ export function useAuthentication() {
   };
 
   const verifyEmailWithCode = async ({ email, code }) => {
-    const token = localStorage.getItem('auth_token');
+    const token = TokenManager.accessToken;
     const resp = await axios.post('/api/auth/contacts/email/verify', { email, code }, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
@@ -172,7 +172,7 @@ export function useAuthentication() {
   };
 
   const requestPhoneVerification = async (phone) => {
-    const token = localStorage.getItem('auth_token');
+    const token = TokenManager.accessToken;
     const resp = await axios.post('/api/auth/contacts/phone/request', { phone }, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
@@ -180,7 +180,7 @@ export function useAuthentication() {
   };
 
   const verifyPhoneWithCode = async ({ phone, code }) => {
-    const token = localStorage.getItem('auth_token');
+    const token = TokenManager.accessToken;
     const resp = await axios.post('/api/auth/contacts/phone/verify', { phone, code }, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
@@ -191,7 +191,7 @@ export function useAuthentication() {
 
   // Endpoint verification (request + verify)
   const requestEndpointVerification = async (endpointUrl) => {
-    const token = localStorage.getItem('auth_token');
+    const token = TokenManager.accessToken;
     const resp = await axios.post('/api/auth/contacts/endpoint/request', { endpoint: endpointUrl }, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
@@ -199,7 +199,7 @@ export function useAuthentication() {
   };
 
   const verifyEndpointWithChallenge = async ({ endpoint }) => {
-    const token = localStorage.getItem('auth_token');
+    const token = TokenManager.accessToken;
     const resp = await axios.post('/api/auth/contacts/endpoint/verify', { endpoint }, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
