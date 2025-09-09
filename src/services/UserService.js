@@ -191,7 +191,7 @@ export default {
    */
   async getSavedMessages(skip = 0, limit = 15) {
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = TokenManager.accessToken;
       
       if (!token) {
         throw new Error('No authentication token available');
@@ -333,7 +333,7 @@ export default {
     async saveMessage(messageId) {
       try {
         
-        const token = localStorage.getItem('auth_token');
+        const token = TokenManager.accessToken;
         
         if (!token) {
           throw new Error('No authentication token available');
@@ -360,7 +360,7 @@ export default {
     async unsaveMessage(messageId) {
       try {
         
-        const token = localStorage.getItem('auth_token');
+        const token = TokenManager.accessToken;
         
         if (!token) {
           throw new Error('No authentication token available');
@@ -385,7 +385,7 @@ export default {
      */
     async getSavedMessagesCount() {
       try {
-        const token = localStorage.getItem('auth_token');
+        const token = TokenManager.accessToken;
         
         if (!token) {
           throw new Error('No authentication token available');
@@ -413,7 +413,7 @@ export default {
      */
     async deleteLink(messageIdFrom, messageIdTo) {
       try {
-        const token = localStorage.getItem('auth_token');
+        const token = TokenManager.accessToken;
         
         if (!token) {
           throw new Error('No authentication token available');
@@ -440,7 +440,7 @@ export default {
      */
     async createLink(messageIdFrom, messageIdTo) {
       try {
-        const token = localStorage.getItem('auth_token');
+        const token = TokenManager.accessToken;
         
         if (!token) {
           throw new Error('No authentication token available');
@@ -487,7 +487,7 @@ export default {
     async deleteUser(userId) {
       try {
         
-        const token = localStorage.getItem('auth_token');
+        const token = TokenManager.accessToken;
         
         if (!token) {
           throw new Error('No authentication token available');

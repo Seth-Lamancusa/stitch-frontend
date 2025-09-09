@@ -365,6 +365,84 @@ export default {
   },
   
   actions: {
+    // Handle incoming message from WebSocket (transport-agnostic)
+    async handleIncomingWsMessage({ commit, getters, dispatch, rootState }, messageData) {
+      try {
+        if (!messageData || !messageData.id) return;
+
+        // Add/merge the message into store
+        commit('SET_MESSAGE', messageData);
+
+        // Determine current user for notification/read logic
+        const user = rootState.auth?.user;
+        let isFromCurrentUser = false;
+        let isToCurrentUser = false;
+        if (user) {
+          isFromCurrentUser = messageData.content_author === user.uid || messageData.author_user_tag === user.user_tag;
+          const recipients = Array.isArray(messageData.recipients) ? messageData.recipients : [];
+          isToCurrentUser = recipients.some(r => {
+            if (!r) return false;
+            if (typeof r === 'object') return (r.uid && r.uid === user.uid) || (r.user_tag && r.user_tag === user.user_tag);
+            if (typeof r === 'string') return r === user.uid || r === user.user_tag;
+            return false;
+          });
+        }
+
+        // Increment unread count for messages to current user (not authored by current user)
+        if (isToCurrentUser && !isFromCurrentUser) {
+          dispatch('incrementUnreadCount');
+
+          // Skip notification if this is the next message in the visible branch
+          // Determine visibility based on current route id if available
+          let isNextInBranch = false;
+          try {
+            const path = typeof window !== 'undefined' ? window.location.pathname : '';
+            const match = path && path.match(/\/([^\/\?]+)$/);
+            const urlMessageId = match ? match[1] : null;
+            if (urlMessageId) {
+              const visibleMessages = getters.getVisibleBranchMessages(urlMessageId);
+              if (visibleMessages && visibleMessages.length > 0) {
+                const lastVisible = visibleMessages[visibleMessages.length - 1];
+                isNextInBranch = messageData.parent_id === lastVisible?.id;
+              }
+            }
+          } catch (_) {}
+
+          if (isNextInBranch) {
+            // Auto-mark as read if user is actively viewing the branch
+            dispatch('batchMarkAsRead', [messageData.id]);
+          } else {
+            const authorName = messageData.author_display_name || messageData.author_user_tag || 'Someone';
+            const contentPreview = messageData.content ? (messageData.content.length > 60 ? messageData.content.substring(0, 60) + '...' : messageData.content) : 'New message';
+            const notificationData = {
+              id: messageData.id,
+              title: `New message from ${authorName}`,
+              message: contentPreview,
+              messageData,
+              timestamp: new Date().toISOString()
+            };
+            // Delegate UI notification to ui module
+            dispatch('ui/setMessageNotification', notificationData, { root: true });
+          }
+        }
+
+        // Maintain parent-child relationships
+        const parentId = messageData.parent_id;
+        if (parentId) {
+          const parentInStore = getters.getMessage(parentId);
+          if (parentInStore) {
+            commit('ADD_CHILD_TO_PARENT', { parentId, childId: messageData.id });
+            const updatedParent = getters.getMessage(parentId);
+            const parentChildren = updatedParent?.child_ids || [];
+            if (parentChildren.length === 1) {
+              commit('SET_BRANCH_CHILD', { messageId: parentId, childId: messageData.id });
+            }
+          }
+        }
+      } catch (e) {
+        console.error('[messages store] handleIncomingWsMessage error:', e);
+      }
+    },
     isTemporaryId(id) {
       return typeof id === 'string' && id.toString().startsWith('temp-');
     },
@@ -1496,6 +1574,7 @@ export default {
       const activeTab = rootState.ui?.activeTab || 'public';
       const currentUser = rootState.auth?.user;
       const userEmail = currentUser?.email;
+      const userUid = currentUser?.uid;
       
       // Filter messages by is_pinned property
       return Object.values(state.messages)
@@ -1506,8 +1585,19 @@ export default {
           
           // Then filter based on the active tab
           const isPublic = message.public === 1 || message.public === true;
-          const isUserRecipient = userEmail && message.recipients && 
-            Array.isArray(message.recipients) && message.recipients.includes(userEmail);
+          const recipients = Array.isArray(message.recipients) ? message.recipients : [];
+          const isUserRecipient = recipients.some(r => {
+            if (!r) return false;
+            if (typeof r === 'string') {
+              return (userUid && r === userUid) || (userEmail && r === userEmail);
+            }
+            if (typeof r === 'object') {
+              const matchesUid = userUid && r.uid && r.uid === userUid;
+              const matchesEmail = userEmail && r.email && r.email === userEmail;
+              return !!(matchesUid || matchesEmail);
+            }
+            return false;
+          });
             
           if (activeTab === 'public') {
             // Public tab: show pinned public messages
@@ -1553,14 +1643,10 @@ export default {
       return state.loadingStates[key] === true;
     },
 
-    // Add new getter for selected profile
-    getSelectedProfile: state => state.selectedProfile,
-
-    // Add new getter for public filter
-    getPublicFilter: state => state.publicFilter,  // Renamed from getVisibilityFilter
-
-    // Add new getter for selected recipients
-    getSelectedRecipients: state => state.selectedRecipients,
+    // Compatibility getters mapped to filters state
+    getSelectedProfile: state => null,
+    getPublicFilter: state => state.filters.isPublic,
+    getSelectedRecipients: state => state.filters.recipients,
 
     // Consolidated filter getters
     getFilters: state => state.filters,

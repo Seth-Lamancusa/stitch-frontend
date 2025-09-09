@@ -35,8 +35,12 @@ export default {
   },
   
   actions: {
-    setLoading({ commit }, { type, value }) {
-      commit('SET_LOADING', { type, value });
+    setLoading({ commit }, payload) {
+      // Route loading state updates to messages module
+      const key = payload && (payload.key || payload.type);
+      const isLoading = payload && (payload.isLoading !== undefined ? payload.isLoading : payload.value);
+      if (!key) return;
+      commit('messages/SET_LOADING', { key, isLoading }, { root: true });
     },
     
     setError({ commit }, error) {

@@ -7,6 +7,32 @@ import { parseScopes, hasScope as hasScopeUtil, hasAnyScope as hasAnyScopeUtil }
 // Auth store
 // ------------------------------------------------------------
 
+// Helper: normalize API user to auth state shape
+function mapApiUserToAuthState(userData) {
+  const data = userData || {};
+  const contacts = Array.isArray(data.contacts) ? data.contacts : [];
+  const primaryEmail = contacts.find(c => c.type === 'email');
+  const primaryEmailValue = primaryEmail && typeof primaryEmail.value === 'string' && primaryEmail.value.trim() ? primaryEmail.value : null;
+  const isEmailVerified = !!(primaryEmail && primaryEmail.verified);
+  const primaryPhone = contacts.find(c => c.type === 'phone');
+  const primaryPhoneValue = primaryPhone && typeof primaryPhone.value === 'string' && primaryPhone.value.trim() ? primaryPhone.value : null;
+  const isPhoneVerified = !!(primaryPhone && primaryPhone.verified);
+  return {
+    uid: data.uid,
+    displayName: data.display_name,
+    user_tag: data.user_tag || '',
+    scopes: data.scopes || '',
+    contact: null,
+    contacts,
+    // Convenience mirrors for easy access in UI
+    phone_number: primaryPhoneValue,
+    email: primaryEmailValue,
+    is_email_verified: isEmailVerified,
+    is_phone_verified: isPhoneVerified,
+    has_endpoint_signing_secret: !!data.has_endpoint_signing_secret
+  };
+}
+
 export default {
   namespaced: true,
   
@@ -27,12 +53,20 @@ export default {
   },
   
   actions: {
+    // Internal helper to consistently clear local auth state
+    _clearLocalAuth({ commit }) {
+      try { WebSocketService.cleanup(); } catch (e) {}
+      try { TokenManager.accessToken = null; } catch (e) {}
+      try { TokenManager.refreshToken = null; } catch (e) {}
+      commit('SET_USER', null);
+      commit('SET_AUTH_READY', true);
+    },
     async initAuth({ commit, dispatch }) {
       try {
-        const token = localStorage.getItem('auth_token');
+        const token = TokenManager.accessToken;
         if (!token) {
           // Attempt proactive refresh if a refresh token exists
-          const refresh = localStorage.getItem('refresh_token');
+          const refresh = TokenManager.refreshToken;
           if (refresh) {
             const newAccess = await TokenManager.refreshAccessToken();
             if (newAccess) {
@@ -55,10 +89,10 @@ export default {
       }
     },
 
-    async deleteOwnAccount({ commit }) {
+    async deleteOwnAccount({ commit, dispatch }) {
       try {
         console.warn('[AUTH] Deleting own account: initiating');
-        const token = localStorage.getItem('auth_token');
+        const token = TokenManager.accessToken;
         if (!token) throw new Error('Not authenticated');
 
         const resp = await axios.delete('/api/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
@@ -69,11 +103,7 @@ export default {
 
         // Cleanup local state and tokens
         console.warn('[AUTH] Account deleted successfully; clearing local auth state and redirecting');
-        WebSocketService.cleanup();
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('refresh_token');
-        commit('SET_USER', null);
-        commit('SET_AUTH_READY', true);
+        await dispatch('_clearLocalAuth');
 
         // Redirect to public page
         if (window.location.pathname !== '/public') {
@@ -88,7 +118,7 @@ export default {
 
     async validateExistingToken({ commit }) {
       try {
-        const token = localStorage.getItem('auth_token');
+        const token = TokenManager.accessToken;
         if (!token) {
           commit('SET_USER', null);
           return;
@@ -102,8 +132,8 @@ export default {
             const newAccess = await TokenManager.refreshAccessToken();
             if (!newAccess) {
               console.warn('[AUTH] /users/me non-OK and refresh failed; clearing tokens');
-              localStorage.removeItem('auth_token');
-              localStorage.removeItem('refresh_token');
+              TokenManager.accessToken = null;
+              TokenManager.refreshToken = null;
               commit('SET_USER', null);
               WebSocketService.cleanup();
               return;
@@ -111,35 +141,15 @@ export default {
             response = await axios.get('/api/users/me', { headers: { 'Authorization': `Bearer ${newAccess}` } });
           } catch (_e) {
             console.warn('[AUTH] /users/me retry after refresh failed; clearing tokens');
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('refresh_token');
+            TokenManager.accessToken = null;
+            TokenManager.refreshToken = null;
             commit('SET_USER', null);
             WebSocketService.cleanup();
             return;
           }
         }
         const userData = response && response.data ? response.data : {};
-        const contacts = Array.isArray(userData.contacts) ? userData.contacts : [];
-        const primaryEmail = contacts.find(c => c.type === 'email');
-        const primaryEmailValue = primaryEmail && typeof primaryEmail.value === 'string' && primaryEmail.value.trim() ? primaryEmail.value : null;
-        const isEmailVerified = !!(primaryEmail && primaryEmail.verified);
-        const primaryPhone = contacts.find(c => c.type === 'phone');
-        const primaryPhoneValue = primaryPhone && typeof primaryPhone.value === 'string' && primaryPhone.value.trim() ? primaryPhone.value : null;
-        const isPhoneVerified = !!(primaryPhone && primaryPhone.verified);
-        commit('SET_USER', {
-          uid: userData.uid,
-          displayName: userData.display_name,
-          user_tag: userData.user_tag || '',
-          scopes: userData.scopes || '',
-          contact: null,
-          contacts,
-          // Convenience mirrors for easy access in UI
-          phone_number: primaryPhoneValue,
-          email: primaryEmailValue,
-          is_email_verified: isEmailVerified,
-          is_phone_verified: isPhoneVerified,
-          has_endpoint_signing_secret: !!userData.has_endpoint_signing_secret
-        });
+        commit('SET_USER', mapApiUserToAuthState(userData));
         try {
           await WebSocketService.initialize();
         } catch (e) {
@@ -147,21 +157,18 @@ export default {
         }
       } catch (error) {
         console.error('[AUTH] Token validation threw error; clearing tokens and user', error);
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('refresh_token');
+        TokenManager.accessToken = null;
+        TokenManager.refreshToken = null;
         commit('SET_USER', null);
         WebSocketService.cleanup();
       }
     },
 
-    async signOut({ commit }) {
+    async signOut({ commit, dispatch }) {
       try {
         // Clean up WebSocket connection before signing out
         console.info('[AUTH] Programmatic sign out initiated');
-        WebSocketService.cleanup();
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('refresh_token');
-        commit('SET_USER', null);
+        await dispatch('_clearLocalAuth');
       } catch (error) {
         console.error('[AUTH] Error during sign out', error);
       }
@@ -169,7 +176,7 @@ export default {
 
     async searchUsers({ }, query) {
       try {
-        const token = localStorage.getItem('auth_token');
+        const token = TokenManager.accessToken;
         const response = await axios.get(`/api/users/search?query=${encodeURIComponent(query)}&limit=15`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -184,7 +191,7 @@ export default {
 
     async updateProfile({ commit }, profileData) {
       try {
-        const token = localStorage.getItem('auth_token');
+        const token = TokenManager.accessToken;
         const response = await axios.post('/api/users/profile', profileData, {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -202,27 +209,7 @@ export default {
           const meResp = await axios.get('/api/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
           if (meResp && meResp.status >= 200 && meResp.status < 300) {
             const userData = meResp.data;
-            const contacts = Array.isArray(userData.contacts) ? userData.contacts : [];
-            const primaryEmail = contacts.find(c => c.type === 'email');
-            const primaryEmailValue = primaryEmail && typeof primaryEmail.value === 'string' && primaryEmail.value.trim() ? primaryEmail.value : null;
-            const isEmailVerified = !!(primaryEmail && primaryEmail.verified);
-            const primaryPhone = contacts.find(c => c.type === 'phone');
-            const primaryPhoneValue = primaryPhone && typeof primaryPhone.value === 'string' && primaryPhone.value.trim() ? primaryPhone.value : null;
-            const isPhoneVerified = !!(primaryPhone && primaryPhone.verified);
-            commit('SET_USER', {
-              uid: userData.uid,
-              displayName: userData.display_name,
-              user_tag: userData.user_tag || '',
-              scopes: userData.scopes || '',
-              contact: null,
-              contacts,
-              // Convenience mirrors for easy access in UI
-              phone_number: primaryPhoneValue,
-              email: primaryEmailValue,
-              is_email_verified: isEmailVerified,
-              is_phone_verified: isPhoneVerified,
-              has_endpoint_signing_secret: !!userData.has_endpoint_signing_secret
-            });
+            commit('SET_USER', mapApiUserToAuthState(userData));
           }
         } catch (e) {
           // Fallback: maintain previous behavior if /me fails
@@ -246,7 +233,7 @@ export default {
       }
     },
 
-    async forceLogoutWithMessage({ commit }, router = null) {
+    async forceLogoutWithMessage({ commit, dispatch }, router = null) {
       try {
         console.warn('[AUTH] Force logout due to unauthorized/refresh-fail', {
           routerAvailable: !!router,
@@ -254,11 +241,7 @@ export default {
         });
         
         // Clear user state
-        commit('SET_USER', null);
-        commit('SET_AUTH_READY', true);
-        
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('refresh_token');
+        await dispatch('_clearLocalAuth');
         
         // Redirect to the public page
         if (window.location.pathname !== '/public') {
@@ -277,10 +260,7 @@ export default {
       } catch (error) {
         console.error('[AUTH] Error during force logout', error);
         // Even if logout fails, clear local state
-        commit('SET_USER', null);
-        commit('SET_AUTH_READY', true);
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('refresh_token');
+        await dispatch('_clearLocalAuth');
       }
     }
   },

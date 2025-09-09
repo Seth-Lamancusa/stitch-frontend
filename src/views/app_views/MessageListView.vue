@@ -2,7 +2,7 @@
   <TabViewLayout>
     
     
-    <MessageList :mode="mode" />
+    <MessageList :key="route.path" :mode="mode" />
 
     <!-- Global Recipients Modal -->
     <RecipientsModal
