@@ -1,6 +1,6 @@
 <template>
   <InfoViewLayout
-    pageTitle="Threaded Group Chats<br>with AI"
+    pageTitle="Collaborate with AI"
     pageSubtitle="Connect, compare, share."
     heroClass="home-hero"
     :showBetaBanner="true"
@@ -9,35 +9,27 @@
     footerTagline="Collaborate with humans, with AI."
   >
     <template #betaBannerText>
-      <div class="banner-buttons">
-        <a href="https://youtu.be/ZoNM-2rqzko" target="_blank" class="banner-btn">
-          <span class="btn-icon">📺</span>
-          <div class="btn-text-content">
-            <div class="btn-title">Watch Demo</div>
-            <div class="btn-subtitle">How does it work?</div>
-          </div>
-        </a>
-        <router-link to="/new-thread" class="banner-btn">
+      <div class="banner-group">
+        <router-link to="/public" class="banner-cta">
           <span class="btn-icon">💬</span>
-          <div class="btn-text-content">
-            <div class="btn-title">Try it FREE</div>
-            <div class="btn-subtitle">Like ChatGPT, but better</div>
-          </div>
+          <span class="cta-text">Try it now!</span>
         </router-link>
-        <router-link to="/features" class="banner-btn">
-          <span class="btn-icon">⚡</span>
-          <div class="btn-text-content">
-            <div class="btn-title">Features</div>
-            <div class="btn-subtitle">Messaging, AI, & more</div>
-          </div>
-        </router-link>
-        <router-link to="/public" class="banner-btn">
-          <span class="btn-icon">🌐</span>
-          <div class="btn-text-content">
-            <div class="btn-title">Public Threads</div>
-            <div class="btn-subtitle">Jump into the convo!</div>
-          </div>
-        </router-link>
+        <div class="banner-buttons">
+          <a href="https://youtu.be/ZoNM-2rqzko" target="_blank" class="banner-btn">
+            <span class="btn-icon">📺</span>
+            <div class="btn-text-content">
+              <div class="btn-title">Watch Demo</div>
+              <div class="btn-subtitle">How does it work?</div>
+            </div>
+          </a>
+          <router-link to="/features" class="banner-btn">
+            <span class="btn-icon">⚡</span>
+            <div class="btn-text-content">
+              <div class="btn-title">Features</div>
+              <div class="btn-subtitle">Messaging, AI, & more</div>
+            </div>
+          </router-link>
+        </div>
       </div>
     </template>
     <section class="home-main">
@@ -175,6 +167,66 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
 
 .banner-btn:hover::before {
   left: 100%;
+}
+
+.banner-group {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 auto;
+}
+
+.banner-group .banner-cta {
+  margin: 0 0 0.75rem 0;
+}
+
+.banner-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+  background: linear-gradient(135deg, rgba(16, 163, 127, 0.35) 0%, rgba(31, 197, 157, 0.25) 100%);
+  border: 1px solid rgba(16, 163, 127, 0.6);
+  border-radius: 12px;
+  color: var(--text-light);
+  text-decoration: none;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  min-width: 200px;
+  height: 72px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 8px 22px rgba(16, 163, 127, 0.25);
+}
+
+.banner-cta:hover {
+  background: linear-gradient(135deg, rgba(16, 163, 127, 0.45) 0%, rgba(31, 197, 157, 0.35) 100%);
+  border-color: rgba(16, 163, 127, 0.8);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(16, 163, 127, 0.3);
+}
+
+.banner-cta::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
+  transition: left 0.6s ease;
+}
+
+.banner-cta:hover::before {
+  left: 100%;
+}
+
+.banner-cta .cta-text {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--color-primary, #4f8cff);
+  line-height: 1;
 }
 
 .btn-text-content {
@@ -352,6 +404,18 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
     display: none;
   }
   }
+
+@media (max-width: 768px) {
+  .banner-cta {
+    min-width: auto;
+    width: calc(100% - 2rem);
+    height: 64px;
+    margin: 0 auto 0.625rem auto;
+  }
+  .banner-cta .cta-text {
+    font-size: 1rem;
+  }
+}
 
 @media (max-width: 480px) {
   .content-columns {

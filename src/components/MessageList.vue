@@ -742,6 +742,7 @@ const handleLinkDelete = async (linkData) => {
           :total-replies="getReplyCount(thread)"
           :can-reply="false"
           :inListView="true"
+          :currentTab="activeTab"
           :threadMessages="getThreadMessages(thread.id)"
           @delete="handleDeleteRequest"
           @navigate="viewMessage"

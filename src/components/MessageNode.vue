@@ -34,8 +34,8 @@
         </span>
         
         <div class="author-info">
-          <span class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ authorDisplayName }}</span>
-          <span v-if="authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
+          <span class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ showParticipantsLabel ? participantsDisplay : authorDisplayName }}</span>
+          <span v-if="!showParticipantsLabel && authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
         </div>
         
         <!-- Envelope icon for recipients - unread (closed) / read (open) -->
@@ -648,6 +648,52 @@ export default {
     const authorUserTag = computed(() => {
       return props.message.author_user_tag || null;
     });
+
+    // Show participants label only for inbox list previews
+    const showParticipantsLabel = computed(() => {
+      return props.inListView === true && props.currentTab === 'inbox';
+    });
+
+    // Build a deduped list of participant display names (author + recipients)
+    const participantsDisplay = computed(() => {
+      if (!showParticipantsLabel.value) {
+        return authorDisplayName.value;
+      }
+
+      const namesSet = new Set();
+      const addName = (raw) => {
+        if (!raw) return;
+        const name = String(raw).trim();
+        if (!name) return;
+        const key = name.toLowerCase();
+        if (!namesSet.has(key)) {
+          namesSet.add(key);
+        }
+      };
+
+      // Include author first
+      addName(props.message.author_display_name);
+
+      // Include deduped recipients' display names (fallback to user_tag)
+      if (typeof props.message.recipients !== 'string' && Array.isArray(props.message.recipients)) {
+        deduplicatedRecipients.value.forEach(recipient => {
+          addName(recipient.display_name || recipient.user_tag);
+        });
+      }
+
+      // Return a comma-separated list preserving insertion order
+      return Array.from(namesSet).map(k => {
+        // Recover original casing by finding first matching source
+        // Prefer author name, then recipients
+        if (props.message.author_display_name && props.message.author_display_name.toLowerCase() === k) {
+          return props.message.author_display_name;
+        }
+        const rec = (typeof props.message.recipients !== 'string' && Array.isArray(props.message.recipients))
+          ? props.message.recipients.find(r => (r.display_name && r.display_name.toLowerCase() === k) || (r.user_tag && r.user_tag.toLowerCase() === k))
+          : null;
+        return (rec && (rec.display_name || rec.user_tag)) || k;
+      }).join(', ');
+    });
     
     // Check if the current user is the author of the message
     const isUserAuthor = computed(() => {
@@ -1142,6 +1188,8 @@ export default {
       recipientsExcludingUser,
       authorDisplayName,
       authorUserTag,
+      showParticipantsLabel,
+      participantsDisplay,
       isUserAuthorOfContent,
       handleSiblingNavigation,
       isCurrentUser,

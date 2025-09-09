@@ -70,14 +70,6 @@ export default {
   
   mutations: {
     SET_MESSAGE(state, message) {
-      console.log('[DEBUG] messages.js - SET_MESSAGE received message:', {
-        id: message.id,
-        author_display_name: message.author_display_name,
-        author_user_tag: message.author_user_tag,
-        content_author: message.content_author,
-        parent_id: message.parent_id,
-        child_ids: message.child_ids
-      });
       
       // Ensure child_ids is always an array
       if (!message.child_ids) {
@@ -967,7 +959,8 @@ export default {
         
         if (wasUnread) {
           console.log(`[Store] Calling UserService to mark message ${messageId} as read`);
-          await UserService.markMessageAsRead(messageId);
+          const resp = await UserService.markMessageAsRead(messageId);
+          console.log('[Store] markMessageAsRead response:', { status: resp?.status, data: resp?.data });
           console.log(`[Store] UserService call successful, updating store`);
           commit('UPDATE_MESSAGE_READ_STATUS', { messageId, isRead: true });
           
@@ -1005,7 +998,8 @@ export default {
         const wasRead = isMessageRead(message);
         
         console.log(`[Store] Calling UserService to mark message ${messageId} as unread`);
-        await UserService.markMessageAsUnread(messageId);
+        const resp = await UserService.markMessageAsUnread(messageId);
+        console.log('[Store] markMessageAsUnread response:', { status: resp?.status, data: resp?.data });
         commit('UPDATE_MESSAGE_READ_STATUS', { messageId, isRead: false });
         
         // If the message was previously read, increment the unread count
@@ -1192,8 +1186,9 @@ export default {
 
     // Batch mark messages as read for thread view auto-marking
     async batchMarkAsRead({ commit, state, rootState }, messageIds) {
-      console.log('[Store] batchMarkAsRead called with:', messageIds.length, 'messages');
-      
+      console.log('[Store] batchMarkAsRead called with:', messageIds.length, 'messages: ids ', messageIds);
+      console.log('[Store] threadViewMode:', state.threadViewMode, 'user present:', !!rootState.auth?.user);
+
       // Only proceed if in thread view mode
       if (!state.threadViewMode) {
         console.log('[Store] Not in thread view mode, skipping auto-mark');
@@ -1207,22 +1202,24 @@ export default {
         return;
       }
 
+      const eligibilityReasons = {};
       const eligibleIds = messageIds.filter(id => {
         const message = state.messages[id];
-        if (!message) return false;
+        if (!message) { eligibilityReasons[id] = 'not_in_store'; return false; }
 
-        // Skip if user is the author
-        if (message.content_author === user.uid) return false;
-
-        // Only mark if user is a recipient
         const isRecipient = message.recipients && message.recipients.some(r => 
           (typeof r === 'object' && r.uid === user.uid) || r === user.uid
         );
-        if (!isRecipient) return false;
+        if (!isRecipient) { eligibilityReasons[id] = 'not_recipient'; return false; }
 
-        // Only mark if currently unread
-        return isMessageUnread(message);
+        const unread = isMessageUnread(message);
+        if (!unread) { eligibilityReasons[id] = 'already_read'; return false; }
+
+        eligibilityReasons[id] = 'eligible';
+        return true;
       });
+
+      console.log('[Store] eligibility map:', eligibilityReasons);
 
       if (eligibleIds.length === 0) {
         console.log('[Store] No eligible messages to mark as read');
@@ -1235,11 +1232,11 @@ export default {
       eligibleIds.forEach(id => commit('ADD_MARKING_AS_READ', id));
 
       try {
-        // Fire async request (don't await - fire and forget)
+        console.log('[Store] Calling UserService.batchMarkAsRead with ids:', eligibleIds);
         const response = await UserService.batchMarkAsRead(eligibleIds);
         const result = response.data;
 
-        console.log('[Store] Batch mark complete:', result);
+        console.log('[Store] Batch mark complete, response:', { status: response?.status, data: result });
 
         // Update message read status in store for successfully marked messages
         eligibleIds.forEach(id => {
@@ -1247,7 +1244,7 @@ export default {
         });
 
         // Decrement unread count by the number of messages actually updated
-        const updatedCount = result.updated_count || eligibleIds.length;
+        const updatedCount = result?.updated_count ?? eligibleIds.length;
         const newUnreadCount = Math.max(0, state.unreadMessageCount - updatedCount);
         commit('SET_UNREAD_MESSAGE_COUNT', newUnreadCount);
 
@@ -1574,9 +1571,16 @@ export default {
     getSortOrder: state => state.filters.sortOrder,
     
     // Read status getters using helper functions
-    isMessageUnread: state => messageId => {
+    // Consider unread if user is a recipient and backend-provided is_read is false (all-edges semantics)
+    isMessageUnread: (state, getters, rootState) => messageId => {
       const message = state.messages[messageId];
-      return isMessageUnread(message);
+      if (!message) return false;
+      const user = rootState?.auth?.user;
+      const isRecipient = user && Array.isArray(message.recipients)
+        ? message.recipients.some(r => (typeof r === 'object' && r.uid === user.uid) || r === user.uid)
+        : false;
+      if (!isRecipient) return false;
+      return message.is_read === false;
     },
     
     isMessageRead: state => messageId => {
