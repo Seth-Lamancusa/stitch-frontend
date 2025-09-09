@@ -534,13 +534,13 @@ const WebSocketService = {
           return `${wsProtocol}//${host}${WS_BASE_URL}/user/${t}`;
         },
         logger: console,
-        pingIntervalMs: Math.max(30000, Math.floor(this.pingTimeoutMs / 2)),
+        // Disable client heartbeat; rely on server pings only
+        pingIntervalMs: 0,
         pingTimeoutMs: this.pingTimeoutMs,
       });
 
       // Wire client events
       this.client.on('open', () => {
-        this.connectionEstablished = true;
         this.connection = this.client.socket;
         // Ensure activity listeners are active after reconnects
         this.setupActivityListeners();
@@ -555,6 +555,7 @@ const WebSocketService = {
         try {
           if (data?.type === 'connection_established') {
             this.userId = data.user_id;
+            this.connectionEstablished = true;
             this.log(`Connection established for user ${this.userId}`);
             return;
           }
