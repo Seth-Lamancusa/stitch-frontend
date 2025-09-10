@@ -7,6 +7,7 @@
 import { registerFormatter } from './formatters';
 
 // Import formatters
+import htmlLinksFormatter from './plugins/html_links';
 import markdownFormatter from './plugins/markdown';
 import latexFormatter from './plugins/latex';
 import codeFormatter from './plugins/code';
@@ -28,6 +29,7 @@ export function initFormatters(options = {}) {
   
   try {
     // Register standard formatters
+    registerFormatter(htmlLinksFormatter); // Run before markdown
     registerFormatter(markdownFormatter);
     registerFormatter(latexFormatter);
     registerFormatter(codeFormatter);
