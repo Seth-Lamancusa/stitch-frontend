@@ -11,7 +11,7 @@
           <input v-model="email" type="email" placeholder="you@example.com" id="register-email" name="email" autocomplete="email" autocapitalize="off" spellcheck="false" />
           <label for="register-phone">Phone (optional)</label>
           <input v-model="phone" type="tel" placeholder="+1 555 123 4567" id="register-phone" name="tel" autocomplete="tel" inputmode="tel" />
-          <label for="register-username">Tag</label>
+          <label for="register-username">Tag (required)</label>
           <input 
             v-model="userTag" 
             type="text" 
@@ -26,7 +26,7 @@
             @input="onTagInput"
           />
           <p v-if="tagError" class="error">{{ tagError }}</p>
-          <label for="register-nickname">Display name</label>
+          <label for="register-nickname">Display name (required)</label>
           <input v-model="displayName" type="text" placeholder="Display name" id="register-nickname" name="nickname" autocomplete="nickname" />
           <label for="register-password">Password</label>
           <input v-model="password" type="password" placeholder="••••••••" id="register-password" name="new-password" autocomplete="new-password" />
@@ -89,13 +89,18 @@ const onClose = () => emit('close')
 
 const canSubmit = computed(() => {
   const hasEmailPw = !!email.value && !!password.value
-  return hasEmailPw && !tagError.value
+  const hasTag = !!(userTag.value || '').trim()
+  const hasDisplay = !!(displayName.value || '').trim()
+  return hasEmailPw && hasTag && hasDisplay && !tagError.value
 })
 
 const validateTag = () => {
   tagError.value = ''
   const tag = (userTag.value || '').trim()
-  if (!tag) return true
+  if (!tag) {
+    tagError.value = 'Tag is required'
+    return false
+  }
   if (!/^[A-Za-z0-9_-]+$/.test(tag)) {
     tagError.value = 'Tag must contain only letters, numbers, underscores, and hyphens'
     return false
@@ -109,11 +114,12 @@ const submit = async () => {
   try {
     if (!email.value || !password.value) throw new Error('Email and password required')
     if (!validateTag()) throw new Error(tagError.value)
+    if (!(displayName.value || '').trim()) throw new Error('Display name required')
     await registerWithPassword({
       email: email.value,
       password: password.value,
-      user_tag: userTag.value || undefined,
-      display_name: displayName.value || undefined,
+      user_tag: userTag.value,
+      display_name: (displayName.value || '').trim(),
       phone: phone.value || undefined,
       endpoint: endpoint.value || undefined,
       notify: notify.value

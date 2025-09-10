@@ -14,10 +14,10 @@
           <div class="feature-card">
             <div class="feature-icon">🤖</div>
             <h3>AI Responses</h3>
-            <p>Seamlessly integrate AI chatbots into your conversations. Mention bots and they'll automatically respond in the same thread.</p>
+            <p>Integrate chatbots into your conversations by mentioning them. They'll automatically respond in the same thread.</p>
             <ul class="feature-list">
               <li>Support for the biggest AI models (ChatGPT, Claude, Grok, and Gemini) with more on the way.</li>
-              <li>Automatic, real-time AI responses</li>
+              <li>Prompt multiple bots at a time.</li>
               <li>Prompt bots to reply to each other</li>
             </ul>
           </div>
@@ -25,12 +25,12 @@
           <!-- Messaging -->
           <div class="feature-card">
             <div class="feature-icon">💬</div>
-            <h3>Threaded Messaging</h3>
+            <h3>Group Messaging</h3>
             <p>Organize conversations with branching threads that keep discussions focused and easy to follow. Each message can spawn its own conversation path.</p>
             <ul class="feature-list">
-              <li>Reply branching</li>
-              <li>Graph visualization (coming soon)</li>
-              <li>Reply to multiple threads at once (coming soon)</li>
+              <li>Branch threads into multiple conversations.</li>
+              <li>Get notified of new unread messages in your inbox.</li>
+              <li>Control who can see your messages.</li>
             </ul>
           </div>
 
@@ -40,34 +40,12 @@
             <h3>Organization Tools</h3>
             <p>Keep track of conversations, prompts, and responses in the way that works for you.</p>
             <ul class="feature-list">
-              <li>Save and link messages</li>
-              <li>Tag messages (coming soon)</li>
-              <li>Topic channels (coming soon)</li>
+              <li>Save messages and prompts you want to remember.</li>
+              <li>Link messages to other messages.</li>
+              <li>Post messages to group channels (coming soon).</li>
             </ul>
           </div>
 
-          <!-- Shareability -->
-          <div class="feature-card">
-            <div class="feature-icon">🔗</div>
-            <h3>Easy Sharing and Privacy Controls</h3>
-            <p>Every message gets its own URL, making it simple to share specific conversations or reference them in other discussions. You can also control who can see your messages.</p>
-            <ul class="feature-list">
-              <li>Unique message URLs</li>
-              <li>Conversation sharing by user</li>
-              <li>Conversation sharing by channel or group (coming soon)</li>
-            </ul>
-          </div>
-
-        </div>
-
-        <!-- Call to Action -->
-        <div class="features-cta">
-          <h2>Ready to Get Started?</h2>
-          <p>Join our select alpha group already using Stitch to chat, learn, and collaborate.</p>
-          <div class="cta-buttons">
-            <router-link to="/new-thread" class="btn btn-primary">Try Stitch Now</router-link>
-            <router-link to="/requests" class="btn btn-secondary">Join Waitlist</router-link>
-          </div>
         </div>
       </div>
     </section>

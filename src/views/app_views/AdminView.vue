@@ -98,13 +98,10 @@
             <div class="metrics-content">
               <div class="metric-group">
                 <h4>Successful Logins</h4>
-                <div v-if="Object.keys(metrics['🔐 Authentication Metrics']['Successful Logins']).length > 0">
-                  <div v-for="(value, role) in metrics['🔐 Authentication Metrics']['Successful Logins']" :key="role" class="metric-item">
-                    <span class="metric-label">{{ role }}:</span>
-                    <span class="metric-value">{{ value }}</span>
-                  </div>
+                <div class="metric-item" v-if="successfulLoginsTotal > 0">
+                  <span class="metric-value">{{ successfulLoginsTotal }}</span>
                 </div>
-                <div v-else class="metric-item">
+                <div class="metric-item" v-else>
                   <span class="metric-value no-data">No login data</span>
                 </div>
               </div>
@@ -123,13 +120,10 @@
             <div class="metrics-content">
               <div class="metric-group">
                 <h4>Messages Created</h4>
-                <div v-if="Object.keys(metrics['💬 Message Metrics']['Messages Created']).length > 0">
-                  <div v-for="(value, role) in metrics['💬 Message Metrics']['Messages Created']" :key="role" class="metric-item">
-                    <span class="metric-label">{{ role }}:</span>
-                    <span class="metric-value">{{ value }}</span>
-                  </div>
+                <div class="metric-item" v-if="messagesCreatedTotal > 0">
+                  <span class="metric-value">{{ messagesCreatedTotal }}</span>
                 </div>
-                <div v-else class="metric-item">
+                <div class="metric-item" v-else>
                   <span class="metric-value no-data">No message data</span>
                 </div>
               </div>
@@ -201,6 +195,35 @@ const stats = ref(null);
 const metrics = ref(null);
 const metricsError = ref(null);
 const isResettingMetrics = ref(false);
+
+// Derived totals for metrics (handles number or object)
+const successfulLoginsTotal = computed(() => {
+  try {
+    const section = metrics.value && metrics.value['🔐 Authentication Metrics'];
+    const raw = section && section['Successful Logins'];
+    if (typeof raw === 'number') return raw;
+    if (raw && typeof raw === 'object') {
+      return Object.values(raw).reduce((sum, v) => sum + (typeof v === 'number' ? v : 0), 0);
+    }
+    return 0;
+  } catch (_) {
+    return 0;
+  }
+});
+
+const messagesCreatedTotal = computed(() => {
+  try {
+    const section = metrics.value && metrics.value['💬 Message Metrics'];
+    const raw = section && section['Messages Created'];
+    if (typeof raw === 'number') return raw;
+    if (raw && typeof raw === 'object') {
+      return Object.values(raw).reduce((sum, v) => sum + (typeof v === 'number' ? v : 0), 0);
+    }
+    return 0;
+  } catch (_) {
+    return 0;
+  }
+});
 
 // Redirect non-admin users after auth is ready
 onMounted(() => {

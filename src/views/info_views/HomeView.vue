@@ -1,7 +1,7 @@
 <template>
   <InfoViewLayout
     pageTitle="Collaborate with AI"
-    pageSubtitle="Connect, compare, share."
+    pageSubtitle="Connect, compare, share. The best ChatGPT alternative you've never heard of."
     heroClass="home-hero"
     :showBetaBanner="true"
     betaBannerIcon=""
@@ -35,21 +35,24 @@
     <section class="home-main">
       <div class="container">
         <div class="home-main-content">
+          <div class="home-intro"><i>
+            A new internet is coming. The proliferation of AI chatbots is only just beginning, and while they see consistent utility by individuals, it remains impossible to fluidly integrate them into group contexts and team workflows. Stitch is here to change that.</i>
+          </div>
           <div class="branching-graph"></div>
           <div class="content-columns">
             <div class="home-main-content-1">
               <div class="content-icon">🧠</div>
               <h2>Connecting ideas, connecting minds</h2>
-              <p>Engage in multi-threaded conversations with bot and human users alike. Stitch makes it easy to keep track of replies, topics, and conversations with different users.</p>
+              <p>Engage in group conversations with AI and human users alike. Easily track conversations, replies, and threads.</p>
             </div>
             <div class="home-main-content-2">
               <div class="content-icon">⚡</div>
               <h2>Compare responses<br>in real time</h2>
-              <p>Easily send messages to groups of users or share them in public channels. Chatbots will automatically reply to messages sent to them.</p>
+              <p>Easily send messages to groups of users and control who can see them. Chatbots will automatically reply to messages sent to them.</p>
             </div>
             <div class="home-main-content-3">
               <div class="content-icon">🔗</div>
-              <h2>Share your conversations with others</h2>
+              <h2>Share your conversations</h2>
               <p>Each message comes with a URL, allowing you to easily share them with others to respond or spin off in their own directions.</p>
             </div>
           </div>
@@ -270,10 +273,31 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
   margin: 0 0 2rem 0;
 }
 
-.branching-graph {
-  margin-bottom: 4rem;
-  display: flex;
-  justify-content: center;
+.home-intro {
+  width: 70%;
+  max-width: 900px;
+  margin: 50px auto 60px auto;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  font-size: 1.05rem;
+  text-align: center;
+}
+
+@media (max-width: 1100px) {
+  .home-intro {
+    width: 90%;
+    font-size: 1rem;
+    margin: 40px auto 60px auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .home-intro {
+    width: 90%;
+    font-size: 0.8rem;
+    padding: 0 1rem;
+    margin: 0 auto 40px auto;
+  }
 }
 
 .content-columns {
@@ -344,6 +368,31 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
   transform: scale(1.1);
 }
 
+/* Medium screen typography adjustments */
+@media (max-width: 1100px) {
+  .content-columns h2 {
+    font-size: 1.4rem;
+  }
+  .content-columns p {
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 992px) {
+  .content-columns {
+    gap: 2rem;
+  }
+  .content-columns > div {
+    padding: 2rem 1.75rem;
+  }
+  .content-columns h2 {
+    font-size: 1.25rem;
+  }
+  .content-columns p {
+    font-size: 0.8rem;
+  }
+}
+
   /* Mobile styles */
   @media (max-width: 768px) {
     .home-main {
@@ -374,9 +423,6 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
       margin-bottom: 1.25rem;
     }
     
-    .branching-graph {
-      margin-bottom: 2.5rem;
-    }
 
       /* Banner buttons mobile styles */
   .banner-buttons {
