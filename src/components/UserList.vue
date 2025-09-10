@@ -19,6 +19,7 @@
             <div class="user-main-info">
               <h3 class="user-name">{{ user.display_name || 'No Display Name' }}</h3>
               <div class="user-email">{{ userEmail(user) }}</div>
+              <div v-if="user.uid" class="user-uid">UID: {{ user.uid }}</div>
               <div v-if="user.user_tag" class="user-tag">@{{ user.user_tag }}</div>
             </div>
             <div class="user-metadata">

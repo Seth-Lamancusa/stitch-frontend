@@ -206,7 +206,7 @@ const closeApiKeysModal = () => {
 <style scoped>
 .app-layout {
   display: grid;
-  grid-template-rows: 56px 1fr;
+  grid-template-rows: auto 1fr;
   height: var(--app-height, 100vh);
   background: var(--color-background, #fff);
 }
@@ -219,6 +219,8 @@ const closeApiKeysModal = () => {
   height: 56px;
   border-bottom: 1px solid var(--color-border, #eee);
   background: #000;
+  position: sticky;
+  top: 0;
   z-index: 100;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
