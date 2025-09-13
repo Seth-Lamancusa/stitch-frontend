@@ -20,7 +20,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="primary" :disabled="busy" @click="submitPassword">Sign in</button>
+        <button class="primary" :disabled="busy" :aria-busy="busy ? 'true' : 'false'" @click="submitPassword">{{ busy ? 'Signing in…' : 'Sign in' }}</button>
       </div>
     </div>
   </div>

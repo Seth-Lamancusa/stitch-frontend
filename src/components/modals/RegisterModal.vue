@@ -44,7 +44,7 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="primary" :disabled="busy || !canSubmit" @click="submit">Create account</button>
+        <button class="primary" :disabled="busy || !canSubmit" :aria-busy="busy ? 'true' : 'false'" @click="submit">{{ busy ? 'Creating account…' : 'Create account' }}</button>
       </div>
     </div>
   </div>

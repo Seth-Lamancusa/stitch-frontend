@@ -96,8 +96,12 @@ input:focus, textarea:focus, select:focus {
 
 a {
   text-decoration: none;
-  color: var(--color-link);
+  color: var(--color-link-unvisited);
   transition: color var(--transition-fast);
+}
+
+a:visited {
+  color: var(--color-link-visited);
 }
 
 a:hover {

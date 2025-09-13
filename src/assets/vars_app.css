@@ -79,6 +79,9 @@
   
   --color-link: #4a90e2;
   --color-link-hover: #3a7bc8;
+  /* Global link state colors */
+  --color-link-unvisited: #8ab4ff; /* lighter blue */
+  --color-link-visited: #ddb7ff;   /* lighter purple */
   
   --color-heading: var(--color-text);
 
