@@ -135,6 +135,7 @@
         :can-interact="canInteract && !!replyTargetId"
         :is-message-selected="!!replyTargetId"
         :is-authenticated="!!user"
+        @open-profile="openProfileModal"
         ref="replyBox"
         class="reply-box"
         :class="{ 'reply-box-hidden': !isReplying }"
@@ -142,7 +143,7 @@
     </template>
     
     <div v-else class="not-found">
-      Thread not found.
+      Message not found.
     </div>
 
     <!-- Global Notifications -->

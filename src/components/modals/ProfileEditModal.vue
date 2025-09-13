@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useStore } from 'vuex';
 import { useAuthentication } from '@/composables/useAuthentication';
 import ApiKeysModal from '@/components/modals/ApiKeysModal.vue';
@@ -44,6 +44,14 @@ const requestingPhoneCode = ref(false);
 const verifyingEmail = ref(false);
 const verifyingPhone = ref(false);
 const verificationMessage = ref('');
+
+// Send code state/timers
+const emailCodeSent = ref(false);
+const phoneCodeSent = ref(false);
+const emailCooldown = ref(0);
+const phoneCooldown = ref(0);
+let emailCooldownTimerId = null;
+let phoneCooldownTimerId = null;
 
 const { changePassword, requestEmailVerification, verifyEmailWithCode, requestPhoneVerification, verifyPhoneWithCode, requestEndpointVerification: requestEndpointChallenge, verifyEndpointWithChallenge } = useAuthentication();
 const notifyPrefs = ref({ email: false, phone: false, endpoint: false });
@@ -157,6 +165,14 @@ const resetForm = () => {
   phoneCode.value = '';
   endpointVerificationMessage.value = '';
   verificationMessage.value = '';
+  // Reset verification flow state
+  emailCodeSent.value = false;
+  phoneCodeSent.value = false;
+  // Reset timers
+  emailCooldown.value = 0;
+  phoneCooldown.value = 0;
+  if (emailCooldownTimerId) { clearInterval(emailCooldownTimerId); emailCooldownTimerId = null; }
+  if (phoneCooldownTimerId) { clearInterval(phoneCooldownTimerId); phoneCooldownTimerId = null; }
   // No Key-Id in contract
   generatedSecret.value = '';
   hasJustRevealedSecret.value = false;
@@ -165,6 +181,11 @@ const resetForm = () => {
 
 onMounted(() => {
   resetForm();
+});
+
+onUnmounted(() => {
+  if (emailCooldownTimerId) clearInterval(emailCooldownTimerId);
+  if (phoneCooldownTimerId) clearInterval(phoneCooldownTimerId);
 });
 
 const validateTag = () => {
@@ -392,6 +413,18 @@ const sendEmailCode = async () => {
     requestingEmailCode.value = true;
     await requestEmailVerification(email.value.trim());
     verificationMessage.value = 'Verification code sent to email';
+    emailCodeSent.value = true;
+    // start cooldown
+    if (emailCooldownTimerId) { clearInterval(emailCooldownTimerId); emailCooldownTimerId = null; }
+    emailCooldown.value = 60;
+    emailCooldownTimerId = setInterval(() => {
+      if (emailCooldown.value > 0) {
+        emailCooldown.value -= 1;
+      } else {
+        clearInterval(emailCooldownTimerId);
+        emailCooldownTimerId = null;
+      }
+    }, 1000);
   } catch (e) {
     verificationMessage.value = e.message || 'Failed to send email code';
   } finally {
@@ -427,6 +460,18 @@ const sendPhoneCode = async () => {
     requestingPhoneCode.value = true;
     await requestPhoneVerification(phoneNumber.value.trim());
     verificationMessage.value = 'Verification code sent to phone';
+    phoneCodeSent.value = true;
+    // start cooldown
+    if (phoneCooldownTimerId) { clearInterval(phoneCooldownTimerId); phoneCooldownTimerId = null; }
+    phoneCooldown.value = 60;
+    phoneCooldownTimerId = setInterval(() => {
+      if (phoneCooldown.value > 0) {
+        phoneCooldown.value -= 1;
+      } else {
+        clearInterval(phoneCooldownTimerId);
+        phoneCooldownTimerId = null;
+      }
+    }, 1000);
   } catch (e) {
     verificationMessage.value = e.message || 'Failed to send phone code';
   } finally {
@@ -577,9 +622,9 @@ const deleteAccount = async () => {
             <div class="field-error" v-if="emailError">{{ emailError }}</div>
             <div class="verify-row warn" v-if="!isEmailVerified && hasSavedEmail">
               <span class="verify-label">Unverified</span>
-              <button class="verify-btn" @click="sendEmailCode" :disabled="requestingEmailCode">{{ requestingEmailCode ? 'Sending…' : 'Send Code' }}</button>
+              <button class="verify-btn" @click="sendEmailCode" :disabled="requestingEmailCode || emailCooldown > 0">{{ requestingEmailCode ? 'Sending…' : (emailCooldown > 0 ? `Resend in ${emailCooldown}s` : 'Send Code') }}</button>
               <input class="code-input" v-model="emailCode" placeholder="Enter code" />
-              <button class="verify-btn" @click="confirmEmailCode" :disabled="verifyingEmail || !emailCode.trim()">{{ verifyingEmail ? 'Verifying…' : 'Verify' }}</button>
+              <button class="verify-btn" v-if="emailCodeSent" @click="confirmEmailCode" :disabled="verifyingEmail || !emailCode.trim()">{{ verifyingEmail ? 'Verifying…' : 'Verify' }}</button>
             </div>
           </div>
           
@@ -606,9 +651,9 @@ const deleteAccount = async () => {
             <div class="field-error" v-if="phoneNumberError">{{ phoneNumberError }}</div>
             <div class="verify-row warn" v-if="!isPhoneVerified && hasSavedPhone">
               <span class="verify-label">Unverified</span>
-              <button class="verify-btn" @click="sendPhoneCode" :disabled="requestingPhoneCode">{{ requestingPhoneCode ? 'Sending…' : 'Send Code' }}</button>
+              <button class="verify-btn" @click="sendPhoneCode" :disabled="requestingPhoneCode || phoneCooldown > 0">{{ requestingPhoneCode ? 'Sending…' : (phoneCooldown > 0 ? `Resend in ${phoneCooldown}s` : 'Send Code') }}</button>
               <input class="code-input" v-model="phoneCode" placeholder="Enter code" />
-              <button class="verify-btn" @click="confirmPhoneCode" :disabled="verifyingPhone || !phoneCode.trim()">{{ verifyingPhone ? 'Verifying…' : 'Verify' }}</button>
+              <button class="verify-btn" v-if="phoneCodeSent" @click="confirmPhoneCode" :disabled="verifyingPhone || !phoneCode.trim()">{{ verifyingPhone ? 'Verifying…' : 'Verify' }}</button>
             </div>
             <div v-if="phoneNumber.trim()" class="consent-message">
               <p>By providing your phone number, you agree to receive text messages from Stitch at the number provided. Message and data rates may apply. Message frequency varies. To opt-out, remove your phone number here. View our Terms of Service and Privacy Policy at <a href="https://stitch.fyi/terms" target="_blank" rel="noopener noreferrer">stitch.fyi/terms</a>.</p>

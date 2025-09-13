@@ -32,9 +32,13 @@ p {
 }
 
 a {
-  color: var(--accent-color);
+  color: var(--link-unvisited);
   text-decoration: none;
   transition: color var(--transition-fast);
+}
+
+a:visited {
+  color: var(--link-visited);
 }
 
 a:hover {

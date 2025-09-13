@@ -81,7 +81,10 @@
       
       <!-- Text area - hidden in add recipients mode -->
       <div v-if="!isAddRecipientsMode" class="reply-sheet__textarea-container">
-        <div class="textarea-wrapper">
+        <div v-if="showVerifyCTA" class="verify-cta" role="button" tabindex="0" @click.stop.prevent="handleVerifyClick" aria-label="Verify your email to get started">
+          <span class="verify-cta__text">Verify your email to get started!</span>
+        </div>
+        <div v-else class="textarea-wrapper">
           <textarea 
             v-model="content" 
             :placeholder="placeholderText" 
@@ -112,6 +115,7 @@
         
         <!-- Send button -->
         <button 
+          v-if="!showVerifyCTA"
           class="textarea-send-button"
           :class="{ 
             'textarea-send-button--disabled': !canSendReply,
@@ -197,7 +201,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['send', 'cancel', 'send-success', 'send-error']);
+const emit = defineEmits(['send', 'cancel', 'send-success', 'send-error', 'open-profile']);
 
 // Setup store
 const store = useStore();
@@ -240,6 +244,7 @@ const addRecipientsExisting = computed(() => store.getters['navigation/addRecipi
 
 // Computed properties from store
 const user = computed(() => store.getters['auth/user']);
+const isEmailVerified = computed(() => !!(user.value && user.value.is_email_verified));
 const isPublic = computed({
   get: () => store.getters['navigation/replyIsPublic'],
   set: (value) => store.dispatch('navigation/updateReplyVisibility', value)
@@ -248,6 +253,7 @@ const recipients = computed(() => store.getters['navigation/replyRecipients']);
 const replyAddToAncestors = computed(() => store.getters['navigation/replyAddToAncestors']);
 const isReplying = computed(() => store.getters['navigation/isReplying']);
 const botPromptModalVisible = computed(() => store.getters['navigation/botPromptModalVisible']);
+const showVerifyCTA = computed(() => !props.canInteract && props.isAuthenticated && !isEmailVerified.value);
 
 // Centralized validation logic
 const canSendReply = computed(() => {
@@ -270,6 +276,9 @@ const placeholderText = computed(() => {
   if (!props.canInteract) {
     if (!props.isAuthenticated) {
       return "You need to log in to send messages";
+    }
+    if (!isEmailVerified.value) {
+      return "Verify your email to get started!";
     }
     return "You need write permission to send messages";
   }
@@ -304,6 +313,16 @@ const replyHeaderText = computed(() => {
 });
 
 // Methods
+const emitOpenProfile = () => {
+  emit('open-profile');
+};
+
+const handleVerifyClick = () => {
+  emitOpenProfile();
+  // Auto-close the reply box
+  hideBottomSheet();
+};
+
 
 const handleVisibilityPointerDown = (event) => {
   // Prevent focus from leaving the textarea (keeps mobile keyboard open)
@@ -1065,6 +1084,45 @@ defineExpose({
   align-items: flex-end;
   gap: 8px;
 }
+
+/* Verify CTA (shown when user lacks write perms due to unverified email) */
+.verify-cta {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  margin-bottom: 10px;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.verify-cta:hover {
+  background-color: var(--color-hover-overlay);
+  border-color: var(--color-border-hover);
+}
+
+.verify-cta:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 79, 140, 255), 0.2);
+}
+
+.verify-cta__text {
+  font-size: var(--font-size-sm);
+}
+
+.verify-link-inline {
+  color: var(--color-primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.verify-link-inline:hover { text-decoration: underline; }
 
 /* Textarea wrapper with toggle button */
 .textarea-wrapper {
