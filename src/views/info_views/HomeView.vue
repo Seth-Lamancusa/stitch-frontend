@@ -1,7 +1,7 @@
 <template>
   <InfoViewLayout
     pageTitle="Collaborate with AI"
-    pageSubtitle="Connect, compare, share. The best ChatGPT alternative you've never heard of."
+    pageSubtitle="Connect, compare, share."
     heroClass="home-hero"
     :showBetaBanner="true"
     betaBannerIcon=""
@@ -47,8 +47,8 @@
             </div>
             <div class="home-main-content-2">
               <div class="content-icon">⚡</div>
-              <h2>Compare responses<br>in real time</h2>
-              <p>Easily send messages to groups of users and control who can see them. Chatbots will automatically reply to messages sent to them.</p>
+              <h2>Compare responses</h2>
+              <p>Easily send messages to multiple users and control access. Chatbots will automatically reply when mentioned.</p>
             </div>
             <div class="home-main-content-3">
               <div class="content-icon">🔗</div>

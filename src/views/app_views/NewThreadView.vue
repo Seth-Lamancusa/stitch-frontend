@@ -23,7 +23,7 @@
             <span v-else class="username">Guest</span>
 
             <!-- Auth status badges -->
-            <span v-if="isAdmin" class="admin-badge" title="Admin">⛊</span>
+            <span v-can="'admin'" class="admin-badge" title="Admin">⛊</span>
             <span v-if="!user" class="guest-badge" title="Not logged in">?</span>
           </div>
           <button v-if="user" @click="logout" class="logout-btn">Logout</button>

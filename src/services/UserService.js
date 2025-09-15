@@ -1,17 +1,5 @@
-import axios from 'axios';
 import TokenManager from './TokenManager';
-import { installAxiosAuthInterceptor } from './httpClient';
-
-const apiClient = axios.create({
-  baseURL: '/api',
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json'
-  }
-});
-
-// Install shared 401->refresh interceptor
-installAxiosAuthInterceptor(apiClient);
+import apiClient from './apiClient';
 
 export default {
   
@@ -478,33 +466,5 @@ export default {
       }
     },
 
-    /**
-     * Delete a user (admin-only operation via admin endpoint)
-     * @param {String} userId - The user ID to delete
-     * @returns {Promise<Object>} - Response with success status
-     * @note This calls the admin endpoint and requires admin privileges
-     */
-    async deleteUser(userId) {
-      try {
-        
-        const token = TokenManager.accessToken;
-        
-        if (!token) {
-          throw new Error('No authentication token available');
-        }
-        
-        // Note: This calls the admin endpoint since user deletion is admin-only
-        const response = await apiClient.delete(`/admin/users/${userId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        
-        return response.data;
-      } catch (error) {
-        console.error('[UserService] Error deleting user:', error);
-        console.error('[UserService] Error details:', error.response?.data || error.message);
-        throw error;
-      }
-    }
+    // Public SPA must not expose admin deleteUser
 }; 

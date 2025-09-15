@@ -6,8 +6,9 @@ import router from './router.js'
 import store from './store'
 import TokenManager from './services/TokenManager'
 import axios from 'axios'
-import { installAxiosAuthInterceptor } from './services/httpClient'
+import { installAxiosAuthInterceptor } from './services/apiClient'
 import { initFormatters } from './components/FormattedContent/init'
+import vCan from './directives/v-can'
 
 // Minimal startup logging
 
@@ -26,7 +27,7 @@ function installFetchAuthInterceptor() {
       // Avoid loops and skip for auth endpoints
       if (init && init._retry) return response;
       // If this was the refresh endpoint itself, do not attempt to refresh again
-      if (url.includes('/api/auth/sessions/refresh')) return response;
+      if (url.includes('/api/v1/auth/sessions/refresh')) return response;
       try { console.warn('[AUTH][fetch] 401 detected', { url }); } catch (_) {}
       const tokenBefore = TokenManager.accessToken;
       const newAccess = await TokenManager.refreshAccessToken();
@@ -72,6 +73,7 @@ installFetchAuthInterceptor();
 const app = createApp(App)
 app.use(router)
 app.use(store)
+app.directive('can', vCan)
 
 const initApp = async () => {
   try {

@@ -788,20 +788,7 @@ export default {
           case 'inbox':
             response = await UserService.fetchUserMessages(limit, skip);
             break;
-          case 'admin':
-            // Import AdminService when needed
-            const AdminService = (await import('../../services/AdminService')).default;
-            const adminResponse = await AdminService.getMessages({ skip, limit });
-            if (adminResponse.success) {
-              response = {
-                messages: adminResponse.messages,
-                has_more: adminResponse.has_more,
-                total: adminResponse.total
-              };
-            } else {
-              throw new Error(adminResponse.error || 'Failed to load admin messages');
-            }
-            break;
+          
           case 'public':
             // Import MessageService when needed
             const MessageService = (await import('../../services/MessageService')).default;
@@ -862,7 +849,7 @@ export default {
         
         // For modes other than inbox, don't automatically commit to store
         // (they might want to handle messages differently)
-        if (mode === 'inbox' || mode === 'admin') {
+        if (mode === 'inbox') {
           if (messages.length > 0) {
             if (skip === 0) {
               // First page - replace messages

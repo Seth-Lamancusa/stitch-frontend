@@ -85,7 +85,8 @@
           
           <!-- Edit button - only for admins -->
           <button
-            v-if="isAdmin && !isSelectionMode && !inListView"
+            v-can="'admin'"
+            v-if="!isSelectionMode && !inListView"
             @click.stop="openEditModal"
             class="edit-icon-button"
             title="Admin: Edit this message"

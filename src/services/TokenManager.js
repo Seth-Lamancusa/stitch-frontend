@@ -220,10 +220,10 @@ class TokenManager {
 
           let response = null;
           try {
-            response = await fetch('/api/auth/sessions/refresh', {
+            response = await fetch('/api/v1/auth/sessions/refresh', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ refresh_token: rt }),
+              body: JSON.stringify({ refresh_token: rt, aud: 'public-v1' }),
               _skipAuth: true
             });
           } catch (e) {

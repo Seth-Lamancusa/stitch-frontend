@@ -153,7 +153,7 @@ export default class WebSocketClient {
       const isSecure = window.location.protocol === 'https:';
       const proto = isSecure ? 'wss:' : 'ws:';
       const host = window.location.host;
-      return `${proto}//${host}/ws/user/${token}`;
+      return `${proto}//${host}/ws/v1?access_token=${encodeURIComponent(token)}`;
     } catch (e) {
       this.logger?.error?.('WebSocketClient: buildUrl failed', e);
       return null;

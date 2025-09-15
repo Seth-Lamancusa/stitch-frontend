@@ -2,46 +2,27 @@ import { createRouter, createWebHistory } from 'vue-router';
 
 // Import components
 import ThreadView from './views/app_views/ThreadView.vue';
-import AdminView from './views/app_views/AdminView.vue';
-import UserManagementView from './views/app_views/UserManagementView.vue';
-import MessageManagementView from './views/app_views/MessageManagementView.vue';
 import NewThreadView from './views/app_views/NewThreadView.vue';
-import ImportView from './views/app_views/ImportView.vue';
 import GraphView from './views/app_views/GraphView.vue';
 import HomeView from './views/info_views/HomeView.vue';
 import ArchitectureView from './views/info_views/ArchitectureView.vue';
 import TermsView from './views/info_views/TermsView.vue';
 import FeaturesView from './views/info_views/FeaturesView.vue';
+import HowView from './views/info_views/HowView.vue';
+import HowDocsView from './views/info_views/HowDocsView.vue';
+import HowBotsView from './views/info_views/HowBotsView.vue';
+import HowApiView from './views/info_views/HowApiView.vue';
 import MessageListView from './views/app_views/MessageListView.vue';
 import PasswordResetView from './views/app_views/PasswordResetView.vue';
 import store from './store';
+import { usePermissions } from './composables/usePermissions';
 
 const routes = [
   {
     path: '/',
     redirect: '/home'
   },
-  {
-    path: '/import',
-    name: 'import',
-    component: ImportView,
-    beforeEnter: async (to, from, next) => {
-      // Ensure auth is initialized before gate check
-      try {
-        if (!store.getters['auth/authReady']) {
-          await store.dispatch('auth/initAuth');
-        }
-      } catch (e) {
-        // ignore
-      }
-
-      if (store.getters['auth/isAdmin']) {
-        next();
-      } else {
-        next({ path: '/public' });
-      }
-    }
-  },
+  // Import moved to admin UI; keep no public route
   {
     path: '/reset-password',
     name: 'reset-password',
@@ -64,6 +45,22 @@ const routes = [
     component: FeaturesView
   },
   {
+    path: '/how',
+    component: HowView
+  },
+  {
+    path: '/how/docs',
+    component: HowDocsView
+  },
+  {
+    path: '/how/bots',
+    component: HowBotsView
+  },
+  {
+    path: '/how/api',
+    component: HowApiView
+  },
+  {
     path: '/inbox',
     name: 'inbox',
     component: MessageListView,
@@ -80,21 +77,6 @@ const routes = [
     name: 'saved', 
     component: MessageListView,
     props: { mode: 'saved' }
-  },
-  {
-    path: '/admin',
-    name: 'admin',
-    component: AdminView
-  },
-  {
-    path: '/admin/users',
-    name: 'admin-users',
-    component: UserManagementView
-  },
-  {
-    path: '/admin/messages',
-    name: 'admin-messages', 
-    component: MessageManagementView
   },
   {
     path: '/new-thread',
@@ -130,7 +112,7 @@ const router = createRouter({
 });
 
 // Navigation guard to prevent Vue router from handling backend-only routes
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   // List of routes that should bypass Vue router and go directly to backend
   const backendOnlyRoutes = ['/metrics'];
   
@@ -139,7 +121,25 @@ router.beforeEach((to, from, next) => {
     window.location.href = to.path;
     return;
   }
-  
+  // Ensure auth is initialized before permission checks
+  try {
+    if (!store.getters['auth/authReady']) {
+      await store.dispatch('auth/initAuth');
+    }
+  } catch (e) {}
+
+  const requiresAll = to.meta && Array.isArray(to.meta.requiredScopes) ? to.meta.requiredScopes : null;
+  const requiresAny = to.meta && Array.isArray(to.meta.requiresAnyScopes) ? to.meta.requiresAnyScopes : null;
+
+  if (requiresAll && requiresAll.length > 0) {
+    const ok = store.getters['auth/hasAnyScope'](requiresAll) && requiresAll.every(s => store.getters['auth/hasScope'](s));
+    if (!ok) return next({ path: '/public' });
+  }
+  if (requiresAny && requiresAny.length > 0) {
+    const ok = store.getters['auth/hasAnyScope'](requiresAny);
+    if (!ok) return next({ path: '/public' });
+  }
+
   next();
 });
 
