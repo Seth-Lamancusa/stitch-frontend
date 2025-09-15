@@ -8,57 +8,36 @@
           </router-link>
         </div>
         
-        <!-- Navigation Tabs -->
+        <!-- Navigation Tabs (public only) -->
         <div class="navigation-tabs">
-          <!-- Admin Navigation -->
-          <template v-if="isOnAdminPage && isAdmin">
-            <router-link 
-              to="/admin/users" 
-              class="nav-tab"
-              :class="{ 'active': $route.path === '/admin/users' }"
-            >
-              Users
-            </router-link>
-            <router-link 
-              to="/admin/messages" 
-              class="nav-tab"
-              :class="{ 'active': $route.path === '/admin/messages' }"
-            >
-              Messages
-            </router-link>
-          </template>
-          
-          <!-- Regular Navigation -->
-          <template v-else>
-            <router-link 
-              to="/public" 
-              class="nav-tab"
-              :class="{ 'active': activeTab === 'public' }"
-              @click="handleTabClick('public')"
-            >
-              Public
-            </router-link>
-            <router-link 
-              to="/saved" 
-              class="nav-tab"
-              :class="{ 'active': activeTab === 'saved' }"
-              @click="handleTabClick('saved')"
-            >
-              Saved
-            </router-link>
-            <router-link 
-              to="/inbox" 
-              class="nav-tab"
-              :class="{ 'active': activeTab === 'inbox' }"
-              @click="handleTabClick('inbox')"
-            >
-              Inbox
-              <span v-if="isUnreadCountLoading" class="unread-inline-badge">
-                <span class="loading-spinner"></span>
-              </span>
-              <span v-else-if="unreadCount > 0" class="unread-inline-badge">{{ unreadCount }}</span>
-            </router-link>
-          </template>
+          <router-link 
+            to="/public" 
+            class="nav-tab"
+            :class="{ 'active': activeTab === 'public' }"
+            @click="handleTabClick('public')"
+          >
+            Public
+          </router-link>
+          <router-link 
+            to="/saved" 
+            class="nav-tab"
+            :class="{ 'active': activeTab === 'saved' }"
+            @click="handleTabClick('saved')"
+          >
+            Saved
+          </router-link>
+          <router-link 
+            to="/inbox" 
+            class="nav-tab"
+            :class="{ 'active': activeTab === 'inbox' }"
+            @click="handleTabClick('inbox')"
+          >
+            Inbox
+            <span v-if="isUnreadCountLoading" class="unread-inline-badge">
+              <span class="loading-spinner"></span>
+            </span>
+            <span v-else-if="unreadCount > 0" class="unread-inline-badge">{{ unreadCount }}</span>
+          </router-link>
         </div>
       </div>
       
@@ -73,7 +52,15 @@
 
           <!-- Auth status badges - only shown when auth is ready -->
           <template v-if="authReady">
-            <span v-if="isAdmin" class="admin-badge" title="Admin">⛊</span>
+            <!-- Admin badge links out to admin origin -->
+            <a
+              v-can="'admin'"
+              class="admin-badge"
+              :href="ADMIN_ORIGIN"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Admin"
+            >⛊</a>
             <span v-if="!user" class="guest-badge" title="Not logged in">?</span>
           </template>
 
@@ -126,6 +113,7 @@ import RegisterButton from '@/components/buttons/RegisterButton.vue'
 import ProfileEditModal from '../modals/ProfileEditModal.vue';
 import ApiKeysModal from '../modals/ApiKeysModal.vue';
 import GlobalNotifications from '../GlobalNotifications.vue';
+import { ADMIN_ORIGIN } from '@/config/appConfig.js';
 
 const router = useRouter();
 const route = useRoute();
@@ -142,10 +130,7 @@ const isLoggingIn = ref(false);
 const isProfileModalOpen = ref(false);
 const isApiKeysModalOpen = ref(false);
 
-// Check if we're on an admin page
-const isOnAdminPage = computed(() => {
-  return route.path.startsWith('/admin');
-});
+// Public SPA: no internal/admin tabs here
 
 const userDisplayName = computed(() => {
   if (!user.value) return 'Guest';

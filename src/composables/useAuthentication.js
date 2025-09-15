@@ -39,7 +39,7 @@ export function useAuthentication() {
   const signInWithPassword = async (identifier, password) => {
     try {
       error.value = null;
-      const resp = await axios.post('/api/auth/password/login', { identifier, password });
+      const resp = await axios.post('/api/v1/auth/password/login', { identifier, password });
       const data = resp && resp.data ? resp.data : {};
       const token = data.access_token;
       if (!token) throw new Error('Missing access token');
@@ -69,7 +69,7 @@ export function useAuthentication() {
   const registerWithPassword = async ({ email, password, user_tag, display_name, phone, endpoint, notify }) => {
     error.value = null;
     try {
-      const resp = await axios.post('/api/auth/register', { email, password, user_tag, display_name, phone, endpoint, notify });
+      const resp = await axios.post('/api/v1/auth/register', { email, password, user_tag, display_name, phone, endpoint, notify });
       const data = resp && resp.data ? resp.data : {};
       const token = data.access_token;
       if (!token) throw new Error('Missing access token');
@@ -89,7 +89,7 @@ export function useAuthentication() {
   const changePassword = async ({ current_password, new_password }) => {
     error.value = null;
     try {
-      const resp = await axios.post('/api/auth/password/change', { current_password, new_password }, {
+      const resp = await axios.post('/api/v1/auth/password/change', { current_password, new_password }, {
         headers: {
           'Authorization': `Bearer ${TokenManager.accessToken}`
         }
@@ -123,7 +123,7 @@ export function useAuthentication() {
   const requestPasswordResetCode = async (email, user_tag) => {
     error.value = null;
     try {
-      const resp = await axios.post('/api/auth/password/reset/request', { email, user_tag });
+      const resp = await axios.post('/api/v1/auth/password/reset/request', { email, user_tag });
       return resp && resp.data ? resp.data : {};
     } catch (e) {
       if (e?.response?.status === 409) throw new Error('multiple_accounts_for_email');
@@ -136,7 +136,7 @@ export function useAuthentication() {
     error.value = null;
     let resp;
     try {
-      resp = await axios.post('/api/auth/password/reset', { email, user_tag, code, new_password });
+      resp = await axios.post('/api/v1/auth/password/reset', { email, user_tag, code, new_password });
     } catch (e) {
       if (e?.response?.status === 409) throw new Error('multiple_accounts_for_email');
       const info = e?.response?.data || {};
@@ -153,7 +153,7 @@ export function useAuthentication() {
   // Contact verification: email and phone
   const requestEmailVerification = async (email) => {
     const token = TokenManager.accessToken;
-    const resp = await axios.post('/api/auth/contacts/email/request', { email }, {
+    const resp = await axios.post('/api/v1/auth/contacts/email/request', { email }, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     return resp && resp.data ? resp.data : {};
@@ -161,7 +161,7 @@ export function useAuthentication() {
 
   const verifyEmailWithCode = async ({ email, code }) => {
     const token = TokenManager.accessToken;
-    const resp = await axios.post('/api/auth/contacts/email/verify', { email, code }, {
+    const resp = await axios.post('/api/v1/auth/contacts/email/verify', { email, code }, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     const result = resp && resp.data ? resp.data : {};
@@ -173,7 +173,7 @@ export function useAuthentication() {
 
   const requestPhoneVerification = async (phone) => {
     const token = TokenManager.accessToken;
-    const resp = await axios.post('/api/auth/contacts/phone/request', { phone }, {
+    const resp = await axios.post('/api/v1/auth/contacts/phone/request', { phone }, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     return resp && resp.data ? resp.data : {};
@@ -181,7 +181,7 @@ export function useAuthentication() {
 
   const verifyPhoneWithCode = async ({ phone, code }) => {
     const token = TokenManager.accessToken;
-    const resp = await axios.post('/api/auth/contacts/phone/verify', { phone, code }, {
+    const resp = await axios.post('/api/v1/auth/contacts/phone/verify', { phone, code }, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     const result = resp && resp.data ? resp.data : {};
@@ -192,7 +192,7 @@ export function useAuthentication() {
   // Endpoint verification (request + verify)
   const requestEndpointVerification = async (endpointUrl) => {
     const token = TokenManager.accessToken;
-    const resp = await axios.post('/api/auth/contacts/endpoint/request', { endpoint: endpointUrl }, {
+    const resp = await axios.post('/api/v1/auth/contacts/endpoint/request', { endpoint: endpointUrl }, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     return resp && resp.data ? resp.data : {};
@@ -200,7 +200,7 @@ export function useAuthentication() {
 
   const verifyEndpointWithChallenge = async ({ endpoint }) => {
     const token = TokenManager.accessToken;
-    const resp = await axios.post('/api/auth/contacts/endpoint/verify', { endpoint }, {
+    const resp = await axios.post('/api/v1/auth/contacts/endpoint/verify', { endpoint }, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     const result = resp && resp.data ? resp.data : {};

@@ -1,11 +1,9 @@
-import store from '../store';
-import TokenManager from './TokenManager';
-import logger from './logger';
+import axios from 'axios'
+import store from '../store'
+import TokenManager from './TokenManager'
+import logger from './logger'
 
-/**
- * Install a 401 -> refresh token -> retry once interceptor on an axios instance.
- * On refresh failure, forces logout.
- */
+// Install a 401 -> refresh token -> retry once interceptor on an axios instance.
 export function installAxiosAuthInterceptor(axiosInstance) {
   if (!axiosInstance || !axiosInstance.interceptors) return;
 
@@ -94,4 +92,15 @@ export function installAxiosAuthInterceptor(axiosInstance) {
   );
 }
 
+// Centralized Axios client for public SPA
+const apiClient = axios.create({
+  baseURL: '/api/v1',
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json'
+  }
+})
 
+installAxiosAuthInterceptor(apiClient)
+
+export default apiClient

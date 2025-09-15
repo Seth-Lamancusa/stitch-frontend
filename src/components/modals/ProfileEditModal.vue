@@ -18,6 +18,7 @@ const tag = ref('');
 const phoneNumber = ref('');
 const email = ref('');
 const endpoint = ref('');
+const isPrivate = ref(false);
 const isSubmitting = ref(false);
 const errorMessage = ref('');
 const tagError = ref('');
@@ -149,6 +150,7 @@ const resetForm = () => {
   phoneNumber.value = user.value?.phone_number || '';
   email.value = user.value?.email || '';
   endpoint.value = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
+  isPrivate.value = !!(user.value?.private);
   const _contacts = (user.value?.contacts || []);
   notifyPrefs.value = {
     email: !!_contacts.find(c => c.type==='email' && c.notify),
@@ -242,11 +244,13 @@ const hasFormChanges = computed(() => {
   const originalPhoneNumber = user.value?.phone_number || '';
   const originalEmail = user.value?.email || '';
   const originalEndpoint = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
+  const originalPrivate = !!(user.value?.private);
   return displayName.value !== originalDisplayName || 
          tag.value !== originalTag ||
          phoneNumber.value !== originalPhoneNumber ||
          email.value !== originalEmail ||
          endpoint.value !== originalEndpoint ||
+         isPrivate.value !== originalPrivate ||
          notifyPrefsChanged();
 });
 
@@ -386,6 +390,11 @@ const updateProfile = async () => {
     if (endpoint.value !== originalEndpoint) {
       profileUpdate.endpoint = endpoint.value.trim() || null;
     }
+    // Private toggle
+    const originalPrivate = !!(user.value?.private);
+    if (isPrivate.value !== originalPrivate) {
+      profileUpdate.private = !!isPrivate.value;
+    }
     if (notifyPrefsChanged()) {
       profileUpdate.notify = { ...notifyPrefs.value };
     }
@@ -396,7 +405,29 @@ const updateProfile = async () => {
     updateSuccess.value = true;
     setTimeout(() => { updateSuccess.value = false; }, 1800);
   } catch (error) {
-    errorMessage.value = error.message || 'Failed to update profile';
+    const code = error && error.message;
+    if (code === 'user_tag_conflict') {
+      tagError.value = 'That tag is already taken';
+      errorMessage.value = '';
+    } else if (code === 'email_conflict') {
+      emailError.value = 'That email is already in use';
+      errorMessage.value = '';
+    } else if (code === 'phone_conflict') {
+      phoneNumberError.value = 'That phone number is already in use';
+      errorMessage.value = '';
+    } else if (code === 'multiple_emails_not_allowed') {
+      emailError.value = 'Only one email is allowed per account';
+      errorMessage.value = '';
+    } else if (code === 'multiple_phones_not_allowed') {
+      phoneNumberError.value = 'Only one phone number is allowed per account';
+      errorMessage.value = '';
+    } else if (code === 'multiple_endpoints_not_allowed') {
+      errorMessage.value = 'Only one endpoint is allowed per account';
+    } else if (code === 'managed_contacts_endpoints_only') {
+      errorMessage.value = 'Managed users may only have an endpoint contact';
+    } else {
+      errorMessage.value = code || 'Failed to update profile';
+    }
   } finally {
     isSubmitting.value = false;
   }
@@ -626,6 +657,14 @@ const deleteAccount = async () => {
               <input class="code-input" v-model="emailCode" placeholder="Enter code" />
               <button class="verify-btn" v-if="emailCodeSent" @click="confirmEmailCode" :disabled="verifyingEmail || !emailCode.trim()">{{ verifyingEmail ? 'Verifying…' : 'Verify' }}</button>
             </div>
+          </div>
+
+          <div class="form-group" style="display:flex; align-items:center; justify-content:space-between;">
+            <label style="min-width:auto;">Privacy</label>
+            <label class="notify-toggle">
+              <input type="checkbox" v-model="isPrivate" />
+              <span class="notify-text">Private account</span>
+            </label>
           </div>
           
           <div class="form-group contact-section">

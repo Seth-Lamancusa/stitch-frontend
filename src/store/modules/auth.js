@@ -95,7 +95,7 @@ export default {
         const token = TokenManager.accessToken;
         if (!token) throw new Error('Not authenticated');
 
-        const resp = await axios.delete('/api/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
+        const resp = await axios.delete('/api/v1/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
         if (!resp || resp.status < 200 || resp.status >= 300) {
           const data = (resp && resp.data) || {};
           throw new Error(data.detail || 'Failed to delete account');
@@ -125,7 +125,7 @@ export default {
         }
         let response;
         try {
-          response = await axios.get('/api/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
+          response = await axios.get('/api/v1/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
         } catch (err) {
           // Attempt refresh then retry once
           try {
@@ -138,7 +138,7 @@ export default {
               WebSocketService.cleanup();
               return;
             }
-            response = await axios.get('/api/users/me', { headers: { 'Authorization': `Bearer ${newAccess}` } });
+            response = await axios.get('/api/v1/users/me', { headers: { 'Authorization': `Bearer ${newAccess}` } });
           } catch (_e) {
             console.warn('[AUTH] /users/me retry after refresh failed; clearing tokens');
             TokenManager.accessToken = null;
@@ -192,7 +192,7 @@ export default {
     async updateProfile({ commit }, profileData) {
       try {
         const token = TokenManager.accessToken;
-        const response = await axios.post('/api/users/profile', profileData, {
+        const response = await axios.post('/api/v1/users/profile', profileData, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -206,7 +206,7 @@ export default {
 
         // Immediately refresh full user state (including contacts/notify flags) from /me
         try {
-          const meResp = await axios.get('/api/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
+          const meResp = await axios.get('/api/v1/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
           if (meResp && meResp.status >= 200 && meResp.status < 300) {
             const userData = meResp.data;
             commit('SET_USER', mapApiUserToAuthState(userData));

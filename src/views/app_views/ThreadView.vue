@@ -16,54 +16,22 @@
     
     <!-- Normal thread view - show when we have messages -->
     <template v-else-if="displayedMessages.length > 0">
-      <!-- Thread header with navigation back and title -->
-      <div class="thread-header">
-        <button @click="backToList()" class="back-button">
-          &larr; Back
-        </button>
-        
-        <!-- Graph view toggle -->
-        <!-- <button @click="openGraphView" class="graph-view-button" title="Switch to graph view">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M1 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h4.5a1 1 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5H1zm7 0a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h4.5a1 1 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5H8zm-7 1h3v6H1V4zm7 0h3v6H8V4z"/>
-            <circle cx="3" cy="6" r="1"/>
-            <circle cx="10" cy="6" r="1"/>
-            <circle cx="6.5" cy="8" r="1"/>
-            <path d="M4 6h2.5M9 6h1.5"/>
-          </svg>
-          Graph View
-        </button> -->
-        
-        <!-- Selection mode controls -->
-        <div v-if="isSelectionMode" class="selection-controls">
-          <span class="selection-count">{{ selectedMessageCount }} message{{ selectedMessageCount === 1 ? '' : 's' }} selected</span>
-          <button @click="copySelectedMessages" class="copy-button" :disabled="selectedMessageCount === 0" :class="{ 'copied': isCopied }">
-            <span class="copy-icon">{{ isCopied ? '✓' : '📝' }}</span>
-            {{ isCopied ? 'Copied!' : 'Copy' }}
-          </button>
-          <button @click="exitSelectionMode" class="exit-selection-button" title="Exit selection mode">
-            ×
-          </button>
-        </div>
-        
-        <!-- Login button -->
-        <div v-else class="user-controls">
-          <div class="user-info">
-            <div class="username-container" @click="openProfileModal" v-if="user">
-              <span class="username">{{ userDisplayName }}</span>
-              <span v-if="userTag" class="user-tag">@{{ userTag }}</span>
-              <span class="edit-icon" title="Edit profile">✎</span>
-            </div>
-            <span v-else class="username">Guest</span>
-
-            <!-- Auth status badges -->
-            <span v-if="isAdmin" class="admin-badge" title="Admin">⛊</span>
-            <span v-if="!user" class="guest-badge" title="Not logged in">?</span>
-          </div>
-          <button v-if="user" @click="logout" class="logout-btn">Logout</button>
-          <LoginButton v-else />
-        </div>
-      </div>
+      <!-- Thread header extracted to component -->
+      <ThreadHeader
+        :user="user"
+        :is-admin="isAdmin"
+        :user-display-name="userDisplayName"
+        :user-tag="userTag"
+        :is-selection-mode="isSelectionMode"
+        :selected-message-count="selectedMessageCount"
+        :is-copied="isCopied"
+        @back="backToList()"
+        @openGraph="openGraphView"
+        @copy="copySelectedMessages"
+        @exitSelection="exitSelectionMode"
+        @logout="logout"
+        @openProfile="openProfileModal"
+      />
       
       <!-- Messages container with fixed spacing -->
       <div 
@@ -142,8 +110,26 @@
       />
     </template>
     
-    <div v-else class="not-found">
-      Message not found.
+    <div v-else>
+      <ThreadHeader
+        :user="user"
+        :is-admin="isAdmin"
+        :user-display-name="userDisplayName"
+        :user-tag="userTag"
+        :is-selection-mode="isSelectionMode"
+        :selected-message-count="selectedMessageCount"
+        :is-copied="isCopied"
+        @back="backToList()"
+        @openGraph="openGraphView"
+        @copy="copySelectedMessages"
+        @exitSelection="exitSelectionMode"
+        @logout="logout"
+        @openProfile="openProfileModal"
+      />
+
+      <div class="not-found">
+        Message not found.
+      </div>
     </div>
 
     <!-- Global Notifications -->
@@ -204,6 +190,7 @@ import RecipientsModal from '../../components/modals/RecipientsModal.vue';
 import DeleteConfirmModal from '../../components/modals/DeleteConfirmModal.vue';
 import ProfileEditModal from '../../components/modals/ProfileEditModal.vue';
 import { useAuthentication } from '../../composables/useAuthentication';
+import ThreadHeader from '../../components/ThreadHeader.vue';
 import LoginButton from '@buttons/LoginButton.vue'
 import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
 
@@ -1310,132 +1297,7 @@ const closeProfileModal = () => {
   height: var(--app-height, 100vh);
   width: 100%;
   position: relative;
-}
-
-.thread-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-sm) var(--space-md);
-  border-bottom: 1px solid var(--color-border);
-  background-color: var(--color-surface);
-  z-index: 5;
-  position: sticky;
-  top: 0;
-  /* Add a subtle shadow when scrolled */
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.back-button {
-  padding: var(--space-xs) var(--space-sm);
-  background-color: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  color: var(--color-text);
-}
-
-.graph-view-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: var(--space-xs) var(--space-sm);
-  background-color: var(--color-primary);
-  color: rgb(99, 90, 90);
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  transition: background-color 0.2s ease;
-}
-
-.graph-view-button:hover {
-  background-color: var(--color-primary-dark);
-}
-
-.graph-view-button svg {
-  flex-shrink: 0;
-}
-
-.thread-title {
-  margin: 0;
-  color: var(--color-primary);
-  font-size: var(--font-size-lg);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Selection controls */
-.selection-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-left: auto;
-}
-
-.selection-count {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-}
-
-.copy-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
-  padding: 5px 8px;
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  color: var(--color-text-secondary);
-}
-
-.copy-button:hover:not(:disabled) {
-  background-color: var(--color-surface-hover);
-  border-color: var(--color-border-hover);
-  color: var(--color-primary);
-}
-
-.copy-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.copy-button.copied {
-  background-color: var(--color-success-light);
-  border-color: var(--color-success);
-  color: var(--color-success);
-}
-
-.copy-icon {
-  font-size: var(--font-size-sm);
-  line-height: 1;
-}
-
-.exit-selection-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
-  padding: 4px 8px;
-  font-size: var(--font-size-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  color: var(--color-text-secondary);
-  min-width: 28px;
-  height: 28px;
-}
-
-.exit-selection-button:hover {
-  background-color: var(--color-error);
-  border-color: var(--color-error);
-  color: var(--color-text-inverse);
+  overflow: visible;
 }
 
 /* Styles for the scroll anchor - make it invisible */
@@ -1710,9 +1572,6 @@ const closeProfileModal = () => {
     width: 100%;
   }
   
-  .thread-header {
-    padding: var(--space-xs) var(--space-sm);
-  }
   
   .thread-title {
     font-size: var(--font-size-md);
@@ -1778,14 +1637,6 @@ const closeProfileModal = () => {
     bottom: 5px;
   }
   
-  .thread-header {
-    padding: 6px 8px; /* Minimal header padding */
-  }
-  
-  .back-button {
-    padding: 4px 8px;
-    font-size: calc(var(--font-size-sm) - 1px);
-  }
   
   .thread-title {
     font-size: calc(var(--font-size-md) - 1px);

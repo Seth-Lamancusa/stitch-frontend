@@ -5,7 +5,7 @@ import IdleManager from './IdleManager';
 import NetworkVisibility from './NetworkVisibility';
 import ReconnectBackoff from './ReconnectBackoff';
 
-const WS_BASE_URL = '/ws'
+const WS_BASE_URL = '/ws/v1'
 
 const WebSocketService = {
   // Core state
@@ -541,7 +541,7 @@ const WebSocketService = {
           const isSecure = window.location.protocol === 'https:';
           const wsProtocol = isSecure ? 'wss:' : 'ws:';
           const host = window.location.host;
-          return `${wsProtocol}//${host}${WS_BASE_URL}/user/${t}`;
+          return `${wsProtocol}//${host}${WS_BASE_URL}?access_token=${encodeURIComponent(t)}`;
         },
         logger: console,
         // Disable client heartbeat; rely on server pings only

@@ -72,15 +72,12 @@ const requestCode = async () => {
       if (cooldown.value === 0 && timer) { clearInterval(timer); timer = null }
     }, 1000)
   } catch (e) {
+    // With unique-email policy, backend should not return multi-account error going forward
+    // Keep a clear message for legacy cases
     if (e && e.message === 'multiple_accounts_for_email') {
-      if (!needsTag.value) {
-        needsTag.value = true
-        error.value = 'Multiple accounts match this email. Enter your @tag to continue.'
-      } else if (hasValidTag.value) {
-        error.value = 'That tag does not match this email. Check spelling.'
-      } else {
-        error.value = 'Enter your @tag to continue.'
-      }
+      error.value = 'This email is associated with multiple accounts. Please contact support.'
+    } else if (e && e.message === 'email_not_found') {
+      error.value = 'No account found for that email'
     } else {
       error.value = e.message || 'Failed to request code'
     }
@@ -97,9 +94,8 @@ const reset = async () => {
     await resetPasswordWithCode({ email: email.value, user_tag: needsTag.value ? normalizeTag(userTag.value) : undefined, code: code.value, new_password: newPassword.value })
     router.push('/inbox')
   } catch (e) {
-    if (e && e.message === 'multiple_accounts_for_email') {
-      needsTag.value = true
-      error.value = hasValidTag.value ? 'That tag does not match this email. Check spelling.' : 'Multiple accounts match this email. Enter your @tag to continue.'
+    if (e && e.message === 'email_not_found') {
+      error.value = 'No account found for that email'
     } else {
       error.value = e.message || 'Password reset failed'
     }

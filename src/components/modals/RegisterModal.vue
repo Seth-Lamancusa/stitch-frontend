@@ -11,11 +11,11 @@
           <input v-model="email" type="email" placeholder="you@example.com" id="register-email" name="email" autocomplete="email" autocapitalize="off" spellcheck="false" />
           <label for="register-phone">Phone (optional)</label>
           <input v-model="phone" type="tel" placeholder="+1 555 123 4567" id="register-phone" name="tel" autocomplete="tel" inputmode="tel" />
-          <label for="register-username">Tag (required)</label>
+          <label for="register-username">User Tag (required, unique)</label>
           <input 
             v-model="userTag" 
             type="text" 
-            placeholder="unique, numbers, letters, underscores, and hyphens only" 
+            placeholder="numbers, letters, underscores, and hyphens only" 
             pattern="[A-Za-z0-9_-]*" 
             title="Only letters, numbers, underscores, and hyphens are allowed"
             id="register-username"
@@ -29,21 +29,25 @@
           <label for="register-nickname">Display name (required)</label>
           <input v-model="displayName" type="text" placeholder="Display name" id="register-nickname" name="nickname" autocomplete="nickname" />
           <label for="register-password">Password</label>
-          <input v-model="password" type="password" placeholder="••••••••" id="register-password" name="new-password" autocomplete="new-password" />
-          <p class="hint">Minimum 8 characters, must include a letter and a number.</p>
-          <hr class="hr">
+          <input v-model="password" type="password" placeholder="8+ chars, letter, number" id="register-password" name="new-password" autocomplete="new-password" />
           <div class="notify">
             <div class="notify-label">Notify me of new direct messages at:</div>
             <div class="notify-buttons">
               <button type="button" :class="['chip', { selected: notify.email }]" @click="selectNotify('email')">Email</button>
               <button type="button" :class="['chip', { selected: notify.phone, disabled: !phone }]" :disabled="!phone" @click="selectNotify('phone')">Phone</button>
             </div>
-            <p class="hint">Notifications are sent only to verified contacts, and only after your email is verified.</p>
+            <p class="hint">Notifications are sent only to verified contacts (phone, email, webhook), and only after your email is verified.</p>
           </div>
           <p v-if="error" class="error">{{ error }}</p>
         </div>
       </div>
       <div class="modal-footer">
+        <div style="display:flex; align-items:center; gap: 10px; margin-right:auto;">
+          <label style="display:inline-grid; grid-auto-flow: column; align-items:center; gap:6px; font-size: 12px;">
+            <input type="checkbox" v-model="isPrivate" />
+            <span>Private account</span>
+          </label>
+        </div>
         <button class="primary" :disabled="busy || !canSubmit" :aria-busy="busy ? 'true' : 'false'" @click="submit">{{ busy ? 'Creating account…' : 'Create account' }}</button>
       </div>
     </div>
@@ -67,6 +71,7 @@ const busy = ref(false)
 const error = ref('')
 const notify = ref({ email: false, phone: false, endpoint: false })
 const tagError = ref('')
+const isPrivate = ref(false)
 
 const { registerWithPassword } = useAuthentication()
 
@@ -82,6 +87,7 @@ watch(() => props.isOpen, (open) => {
     error.value = ''
     notify.value = { email: false, phone: false, endpoint: false }
     tagError.value = ''
+    isPrivate.value = false
   }
 })
 
@@ -122,16 +128,28 @@ const submit = async () => {
       display_name: (displayName.value || '').trim(),
       phone: phone.value || undefined,
       endpoint: endpoint.value || undefined,
-      notify: notify.value
+      notify: notify.value,
+      private: !!isPrivate.value
     })
     emit('success')
     emit('close')
   } catch (e) {
-    if ((e && e.message) === 'user_tag_in_use') {
+    const code = e && e.message
+    if (code === 'user_tag_conflict' || code === 'user_tag_in_use') {
       tagError.value = 'That tag is already taken'
       error.value = ''
+    } else if (code === 'email_conflict') {
+      error.value = 'That email is already in use'
+    } else if (code === 'phone_conflict') {
+      error.value = 'That phone number is already in use'
+    } else if (code === 'multiple_emails_not_allowed') {
+      error.value = 'Only one email is allowed per account'
+    } else if (code === 'multiple_phones_not_allowed') {
+      error.value = 'Only one phone number is allowed per account'
+    } else if (code === 'multiple_endpoints_not_allowed') {
+      error.value = 'Only one endpoint is allowed per account'
     } else {
-      error.value = e.message || 'Registration failed'
+      error.value = code || 'Registration failed'
     }
   } finally {
     busy.value = false
