@@ -1,6 +1,6 @@
 <template>
-  <div v-if="isOpen" class="modal-overlay" @click.stop="onClose">
-    <div class="modal-container" @click.stop>
+  <div v-if="isOpen" class="modal-overlay" @pointerdown="onOverlayPointerDown" @click.self="onOverlayClick">
+    <div class="modal-container" @click.stop @pointerdown="onContainerPointerDown">
       <div class="modal-header">
         <h3>Create account</h3>
         <button class="close-button" @click.stop="onClose">×</button>
@@ -29,7 +29,12 @@
           <label for="register-nickname">Display name (required)</label>
           <input v-model="displayName" type="text" placeholder="Display name" id="register-nickname" name="nickname" autocomplete="nickname" />
           <label for="register-password">Password</label>
-          <input v-model="password" type="password" placeholder="8+ chars, letter, number" id="register-password" name="new-password" autocomplete="new-password" />
+          <div class="password-field">
+            <input :type="showPassword ? 'text' : 'password'" v-model="password" placeholder="8+ chars, letter, number" id="register-password" name="new-password" autocomplete="new-password" />
+            <button type="button" class="eye-toggle" @click="showPassword = !showPassword" :aria-pressed="showPassword ? 'true' : 'false'" :title="showPassword ? 'Hide password' : 'Show password'">
+              {{ showPassword ? '🙈' : '👁️' }}
+            </button>
+          </div>
           <div class="notify">
             <div class="notify-label">Notify me of new direct messages at:</div>
             <div class="notify-buttons">
@@ -67,6 +72,7 @@ const endpoint = ref('')
 const userTag = ref('')
 const displayName = ref('')
 const password = ref('')
+const showPassword = ref(false)
 const busy = ref(false)
 const error = ref('')
 const notify = ref({ email: false, phone: false, endpoint: false })
@@ -74,6 +80,15 @@ const tagError = ref('')
 const isPrivate = ref(false)
 
 const { registerWithPassword } = useAuthentication()
+
+// Overlay click guard: prevent close when pointer starts inside and ends outside
+const startedInsideModal = ref(false)
+const onContainerPointerDown = () => { startedInsideModal.value = true }
+const onOverlayPointerDown = () => { startedInsideModal.value = false }
+const onOverlayClick = () => {
+  if (startedInsideModal.value) { startedInsideModal.value = false; return }
+  onClose()
+}
 
 watch(() => props.isOpen, (open) => {
   if (open) {
@@ -83,6 +98,7 @@ watch(() => props.isOpen, (open) => {
     userTag.value = ''
     displayName.value = ''
     password.value = ''
+    showPassword.value = false
     busy.value = false
     error.value = ''
     notify.value = { email: false, phone: false, endpoint: false }
@@ -195,6 +211,10 @@ const onTagInput = () => {
 .panel { display: flex; flex-direction: column; gap: var(--space-sm); }
 label { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
 input { padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: var(--font-size-sm); background: var(--color-surface); color: var(--color-text); }
+.password-field { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; }
+.password-field input { padding-right: 36px; }
+.eye-toggle { margin-left: 6px; background: transparent; border: 1px solid var(--color-border); color: var(--color-text-secondary); border-radius: var(--radius-sm); cursor: pointer; padding: 6px 8px; font-size: 14px; }
+.eye-toggle:hover { background: var(--color-hover-overlay); color: var(--color-text); }
 .primary { background: var(--color-primary); color: var(--color-text-inverse); border: none; padding: 8px 12px; border-radius: var(--radius-sm); cursor: pointer; }
 .error { color: var(--color-error); margin-top: var(--space-sm); font-size: var(--font-size-sm); }
 .hint { color: var(--color-text-secondary); margin-top: 0; font-size: var(--font-size-xs); }
@@ -207,6 +227,10 @@ input { padding: 8px 10px; border: 1px solid var(--color-border); border-radius:
 .none-link { background: none; border: none; color: var(--color-text-secondary); text-decoration: underline; font-size: var(--font-size-xs); width: fit-content; padding: 0; cursor: pointer; }
 .hr { margin-top: 0; margin-bottom: 12px; border: none; border-top: 1px solid var(--color-border); }
 @media (max-width: 768px) { .modal-container { width: 95%; height: 80vh; max-height: 80vh; } .modal-content { padding: var(--space-md); } }
+
+@media (max-width: 600px) {
+  .notify-buttons { justify-content: flex-start; }
+}
 </style>
 
 

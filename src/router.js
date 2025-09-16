@@ -30,6 +30,7 @@ const routes = [
   },
   {
     path: '/home',
+    name: 'home',
     component: HomeView
   },
   {
@@ -139,11 +140,11 @@ router.beforeEach(async (to, from, next) => {
 
   if (requiresAll && requiresAll.length > 0) {
     const ok = store.getters['auth/hasAnyScope'](requiresAll) && requiresAll.every(s => store.getters['auth/hasScope'](s));
-    if (!ok) return next({ path: '/public' });
+    if (!ok) return next({ path: '/history' });
   }
   if (requiresAny && requiresAny.length > 0) {
     const ok = store.getters['auth/hasAnyScope'](requiresAny);
-    if (!ok) return next({ path: '/public' });
+    if (!ok) return next({ path: '/history' });
   }
 
   next();

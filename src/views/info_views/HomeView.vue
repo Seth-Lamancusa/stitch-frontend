@@ -1,7 +1,7 @@
 <template>
   <InfoViewLayout
-    pageTitle="Collaborate with AI"
-    pageSubtitle="Connect, compare, share."
+    pageTitle="Welcome to Stitch"
+    pageSubtitle="AI meets the group."
     heroClass="home-hero"
     :showBetaBanner="true"
     betaBannerIcon=""
@@ -10,26 +10,10 @@
   >
     <template #betaBannerText>
       <div class="banner-group">
-        <router-link to="/public" class="banner-cta">
+        <router-link to="/history" class="banner-cta">
           <span class="btn-icon">💬</span>
           <span class="cta-text">Try it now!</span>
         </router-link>
-        <div class="banner-buttons">
-          <a href="https://youtu.be/ZoNM-2rqzko" target="_blank" class="banner-btn">
-            <span class="btn-icon">📺</span>
-            <div class="btn-text-content">
-              <div class="btn-title">Watch Demo</div>
-              <div class="btn-subtitle">How does it work?</div>
-            </div>
-          </a>
-          <router-link to="/features" class="banner-btn">
-            <span class="btn-icon">⚡</span>
-            <div class="btn-text-content">
-              <div class="btn-title">Features</div>
-              <div class="btn-subtitle">Messaging, AI, & more</div>
-            </div>
-          </router-link>
-        </div>
       </div>
     </template>
     <section class="home-main">
@@ -178,10 +162,6 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
   align-items: center;
   gap: 0.75rem;
   margin: 0 auto;
-}
-
-.banner-group .banner-cta {
-  margin: 0 0 0.75rem 0;
 }
 
 .banner-cta {
@@ -424,19 +404,7 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
     }
     
 
-      /* Banner buttons mobile styles */
-  .banner-buttons {
-    gap: 0.375rem;
-    max-width: 600px;
-  }
 
-  .banner-btn {
-    min-width: auto;
-    flex: 1 1 calc(50% - 0.1875rem);
-    padding: 0.625rem 0.75rem;
-    height: 60px;
-    gap: 0.5rem;
-  }
 
   .btn-text-content {
     justify-content: center;
@@ -451,17 +419,6 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
   }
   }
 
-@media (max-width: 768px) {
-  .banner-cta {
-    min-width: auto;
-    width: calc(100% - 2rem);
-    height: 64px;
-    margin: 0 auto 0.625rem auto;
-  }
-  .banner-cta .cta-text {
-    font-size: 1rem;
-  }
-}
 
 @media (max-width: 480px) {
   .content-columns {

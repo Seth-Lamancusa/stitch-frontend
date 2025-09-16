@@ -552,10 +552,6 @@ export default {
       }
     };
     
-    const openEditModal = () => {
-      store.dispatch('navigation/showEditMessageModal', props.message);
-    };
-    
     const isPublic = computed(() => {
       const publicValue = props.message.public;
       const result = publicValue === 1 || publicValue === true;

@@ -14,7 +14,7 @@
           <li><router-link to="/features" :class="{ active: currentRoute === '/features' }">Features</router-link></li>
           <li><router-link to="/how" :class="{ active: currentRoute.startsWith('/how') }">How it works</router-link></li>
           <li><router-link to="/terms" :class="{ active: currentRoute === '/terms' }">Terms</router-link></li>
-          <li><router-link to="/public" class="login-btn">Go to Stitch</router-link></li>
+          <li><router-link to="/history" class="login-btn">Go to Stitch</router-link></li>
         </ul>
         <div class="hamburger" @click="toggleMenu" :class="{ active: isMenuOpen }">
           <span></span>
@@ -115,9 +115,6 @@ const props = defineProps({
 // Current route for active links
 const route = useRoute();
 const currentRoute = computed(() => route.path);
-
-// Current year for copyright
-const currentYear = computed(() => new Date().getFullYear());
 
 // State for mobile menu toggle
 const isMenuOpen = ref(false);

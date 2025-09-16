@@ -45,12 +45,17 @@ const onSuccess = async () => {
 .login-btn {
   background-color: var(--color-primary, #4f8cff);
   color: var(--color-text-inverse, #fff);
-  padding: var(--space-xs, 6px) var(--space-sm, 12px);
+  padding: 6px 12px;
   border: none;
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
-  font-size: var(--font-size-xs, 0.85rem);
+  font-size: calc(var(--font-size-xs, 0.85rem) - 2px);
+  line-height: 1.1;
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
 }
 
 .login-btn:hover {

@@ -1,6 +1,6 @@
 <template>
-  <div v-if="isOpen" class="modal-overlay" @click.stop="onClose">
-    <div class="modal-container" @click.stop>
+  <div v-if="isOpen" class="modal-overlay" @pointerdown="onOverlayPointerDown" @click.self="onOverlayClick">
+    <div class="modal-container" @click.stop @pointerdown="onContainerPointerDown">
       <div class="modal-header">
         <h3>Sign in</h3>
         <button class="close-button" @click.stop="onClose">×</button>
@@ -10,7 +10,12 @@
           <label>Tag, Email, or Phone</label>
           <input v-model="identifier" type="text" placeholder="tag, email, or phone" />
           <label>Password</label>
-          <input v-model="password" type="password" placeholder="••••••••" @keyup.enter="submitPassword" />
+          <div class="password-field">
+            <input :type="showPassword ? 'text' : 'password'" v-model="password" placeholder="••••••••" @keyup.enter="submitPassword" />
+            <button type="button" class="eye-toggle" @click="showPassword = !showPassword" :aria-pressed="showPassword ? 'true' : 'false'" :title="showPassword ? 'Hide password' : 'Show password'">
+              {{ showPassword ? '🙈' : '👁️' }}
+            </button>
+          </div>
           <p class="hint">If your email is used by multiple accounts, sign in with your @tag.</p>
           <div class="row between">
             <span></span>
@@ -38,11 +43,21 @@ const emit = defineEmits(['close','success'])
 
 const identifier = ref('')
 const password = ref('')
+const showPassword = ref(false)
 const busy = ref(false)
 const error = ref('')
 
 const store = useStore()
 const { signInWithPassword } = useAuthentication()
+
+// Overlay click guard: prevent close when pointer starts inside and ends outside
+const startedInsideModal = ref(false)
+const onContainerPointerDown = () => { startedInsideModal.value = true }
+const onOverlayPointerDown = () => { startedInsideModal.value = false }
+const onOverlayClick = () => {
+  if (startedInsideModal.value) { startedInsideModal.value = false; return }
+  onClose()
+}
 
 // Identifier validation
 // - tag: letters, numbers, hyphen, underscore (no leading @ in input)
@@ -65,6 +80,7 @@ watch(() => props.isOpen, (open) => {
   if (open) {
     identifier.value = ''
     password.value = ''
+    showPassword.value = false
     error.value = ''
   }
 })
@@ -182,6 +198,10 @@ const submitPassword = async () => {
 .panel { display: flex; flex-direction: column; gap: var(--space-sm); }
 label { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
 input { padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: var(--font-size-sm); background: var(--color-surface); color: var(--color-text); }
+.password-field { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; }
+.password-field input { padding-right: 36px; }
+.eye-toggle { margin-left: 6px; background: transparent; border: 1px solid var(--color-border); color: var(--color-text-secondary); border-radius: var(--radius-sm); cursor: pointer; padding: 6px 8px; font-size: 14px; }
+.eye-toggle:hover { background: var(--color-hover-overlay); color: var(--color-text); }
 .row.between { display: flex; justify-content: space-between; align-items: center; }
 .forgot { font-size: var(--font-size-xs); color: var(--color-primary); text-decoration: none; }
 .forgot:hover { text-decoration: underline; }
