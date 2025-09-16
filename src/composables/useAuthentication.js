@@ -30,7 +30,7 @@ export function useAuthentication() {
       TokenManager.accessToken = null;
       TokenManager.refreshToken = null;
       store.commit('auth/SET_USER', null);
-      window.location.href = '/public';
+      window.location.href = '/history';
     } catch (e) {
       error.value = e.message;
     }

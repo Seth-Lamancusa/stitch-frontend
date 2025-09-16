@@ -5,7 +5,7 @@ export default {
     replyingToMessageId: null,
     isLoadingReplyMessage: false,
     isReplying: false,
-    previousRoute: '/public', // Default to public as fallback
+    previousRoute: '/history', // Default to history as fallback
     activeTab: 'public', // Track which navigation tab is active
     replySettings: {
       isPublic: true,
@@ -34,8 +34,6 @@ export default {
     recipientsModalConfig: null, // Holds { isPublic, isAddMode, existingRecipients, messageId }
     linksModalVisible: false,
     messageForLinks: null,
-    editMessageModalVisible: false,
-    messageToEdit: null,
     // Global Bot Prompt modal state
     botPromptModalVisible: false,
     botPromptTargetMessageId: null,
@@ -201,12 +199,6 @@ export default {
     SET_MESSAGE_FOR_LINKS(state, message) {
       state.messageForLinks = message;
     },
-    SET_EDIT_MESSAGE_MODAL_VISIBLE(state, visible) {
-      state.editMessageModalVisible = visible;
-    },
-    SET_MESSAGE_TO_EDIT(state, message) {
-      state.messageToEdit = message;
-    },
     // Global Bot Prompt modal mutations
     SHOW_BOT_PROMPT_MODAL(state, { messageId }) {
       state.botPromptModalVisible = true;
@@ -279,8 +271,6 @@ export default {
     recipientsModalMessageId: state => state.recipientsModal.messageId,
     linksModalVisible: (state) => state.linksModalVisible,
     messageForLinks: (state) => state.messageForLinks,
-    editMessageModalVisible: (state) => state.editMessageModalVisible,
-    messageToEdit: (state) => state.messageToEdit,
     // Bot Prompt modal getters
     botPromptModalVisible: (state) => state.botPromptModalVisible,
     botPromptTargetMessageId: (state) => state.botPromptTargetMessageId,
@@ -540,14 +530,6 @@ export default {
     hideLinksModal({ commit }) {
       commit('SET_LINKS_MODAL_VISIBLE', false);
       commit('SET_MESSAGE_FOR_LINKS', null);
-    },
-    showEditMessageModal({ commit }, message) {
-      commit('SET_MESSAGE_TO_EDIT', message);
-      commit('SET_EDIT_MESSAGE_MODAL_VISIBLE', true);
-    },
-    hideEditMessageModal({ commit }) {
-      commit('SET_EDIT_MESSAGE_MODAL_VISIBLE', false);
-      commit('SET_MESSAGE_TO_EDIT', null);
     },
     // Bot Prompt modal actions
     showBotPromptModal({ commit }, { messageId }) {

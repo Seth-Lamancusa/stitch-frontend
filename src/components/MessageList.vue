@@ -10,7 +10,7 @@ const props = defineProps({
   mode: {
     type: String,
     required: true,
-    validator: (val) => ['inbox', 'public', 'saved', 'incoming-links', 'outgoing-links'].includes(val)
+    validator: (val) => ['inbox', 'public', 'history', 'saved', 'incoming-links', 'outgoing-links'].includes(val)
   },
   // Custom messages to display instead of fetching from store
   customMessages: {
@@ -75,9 +75,9 @@ const currentRequestId = ref(0);
 const localLoadingState = ref(false);
 
 // Mode classification helpers
-const isLocalMode = computed(() => ['saved', 'public', 'incoming-links', 'outgoing-links'].includes(props.mode));
+const isLocalMode = computed(() => ['saved', 'public', 'history', 'incoming-links', 'outgoing-links'].includes(props.mode));
 const isStoreMode = computed(() => ['inbox', 'admin'].includes(props.mode));
-const requiresAuth = computed(() => ['inbox', 'saved'].includes(props.mode));
+const requiresAuth = computed(() => ['inbox', 'saved', 'history'].includes(props.mode));
 
 // Store loading state - single source of truth for store-based modes only
 const isLoading = computed(() => {
@@ -92,14 +92,8 @@ const messageListRef = ref(null);
 // Reference to the loading indicator for intersection observer
 const loadingIndicatorRef = ref(null);
 
-// Determine active tab from route path (robust to nested routes)
-const activeTab = computed(() => {
-  const p = route.path || '';
-  if (p.startsWith('/public')) return 'public';
-  if (p.startsWith('/saved')) return 'saved';
-  if (p.startsWith('/inbox')) return 'inbox';
-  return 'public';
-});
+// Read active tab from centralized navigation store (synced from TabViewLayout via route)
+const activeTab = computed(() => store.getters['navigation/activeTab'] || 'public');
 
 const threads = computed(() => {
   // Use custom messages if provided
@@ -107,8 +101,8 @@ const threads = computed(() => {
     return props.customMessages;
   }
   
-  // Use local state for saved and link modes (to avoid polluting global store)
-  if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
+  // Use local state for local modes (to avoid polluting global store)
+  if (isLocalMode.value) {
     return localMessages.value;
   }
   
@@ -137,6 +131,12 @@ const emptyStateMessage = computed(() => {
         return 'No messages in your inbox.';
       } else {
         return 'You must be logged in to view your inbox.';
+      }
+    case 'history':
+      if (user.value) {
+        return 'No history yet. Create your first message to get started.';
+      } else {
+        return 'You must be logged in to view your history.';
       }
     case 'admin':
       return 'No messages found.';
@@ -168,6 +168,9 @@ const loginPromptMessage = computed(() => {
     }
     if (props.mode === 'inbox') {
       return 'Login or register to receive direct messages.';
+    }
+    if (props.mode === 'history') {
+      return 'Login or register to view your message history.';
     }
   }
   return '';
@@ -796,6 +799,9 @@ const handleLinkDelete = async (linkData) => {
   padding: var(--space-xl);
   text-align: center;
   color: var(--color-text-secondary);
+  width: 50%;
+  margin: 0 auto;
+  align-self: center;
 }
 
 .empty-subtitle {
@@ -950,6 +956,7 @@ const handleLinkDelete = async (linkData) => {
   text-align: center;
   flex-direction: column;
   gap: 16px;
+  align-self: center;
 }
 
 .end-of-results {

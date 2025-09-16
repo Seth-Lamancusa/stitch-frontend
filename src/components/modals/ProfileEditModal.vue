@@ -56,6 +56,12 @@ let phoneCooldownTimerId = null;
 
 const { changePassword, requestEmailVerification, verifyEmailWithCode, requestPhoneVerification, verifyPhoneWithCode, requestEndpointVerification: requestEndpointChallenge, verifyEndpointWithChallenge } = useAuthentication();
 const notifyPrefs = ref({ email: false, phone: false, endpoint: false });
+const showPhoneConsent = ref(false);
+
+// Password visibility toggles
+const showCurrentPassword = ref(false);
+const showNewPassword = ref(false);
+const showConfirmPassword = ref(false);
 
 // Endpoint signing secret management (write-only)
 const secretBusy = ref(false);
@@ -137,6 +143,65 @@ const hasSavedEndpoint = computed(() => !!((user.value?.contacts || []).find(c =
 // Signing secret presence flag from /me
 const hasEndpointSigningSecret = computed(() => !!(user.value?.has_endpoint_signing_secret));
 
+// ------------------------------------------------------------
+// Normalization helpers for equality/dirty checks
+// ------------------------------------------------------------
+function normalizeTrimmed(value) {
+  const v = (value ?? '').toString();
+  return v.trim();
+}
+
+function normalizeLowerTrimmed(value) {
+  return normalizeTrimmed(value).toLowerCase();
+}
+
+function normalizePhoneForCompare(value) {
+  const digits = (value || '').replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return digits.slice(1); // US canonical 10-digit
+  }
+  if (digits.length === 10) return digits;
+  return digits; // fallback: compare raw digits
+}
+
+function normalizeEndpointForCompare(value) {
+  const v = normalizeTrimmed(value);
+  if (!v) return '';
+  try {
+    const url = new URL(v);
+    // normalize scheme/host case and strip trailing slash on pathname
+    const scheme = url.protocol.toLowerCase();
+    const host = url.hostname.toLowerCase();
+    let path = url.pathname || '';
+    if (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1);
+    const normalized = `${scheme}//${host}${path}${url.search || ''}`;
+    return normalized;
+  } catch (_) {
+    // If not a valid URL, fall back to trimmed string without trailing slash
+    return v.endsWith('/') && v.length > 1 ? v.slice(0, -1) : v;
+  }
+}
+
+// Global keyboard handling (Esc to close with confirm)
+const onGlobalKeydown = (e) => {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    closeModal();
+  }
+};
+
+// Overlay click guard: prevent close when pointer starts inside and ends outside
+const startedInsideModal = ref(false);
+const markStartedInside = () => { startedInsideModal.value = true; };
+const onOverlayPointerDown = () => { startedInsideModal.value = false; };
+const onOverlayClick = () => {
+  if (startedInsideModal.value) {
+    startedInsideModal.value = false;
+    return; // ignore stray click after dragging out
+  }
+  closeModal();
+};
+
 // Reset form whenever modal is opened
 watch(() => props.isOpen, (isOpen) => {
   if (isOpen) {
@@ -179,15 +244,30 @@ const resetForm = () => {
   generatedSecret.value = '';
   hasJustRevealedSecret.value = false;
   secretError.value = '';
+  // reset password visibility toggles
+  showCurrentPassword.value = false;
+  showNewPassword.value = false;
+  showConfirmPassword.value = false;
+  // hide phone consent info by default
+  showPhoneConsent.value = false;
 };
 
 onMounted(() => {
   resetForm();
+  window.addEventListener('keydown', onGlobalKeydown);
 });
 
 onUnmounted(() => {
   if (emailCooldownTimerId) clearInterval(emailCooldownTimerId);
   if (phoneCooldownTimerId) clearInterval(phoneCooldownTimerId);
+  window.removeEventListener('keydown', onGlobalKeydown);
+});
+
+// Hide consent info when phone number is cleared
+watch(phoneNumber, (v) => {
+  if (!v || !v.trim()) {
+    showPhoneConsent.value = false;
+  }
 });
 
 const validateTag = () => {
@@ -236,7 +316,7 @@ const validateEmail = () => {
   return true;
 };
 
-// Function to check if the form has any changes from the original user data
+// Function to check if the form has any changes from the original user data (normalized)
 const hasFormChanges = computed(() => {
   if (!user.value) return false;
   const originalDisplayName = user.value.displayName || '';
@@ -245,13 +325,15 @@ const hasFormChanges = computed(() => {
   const originalEmail = user.value?.email || '';
   const originalEndpoint = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
   const originalPrivate = !!(user.value?.private);
-  return displayName.value !== originalDisplayName || 
-         tag.value !== originalTag ||
-         phoneNumber.value !== originalPhoneNumber ||
-         email.value !== originalEmail ||
-         endpoint.value !== originalEndpoint ||
-         isPrivate.value !== originalPrivate ||
-         notifyPrefsChanged();
+
+  const displayNameChanged = normalizeTrimmed(displayName.value) !== normalizeTrimmed(originalDisplayName);
+  const tagChanged = normalizeLowerTrimmed(tag.value) !== normalizeLowerTrimmed(originalTag);
+  const phoneChanged = normalizePhoneForCompare(phoneNumber.value) !== normalizePhoneForCompare(originalPhoneNumber);
+  const emailChanged = normalizeLowerTrimmed(email.value) !== normalizeLowerTrimmed(originalEmail);
+  const endpointChanged = normalizeEndpointForCompare(endpoint.value) !== normalizeEndpointForCompare(originalEndpoint);
+  const privateChanged = !!isPrivate.value !== originalPrivate;
+
+  return displayNameChanged || tagChanged || phoneChanged || emailChanged || endpointChanged || privateChanged || notifyPrefsChanged();
 });
 
 // Function to determine if the update button should be enabled
@@ -352,6 +434,12 @@ const submitPasswordChange = async () => {
 
 const handleKeydown = (e) => {
   if (e.key === 'Enter') {
+    if (!hasFormChanges.value) {
+      // Treat Enter as Done when no changes
+      e.preventDefault();
+      closeModal();
+      return;
+    }
     if (!canSubmit.value) {
       e.preventDefault();
       if (!hasFormChanges.value) {
@@ -372,27 +460,31 @@ const updateProfile = async () => {
     errorMessage.value = '';
     noChangesMessage.value = '';
     const profileUpdate = {};
-    if (displayName.value.trim()) {
-      profileUpdate.display_name = displayName.value.trim();
-    }
-    if (tag.value.trim()) {
-      profileUpdate.user_tag = tag.value.trim();
-    }
     const originalPhoneNumber = user.value?.phone_number || '';
-    if (phoneNumber.value !== originalPhoneNumber) {
-      profileUpdate.phone_number = phoneNumber.value.trim() || null;
-    }
     const originalEmail = user.value?.email || '';
-    if (email.value !== originalEmail) {
-      profileUpdate.email = email.value.trim() || null;
-    }
     const originalEndpoint = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
-    if (endpoint.value !== originalEndpoint) {
-      profileUpdate.endpoint = endpoint.value.trim() || null;
-    }
-    // Private toggle
     const originalPrivate = !!(user.value?.private);
-    if (isPrivate.value !== originalPrivate) {
+
+    // Only include changed fields (normalized)
+    if (normalizeTrimmed(displayName.value) !== normalizeTrimmed(user.value?.displayName || '')) {
+      profileUpdate.display_name = normalizeTrimmed(displayName.value);
+    }
+    if (normalizeLowerTrimmed(tag.value) !== normalizeLowerTrimmed(user.value?.user_tag || '')) {
+      profileUpdate.user_tag = normalizeTrimmed(tag.value);
+    }
+    if (normalizePhoneForCompare(phoneNumber.value) !== normalizePhoneForCompare(originalPhoneNumber)) {
+      const trimmed = normalizeTrimmed(phoneNumber.value);
+      profileUpdate.phone_number = trimmed || null;
+    }
+    if (normalizeLowerTrimmed(email.value) !== normalizeLowerTrimmed(originalEmail)) {
+      const trimmed = normalizeTrimmed(email.value);
+      profileUpdate.email = trimmed || null;
+    }
+    if (normalizeEndpointForCompare(endpoint.value) !== normalizeEndpointForCompare(originalEndpoint)) {
+      const trimmed = normalizeTrimmed(endpoint.value);
+      profileUpdate.endpoint = trimmed || null;
+    }
+    if (!!isPrivate.value !== originalPrivate) {
       profileUpdate.private = !!isPrivate.value;
     }
     if (notifyPrefsChanged()) {
@@ -591,7 +683,7 @@ const deleteAccount = async () => {
 
 <template>
   <transition name="fade">
-    <div v-if="isOpen" class="modal-overlay" @click.self="closeModal">
+    <div v-if="isOpen" class="modal-overlay" @pointerdown="onOverlayPointerDown" @click.self="onOverlayClick">
       <div class="modal-container">
         <div class="modal-header">
           <h3>Edit Profile</h3>
@@ -630,6 +722,18 @@ const deleteAccount = async () => {
             <div v-else class="field-hint">A unique identifier for your account (letters, numbers, underscores, and hyphens only)</div>
           </div>
 
+          <!-- Privacy settings moved to first section -->
+          <div class="form-group">
+            <div class="form-row privacy-row">
+              <label style="min-width:auto;">Privacy</label>
+              <label class="notify-toggle">
+                <input type="checkbox" v-model="isPrivate" />
+                <span class="notify-text">Private account</span>
+              </label>
+            </div>
+            <div class="field-hint">Private profiles are visible only to users you follow or manage, or who follow or manage you.</div>
+          </div>
+
           <div class="form-group contact-section">
             <div class="form-row">
               <label for="email">Email</label>
@@ -659,26 +763,23 @@ const deleteAccount = async () => {
             </div>
           </div>
 
-          <div class="form-group" style="display:flex; align-items:center; justify-content:space-between;">
-            <label style="min-width:auto;">Privacy</label>
-            <label class="notify-toggle">
-              <input type="checkbox" v-model="isPrivate" />
-              <span class="notify-text">Private account</span>
-            </label>
-          </div>
+          
           
           <div class="form-group contact-section">
             <div class="form-row">
               <label for="phoneNumber">Phone Number</label>
               <div class="control">
-                <input 
-                  id="phoneNumber" 
-                  v-model="phoneNumber" 
-                  type="tel" 
-                  placeholder="(555) 123-4567"
-                  @keydown="handleKeydown"
-                  @blur="validatePhoneNumber"
-                />
+                <div class="input-with-icon">
+                  <input 
+                    id="phoneNumber" 
+                    v-model="phoneNumber" 
+                    type="tel" 
+                    placeholder="(555) 123-4567"
+                    @keydown="handleKeydown"
+                    @blur="validatePhoneNumber"
+                  />
+                  <button type="button" class="info-btn" @click="showPhoneConsent = !showPhoneConsent" :aria-pressed="showPhoneConsent ? 'true' : 'false'" title="SMS consent details">ⓘ</button>
+                </div>
                 <div class="notify-group">
                   <label class="notify-toggle" :class="{ disabled: !isPhoneVerified || !isEmailVerified }">
                     <input type="checkbox" v-model="notifyPrefs.phone" :disabled="!isPhoneVerified || !isEmailVerified" /><span class="notify-text">Notify</span>
@@ -694,7 +795,7 @@ const deleteAccount = async () => {
               <input class="code-input" v-model="phoneCode" placeholder="Enter code" />
               <button class="verify-btn" v-if="phoneCodeSent" @click="confirmPhoneCode" :disabled="verifyingPhone || !phoneCode.trim()">{{ verifyingPhone ? 'Verifying…' : 'Verify' }}</button>
             </div>
-            <div v-if="phoneNumber.trim()" class="consent-message">
+            <div v-if="showPhoneConsent && phoneNumber.trim()" class="consent-message">
               <p>By providing your phone number, you agree to receive text messages from Stitch at the number provided. Message and data rates may apply. Message frequency varies. To opt-out, remove your phone number here. View our Terms of Service and Privacy Policy at <a href="https://stitch.fyi/terms" target="_blank" rel="noopener noreferrer">stitch.fyi/terms</a>.</p>
             </div>
           </div>
@@ -764,15 +865,24 @@ const deleteAccount = async () => {
             <h4 style="margin: 0 0 8px 0;">Change Password</h4>
             <div class="form-row">
               <label for="currentPassword">Current password</label>
-              <input id="currentPassword" v-model="currentPassword" type="password" placeholder="••••••••" />
+              <div class="password-field">
+                <input id="currentPassword" :type="showCurrentPassword ? 'text' : 'password'" v-model="currentPassword" placeholder="••••••••" />
+                <button type="button" class="eye-toggle" @click="showCurrentPassword = !showCurrentPassword" :aria-pressed="showCurrentPassword ? 'true' : 'false'" :title="showCurrentPassword ? 'Hide password' : 'Show password'">{{ showCurrentPassword ? '🙈' : '👁️' }}</button>
+              </div>
             </div>
             <div class="form-row" style="margin-top: 8px;">
               <label for="newPassword">New password</label>
-              <input id="newPassword" v-model="newPassword" type="password" placeholder="••••••••" />
+              <div class="password-field">
+                <input id="newPassword" :type="showNewPassword ? 'text' : 'password'" v-model="newPassword" placeholder="••••••••" />
+                <button type="button" class="eye-toggle" @click="showNewPassword = !showNewPassword" :aria-pressed="showNewPassword ? 'true' : 'false'" :title="showNewPassword ? 'Hide password' : 'Show password'">{{ showNewPassword ? '🙈' : '👁️' }}</button>
+              </div>
             </div>
             <div class="form-row" style="margin-top: 8px;">
               <label for="confirmPassword">Confirm new</label>
-              <input id="confirmPassword" v-model="confirmPassword" type="password" placeholder="••••••••" />
+              <div class="password-field">
+                <input id="confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" v-model="confirmPassword" placeholder="••••••••" />
+                <button type="button" class="eye-toggle" @click="showConfirmPassword = !showConfirmPassword" :aria-pressed="showConfirmPassword ? 'true' : 'false'" :title="showConfirmPassword ? 'Hide password' : 'Show password'">{{ showConfirmPassword ? '🙈' : '👁️' }}</button>
+              </div>
             </div>
             <div class="field-hint">Minimum 8 characters, must include a letter and a number.</div>
             <div class="field-error" v-if="changePwError">{{ changePwError }}</div>
@@ -811,12 +921,12 @@ const deleteAccount = async () => {
             <span>{{ noChangesMessage }}</span>
           </div>
           <div class="button-group">
-            <button class="cancel-btn" @click="closeModal">Cancel</button>
-            <button class="update-btn" :class="{ success: updateSuccess }" @click="updateProfile" :disabled="!canSubmit">
+            <button class="cancel-btn" @click="closeModal" :disabled="isSubmitting">{{ hasFormChanges ? 'Cancel' : 'Done' }}</button>
+            <button v-if="hasFormChanges" class="update-btn" :class="{ success: updateSuccess }" @click="updateProfile" :disabled="!canSubmit">
               <div class="button-inner">
                 <div v-if="isSubmitting" class="spinner"></div>
                 <span v-else-if="updateSuccess" class="checkmark">✓</span>
-                {{ isSubmitting ? 'Updating...' : (updateSuccess ? 'Saved' : 'Update Profile') }}
+                {{ isSubmitting ? 'Saving…' : (updateSuccess ? 'Saved' : 'Save Changes') }}
               </div>
             </button>
           </div>
@@ -950,6 +1060,11 @@ const deleteAccount = async () => {
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
+.password-field { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; }
+.password-field input { padding-right: 36px; }
+.eye-toggle { margin-left: 6px; background: transparent; border: 1px solid var(--color-border); color: var(--color-text); border-radius: var(--radius-sm); cursor: pointer; padding: 6px 8px; font-size: 14px; }
+.eye-toggle:hover { background: var(--color-hover-overlay); }
+
 .form-row {
   display: flex;
   align-items: center;
@@ -1001,6 +1116,15 @@ const deleteAccount = async () => {
 
 .consent-message a:hover {
   text-decoration: underline;
+}
+
+.info-btn {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
 }
 
 .error-message {
@@ -1126,12 +1250,20 @@ const deleteAccount = async () => {
 .notify-text { display: inline-block; line-height: 1; }
 .notify-toggle.disabled { opacity: 0.6; }
 .control { display:flex; align-items:center; gap: 8px; width: 100%; }
+.input-with-icon { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr auto; align-items: center; gap: 6px; width: 100%; }
 .status-badge { font-size: 11px; padding: 2px 6px; border-radius: 10px; border: 1px solid var(--color-border); color: var(--color-text-secondary); }
 .status-badge.ok { background: rgba(16, 185, 129, 0.12); color: var(--color-success, #10b981); border-color: rgba(16,185,129,0.35); }
 .status-badge.warn { background: rgba(234, 179, 8, 0.12); color: #eab308; border-color: rgba(234,179,8,0.35); }
 .verify-tip { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
 .contact-section { border-top: 1px solid var(--color-border); padding-top: var(--space-sm); margin-top: 16px; }
 .form-row { margin-top: 12px; }
+
+.privacy-row { align-items: center; justify-content: space-between; }
+/* Ensure the privacy toggle doesn't inherit the generic 140px label min-width */
+.privacy-row label.notify-toggle { min-width: 0; width: auto; }
+@media (max-width: 600px) {
+  .privacy-row { justify-content: flex-start; gap: 12px; }
+}
 
 /* Unsaved changes confirmation styles */
 .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: calc(var(--z-index-modal) + 1); }
@@ -1144,9 +1276,10 @@ const deleteAccount = async () => {
   .form-row { flex-direction: column; align-items: stretch; gap: 6px; }
   .form-row label { min-width: 0; width: 100%; }
   .control { flex-direction: column; align-items: stretch; gap: 6px; }
-  .notify-group { align-self: flex-start; }
+  .input-with-icon { width: 100%; }
+  .notify-group { align-self: flex-start; width: auto; }
   .status-badge { align-self: flex-start; }
-  .notify-toggle { align-self: flex-start; }
+  .notify-toggle { align-self: flex-start; width: auto; }
   .verify-row { align-items: flex-start; flex-wrap: wrap; }
   .code-input { max-width: 100%; }
 }

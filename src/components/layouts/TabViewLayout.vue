@@ -3,7 +3,7 @@
     <div class="app-header">
       <div class="header-left">
         <div class="branding">
-          <router-link to="/home" class="logo-link">
+          <router-link to="/home" class="logo-link" @click.prevent="onLogoClick">
             <span class="logo-text">Stitch</span>
           </router-link>
         </div>
@@ -11,24 +11,14 @@
         <!-- Navigation Tabs (public only) -->
         <div class="navigation-tabs" role="tablist" aria-label="Main tabs">
           <router-link 
-            to="/public" 
-            class="nav-tab"
-            :class="{ 'active': activeTab === 'public' }"
-            role="tab"
-            :aria-selected="activeTab === 'public'"
-            @click="handleTabClick('public')"
-          >
-            Public
-          </router-link>
-          <router-link 
             to="/history" 
             class="nav-tab"
             :class="{ 'active': activeTab === 'history' }"
             role="tab"
             :aria-selected="activeTab === 'history'"
-            @click="handleTabClick('history')"
           >
-            History
+            <span class="tab-emoji" aria-hidden="true">🕘</span>
+            <span class="tab-label">History</span>
           </router-link>
           <router-link 
             to="/saved" 
@@ -36,9 +26,9 @@
             :class="{ 'active': activeTab === 'saved' }"
             role="tab"
             :aria-selected="activeTab === 'saved'"
-            @click="handleTabClick('saved')"
           >
-            Saved
+            <span class="tab-emoji" aria-hidden="true">🔖</span>
+            <span class="tab-label">Saved</span>
           </router-link>
           <router-link 
             to="/inbox" 
@@ -46,25 +36,34 @@
             :class="{ 'active': activeTab === 'inbox' }"
             role="tab"
             :aria-selected="activeTab === 'inbox'"
-            @click="handleTabClick('inbox')"
           >
-            Inbox
+            <span class="tab-emoji" aria-hidden="true">📥</span>
+            <span class="tab-label">Inbox</span>
             <span v-if="isUnreadCountLoading" class="unread-inline-badge">
               <span class="loading-spinner"></span>
             </span>
             <span v-else-if="unreadCount > 0" class="unread-inline-badge">{{ unreadCount }}</span>
           </router-link>
+          <router-link 
+            to="/public" 
+            class="nav-tab"
+            :class="{ 'active': activeTab === 'public' }"
+            role="tab"
+            :aria-selected="activeTab === 'public'"
+          >
+            <span class="tab-emoji" aria-hidden="true">🌐</span>
+            <span class="tab-label">Public</span>
+          </router-link>
         </div>
       </div>
       
       <div class="user-controls">
-        <div class="user-info">
-          <div class="username-container" @click="openProfileModal" v-if="user">
+        <div class="user-info" v-if="user">
+          <div class="username-container" @click="openProfileModal">
             <span class="username">{{ userDisplayName }}</span>
             <span v-if="userTag" class="user-tag">@{{ userTag }}</span>
             <span class="edit-icon" title="Edit profile">✎</span>
           </div>
-          <span v-else class="username">Guest</span>
 
           <!-- Auth status badges - only shown when auth is ready -->
           <template v-if="authReady">
@@ -77,7 +76,6 @@
               rel="noopener noreferrer"
               title="Admin"
             >⛊</a>
-            <span v-if="!user" class="guest-badge" title="Not logged in">?</span>
           </template>
 
           <!-- Loading spinner when auth is not ready -->
@@ -145,7 +143,7 @@ const activeTab = computed(() => {
   if (p.startsWith('/history')) return 'history';
   if (p.startsWith('/saved')) return 'saved';
   if (p.startsWith('/inbox')) return 'inbox';
-  return null;
+  return 'history';
 });
 const unreadCount = computed(() => store.getters['messages/getUnreadMessageCount']);
 const isUnreadCountLoading = computed(() => store.getters['messages/isLoading']('fetchingUnreadCount'));
@@ -207,9 +205,7 @@ const closeProfileModal = () => {
   isProfileModalOpen.value = false;
 };
 
-const handleTabClick = (tab) => {
-  store.dispatch('navigation/setActiveTab', tab);
-};
+// Removed click-driven tab syncing; route is now the single source of truth
 
 const openApiKeysModal = () => {
   if (user.value) {
@@ -219,6 +215,16 @@ const openApiKeysModal = () => {
 
 const closeApiKeysModal = () => {
   isApiKeysModalOpen.value = false;
+};
+
+const onLogoClick = (event) => {
+  console.log('[TabViewLayout] Stitch logo clicked → navigating to /home');
+  try {
+    router.push('/home');
+  } catch (e) {
+    console.warn('[TabViewLayout] router.push to /home failed, falling back to replace', e);
+    router.replace('/home');
+  }
 };
 </script>
 
@@ -249,6 +255,7 @@ const closeApiKeysModal = () => {
   align-items: center;
   gap: var(--space-lg, 24px);
   flex-shrink: 0;
+  min-width: 0; /* Allow tabs to scroll instead of shrinking */
 }
 
 .branding {
@@ -275,6 +282,22 @@ const closeApiKeysModal = () => {
   display: flex;
   align-items: center;
   gap: var(--space-sm, 12px);
+  flex-wrap: nowrap; /* Keep on one line */
+  overflow-x: auto; /* Scroll if tabs overflow */
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Hide by default (Firefox) */
+}
+
+/* Hide scrollbar by default in WebKit; reveal on interaction */
+.navigation-tabs::-webkit-scrollbar { height: 0px; }
+.navigation-tabs:hover::-webkit-scrollbar,
+.navigation-tabs:focus-within::-webkit-scrollbar,
+.navigation-tabs:active::-webkit-scrollbar { height: 6px; }
+.navigation-tabs:hover::-webkit-scrollbar-thumb,
+.navigation-tabs:focus-within::-webkit-scrollbar-thumb,
+.navigation-tabs:active::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
 }
 
 .nav-tab {
@@ -283,6 +306,9 @@ const closeApiKeysModal = () => {
   padding: var(--space-xs, 6px) var(--space-sm, 12px);
   border-radius: var(--radius-sm, 4px);
   transition: background-color var(--transition-fast, 0.2s);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .nav-tab:hover {
@@ -340,6 +366,13 @@ const closeApiKeysModal = () => {
   gap: var(--space-sm, 12px);
   flex-shrink: 0;
   margin-left: auto;
+}
+
+/* Ensure direct children (including wrapped button components) are centered */
+.user-controls > * {
+  display: flex;
+  align-items: center;
+  padding: 0;
 }
 
 .user-info {
@@ -405,16 +438,34 @@ const closeApiKeysModal = () => {
 .login-btn {
   background-color: var(--color-primary, #4f8cff);
   color: var(--color-text-inverse, #fff);
-  padding: var(--space-xs, 6px) var(--space-sm, 12px);
+  padding: 2px 8px;
   border: none;
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
-  font-size: var(--font-size-xs, 0.85rem);
+  font-size: calc(var(--font-size-xs, 0.85rem) - 2px);
+  line-height: 1.1;
   text-decoration: none;
 }
 
 .login-btn:hover {
   background-color: var(--color-primary-dark, #357ae8);
+}
+
+/* Ensure register button matches compact login sizing if component exposes a class */
+.register-btn {
+  background-color: transparent;
+  color: var(--color-text, #fff);
+  padding: 2px 8px;
+  border: 1px solid var(--color-border, #eee);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  font-size: calc(var(--font-size-xs, 0.85rem) - 2px);
+  line-height: 1.1;
+  text-decoration: none;
+}
+
+.register-btn:hover {
+  background-color: var(--color-hover-overlay, #222);
 }
 
 .whitelist-badge, .admin-badge, .non-whitelist-badge, .guest-badge {
@@ -564,6 +615,10 @@ const closeApiKeysModal = () => {
     overflow-x: auto; /* Allow horizontal scroll if needed */
     flex-shrink: 1; /* Allow shrinking */
     min-width: 0;
+    flex-wrap: nowrap; /* Prevent wrapping; enable horizontal scroll */
+    white-space: nowrap; /* Keep tabs on one line */
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+    scrollbar-width: none; /* Hidden until interaction */
   }
   
   .nav-tab {
@@ -572,6 +627,8 @@ const closeApiKeysModal = () => {
     white-space: nowrap; /* Prevent text wrapping */
     flex-shrink: 0; /* Don't shrink tabs */
   }
+  .tab-emoji { font-size: 14px; }
+  .tab-label { display: none; }
   
   .unread-inline-badge {
     height: 14px;
@@ -667,13 +724,18 @@ const closeApiKeysModal = () => {
     gap: 4px; /* Minimal gap between tabs */
     flex-shrink: 1;
     min-width: 0;
-    overflow-x: auto;
-    scrollbar-width: none; /* Hide scrollbar in Firefox */
-    -ms-overflow-style: none; /* Hide scrollbar in IE */
+    width: 60%;
+    overflow-x: auto; /* Allow horizontal scroll */
+    flex-wrap: nowrap; /* Do not wrap on narrow screens */
+    white-space: nowrap; /* Keep on one line */
+    scrollbar-width: none; /* Hide until interaction */
+    -ms-overflow-style: none; /* Hide in IE/Edge until scroll */
   }
   
-  .navigation-tabs::-webkit-scrollbar {
-    display: none; /* Hide scrollbar in WebKit browsers */
+  .navigation-tabs:hover::-webkit-scrollbar,
+  .navigation-tabs:focus-within::-webkit-scrollbar,
+  .navigation-tabs:active::-webkit-scrollbar {
+    height: 6px; /* Show scrollbar only on interaction */
   }
   
   .nav-tab {
@@ -681,6 +743,8 @@ const closeApiKeysModal = () => {
     font-size: calc(var(--font-size-xs) - 2px); /* Very small font */
     min-width: fit-content; /* Only take needed space */
   }
+  .tab-emoji { font-size: 14px; }
+  .tab-label { display: none; }
   
   .unread-inline-badge {
     height: 12px;
@@ -739,8 +803,8 @@ const closeApiKeysModal = () => {
   }
 }
 
-/* Stack layout vertically on very narrow screens - much better UX */
-@media (max-width: 360px) {
+/* Stack layout vertically on ultra-narrow screens */
+@media (max-width: 330px) {
   .app-header {
     flex-direction: column; /* Stack everything vertically */
     padding: 8px;
@@ -761,11 +825,15 @@ const closeApiKeysModal = () => {
   
   .navigation-tabs {
     order: 2; /* Put navigation on second row */
-    justify-content: center; /* Center the navigation tabs */
-    flex-wrap: wrap; /* Allow wrapping if needed */
+    justify-content: flex-start; /* Left-align tabs */
+    flex-wrap: nowrap; /* Keep one line and scroll */
     gap: 8px; /* Restore normal gaps */
     margin-top: 4px; /* Small space from user controls */
+    overflow-x: auto; /* Allow horizontal scroll */
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
   }
+  .navigation-tabs::-webkit-scrollbar { height: 6px; }
   
   .user-controls {
     order: 1; /* Keep with logo on first row */
@@ -792,6 +860,8 @@ const closeApiKeysModal = () => {
     font-size: calc(var(--font-size-xs)); /* Restore normal size */
     min-width: fit-content;
   }
+  .tab-emoji { font-size: 16px; }
+  .tab-label { display: none; }
   
   .unread-inline-badge {
     height: 15px;

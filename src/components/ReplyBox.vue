@@ -49,6 +49,7 @@
           <button 
             class="toolbar-control meta-pill visibility-globe-toggle no-drag" 
             @pointerdown.stop.prevent="handleVisibilityToggle('pointer')"
+            @click.stop
             @keydown.enter.prevent="handleVisibilityToggle('kbd')"
             @keydown.space.prevent="handleVisibilityToggle('kbd')"
             :class="{ 'active': isPublic }"
@@ -777,11 +778,20 @@ const handleClickOutside = (event) => {
   const replySheetElement = replySheet.value;
   const replyButtons = document.querySelectorAll('.reply-button, .mobile-reply-button');
   
-  // Close if clicked outside reply sheet and not on a reply button
-  if (replySheetElement && !replySheetElement.contains(event.target) && 
-      Array.from(replyButtons).every(btn => !btn.contains(event.target))) {
-    hideBottomSheet();
+  // Use composedPath when available to robustly detect clicks originating inside the sheet
+  const path = typeof event.composedPath === 'function' ? event.composedPath() : null;
+  const clickedInsideSheet = !!(
+    replySheetElement && (
+      replySheetElement.contains(event.target) || (path && path.includes(replySheetElement))
+    )
+  );
+  const clickedReplyButton = Array.from(replyButtons).some(btn => btn.contains(event.target));
+  
+  if (clickedInsideSheet || clickedReplyButton) {
+    return;
   }
+  
+  hideBottomSheet();
 };
 
 // Close search results when clicking outside
@@ -1252,13 +1262,21 @@ defineExpose({
   flex-shrink: 0;
 }
 
-.textarea-send-button:hover:not(:disabled) {
-  background-color: var(--color-primary-hover);
-  transform: scale(1.05);
+.textarea-send-button:focus { outline: none; }
+
+.textarea-send-button:focus-visible {
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 79, 140, 255), 0.35), 0 3px 12px rgba(0, 0, 0, 0.2);
 }
 
-.textarea-send-button:active:not(:disabled) {
-  transform: scale(0.95);
+.textarea-send-button:hover:not(:disabled):not(.textarea-send-button--loading):not(.textarea-send-button--success) {
+  background-color: var(--color-primary-light);
+  color: var(--color-surface);
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
+}
+
+.textarea-send-button:active:not(:disabled):not(.textarea-send-button--loading):not(.textarea-send-button--success) {
+  transform: translateY(0) scale(0.98);
 }
 
 .textarea-send-button--disabled {
@@ -1282,6 +1300,14 @@ defineExpose({
   transform: scale(1.05);
 }
 
+/* Stabilize hover while loading/success */
+.textarea-send-button--loading:hover,
+.textarea-send-button--success:hover {
+  background-color: inherit;
+  transform: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
 .send-button__arrow {
   font-size: 18px;
   line-height: 1;
@@ -1289,7 +1315,7 @@ defineExpose({
   transition: transform var(--transition-fast);
 }
 
-.textarea-send-button:hover:not(:disabled) .send-button__arrow {
+.textarea-send-button:hover:not(:disabled):not(.textarea-send-button--loading):not(.textarea-send-button--success) .send-button__arrow {
   transform: rotate(15deg);
 }
 

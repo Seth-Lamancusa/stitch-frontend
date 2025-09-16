@@ -1,8 +1,8 @@
 <template>
   <TabViewLayout>
-    
-    
-    <MessageList :key="route.path" :mode="mode" />
+    <keep-alive>
+      <MessageList :key="route.path" :mode="mode" />
+    </keep-alive>
 
     <!-- Global Recipients Modal -->
     <RecipientsModal
@@ -30,7 +30,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, watch, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute } from 'vue-router';
 import TabViewLayout from '../../components/layouts/TabViewLayout.vue';
@@ -49,7 +49,7 @@ const props = defineProps({
 const store = useStore();
 const route = useRoute();
 
-// Clear messages store on mount and when mode changes
+// Clear messages store on mount
 onMounted(async () => {
   try {
     await store.dispatch('messages/clearCache');
@@ -57,26 +57,7 @@ onMounted(async () => {
   } catch (error) {
     console.error('[MessageListView] Error clearing messages store:', error);
   }
-  
-  // Initialize
-  
-  // Set active tab based on route
-  updateActiveTab();
 });
-
-// Watch for route changes to update active tab
-watch(() => route.path, () => {
-  updateActiveTab();
-});
-
-const updateActiveTab = () => {
-  let tab = 'public'; // Default to public
-  if (route.path === '/public') tab = 'public';
-  else if (route.path === '/saved') tab = 'saved';
-  else if (route.path === '/inbox') tab = 'inbox';
-  
-  store.dispatch('navigation/setActiveTab', tab);
-};
 
 const user = computed(() => store.getters['auth/user']);
 

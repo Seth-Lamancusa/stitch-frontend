@@ -105,9 +105,9 @@ export default {
         console.warn('[AUTH] Account deleted successfully; clearing local auth state and redirecting');
         await dispatch('_clearLocalAuth');
 
-        // Redirect to public page
-        if (window.location.pathname !== '/public') {
-          window.location.href = '/public';
+        // Redirect to history page
+        if (window.location.pathname !== '/history') {
+          window.location.href = '/history';
         }
         return { success: true };
       } catch (e) {
@@ -236,19 +236,19 @@ export default {
         // Clear user state
         await dispatch('_clearLocalAuth');
         
-        // Redirect to the public page
-        if (window.location.pathname !== '/public') {
-          console.warn('[AUTH] Redirecting to /public from', window.location.pathname);
+        // Redirect to the history page
+        if (window.location.pathname !== '/history') {
+          console.warn('[AUTH] Redirecting to /history from', window.location.pathname);
           // Use Vue router if available, otherwise fall back to hard redirect
           if (router) {
             console.info('[AUTH] Using Vue router to navigate');
-            router.push('/public');
+            router.push('/history');
           } else {
             console.info('[AUTH] Using hard redirect');
-            window.location.href = '/public';
+            window.location.href = '/history';
           }
         } else {
-          console.info('[AUTH] Already on /public, no redirect needed');
+          console.info('[AUTH] Already on /history, no redirect needed');
         }
       } catch (error) {
         console.error('[AUTH] Error during force logout', error);
