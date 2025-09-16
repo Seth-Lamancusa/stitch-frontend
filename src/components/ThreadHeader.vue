@@ -40,15 +40,7 @@
         </div>
         <span v-else class="username">Guest</span>
 
-        <!-- Admin badge links out to admin origin -->
-        <a
-          v-can="'admin'"
-          class="admin-badge"
-          :href="ADMIN_ORIGIN"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Admin"
-        >⛊</a>
+        
         <span v-if="!user" class="guest-badge" title="Not logged in">?</span>
       </div>
       <button v-if="user" @click="$emit('logout')" class="logout-btn">Logout</button>
@@ -59,7 +51,7 @@
 
 <script setup>
 import LoginButton from './buttons/LoginButton.vue';
-import { ADMIN_ORIGIN } from '@/config/appConfig.js';
+// Public SPA: no admin link here; a single admin badge exists in the main layout
 
 defineProps({
   user: { type: Object, default: null },

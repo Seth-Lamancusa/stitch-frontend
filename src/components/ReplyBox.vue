@@ -47,10 +47,10 @@
         <div class="toolbar-left">
           <!-- Public visibility globe toggle -->
           <button 
-            class="toolbar-control meta-pill visibility-globe-toggle" 
-            @mousedown.prevent="handleVisibilityPointerDown"
-            @touchstart.stop.prevent="handleVisibilityToggle('touch')"
-            @click.stop.prevent="handleVisibilityToggle('click')"
+            class="toolbar-control meta-pill visibility-globe-toggle no-drag" 
+            @pointerdown.stop.prevent="handleVisibilityToggle('pointer')"
+            @keydown.enter.prevent="handleVisibilityToggle('kbd')"
+            @keydown.space.prevent="handleVisibilityToggle('kbd')"
             :class="{ 'active': isPublic }"
             :disabled="!canInteract"
             :aria-pressed="isPublic"
@@ -380,7 +380,19 @@ const hideBottomSheet = () => {
 };
 
 // Touch gesture handlers
+const skipDragFromControl = ref(false);
+
 const handleTouchStart = (event) => {
+  // Ignore drag gestures that originate from controls like visibility toggle
+  try {
+    const target = event.target;
+    skipDragFromControl.value = !!(target && target.closest && target.closest('.no-drag'));
+  } catch (e) {
+    skipDragFromControl.value = false;
+  }
+  if (skipDragFromControl.value) {
+    return;
+  }
   const touch = event.touches[0];
   touchStartY.value = touch.clientY;
   isDragging.value = false;
@@ -388,6 +400,9 @@ const handleTouchStart = (event) => {
 };
 
 const handleTouchMove = (event) => {
+  if (skipDragFromControl.value) {
+    return;
+  }
   if (!isDragging.value) {
     const touch = event.touches[0];
     const deltaY = touch.clientY - touchStartY.value;
@@ -410,6 +425,10 @@ const handleTouchMove = (event) => {
 };
 
 const handleTouchEnd = () => {
+  if (skipDragFromControl.value) {
+    skipDragFromControl.value = false;
+    return;
+  }
   if (isDragging.value) {
     // Reset visual transform
     if (replySheet.value) {

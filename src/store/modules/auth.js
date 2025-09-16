@@ -123,31 +123,8 @@ export default {
           commit('SET_USER', null);
           return;
         }
-        let response;
-        try {
-          response = await axios.get('/api/v1/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
-        } catch (err) {
-          // Attempt refresh then retry once
-          try {
-            const newAccess = await TokenManager.refreshAccessToken();
-            if (!newAccess) {
-              console.warn('[AUTH] /users/me non-OK and refresh failed; clearing tokens');
-              TokenManager.accessToken = null;
-              TokenManager.refreshToken = null;
-              commit('SET_USER', null);
-              WebSocketService.cleanup();
-              return;
-            }
-            response = await axios.get('/api/v1/users/me', { headers: { 'Authorization': `Bearer ${newAccess}` } });
-          } catch (_e) {
-            console.warn('[AUTH] /users/me retry after refresh failed; clearing tokens');
-            TokenManager.accessToken = null;
-            TokenManager.refreshToken = null;
-            commit('SET_USER', null);
-            WebSocketService.cleanup();
-            return;
-          }
-        }
+        // Single call; axios interceptor handles 401 -> refresh -> retry
+        const response = await axios.get('/api/v1/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
         const userData = response && response.data ? response.data : {};
         commit('SET_USER', mapApiUserToAuthState(userData));
         try {
@@ -228,6 +205,22 @@ export default {
 
         return result;
       } catch (error) {
+        // Normalize known backend conflicts to short codes for UI catch blocks
+        try {
+          const status = error?.response?.status;
+          const detail = error?.response?.data?.detail;
+          if (status === 409 && typeof detail === 'string' && detail) {
+            // Pass through standard codes
+            if (['user_tag_conflict','email_conflict','phone_conflict','multiple_endpoints_not_allowed','managed_contacts_endpoints_only'].includes(detail)) {
+              throw new Error(detail);
+            }
+          }
+          if (status && detail) {
+            throw new Error(detail);
+          }
+        } catch (_) {
+          // fall through to generic handling
+        }
         console.error('Error updating profile:', error);
         throw error;
       }

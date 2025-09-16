@@ -803,6 +803,17 @@ export default {
             // Use existing UserService.getSavedMessages (which already handles pagination properly)
             response = await UserService.getSavedMessages(skip, limit);
             break;
+          case 'history':
+            {
+              const MessageService = (await import('../../services/MessageService')).default;
+              const histResponse = await MessageService.getUserHistory(skip, limit);
+              response = {
+                messages: histResponse.data.messages || [],
+                has_more: histResponse.data.has_more || false,
+                total: histResponse.data.total || 0
+              };
+            }
+            break;
           case 'incoming-links':
             if (!sourceMessageId) throw new Error('sourceMessageId required for incoming-links mode');
             response = await UserService.getUserIncomingLinks(sourceMessageId, skip, limit, showAllLinks);

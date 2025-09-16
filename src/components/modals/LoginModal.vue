@@ -81,7 +81,9 @@ const submitPassword = async () => {
     if (!kind) {
       throw new Error('Enter a valid tag, email, or phone number')
     }
-    const toSend = (kind === 'tag') ? (trimmed.startsWith('@') ? trimmed : `@${trimmed}`) : trimmed
+    const toSend = (kind === 'tag')
+      ? `@${(trimmed.startsWith('@') ? trimmed.slice(1) : trimmed).toLowerCase()}`
+      : trimmed
     await signInWithPassword(toSend, password.value)
     emit('success')
     emit('close')
@@ -114,7 +116,7 @@ const submitPassword = async () => {
   border-radius: var(--radius-md);
   width: 90%;
   max-width: 500px;
-  max-height: 70vh;
+  height: 70vh;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   border: 1px solid var(--color-border);
   overflow: hidden;
@@ -189,7 +191,7 @@ input { padding: 8px 10px; border: 1px solid var(--color-border); border-radius:
 .hint { color: var(--color-text-secondary); margin-top: var(--space-xs); font-size: var(--font-size-xs); }
 
 @media (max-width: 768px) {
-  .modal-container { width: 95%; height: 80vh; max-height: 80vh; }
+  .modal-container { width: 95%; max-height: 80vh; }
   .modal-content { padding: var(--space-md); }
 }
 </style>
