@@ -1559,6 +1559,7 @@ const closeProfileModal = () => {
     padding-left: 8px;
     padding-right: 8px;
     padding-bottom: calc(120px + 100vh); /* More space for the reply box on mobile plus a screen's worth of scrollable space */
+    gap: 12px; /* Reduce space between messages on small screens */
   }
   
   .reply-box-container {
@@ -1630,6 +1631,7 @@ const closeProfileModal = () => {
     padding-left: 4px; /* Minimal padding for thread content */
     padding-right: 4px;
     padding-bottom: calc(130px + 100vh); /* Minimal padding plus a screen's worth of scrollable space */
+    gap: 8px; /* Further reduce space between messages on very small screens */
   }
   
   .reply-box-container {

@@ -105,11 +105,7 @@
       </div>
       
       <div class="message-footer">
-        <span class="message-id" :title="'Message ID: ' + message.id">ID: {{ message.id }}</span>
-        
-        <div class="reply-count" :class="{ 'mobile-hidden': isMobile && !inListView }">
-          {{ message.child_ids?.length === 0 ? '🍃' : `${message.child_ids?.length} ${message.child_ids?.length === 1 ? 'reply' : 'replies'}` }}
-        </div>
+        <span class="reply-count">{{ message.child_ids?.length || 0 }} ↩️</span>
         
         <!-- Unified message actions - desktop layout -->
         <div v-if="!isSelectionMode" class="message-actions desktop-actions">
@@ -184,10 +180,6 @@
       
       <!-- Unified mobile action controls -->
       <div v-if="!inListView && !isSelectionMode" class="mobile-action-controls">
-        <!-- Reply count for mobile - positioned next to reply button -->
-        <div v-if="isMobile" class="mobile-reply-count">
-          {{ message.child_ids?.length === 0 ? '🍃' : `${message.child_ids?.length} ${message.child_ids?.length === 1 ? 'reply' : 'replies'}` }}
-        </div>
         
         <!-- Mobile visible actions -->
         <button 
@@ -339,6 +331,7 @@ export default {
     // Add refs for copy button states
     const isJsonCopied = ref(false);
     const isTextCopied = ref(false);
+    const isLinkCopied = ref(false);
     
     // Add refs for save button state
     const isMessageSaved = ref(false);
@@ -404,6 +397,17 @@ export default {
         active: () => isTextCopied.value
       },
       
+      {
+        id: 'copy-link',
+        emoji: isLinkCopied.value ? '✅' : '📋',
+        text: isLinkCopied.value ? 'Copied' : 'Copy link',
+        desktopVisible: false,
+        mobileVisible: false,
+        adminOnly: false,
+        handler: copyMessageLink,
+        condition: () => !props.inListView,
+        active: () => isLinkCopied.value
+      },
       {
         id: 'links',
         emoji: '🔗',
@@ -935,6 +939,25 @@ export default {
       }
     };
     
+    // Copy public message link (hide numeric id in UI)
+    const copyMessageLink = () => {
+      try {
+        const link = `stitch.fyi/messages/${props.message.id}`;
+        navigator.clipboard.writeText(link)
+          .then(() => {
+            isLinkCopied.value = true;
+            setTimeout(() => {
+              isLinkCopied.value = false;
+            }, 1000);
+          })
+          .catch(err => {
+            console.error('Failed to copy link: ', err);
+          });
+      } catch (error) {
+        console.error('Error copying message link:', error);
+      }
+    };
+    
 
     
     // Function to strip basic markdown formatting
@@ -1192,6 +1215,8 @@ export default {
       isMobile,
       isJsonCopied,
       isTextCopied,
+      isLinkCopied,
+      copyMessageLink,
       isMessageSaved,
       isSavingMessage,
       toggleSaveMessage,
@@ -1681,21 +1706,20 @@ export default {
 .message-footer {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  justify-content: space-between;
   margin-top: var(--space-xs);
   padding-top: var(--space-md);
   border-top: 1px solid var(--color-border);
 }
 
+/* footer-left removed */
+
 .reply-count {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
-  margin-right: var(--space-sm);
-  padding: 2px 6px;
-  background-color: var(--color-surface-hover);
-  border-radius: var(--radius-xs);
-  cursor: help;
 }
+
+/* copy-id-button removed (moved into actions menu) */
 
 /* Header sibling navigation slot styling */
 .header-sibling-nav-slot {
@@ -1715,7 +1739,7 @@ export default {
   }
   
   .message-footer .reply-count {
-    flex: 1;
+    flex: 0;
     text-align: left;
   }
 }
@@ -1726,6 +1750,7 @@ export default {
   gap: 16px;
   flex-wrap: wrap;
   position: relative;
+  margin-left: auto;
 }
 
 /* Mobile action controls - hidden on desktop */
@@ -2309,15 +2334,7 @@ export default {
 
 
 
-.message-id {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-  margin-right: var(--space-sm);
-  padding: 2px 6px;
-  background-color: var(--color-surface-hover);
-  border-radius: var(--radius-xs);
-  cursor: help;
-}
+/* message-id removed */
 
 .edit-icon-button {
   background: none;

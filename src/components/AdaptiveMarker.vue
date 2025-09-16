@@ -208,6 +208,7 @@ export default {
   transition: opacity var(--transition-normal);
   border-radius: var(--radius-md);
   position: relative;
+  padding-bottom: 6px;
 }
 
 .adaptive-marker.visible {
