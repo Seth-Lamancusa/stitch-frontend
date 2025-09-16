@@ -823,10 +823,19 @@ const handleLinkDelete = async (linkData) => {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  /* Center items horizontally so previews are centered within the layout */
+  align-items: center;
 }
 
 .message-list-item {
   width: 100%;
+  /* Constrain preview width and center it */
+  max-width: var(--content-max-width, 900px);
+  margin-left: auto;
+  margin-right: auto;
+  /* Symmetric horizontal padding to prevent right-edge clipping */
+  padding-left: 2px;
+  padding-right: 2px;
   cursor: pointer;
   position: relative;
   transition: transform var(--transition-fast), opacity var(--transition-fast);
@@ -903,6 +912,11 @@ const handleLinkDelete = async (linkData) => {
 /* Ensure MessageNode takes remaining space in link mode */
 .message-list-item.link-mode .message-node {
   flex: 1;
+}
+
+/* Ensure MessageNode spans full width of the centered container */
+.message-list-item .message-node {
+  width: 100%;
 }
 
 .loading-indicator {
