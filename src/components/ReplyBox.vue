@@ -49,7 +49,9 @@
           <button 
             class="toolbar-control meta-pill visibility-globe-toggle no-drag" 
             @pointerdown.stop.prevent="handleVisibilityToggle('pointer')"
-            @click.stop
+            @click.capture.stop
+            @mousedown.stop.prevent
+            @touchend.stop.prevent
             @keydown.enter.prevent="handleVisibilityToggle('kbd')"
             @keydown.space.prevent="handleVisibilityToggle('kbd')"
             :class="{ 'active': isPublic }"
@@ -333,6 +335,10 @@ const handleVisibilityPointerDown = (event) => {
 const handleVisibilityToggle = (source) => {
   if (!props.canInteract) return;
 
+  // Suppress outside-click close during this toggle to avoid mobile re-render race
+  suppressOutsideClose.value = true;
+  setTimeout(() => { suppressOutsideClose.value = false; }, 350);
+
   isPublic.value = !isPublic.value;
 
   // Maintain keyboard visibility by restoring textarea focus on mobile
@@ -382,6 +388,7 @@ const hideBottomSheet = () => {
 
 // Touch gesture handlers
 const skipDragFromControl = ref(false);
+const suppressOutsideClose = ref(false);
 
 const handleTouchStart = (event) => {
   // Ignore drag gestures that originate from controls like visibility toggle
@@ -770,6 +777,11 @@ const closeRecipientSelector = (event) => {
 
 // Handle clicks outside reply box
 const handleClickOutside = (event) => {
+  // Guard: if we just toggled a control inside the sheet, skip this close once
+  if (suppressOutsideClose.value) {
+    suppressOutsideClose.value = false;
+    return;
+  }
   // Don't close if any modal is open
   if (showRecipientSelector.value || botPromptModalVisible.value) {
     return;

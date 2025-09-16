@@ -83,7 +83,14 @@
             <span class="auth-loading-spinner"></span>
           </span>
         </div>
-        <button v-if="user" @click="openApiKeysModal" class="logout-btn" title="Developer tools">Dev</button>
+        <button
+          v-if="user"
+          @click="openApiKeysModal"
+          class="dev-btn"
+          type="button"
+          title="Developer tools"
+          aria-label="Open developer tools"
+        >Dev</button>
         <button v-if="user" @click="logout" class="logout-btn">Logout</button>
         <template v-else>
           <LoginButton />
@@ -468,6 +475,34 @@ const onLogoClick = (event) => {
   background-color: var(--color-hover-overlay, #222);
 }
 
+/* Dev button: neutral styling, compact padding */
+.dev-btn {
+  background-color: transparent;
+  color: var(--color-text, #fff);
+  padding: 2px 8px;
+  border: 1px solid var(--color-border, #eee);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  font-size: calc(var(--font-size-xs, 0.85rem) - 2px);
+  line-height: 1.1;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.dev-btn:hover {
+  background-color: var(--color-hover-overlay, #222);
+}
+
+/* Desktop: make dev button match logout button above 852px */
+@media (min-width: 853px) {
+  .dev-btn {
+    padding: var(--space-xs, 6px) var(--space-sm, 12px);
+    font-size: var(--font-size-xs, 0.85rem);
+    line-height: normal;
+  }
+}
+
 .whitelist-badge, .admin-badge, .non-whitelist-badge, .guest-badge {
   display: inline-block;
   width: 18px;
@@ -585,7 +620,7 @@ const onLogoClick = (event) => {
 /* (removed) simple tab transition */
 
 /* Mobile responsive styles */
-@media (max-width: 768px) {
+@media (max-width: 852px) {
   .verify-banner {
     flex-direction: column;
     align-items: flex-start;
@@ -672,9 +707,6 @@ const onLogoClick = (event) => {
     display: none; /* Hide user tag on mobile to save space */
   }
   
-  .edit-icon {
-    display: none; /* Hide edit icon on mobile */
-  }
   
   .whitelist-badge, .admin-badge, .non-whitelist-badge, .guest-badge, .auth-loading-badge {
     width: 14px; /* Smaller badges */
@@ -684,7 +716,7 @@ const onLogoClick = (event) => {
     margin-left: 2px; /* Reduce margin */
   }
   
-  .logout-btn, .login-btn {
+  .logout-btn, .login-btn, .dev-btn {
     padding: var(--space-xs, 6px) var(--space-sm, 8px); /* Smaller button padding */
     font-size: calc(var(--font-size-xs) - 1px); /* Smaller font */
     white-space: nowrap; /* Prevent text wrapping */
@@ -787,10 +819,10 @@ const onLogoClick = (event) => {
     margin-left: 1px;
   }
   
-  .logout-btn, .login-btn {
+  .logout-btn, .login-btn, .dev-btn {
     padding: 4px 6px; /* Minimal button padding */
     font-size: calc(var(--font-size-xs) - 2px); /* Very small font */
-    min-width: 50px; /* Ensure minimum button width */
+    min-width: 0; /* Allow content to dictate width */
   }
   
   .feedback-button-container {
@@ -849,8 +881,8 @@ const onLogoClick = (event) => {
     max-width: 60px; /* Bit more space since we have vertical room */
   }
   
-  .logout-btn, .login-btn {
-    min-width: 60px; /* Better button size with vertical layout */
+  .logout-btn, .login-btn, .dev-btn {
+    min-width: 0; /* Remove enforced minimum width */
     padding: 4px 8px;
     font-size: calc(var(--font-size-xs)); /* Slightly larger font */
   }
