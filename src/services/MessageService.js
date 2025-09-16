@@ -114,13 +114,11 @@ export default {
     return apiClient.get(`/messages/public?skip=${skip}&limit=${limit}`, { headers })
   },
 
-  // Admin update message (update content and/or author)
-  async adminUpdateMessage(id, { content, content_author } = {}) {
-    const headers = getAuthHeaders()
-    const body = {}
-    if (typeof content === 'string') body.content = content
-    if (content_author) body.content_author = content_author
-    const response = await apiClient.patch(`/messages/${id}`, body, { headers })
-    return response.data
+  // Get user history root messages (auth required)
+  async getUserHistory(skip = 0, limit = 15) {
+    const headers = await getAuthHeaders()
+    return apiClient.get(`/messages/history?skip=${skip}&limit=${limit}`, { headers })
   },
+
+  
 }

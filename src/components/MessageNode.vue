@@ -71,28 +71,15 @@
             Recipients {{ typeof message.recipients === 'string' ? '' : `(${deduplicatedRecipients.length})` }}
           </button>
           
-          <!-- Delete button - scope-based capability: admin or msg.write + author -->
+          <!-- Delete button - scope-based capability: msg.write + author only (no admin UI in public SPA) -->
           <button 
             v-if="canDeleteMessage(message) && !isSelectionMode && !inListView" 
             @click.stop="$emit('delete', message)" 
             class="delete-icon-button"
-            :title="isAdmin ? 'Admin: Delete this message and all replies' : 'Delete this message and all replies'"
+            :title="'Delete this message and all replies'"
           >
             <svg class="delete-icon" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
               <path d="M2.5 1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1H3v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4h.5a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1H2.5zm3 4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 .5-.5zM8 5a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7A.5.5 0 0 1 8 5zm3 .5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 1 0z"/>
-            </svg>
-          </button>
-          
-          <!-- Edit button - only for admins -->
-          <button
-            v-can="'admin'"
-            v-if="!isSelectionMode && !inListView"
-            @click.stop="openEditModal"
-            class="edit-icon-button"
-            title="Admin: Edit this message"
-          >
-            <svg class="edit-icon" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor">
-              <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207zm1.586 3.172L5.828 12.5H3.5v-2.328L10.328 3.34z"/>
             </svg>
           </button>
         </div>
@@ -438,6 +425,7 @@ export default {
         condition: () => !props.inListView,
         active: () => isJsonCopied.value
       }
+      
       ,
       {
         id: 'center',
@@ -1234,7 +1222,7 @@ export default {
       shouldShowMenuButton,
       isPlaying,
       isLoading,
-      openEditModal,
+      
     };
   },
   

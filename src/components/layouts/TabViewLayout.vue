@@ -9,19 +9,33 @@
         </div>
         
         <!-- Navigation Tabs (public only) -->
-        <div class="navigation-tabs">
+        <div class="navigation-tabs" role="tablist" aria-label="Main tabs">
           <router-link 
             to="/public" 
             class="nav-tab"
             :class="{ 'active': activeTab === 'public' }"
+            role="tab"
+            :aria-selected="activeTab === 'public'"
             @click="handleTabClick('public')"
           >
             Public
           </router-link>
           <router-link 
+            to="/history" 
+            class="nav-tab"
+            :class="{ 'active': activeTab === 'history' }"
+            role="tab"
+            :aria-selected="activeTab === 'history'"
+            @click="handleTabClick('history')"
+          >
+            History
+          </router-link>
+          <router-link 
             to="/saved" 
             class="nav-tab"
             :class="{ 'active': activeTab === 'saved' }"
+            role="tab"
+            :aria-selected="activeTab === 'saved'"
             @click="handleTabClick('saved')"
           >
             Saved
@@ -30,6 +44,8 @@
             to="/inbox" 
             class="nav-tab"
             :class="{ 'active': activeTab === 'inbox' }"
+            role="tab"
+            :aria-selected="activeTab === 'inbox'"
             @click="handleTabClick('inbox')"
           >
             Inbox
@@ -123,7 +139,14 @@ const { signInWithApiKey, logout } = useAuthentication();
 const user = computed(() => store.getters['auth/user']);
 const isAdmin = computed(() => store.getters['auth/isAdmin']);
 const authReady = computed(() => store.getters['auth/authReady']);
-const activeTab = computed(() => store.getters['navigation/activeTab']);
+const activeTab = computed(() => {
+  const p = route.path || '';
+  if (p.startsWith('/public')) return 'public';
+  if (p.startsWith('/history')) return 'history';
+  if (p.startsWith('/saved')) return 'saved';
+  if (p.startsWith('/inbox')) return 'inbox';
+  return null;
+});
 const unreadCount = computed(() => store.getters['messages/getUnreadMessageCount']);
 const isUnreadCountLoading = computed(() => store.getters['messages/isLoading']('fetchingUnreadCount'));
 const isLoggingIn = ref(false);
@@ -162,6 +185,17 @@ onMounted(() => {
     store.dispatch('messages/fetchUnreadMessageCount');
   }
 });
+
+// Sync store's active tab with route-driven value
+watch(
+  () => route.path,
+  () => {
+    if (activeTab.value) {
+      store.dispatch('navigation/setActiveTab', activeTab.value);
+    }
+  },
+  { immediate: true }
+);
 
 const openProfileModal = () => {
   if (user.value) {
@@ -496,6 +530,8 @@ const closeApiKeysModal = () => {
   font-weight: 600;
 }
 .verify-link:hover { text-decoration: underline; }
+
+/* (removed) simple tab transition */
 
 /* Mobile responsive styles */
 @media (max-width: 768px) {

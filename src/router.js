@@ -73,6 +73,12 @@ const routes = [
     props: { mode: 'public' }
   },
   {
+    path: '/history',
+    name: 'history',
+    component: MessageListView,
+    props: { mode: 'history' }
+  },
+  {
     path: '/saved',
     name: 'saved', 
     component: MessageListView,

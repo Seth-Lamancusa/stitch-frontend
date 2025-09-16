@@ -10,7 +10,7 @@ const props = defineProps({
   mode: {
     type: String,
     required: true,
-    validator: (val) => ['inbox', 'public', 'saved', 'all', 'sent', 'incoming-links', 'outgoing-links'].includes(val)
+    validator: (val) => ['inbox', 'public', 'saved', 'incoming-links', 'outgoing-links'].includes(val)
   },
   // Custom messages to display instead of fetching from store
   customMessages: {
@@ -74,14 +74,16 @@ const deletingLinkId = ref(null);
 const currentRequestId = ref(0);
 const localLoadingState = ref(false);
 
+// Mode classification helpers
+const isLocalMode = computed(() => ['saved', 'public', 'incoming-links', 'outgoing-links'].includes(props.mode));
+const isStoreMode = computed(() => ['inbox', 'admin'].includes(props.mode));
+const requiresAuth = computed(() => ['inbox', 'saved'].includes(props.mode));
+
 // Store loading state - single source of truth for store-based modes only
 const isLoading = computed(() => {
-  // For local modes (saved, public, links), use local loading state
-  if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
-    return localLoadingState.value;
-  }
-  // For store modes (inbox, admin), use store loading state
-  return store.getters['messages/isLoading']('fetchingMessages');
+  return isLocalMode.value
+    ? localLoadingState.value
+    : store.getters['messages/isLoading']('fetchingMessages');
 });
 
 // Reference to the message list container for scroll detection
@@ -90,12 +92,13 @@ const messageListRef = ref(null);
 // Reference to the loading indicator for intersection observer
 const loadingIndicatorRef = ref(null);
 
-// Determine active tab from route path
+// Determine active tab from route path (robust to nested routes)
 const activeTab = computed(() => {
-  if (route.path === '/public') return 'public';
-  if (route.path === '/saved') return 'saved';
-  if (route.path === '/inbox') return 'inbox';
-  return 'public'; // Default to public instead of inbox
+  const p = route.path || '';
+  if (p.startsWith('/public')) return 'public';
+  if (p.startsWith('/saved')) return 'saved';
+  if (p.startsWith('/inbox')) return 'inbox';
+  return 'public';
 });
 
 const threads = computed(() => {
@@ -116,19 +119,13 @@ const threads = computed(() => {
 
 // Loading indicator should be visible if we're loading or have more to load
 const shouldShowLoadingIndicator = computed(() => {
-  // For saved/inbox modes, don't show loading indicator if user is not logged in
-  if ((props.mode === 'saved' || props.mode === 'inbox') && !user.value) {
-    return false;
-  }
+  if (requiresAuth.value && !user.value) return false;
   return isLoading.value || !isAllLoaded.value;
 });
 
 // Empty state only shows if we've loaded and have no messages
 const shouldShowEmptyState = computed(() => {
-  // For saved/inbox mode when not logged in, do not show empty state (we show login prompt)
-  if ((props.mode === 'saved' || props.mode === 'inbox') && !user.value) {
-    return false;
-  }
+  if (requiresAuth.value && !user.value) return false;
   return !isLoading.value && isAllLoaded.value && threads.value.length === 0;
 });
 
@@ -153,10 +150,6 @@ const emptyStateMessage = computed(() => {
       return 'No incoming links found.';
     case 'outgoing-links':
       return 'No outgoing links found.';
-    case 'sent':
-      return 'No sent messages found.';
-    case 'all':
-      return 'No messages found.';
     case 'public':
       return 'No public messages found.';
     default:
@@ -165,9 +158,7 @@ const emptyStateMessage = computed(() => {
 });
 
 // Show login message when no user is logged in (for inbox and saved)
-const shouldShowLoginMessage = computed(() => {
-  return (props.mode === 'inbox' || props.mode === 'saved') && !user.value;
-});
+const shouldShowLoginMessage = computed(() => requiresAuth.value && !user.value);
 
 // Specific login/register prompt per tab when logged out
 const loginPromptMessage = computed(() => {
@@ -341,19 +332,15 @@ const loadMessages = async () => {
     return;
   }
   
-  // Skip for saved/inbox modes if no user (requires authentication)
-  if ((props.mode === 'saved' || props.mode === 'inbox') && !user.value) {
-    return;
-  }
+  // Skip for auth-required modes if no user
+  if (requiresAuth.value && !user.value) return;
   
   // Generate a unique request ID to prevent race conditions
   const requestId = ++currentRequestId.value;
   
   
   // Set loading state based on mode
-  if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
-    localLoadingState.value = true;
-  }
+  if (isLocalMode.value) localLoadingState.value = true;
   // Store modes handle their own loading state in the store
   
   try {
@@ -385,7 +372,7 @@ const loadMessages = async () => {
       
       
       // Handle response based on mode
-      if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
+      if (isLocalMode.value) {
         // For saved, public, and link modes, use local state
         if (currentSkip.value === 0) {
           // First load - replace local messages
@@ -411,9 +398,7 @@ const loadMessages = async () => {
   } finally {
     // Only clear loading state if this is still the current request
     if (requestId === currentRequestId.value) {
-      if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
-        localLoadingState.value = false;
-      }
+      if (isLocalMode.value) localLoadingState.value = false;
     }
   }
 };
@@ -422,25 +407,20 @@ const loadMessages = async () => {
 onMounted(async () => {
   // Start loading based on mode
   if (props.mode === 'admin') {
-    // Admin mode - load immediately (auth checked server-side)
     loadMessages();
-  } else if ((props.mode === 'saved' || props.mode === 'inbox') && !user.value) {
-    // Don't load saved/inbox messages for guests
+  } else if (requiresAuth.value && !user.value) {
     return;
   } else {
-    // Load messages for all other modes
     loadMessages();
   }
 });
 
 // Watch for user changes to start loading when they log in (inbox mode only)
 watch(user, (newUser, oldUser) => {
-  if (props.mode === 'inbox' || props.mode === 'saved') {
+  if (requiresAuth.value) {
     if (newUser && !oldUser) {
-      // User just logged in, start loading messages
       loadMessages();
     } else if (!newUser && oldUser) {
-      // User logged out, reset state 
       isAllLoaded.value = false;
       currentSkip.value = 0;
     }
@@ -547,7 +527,7 @@ watch([() => props.mode, () => props.sourceMessageId, () => props.showAllLinks],
   currentRequestId.value++;
   localLoadingState.value = false;
   
-  if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
+  if (isLocalMode.value) {
     console.log(`[MessageList] Local state mode "${props.mode}", resetting local state`);
     console.log(`[MessageList] Current local state:`, {
       localMessagesCount: localMessages.value.length,
@@ -566,7 +546,7 @@ watch([() => props.mode, () => props.sourceMessageId, () => props.showAllLinks],
     nextTick(() => {
       loadMessages();
     });
-  } else if (props.mode === 'inbox' || props.mode === 'admin') {
+  } else if (isStoreMode.value) {
     console.log(`[MessageList] Store-based mode "${props.mode}", resetting pagination state`);
     // For store-based modes, just reset pagination (messages handled by store)
     isAllLoaded.value = false;
