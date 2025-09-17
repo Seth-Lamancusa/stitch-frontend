@@ -619,8 +619,7 @@ onBeforeUnmount(() => {
     messageList.value.removeEventListener('scroll', handleScroll);
   }
   
-  // Clear replying message when leaving the thread view
-  store.dispatch('navigation/clearReplyingTo');
+  // (Removed duplicate clearReplyingTo; already called above)
 });
 
 // Watch for route changes - use loadInitialContent for new thread IDs
@@ -1309,6 +1308,7 @@ const closeProfileModal = () => {
   flex: 1;
   display: flex;
   flex-direction: column;
+  align-items: center; /* Center MessageNode components horizontally */
   padding-left: 80px;
   padding-right: 80px;
   padding-bottom: calc(100px + 25vh); /* Add space at bottom for the reply box plus a screen's worth of scrollable space */
@@ -1560,6 +1560,7 @@ const closeProfileModal = () => {
     padding-right: 8px;
     padding-bottom: calc(120px + 100vh); /* More space for the reply box on mobile plus a screen's worth of scrollable space */
     gap: 12px; /* Reduce space between messages on small screens */
+    align-items: stretch; /* Let MessageNodes fill width on small screens */
   }
   
   .reply-box-container {
@@ -1632,6 +1633,7 @@ const closeProfileModal = () => {
     padding-right: 4px;
     padding-bottom: calc(130px + 100vh); /* Minimal padding plus a screen's worth of scrollable space */
     gap: 8px; /* Further reduce space between messages on very small screens */
+    align-items: stretch; /* Full width on very small screens */
   }
   
   .reply-box-container {
