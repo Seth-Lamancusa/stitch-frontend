@@ -18,14 +18,38 @@ export default {
     if (parentId) messageData.parent_id = parentId
     if (content_author) messageData.content_author = content_author
 
-    const response = await apiClient.post(`/messages`, [messageData], { headers })
-    const results = Array.isArray(response.data) ? response.data : []
-    const first = results[0] || null
-    if (!first || !first.success || !first.message) {
-      const err = first?.error || 'Unknown error creating message'
-      throw new Error(err)
+    try {
+      // Debug logging for outgoing payload
+      // Note: avoid logging full content to keep logs concise
+      console.log('[MessageService] sendReply payload', {
+        parent_id: messageData.parent_id || null,
+        content_length: content ? content.length : 0,
+        recipients_count: Array.isArray(recipients) ? recipients.length : 0,
+        content_author: content_author || null,
+        is_private: !!isPrivate,
+      })
+
+      const response = await apiClient.post(`/messages`, [messageData], { headers })
+      const results = Array.isArray(response.data) ? response.data : []
+      const first = results[0] || null
+
+      console.log('[MessageService] sendReply response', {
+        status: response?.status,
+        success: first?.success ?? null,
+        created_id: first?.message?.id ?? null,
+        created_parent_id: first?.message?.parent_id ?? null,
+        error: first?.error || null,
+      })
+
+      if (!first || !first.success || !first.message) {
+        const err = first?.error || 'Unknown error creating message'
+        throw new Error(err)
+      }
+      return { data: first.message, status: response.status }
+    } catch (e) {
+      console.error('[MessageService] sendReply error', e)
+      throw e
     }
-    return { data: first.message, status: response.status }
   },
 
   // Add recipients to a message (or multiple messages)

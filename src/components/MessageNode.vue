@@ -105,7 +105,7 @@
       </div>
       
       <div class="message-footer">
-        <span class="reply-count">{{ message.child_ids?.length || 0 }} ↩️</span>
+        <div class="reply-count">{{ message.child_ids?.length || 0 }} 💬</div>
         
         <!-- Unified message actions - desktop layout -->
         <div v-if="!isSelectionMode" class="message-actions desktop-actions">
@@ -792,52 +792,6 @@ export default {
       return hasSiblings;
     });
 
-
-
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
 
     
     const isCurrentUser = computed(() => {
@@ -1717,6 +1671,9 @@ export default {
 .reply-count {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
 }
 
 /* copy-id-button removed (moved into actions menu) */
@@ -2442,11 +2399,13 @@ export default {
 .reply-count {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
-  margin-right: var(--space-sm);
   padding: 2px 6px;
   background-color: var(--color-surface-hover);
   border-radius: var(--radius-xs);
   cursor: help;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
 }
 
 /* Header sibling navigation slot styling */
