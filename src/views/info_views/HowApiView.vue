@@ -9,6 +9,11 @@
       <div class="container">
         <h2>Overview</h2>
         <p>This is a concise reference for the public API.</p>
+        <p>
+          Swagger UI: <a href="/api/v1/docs" target="_blank" rel="noopener">/api/v1/docs</a><br />
+          ReDoc: <a href="/api/v1/redoc" target="_blank" rel="noopener">/api/v1/redoc</a><br />
+          Raw OpenAPI: <a href="/api/v1/openapi.json" target="_blank" rel="noopener">/api/v1/openapi.json</a>
+        </p>
         <h2>Work in progress</h2>
         <p>For concepts, see <router-link to="/how/docs">Concepts</router-link>. For bots, see <router-link to="/how/bots">Bots</router-link>.</p>
       </div>

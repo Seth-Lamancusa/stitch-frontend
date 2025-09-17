@@ -4,6 +4,7 @@ import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
 import MessageNode from './MessageNode.vue';
 import DeleteConfirmModal from './modals/DeleteConfirmModal.vue';
+import { onActivated } from 'vue';
 
 // Props to support different modes and configurations
 const props = defineProps({
@@ -415,6 +416,22 @@ onMounted(async () => {
     return;
   } else {
     loadMessages();
+  }
+});
+
+// Add: auto-load when component is re-activated via keep-alive (e.g., switching tabs)
+onActivated(() => {
+  try {
+    const hasUser = !!user.value;
+    const needsAuth = requiresAuth.value;
+    const anyMessages = (store.getters['messages/getLoadedMessages'] || []).length > 0;
+    if (isStoreMode.value && !isLoading.value && !anyMessages && (!needsAuth || hasUser)) {
+      nextTick(() => {
+        loadMessages();
+      });
+    }
+  } catch (e) {
+    // no-op
   }
 });
 
