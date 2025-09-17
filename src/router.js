@@ -16,6 +16,7 @@ import MessageListView from './views/app_views/MessageListView.vue';
 import PasswordResetView from './views/app_views/PasswordResetView.vue';
 import store from './store';
 import { usePermissions } from './composables/usePermissions';
+import TokenManager from './services/TokenManager';
 
 const routes = [
   {
@@ -135,16 +136,17 @@ router.beforeEach(async (to, from, next) => {
     }
   } catch (e) {}
 
-  const requiresAll = to.meta && Array.isArray(to.meta.requiredScopes) ? to.meta.requiredScopes : null;
-  const requiresAny = to.meta && Array.isArray(to.meta.requiresAnyScopes) ? to.meta.requiresAnyScopes : null;
+  // Support both legacy scopes and new permissions meta keys
+  const requiresAll = to.meta && Array.isArray(to.meta.requiredScopes) ? to.meta.requiredScopes : (to.meta && Array.isArray(to.meta.requiredPermissions) ? to.meta.requiredPermissions : null);
+  const requiresAny = to.meta && Array.isArray(to.meta.requiresAnyScopes) ? to.meta.requiresAnyScopes : (to.meta && Array.isArray(to.meta.requiresAnyPermissions) ? to.meta.requiresAnyPermissions : null);
 
   if (requiresAll && requiresAll.length > 0) {
-    const ok = store.getters['auth/hasAnyScope'](requiresAll) && requiresAll.every(s => store.getters['auth/hasScope'](s));
-    if (!ok) return next({ path: '/history' });
+    const allOk = requiresAll.every(s => store.getters['auth/hasScope'](s));
+    if (!allOk) return next({ path: '/history' });
   }
   if (requiresAny && requiresAny.length > 0) {
-    const ok = store.getters['auth/hasAnyScope'](requiresAny);
-    if (!ok) return next({ path: '/history' });
+    const anyOk = store.getters['auth/hasAnyScope'](requiresAny);
+    if (!anyOk) return next({ path: '/history' });
   }
 
   next();

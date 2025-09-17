@@ -220,18 +220,24 @@ class TokenManager {
 
           let response = null;
           try {
+            if (this.debug) console.log(`[TokenManager] Refresh attempt ${attempt}/${maxAttempts} sending...`);
             response = await fetch('/api/v1/auth/sessions/refresh', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ refresh_token: rt, aud: 'public-v1' }),
               _skipAuth: true
             });
+            if (this.debug) console.log('[TokenManager] Refresh response status:', response && response.status);
           } catch (e) {
             if (this.debug) console.warn(`[TokenManager] Refresh network error (attempt ${attempt})`, e?.message || e);
           }
 
           if (response && response.ok) {
-            const data = await response.json().catch(() => null);
+            const data = await response.json().catch((err) => {
+              if (this.debug) console.warn('[TokenManager] Failed to parse refresh JSON', err?.message || err);
+              return null;
+            });
+            if (this.debug) console.log('[TokenManager] Refresh body keys:', data && Object.keys(data || {}));
             if (data && data.access_token) {
               const ok = await this._applyTokensSafely(data.access_token, data.refresh_token);
               if (!ok) {
@@ -249,6 +255,7 @@ class TokenManager {
           }
 
           const status = response ? response.status : 'NETERR';
+          if (this.debug) console.warn('[TokenManager] Refresh non-OK status', status);
           const shouldRetry = status === 'NETERR' || isTransientStatus(status);
           if (!shouldRetry) {
             if (this.debug) console.warn('[TokenManager] Non-transient refresh failure; not retrying', status);

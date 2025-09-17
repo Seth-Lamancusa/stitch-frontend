@@ -1,7 +1,8 @@
 import WebSocketService from '../../services/ws/WebSocketService'
 import TokenManager from '../../services/TokenManager'
 import axios from 'axios'
-import { parseScopes, hasScope as hasScopeUtil, hasAnyScope as hasAnyScopeUtil } from '../../utils/scopes'
+import { parseScopes } from '../../utils/scopes'
+import { hasPermission as hasPermUtil, hasAnyPermission as hasAnyPermUtil, isAdmin as isAdminUtil } from '../../utils/permissions'
 
 // ------------------------------------------------------------
 // Auth store
@@ -39,7 +40,8 @@ export default {
   state: {
     user: null,
     isAuthenticated: false,
-    authReady: false
+    authReady: false,
+    _initInFlight: null
   },
   
   mutations: {
@@ -61,8 +63,13 @@ export default {
       commit('SET_USER', null);
       commit('SET_AUTH_READY', true);
     },
-    async initAuth({ commit, dispatch }) {
+    async initAuth({ state, commit, dispatch }) {
       try {
+        // Dedupe concurrent init calls (e.g., router guard + main.js during HMR)
+        if (state._initInFlight) {
+          return await state._initInFlight;
+        }
+        const initPromise = (async () => {
         const token = TokenManager.accessToken;
         if (!token) {
           // Attempt proactive refresh if a refresh token exists
@@ -81,11 +88,17 @@ export default {
           return;
         }
         await dispatch('validateExistingToken');
+      })();
+        // Record in-flight to avoid overlapping work
+        state._initInFlight = initPromise;
+        await initPromise;
       } catch (error) {
         console.error('Auth initialization failed:', error);
         commit('SET_USER', null);
       } finally {
         commit('SET_AUTH_READY', true);
+        // Clear in-flight marker
+        state._initInFlight = null;
       }
     },
 
@@ -264,11 +277,11 @@ export default {
     authReady: state => state.authReady,
     // Scopes helpers
     scopesSet: state => parseScopes(state.user ? state.user.scopes : ''),
-    hasScope: state => (name) => state.user ? hasScopeUtil(state.user.scopes, name) : false,
-    hasAnyScope: state => (names) => state.user ? hasAnyScopeUtil(state.user.scopes, names) : false,
+    hasScope: state => (name) => state.user ? hasPermUtil(state.user, name, TokenManager.accessToken) : false,
+    hasAnyScope: state => (names) => state.user ? hasAnyPermUtil(state.user, names, TokenManager.accessToken) : false,
 
     // Common role-style flags derived from scopes
-    isAdmin: (state, getters) => getters.hasScope('admin'),
+    isAdmin: (state) => isAdminUtil(state.user, TokenManager.accessToken),
     // Interaction capability: can the user create/write messages
     canInteract: (state, getters) => getters.hasAnyScope(['msg.write', 'admin']),
 

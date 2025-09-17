@@ -3,9 +3,24 @@ import store from '../store'
 import TokenManager from './TokenManager'
 import logger from './logger'
 
+// Guard symbol to avoid duplicate interceptor installation during HMR
+const AUTH_INTERCEPTOR_INSTALLED = Symbol.for('stitch.authInterceptorInstalled')
+
 // Install a 401 -> refresh token -> retry once interceptor on an axios instance.
 export function installAxiosAuthInterceptor(axiosInstance) {
   if (!axiosInstance || !axiosInstance.interceptors) return;
+  try {
+    if (axiosInstance[AUTH_INTERCEPTOR_INSTALLED]) {
+      return;
+    }
+    // Mark as installed to prevent stacking interceptors in dev/HMR
+    Object.defineProperty(axiosInstance, AUTH_INTERCEPTOR_INSTALLED, {
+      value: true,
+      enumerable: false,
+      configurable: false,
+      writable: false
+    });
+  } catch (_) {}
 
   // Stamp start time for duration metrics
   axiosInstance.interceptors.request.use((config) => {

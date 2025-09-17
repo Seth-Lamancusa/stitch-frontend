@@ -77,11 +77,14 @@ export function useAuthentication() {
       if (data.refresh_token) TokenManager.refreshToken = data.refresh_token;
       await store.dispatch('auth/validateExistingToken');
     } catch (e) {
-      if (e?.response?.status === 409) {
-        // Backend returns 409 when user_tag is already taken
-        throw new Error('user_tag_in_use');
-      }
+      const status = e?.response?.status;
       const info = e?.response?.data || {};
+      if (status === 409) {
+        const detail = info?.detail;
+        if (detail === 'user_tag_conflict' || detail === 'user_tag_in_use') throw new Error('user_tag_in_use');
+        if (detail === 'email_conflict') throw new Error('email_conflict');
+        if (detail === 'phone_conflict') throw new Error('phone_conflict');
+      }
       throw new Error(info.detail || e.message || 'Registration failed');
     }
   };
