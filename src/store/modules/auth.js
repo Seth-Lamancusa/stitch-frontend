@@ -167,7 +167,7 @@ export default {
     async searchUsers({ }, query) {
       try {
         const token = TokenManager.accessToken;
-        const response = await axios.get(`/api/users/search?query=${encodeURIComponent(query)}&limit=15`, {
+        const response = await axios.get(`/api/v1/users/search?query=${encodeURIComponent(query)}&limit=15`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = response && response.data ? response.data : {};
