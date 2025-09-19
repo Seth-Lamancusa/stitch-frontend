@@ -755,8 +755,8 @@ const handleDone = async () => {
     
   } catch (error) {
     console.error('[RecipientsModal] Error adding recipients:', error);
-    // Show user-friendly error message
-    alert('Failed to add recipients. Please try again.');
+    // Show user-friendly error message via global notification
+    store.commit('ui/SET_ERROR', { code: 'recipients_add_failed', message: 'Failed to add recipients. Please try again.' });
     // Reset loading state on error
     isAddingRecipients.value = false;
   }
@@ -817,7 +817,7 @@ const onAddRecipientsError = (error) => {
   console.error('[RecipientsModal] onAddRecipientsError called:', error);
   // Show user-friendly error message
   const errorMessage = error?.message || 'Failed to add recipients. Please try again.';
-  alert(errorMessage);
+  store.commit('ui/SET_ERROR', { code: 'recipients_add_failed', message: errorMessage });
   // Reset loading state
   isAddingRecipients.value = false;
 };
@@ -973,7 +973,7 @@ const removeRecipient = async (index, recipient) => {
     
     // Show user-friendly error message
     const errorMessage = error.response?.data?.detail || 'Failed to remove recipient';
-    alert(errorMessage);
+    store.commit('ui/SET_ERROR', { code: 'recipient_remove_failed', message: errorMessage });
   }
 };
 
@@ -1027,7 +1027,7 @@ const confirmRemoveRecipient = async (propagateToDescendants) => {
     
     // Show user-friendly error message
     const errorMessage = error.response?.data?.detail || 'Failed to remove recipient';
-    alert(errorMessage);
+    store.commit('ui/SET_ERROR', { code: 'recipient_remove_failed', message: errorMessage });
   } finally {
     // Reset loading states
     removingRecipientIds.value.delete(recipient.uid);
@@ -1710,6 +1710,28 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   height: 16px;
   cursor: pointer;
   accent-color: var(--color-primary);
+  position: relative;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  background-color: var(--color-surface);
+}
+.descendants-toggle input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -55%);
+  color: rgb(0, 0, 0);
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 1;
+}
+.descendants-toggle input[type="checkbox"]:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .descendants-toggle-text {

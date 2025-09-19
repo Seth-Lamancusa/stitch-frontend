@@ -11,6 +11,7 @@ import htmlLinksFormatter from './plugins/html_links';
 import markdownFormatter from './plugins/markdown';
 import latexFormatter from './plugins/latex';
 import codeFormatter from './plugins/code';
+import mcpExamplesFormatter from './plugins/mcp_examples';
 
 // Track if the system has been initialized
 let isInitialized = false;
@@ -30,6 +31,7 @@ export function initFormatters(options = {}) {
   try {
     // Register standard formatters
     registerFormatter(htmlLinksFormatter); // Run before markdown
+    registerFormatter(mcpExamplesFormatter); // Detect MCP example sections early
     registerFormatter(markdownFormatter);
     registerFormatter(latexFormatter);
     registerFormatter(codeFormatter);
@@ -80,13 +82,13 @@ export function getFormattersCss() {
       display: inline-block;
     }
     
-    /* Code highlighting */
+    /* Code highlighting (use CSS variables and external theme) */
     .hljs {
       display: block;
       overflow-x: auto;
       padding: 0.5em;
-      color: #333;
-      background: #f8f8f8;
+      color: var(--color-code-text);
+      background: var(--color-code-background);
     }
     
     /* Markdown customizations */

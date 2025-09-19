@@ -1,8 +1,8 @@
 /* Import KaTeX CSS */
 @import 'katex/dist/katex.min.css';
 
-/* Import highlight.js CSS (GitHub theme) */
-@import 'highlight.js/styles/github.css';
+/* Import highlight.js CSS (VS Code Dark+ / vs2015 theme) */
+@import 'highlight.js/styles/vs2015.css';
 
 /* Import variables for app styling */
 @import '../../assets/vars_app.css';
@@ -47,6 +47,70 @@ pre code {
   background-color: var(--color-code-background) !important;
   color: var(--color-code-text) !important;
   padding: 0 !important;
+}
+
+/* VS Code-like token colors (lighter tints) */
+.hljs-comment,
+.hljs-quote {
+  color: #6a9955 !important;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-meta .hljs-keyword {
+  color: #c586c0 !important;
+}
+
+.hljs-string,
+.hljs-doctag {
+  color: #ce9178 !important;
+}
+
+.hljs-number,
+.hljs-bullet,
+.hljs-symbol {
+  color: #b5cea8 !important;
+}
+
+.hljs-title,
+.hljs-section,
+.hljs-function .hljs-title {
+  color: #dcdcaa !important;
+}
+
+.hljs-built_in,
+.hljs-class .hljs-title,
+.hljs-type {
+  color: #4ec9b0 !important;
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-property,
+.hljs-params {
+  color: #9cdcfe !important;
+}
+
+.hljs-tag,
+.hljs-name {
+  color: #569cd6 !important;
+}
+
+.hljs-addition {
+  color: #b5cea8 !important;
+}
+
+.hljs-deletion {
+  color: #d16969 !important;
+}
+
+.hljs-meta,
+.hljs-meta .hljs-string {
+  color: #c586c0 !important;
 }
 
 /* ===== Tables ===== */
@@ -136,4 +200,14 @@ img {
   border-radius: var(--radius-sm);
 }
 
-/* Dark mode overrides are now unnecessary since we're using CSS variables */ 
+/* Separator for ellipsis and collapsed blank blocks */
+.fc-separator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: var(--space-md) 0;
+  color: var(--color-text-secondary);
+  opacity: 0.8;
+}
+
+/* Dark mode overrides are now unnecessary since we're using CSS variables */

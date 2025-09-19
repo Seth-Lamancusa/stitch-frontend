@@ -5,6 +5,7 @@ class TokenManager {
   static lockKey = 'tm_refresh_lock';
   static resultKey = 'tm_refresh_result';
   static bundleKey = 'auth_bundle';
+  static deviceKey = 'device_id';
 
   static get accessToken() {
     return localStorage.getItem('auth_token');
@@ -50,6 +51,20 @@ class TokenManager {
     try {
       localStorage.setItem(this.bundleKey, JSON.stringify(obj || {}));
     } catch (_) {}
+  }
+
+  static _ensureDeviceId() {
+    try {
+      let id = localStorage.getItem(this.deviceKey);
+      if (!id) {
+        id = (crypto && crypto.randomUUID && crypto.randomUUID()) || (Math.random().toString(36).slice(2) + Date.now().toString(36));
+        localStorage.setItem(this.deviceKey, id);
+      }
+      return id;
+    } catch (_) {
+      // Fallback non-persistent
+      return 'dev-' + Math.random().toString(36).slice(2);
+    }
   }
 
   static _genId() {
@@ -224,7 +239,7 @@ class TokenManager {
             response = await fetch('/api/v1/auth/sessions/refresh', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ refresh_token: rt, aud: 'public-v1' }),
+              body: JSON.stringify({ refresh_token: rt, aud: 'public-v1', device_id: this._ensureDeviceId() }),
               _skipAuth: true
             });
             if (this.debug) console.log('[TokenManager] Refresh response status:', response && response.status);

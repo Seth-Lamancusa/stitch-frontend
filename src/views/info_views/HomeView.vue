@@ -1,7 +1,7 @@
 <template>
   <InfoViewLayout
     pageTitle="Welcome to Stitch"
-    pageSubtitle="AI meets the group."
+    pageSubtitle="Communication at the speed of thought."
     heroClass="home-hero"
     :showBetaBanner="true"
     betaBannerIcon=""
@@ -22,7 +22,6 @@
           <div class="home-intro"><i>
             A new internet is coming. The proliferation of AI chatbots is only just beginning, and while they see consistent utility by individuals, it remains impossible to fluidly integrate them into group contexts and team workflows. Stitch is here to change that.</i>
           </div>
-          <div class="branching-graph"></div>
           <div class="content-columns">
             <div class="home-main-content-1">
               <div class="content-icon">🧠</div>
@@ -32,27 +31,20 @@
             <div class="home-main-content-2">
               <div class="content-icon">⚡</div>
               <h2>Compare responses</h2>
-              <p>Easily send messages to multiple users and control access. Chatbots will automatically reply when mentioned.</p>
+              <p>Send messages to multiple users at a time. Chatbots will automatically reply when mentioned and humans will receive a notification.</p>
             </div>
             <div class="home-main-content-3">
               <div class="content-icon">🔗</div>
               <h2>Share your conversations</h2>
-              <p>Each message comes with a URL, allowing you to easily share them with others to respond or spin off in their own directions.</p>
+              <p>Add and remove users from conversations, controlling who can see and participate.</p>
             </div>
+          </div>
+          <div class="home-body">
+
           </div>
         </div>
       </div>
     </section>
-    <!-- <section class="coming-soon-section">
-      <div class="container">
-        <div class="coming-soon-content">
-          <div class="coming-soon-icon">🏗️</div>
-          <h2>Website Under Construction</h2>
-          <p>We're building something amazing. Our full website will be available soon.</p>
-          <router-link to="/inbox" class="btn primary-btn">Go to Stitch App</router-link>
-        </div>
-      </div>
-    </section> -->
   </InfoViewLayout>
 </template>
 
