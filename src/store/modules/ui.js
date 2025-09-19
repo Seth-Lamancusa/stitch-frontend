@@ -1,3 +1,5 @@
+import { normalizeError } from '../../utils/error.js'
+
 export default {
   namespaced: true,
   
@@ -12,7 +14,15 @@ export default {
   mutations: {
     
     SET_ERROR(state, error) {
-      state.error = error;
+      if (error === null) {
+        state.error = null;
+        return;
+      }
+      // Accept strings, Error objects, HTTP errors, or pre-normalized objects
+      const normalized = typeof error === 'object' && (error.code || error.message)
+        ? { code: error.code || null, message: error.message || 'An error occurred' }
+        : normalizeError(error);
+      state.error = normalized;
     },
     
     SET_SUCCESS(state, message) {
@@ -44,7 +54,7 @@ export default {
     },
     
     setError({ commit }, error) {
-      commit('SET_ERROR', error);
+      commit('SET_ERROR', normalizeError(error));
     },
     
     setSuccess({ commit }, message) {

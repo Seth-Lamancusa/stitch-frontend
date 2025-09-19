@@ -66,9 +66,10 @@
   --color-system-message-text: var(--color-text);
 
   /* ===== Formatted Content Colors ===== */
-  --color-code-background: #2d2d2d;
-  --color-inline-code-background: #3a3a3a;
-  --color-code-text: #f8f8f2;
+  /* VS Code-like dark editor background with lighter token tints */
+  --color-code-background: #1e1e1e;
+  --color-inline-code-background: #252526;
+  --color-code-text: #d4d4d4;
   
   --color-table-border: #444444;
   --color-table-header-background: #2a2a2a;

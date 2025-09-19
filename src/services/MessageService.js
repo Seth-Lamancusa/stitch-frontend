@@ -79,6 +79,12 @@ export default {
     return apiClient.delete(`/messages/${id}`, { headers, params })
   },
 
+  // Set message public flag
+  async setPublic(id, isPublic) {
+    const headers = getAuthHeaders()
+    return apiClient.patch(`/messages/${id}/public`, { public: !!isPublic }, { headers })
+  },
+
   // Load messages via unified traversal endpoint
   async traverseFrom(messageId, { up_depth = 2, down_depth = 2, get_replies = true, get_children = false } = {}) {
     const headers = getAuthHeaders()

@@ -6,7 +6,15 @@
       <div v-if="error" class="notification error-notification" @click="clearError">
         <div class="notification-icon">⚠️</div>
         <div class="notification-content">
-          <div class="notification-message">{{ error }}</div>
+          <div class="notification-message">
+            <template v-if="typeof error === 'object'">
+              <span v-if="error.code" class="notification-title">{{ error.code }}</span>
+              <span>{{ error.message }}</span>
+            </template>
+            <template v-else>
+              {{ error }}
+            </template>
+          </div>
         </div>
         <button class="notification-close" @click.stop="clearError">×</button>
       </div>

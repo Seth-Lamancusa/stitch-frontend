@@ -39,7 +39,7 @@ export function useAuthentication() {
   const signInWithPassword = async (identifier, password) => {
     try {
       error.value = null;
-      const resp = await axios.post('/api/v1/auth/password/login', { identifier, password });
+      const resp = await axios.post('/api/v1/auth/password/login', { identifier, password, device_id: TokenManager._ensureDeviceId?.() });
       const data = resp && resp.data ? resp.data : {};
       const token = data.access_token;
       if (!token) throw new Error('Missing access token');
@@ -69,7 +69,7 @@ export function useAuthentication() {
   const registerWithPassword = async ({ email, password, user_tag, display_name, phone, endpoint, notify }) => {
     error.value = null;
     try {
-      const resp = await axios.post('/api/v1/auth/register', { email, password, user_tag, display_name, phone, endpoint, notify });
+      const resp = await axios.post('/api/v1/auth/register', { email, password, user_tag, display_name, phone, endpoint, notify, device_id: TokenManager._ensureDeviceId?.() });
       const data = resp && resp.data ? resp.data : {};
       const token = data.access_token;
       if (!token) throw new Error('Missing access token');

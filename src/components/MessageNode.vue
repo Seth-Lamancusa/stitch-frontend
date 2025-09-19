@@ -18,7 +18,7 @@
     <div class="message-header">
       <div class="author-section">
         <!-- Sibling navigator - positioned left of display name on mobile only -->
-        <div v-if="!inListView && message.parent_id && isMobile" class="header-sibling-nav-slot">
+        <div v-if="showSiblingNavMobile" class="header-sibling-nav-slot">
           <sibling-navigator
             :message-id="message.id"
             :parent-id="message.parent_id"
@@ -56,10 +56,7 @@
           </svg>
         </button>
           
-          <!-- Public badge - shown for all public messages -->
-          <span v-if="isPublic" class="visibility-indicator public">
-            Public
-          </span>
+          
           
           <!-- Recipients badge -->
           <button 
@@ -71,6 +68,19 @@
             Recipients {{ typeof message.recipients === 'string' ? '' : `(${deduplicatedRecipients.length})` }}
           </button>
           
+          <!-- Visibility toggle - single globe emoji (solid if public, transparent if private) -->
+          <span 
+            v-if="canDeleteMessage(message) && !isSelectionMode && !inListView" 
+            @click.stop="toggleVisibility"
+            class="globe-emoji"
+            :class="isPublic ? 'visible' : 'hidden'"
+            :title="isPublic ? 'Make private' : 'Make public'"
+            role="button"
+            tabindex="0"
+          >
+            🌍
+          </span>
+
           <!-- Delete button - scope-based capability: msg.write + author only (no admin UI in public SPA) -->
           <button 
             v-if="canDeleteMessage(message) && !isSelectionMode && !inListView" 
@@ -170,7 +180,7 @@
       
       <!-- Desktop sibling navigator - absolutely positioned -->
       <sibling-navigator
-        v-if="!inListView && message.parent_id && !isMobile"
+        v-if="showSiblingNavDesktop"
         :message-id="message.id"
         :parent-id="message.parent_id"
         :mobile-mode="false"
@@ -789,6 +799,14 @@ export default {
       }
       
       const hasSiblings = parent.child_ids.length > 1;
+      try {
+        console.log('[MessageNode] hasSiblings computed', {
+          messageId: props.message.id,
+          parentId: props.message.parent_id,
+          childCount: Array.isArray(parent.child_ids) ? parent.child_ids.length : 0,
+          hasSiblings
+        });
+      } catch (e) {}
       return hasSiblings;
     });
 
@@ -1001,10 +1019,42 @@ export default {
         isSavingMessage.value = false;
       }
     };
+
+    const toggleVisibility = async () => {
+      try {
+        const target = !isPublic.value;
+        try {
+          console.log('[MessageNode] toggleVisibility dispatch', {
+            messageId: props.message.id,
+            fromPublic: isPublic.value,
+            toPublic: target
+          });
+        } catch (e) {}
+        const ok = await store.dispatch('messages/togglePublicMessage', { messageId: props.message.id, makePublic: target });
+        if (!ok) {
+          console.warn('[MessageNode] Failed to toggle visibility');
+        }
+        try {
+          console.log('[MessageNode] toggleVisibility result', {
+            messageId: props.message.id,
+            nowPublic: isPublic.value,
+            ok
+          });
+        } catch (e) {}
+      } catch (e) {
+        console.error('[MessageNode] toggleVisibility error:', e);
+      }
+    };
     
     // Check if device is mobile
     const checkMobileDevice = () => {
-      isMobile.value = window.innerWidth <= 768;
+      const nextIsMobile = window.innerWidth <= 768;
+      if (isMobile.value !== nextIsMobile) {
+        try {
+          console.log('[MessageNode] isMobile changed', { messageId: props.message.id, prev: isMobile.value, next: nextIsMobile, innerWidth: window.innerWidth });
+        } catch (e) {}
+      }
+      isMobile.value = nextIsMobile;
     };
     
     // Handle viewport changes for keyboard detection
@@ -1086,6 +1136,17 @@ export default {
       window.addEventListener('resize', checkMobileDevice);
       window.addEventListener('resize', handleViewportChange);
       
+      // Initial diagnostics
+      try {
+        console.log('[MessageNode] mounted', {
+          messageId: props.message.id,
+          parentId: props.message.parent_id,
+          inListView: props.inListView,
+          isMobile: isMobile.value,
+          hasSiblings: hasSiblings.value,
+          isSelectionMode: isSelectionMode.value
+        });
+      } catch (e) {}
 
     });
     
@@ -1124,6 +1185,85 @@ export default {
       };
       console.log('[MessageNode] Add Recipients button visibility conditions:', conditions);
       return !props.inListView && !isSelectionMode.value;
+    });
+    
+    // Sibling navigator visibility flags (mirror original template conditions)
+    const showSiblingNavMobile = computed(() => {
+      const val = !props.inListView && !!props.message.parent_id && isMobile.value;
+      try {
+        console.log('[MessageNode] showSiblingNavMobile computed', {
+          messageId: props.message.id,
+          value: val,
+          inListView: props.inListView,
+          parentId: props.message.parent_id,
+          isMobile: isMobile.value,
+          hasSiblings: hasSiblings.value,
+          isSelectionMode: isSelectionMode.value
+        });
+      } catch (e) {}
+      return val;
+    });
+
+    const showSiblingNavDesktop = computed(() => {
+      const val = !props.inListView && !!props.message.parent_id && !isMobile.value;
+      try {
+        console.log('[MessageNode] showSiblingNavDesktop computed', {
+          messageId: props.message.id,
+          value: val,
+          inListView: props.inListView,
+          parentId: props.message.parent_id,
+          isMobile: isMobile.value,
+          hasSiblings: hasSiblings.value,
+          isSelectionMode: isSelectionMode.value
+        });
+      } catch (e) {}
+      return val;
+    });
+
+    // Watchers for diagnostics
+    watch(showSiblingNavMobile, (next, prev) => {
+      try {
+        console.log('[MessageNode] showSiblingNavMobile changed', {
+          messageId: props.message.id,
+          prev,
+          next
+        });
+      } catch (e) {}
+    });
+
+    watch(showSiblingNavDesktop, (next, prev) => {
+      try {
+        console.log('[MessageNode] showSiblingNavDesktop changed', {
+          messageId: props.message.id,
+          prev,
+          next
+        });
+      } catch (e) {}
+    });
+
+    watch(isSelectionMode, (next, prev) => {
+      try { console.log('[MessageNode] isSelectionMode changed', { messageId: props.message.id, prev, next }); } catch (e) {}
+    });
+
+    watch(hasSiblings, (next, prev) => {
+      try { console.log('[MessageNode] hasSiblings changed', { messageId: props.message.id, prev, next }); } catch (e) {}
+    });
+
+    watch(() => props.inListView, (next, prev) => {
+      try { console.log('[MessageNode] inListView changed', { messageId: props.message.id, prev, next }); } catch (e) {}
+    });
+
+    // Watch parent_id changes directly
+    watch(() => props.message.parent_id, (next, prev) => {
+      try { console.log('[MessageNode] parent_id changed', { messageId: props.message.id, prev, next }); } catch (e) {}
+    });
+
+    // Watch parent child count when available
+    watch(() => {
+      const parent = props.message.parent_id ? store.getters['messages/getMessage'](props.message.parent_id) : null;
+      return parent && Array.isArray(parent.child_ids) ? parent.child_ids.length : null;
+    }, (next, prev) => {
+      try { console.log('[MessageNode] parent child_ids length changed', { messageId: props.message.id, parentId: props.message.parent_id, prev, next }); } catch (e) {}
     });
     
     return {
@@ -1166,6 +1306,8 @@ export default {
       // handleReformat,
       messageContentRef,
       hasSiblings,
+      showSiblingNavMobile,
+      showSiblingNavDesktop,
       isMobile,
       isJsonCopied,
       isTextCopied,
@@ -1174,6 +1316,7 @@ export default {
       isMessageSaved,
       isSavingMessage,
       toggleSaveMessage,
+      toggleVisibility,
       openLinksModal,
       openAddRecipientsModal,
       handleMessageClick,
@@ -1513,6 +1656,31 @@ export default {
 }
 
 .envelope-icon-button:hover .envelope-icon {
+  transform: scale(1.1);
+}
+
+/* Globe emoji visibility indicator (modeled after RecipientsModal indicators) */
+.globe-emoji {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 24px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  opacity: 0.8; /* default */
+}
+
+.globe-emoji.visible {
+  opacity: 1;
+}
+
+.globe-emoji.hidden {
+  opacity: 0.4; /* more transparent when private */
+}
+
+.globe-emoji:hover {
   transform: scale(1.1);
 }
 

@@ -761,6 +761,35 @@ export default {
         throw error;
       }
     },
+
+    // Toggle message public flag
+    async togglePublicMessage({ commit, state, rootGetters }, { messageId, makePublic }) {
+      try {
+        if (!rootGetters['auth/hasScope']('msg.write')) {
+          throw new Error('Write permission required');
+        }
+        const existing = state.messages[messageId];
+        if (!existing) return false;
+        const resp = await MessageService.setPublic(messageId, !!makePublic);
+        const updated = resp?.data;
+        if (updated && updated.id) {
+          // Ensure we don't lose relational context if backend returns a minimal payload
+          if (updated.parent_id === undefined || updated.parent_id === null) {
+            updated.parent_id = existing.parent_id;
+          }
+          if (!Array.isArray(updated.child_ids)) {
+            updated.child_ids = existing.child_ids || [];
+          }
+          commit('SET_MESSAGE', updated);
+          return true;
+        }
+        return false;
+      } catch (error) {
+        console.error('[Store] togglePublicMessage error:', error);
+        commit('ui/SET_ERROR', error.message || 'Failed to update visibility', { root: true });
+        return false;
+      }
+    },
     
     // Removed: reformatMessage (no server endpoint)
     

@@ -254,7 +254,7 @@ const createNewThread = () => {
 const handleNewThreadClick = (event) => {
   // First check if user is logged in
   if (!user.value) {
-    alert("Please log in to create new messages");
+    store.commit('ui/SET_ERROR', { code: 'auth_required', message: 'Please log in to create new messages' });
     return;
   }
 
@@ -262,7 +262,7 @@ const handleNewThreadClick = (event) => {
   if (store.getters['auth/canInteract']) {
     createNewThread();
   } else {
-    alert("You need write permission to create new messages");
+    store.commit('ui/SET_ERROR', { code: 'permission_required', message: 'You need write permission to create new messages' });
   }
 };
 

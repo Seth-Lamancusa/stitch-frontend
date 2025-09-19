@@ -1950,6 +1950,28 @@ defineExpose({
   width: 14px;
   height: 14px;
   accent-color: var(--color-primary);
+  position: relative;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  background-color: var(--color-surface);
+}
+.ancestors-toggle input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -55%);
+  color: rgb(0, 0, 0);
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 1;
+}
+.ancestors-toggle input[type="checkbox"]:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .ancestors-toggle span {
