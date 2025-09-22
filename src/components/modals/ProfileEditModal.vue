@@ -12,6 +12,7 @@ const emit = defineEmits(['close']);
 
 const store = useStore();
 const user = computed(() => store.getters['auth/user']);
+const isManaged = computed(() => !!(user.value && user.value.is_managed));
 
 const displayName = ref('');
 const tag = ref('');
@@ -734,7 +735,7 @@ const deleteAccount = async () => {
             <div class="field-hint">Private profiles are visible only to users you follow or manage, or who follow or manage you.</div>
           </div>
 
-          <div class="form-group contact-section">
+          <div class="form-group contact-section" v-if="!isManaged">
             <div class="form-row">
               <label for="email">Email</label>
               <div class="control">
@@ -743,12 +744,13 @@ const deleteAccount = async () => {
                   v-model="email" 
                   type="email" 
                   placeholder="you@example.com"
+                  :disabled="user?.is_managed"
                   @keydown="handleKeydown"
                   @blur="validateEmail"
                 />
                 <div class="notify-group">
-                  <label class="notify-toggle" :class="{ disabled: !isEmailVerified }">
-                    <input type="checkbox" v-model="notifyPrefs.email" :disabled="!isEmailVerified" /><span class="notify-text">Notify</span>
+                  <label class="notify-toggle" :class="{ disabled: !isEmailVerified || user?.is_managed }">
+                    <input type="checkbox" v-model="notifyPrefs.email" :disabled="!isEmailVerified || user?.is_managed" /><span class="notify-text">Notify</span>
                   </label>
                   <span v-if="isEmailVerified" class="status-badge ok">Verified</span>
                 </div>
@@ -765,7 +767,7 @@ const deleteAccount = async () => {
 
           
           
-          <div class="form-group contact-section">
+          <div class="form-group contact-section" v-if="!isManaged">
             <div class="form-row">
               <label for="phoneNumber">Phone Number</label>
               <div class="control">
@@ -775,14 +777,15 @@ const deleteAccount = async () => {
                     v-model="phoneNumber" 
                     type="tel" 
                     placeholder="(555) 123-4567"
+                    :disabled="user?.is_managed"
                     @keydown="handleKeydown"
                     @blur="validatePhoneNumber"
                   />
                   <button type="button" class="info-btn" @click="showPhoneConsent = !showPhoneConsent" :aria-pressed="showPhoneConsent ? 'true' : 'false'" title="SMS consent details">ⓘ</button>
                 </div>
                 <div class="notify-group">
-                  <label class="notify-toggle" :class="{ disabled: !isPhoneVerified || !isEmailVerified }">
-                    <input type="checkbox" v-model="notifyPrefs.phone" :disabled="!isPhoneVerified || !isEmailVerified" /><span class="notify-text">Notify</span>
+                  <label class="notify-toggle" :class="{ disabled: !isPhoneVerified || !isEmailVerified || user?.is_managed }">
+                    <input type="checkbox" v-model="notifyPrefs.phone" :disabled="!isPhoneVerified || !isEmailVerified || user?.is_managed" /><span class="notify-text">Notify</span>
                   </label>
                   <span v-if="isPhoneVerified" class="status-badge ok">Verified</span>
                 </div>

@@ -180,6 +180,7 @@ const loginPromptMessage = computed(() => {
 const error = computed(() => store.getters['ui/error']);
 const user = computed(() => store.getters['auth/user']);
 const canInteract = computed(() => store.getters['auth/canInteract']);
+const activePrincipalUid = computed(() => store.getters['auth/activePrincipalUid']);
 
 const firebaseReady = ref(true);
 const replyCounts = ref({}); // Track reply counts by thread ID
@@ -444,6 +445,27 @@ watch(user, (newUser, oldUser) => {
       isAllLoaded.value = false;
       currentSkip.value = 0;
     }
+  }
+});
+
+// Reload when active principal changes (manager ↔ managed or between manageds)
+watch(activePrincipalUid, async (newUid, oldUid) => {
+  try {
+    if (newUid === oldUid) return;
+    // Cancel in-flight and reset local state
+    currentRequestId.value++;
+    localLoadingState.value = false;
+    selectedMessageIds.value.clear();
+    isAllLoaded.value = false;
+    currentSkip.value = 0;
+    if (isLocalMode.value) {
+      localMessages.value = [];
+    }
+    // Trigger fresh load respecting mode/auth
+    await nextTick();
+    loadMessages();
+  } catch (e) {
+    // no-op
   }
 });
 
