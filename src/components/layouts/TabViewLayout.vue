@@ -59,10 +59,66 @@
       
       <div class="user-controls">
         <div class="user-info" v-if="user">
-          <div class="username-container" @click="openProfileModal">
-            <span class="username">{{ userDisplayName }}</span>
-            <span v-if="userTag" class="user-tag">@{{ userTag }}</span>
+          <div class="username-container" ref="usernameContainerRef" @click="openProfileModal">
+            <span class="username">{{ displayedPrincipalName }}</span>
+            <span v-if="displayedPrincipalTag" class="user-tag">@{{ displayedPrincipalTag }}</span>
+            <span v-if="isDelegated" class="acting-chip" title="Acting as">Acting as</span>
             <span class="edit-icon" title="Edit profile">✎</span>
+          </div>
+          <div class="principal-menu-wrapper">
+            <button
+              class="principal-dropdown-toggle"
+              type="button"
+              aria-haspopup="menu"
+              :aria-expanded="isPrincipalMenuOpen"
+              title="Switch principal"
+              @click.stop="togglePrincipalMenu"
+            >▾</button>
+            <div
+              v-if="isPrincipalMenuOpen"
+              ref="principalMenuWrapperRef"
+              class="principal-menu"
+              role="menu"
+            >
+              <div class="menu-section">
+                <div
+                  class="menu-item manager"
+                  :class="{ active: effectiveActivePrincipalUid === managerUid }"
+                  role="menuitem"
+                  @click="onSelectPrincipal(managerUid)"
+                >
+                  <span class="menu-item-name">{{ managerDisplayName }}</span>
+                  <span v-if="managerTag" class="menu-item-tag">@{{ managerTag }}</span>
+                </div>
+              </div>
+              <div class="menu-divider"></div>
+              <div class="menu-section">
+                <div v-if="managedLoading" class="menu-loading">
+                  <span class="loading-spinner"></span>
+                  <span>Loading managed users…</span>
+                </div>
+                <template v-else>
+                  <div
+                    v-for="m in managedUsers"
+                    :key="(m && (m.uid || m.id || m._key)) || Math.random()"
+                    class="menu-item"
+                    :class="{ active: (m && (m.uid || m.id || m._key)) === effectiveActivePrincipalUid }"
+                    role="menuitem"
+                    @click="onSelectPrincipal(m && (m.uid || m.id || m._key))"
+                  >
+                    <span class="menu-item-name">{{ getUserDisplayName(m) }}</span>
+                    <span v-if="m && m.user_tag" class="menu-item-tag">@{{ m.user_tag }}</span>
+                  </div>
+                  <div v-if="managedUsers.length === 0" class="menu-empty">No managed users</div>
+                </template>
+              </div>
+              <div class="menu-divider"></div>
+              <div class="menu-section">
+                <div class="menu-item create" role="menuitem" @click="onCreateManagedUser">
+                  <span class="menu-item-name">＋ Create new managed user</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Auth status badges - only shown when auth is ready -->
@@ -100,7 +156,7 @@
     </div>
     
     <div class="main-content">
-      <div v-if="user && authReady && !isEmailVerified" class="verify-banner">
+      <div v-if="user && authReady && !isEmailVerified && !isDelegated && !(user && user.is_managed)" class="verify-banner">
         <span>Verify your email to unlock messaging & notifications.</span>
         <a class="verify-link" href="#" @click.prevent="openProfileModal">Verify now</a>
       </div>
@@ -120,12 +176,16 @@
       :isOpen="isApiKeysModalOpen" 
       @close="closeApiKeysModal" 
     />
+    <ManagedUserCreateModal 
+      :isOpen="isCreateManagedModalOpen" 
+      @close="closeCreateManagedModal" 
+    />
     <GlobalNotifications />
   </div>
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted } from 'vue';
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useStore } from 'vuex';
 import { useAuthentication } from '../../composables/useAuthentication';
@@ -133,6 +193,7 @@ import LoginButton from '@/components/buttons/LoginButton.vue'
 import RegisterButton from '@/components/buttons/RegisterButton.vue'
 import ProfileEditModal from '../modals/ProfileEditModal.vue';
 import ApiKeysModal from '../modals/ApiKeysModal.vue';
+import ManagedUserCreateModal from '../modals/ManagedUserCreateModal.vue';
 import GlobalNotifications from '../GlobalNotifications.vue';
 import { ADMIN_ORIGIN } from '@/config/appConfig.js';
 
@@ -140,6 +201,9 @@ const router = useRouter();
 const route = useRoute();
 const store = useStore();
 const { signInWithApiKey, logout } = useAuthentication();
+
+// Debug: enable dropdown state logging by default; can be toggled via DevTools
+try { if (typeof window !== 'undefined') { window.__STITCH_DEBUG_MENU = true; } } catch (_) {}
 
 const user = computed(() => store.getters['auth/user']);
 const isAdmin = computed(() => store.getters['auth/isAdmin']);
@@ -157,6 +221,11 @@ const isUnreadCountLoading = computed(() => store.getters['messages/isLoading'](
 const isLoggingIn = ref(false);
 const isProfileModalOpen = ref(false);
 const isApiKeysModalOpen = ref(false);
+const isPrincipalMenuOpen = ref(false);
+const principalMenuWrapperRef = ref(null);
+const usernameContainerRef = ref(null);
+const activePrincipalUidLocal = ref(null);
+const isCreateManagedModalOpen = ref(false);
 
 // Public SPA: no internal/admin tabs here
 
@@ -190,6 +259,139 @@ onMounted(() => {
     store.dispatch('messages/fetchUnreadMessageCount');
   }
 });
+
+// Principal dropdown data (wired)
+const managedUsersFromStore = computed(() => (store.getters['auth/managedUsers'] || []));
+const managedUsers = computed(() => managedLoading.value ? [] : (managedUsersFromStore.value || []));
+const managedLoading = ref(false);
+const resolveUid = (u) => (u && (u.uid || u.id || u._key)) || null;
+const activePrincipalUid = computed(() => store.getters['auth/activePrincipalUid'] || resolveUid(user.value));
+const managerUid = computed(() => store.getters['auth/managerUid'] || resolveUid(user.value));
+const getUserDisplayName = (u) => {
+  if (!u) return 'Unknown';
+  return u.displayName || (u.user_tag ? `@${u.user_tag}` : (u.email || 'Unknown'));
+};
+// Manager row should always reflect the true manager principal (act.sub when acting-as)
+const managerDisplayName = computed(() => {
+  const list = managedUsers.value || [];
+  const manager = managerUid.value;
+  if (!manager) return getUserDisplayName(user.value);
+  if (user.value && user.value.uid === manager) return getUserDisplayName(user.value);
+  const found = list.find(u => (u && (u.uid || u._key || u.id)) === manager);
+  // Fallback to manager snapshot from store if present
+  const snap = store.state.auth && store.state.auth.managerSnapshot;
+  if (found) return getUserDisplayName(found);
+  if (snap) return snap.display_name || (snap.user_tag ? `@${snap.user_tag}` : 'Unknown');
+  return getUserDisplayName(user.value);
+});
+const managerTag = computed(() => {
+  const list = managedUsers.value || [];
+  const manager = managerUid.value;
+  if (!manager) return (user.value && user.value.user_tag) ? user.value.user_tag : null;
+  if (user.value && user.value.uid === manager) return (user.value && user.value.user_tag) ? user.value.user_tag : null;
+  const found = list.find(u => (u && (u.uid || u._key || u.id)) === manager);
+  if (found && found.user_tag) return found.user_tag;
+  const snap = store.state.auth && store.state.auth.managerSnapshot;
+  if (snap && snap.user_tag) return snap.user_tag;
+  return (user.value && user.value.user_tag) ? user.value.user_tag : null;
+});
+const effectiveActivePrincipalUid = computed(() => activePrincipalUidLocal.value || activePrincipalUid.value);
+
+// Header: show selected principal name/tag
+const displayedPrincipal = computed(() => {
+  const current = effectiveActivePrincipalUid.value;
+  const manager = managerUid.value;
+  if (current === manager) return user.value;
+  const list = managedUsers.value || [];
+  return list.find((u) => resolveUid(u) === current) || user.value;
+});
+const displayedPrincipalName = computed(() => getUserDisplayName(displayedPrincipal.value));
+const displayedPrincipalTag = computed(() => (displayedPrincipal.value && displayedPrincipal.value.user_tag) ? displayedPrincipal.value.user_tag : null);
+const isDelegated = computed(() => {
+  try {
+    const active = activePrincipalUid.value;
+    const manager = managerUid.value;
+    return !!(active && manager && active !== manager);
+  } catch (_) { return false; }
+});
+
+const togglePrincipalMenu = async () => {
+  const next = !isPrincipalMenuOpen.value;
+  isPrincipalMenuOpen.value = next;
+  if (next) {
+    try {
+      managedLoading.value = true;
+      await store.dispatch('auth/fetchManagedUsers');
+    } catch (e) {
+      console.warn('[TabViewLayout] fetchManagedUsers failed', e);
+    } finally {
+      managedLoading.value = false;
+    }
+    // Debug snapshot
+    try {
+      // eslint-disable-next-line no-underscore-dangle
+      const dbg = (typeof window !== 'undefined') && window.__STITCH_DEBUG_MENU;
+      if (dbg) {
+        const manager = managerUid.value;
+        const active = activePrincipalUid.value;
+        const list = managedUsers.value || [];
+        const found = list.find(u => (u && (u.uid || u._key || u.id)) === manager);
+        const managerSource = (user.value && user.value.uid === manager) ? 'self' : (found ? 'managed_list' : 'fallback');
+        const header = {
+          displayedPrincipalUid: (displayedPrincipal.value && (displayedPrincipal.value.uid || displayedPrincipal.value._key || displayedPrincipal.value.id)) || null,
+          displayedPrincipalName: displayedPrincipalName.value,
+          displayedPrincipalTag: displayedPrincipalTag.value,
+          isDelegated: isDelegated.value,
+        };
+        // Trim list for logging
+        const listPreview = list.slice(0, 5).map(u => ({ uid: u && (u.uid || u._key || u.id), display_name: u && (u.displayName || u.display_name), user_tag: u && u.user_tag }));
+        console.log('[PrincipalMenu][debug]', {
+          managerUid: manager,
+          activePrincipalUid: active,
+          managerSource,
+          managerRow: { name: managerDisplayName.value, tag: managerTag.value },
+          user: user.value ? { uid: user.value.uid, displayName: user.value.displayName, user_tag: user.value.user_tag } : null,
+          header,
+          managedUsersCount: list.length,
+          managedUsersPreview: listPreview,
+        });
+      }
+    } catch (_) {}
+  }
+};
+const closePrincipalMenu = () => { isPrincipalMenuOpen.value = false; };
+const onSelectPrincipal = async (_uid) => {
+  try {
+    if (!_uid) return;
+    const manager = managerUid.value;
+    if (_uid === manager) {
+      await store.dispatch('auth/returnToSelf');
+    } else {
+      await store.dispatch('auth/switchPrincipal', { managedUid: _uid });
+    }
+  } catch (e) {
+    console.error('[TabViewLayout] principal switch failed', e);
+  } finally {
+    closePrincipalMenu();
+  }
+};
+const onCreateManagedUser = () => { closePrincipalMenu(); isCreateManagedModalOpen.value = true; };
+
+const closeCreateManagedModal = () => {
+  isCreateManagedModalOpen.value = false;
+};
+
+const onDocumentClick = (e) => {
+  if (!isPrincipalMenuOpen.value) return;
+  const menuEl = principalMenuWrapperRef.value;
+  const nameEl = usernameContainerRef.value;
+  if (menuEl && menuEl.contains(e.target)) return;
+  if (nameEl && nameEl.contains(e.target)) return;
+  closePrincipalMenu();
+};
+
+onMounted(() => { document.addEventListener('click', onDocumentClick); });
+onBeforeUnmount(() => { document.removeEventListener('click', onDocumentClick); });
 
 // Sync store's active tab with route-driven value
 watch(
@@ -389,6 +591,64 @@ const onLogoClick = (event) => {
   margin-right: var(--space-sm, 12px);
 }
 
+.principal-menu-wrapper {
+  position: relative;
+}
+
+.principal-dropdown-toggle {
+  background: transparent;
+  color: var(--color-text, #fff);
+  border: 1px solid var(--color-border, #eee);
+  border-radius: var(--radius-sm, 4px);
+  padding: 2px 6px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.principal-dropdown-toggle:hover {
+  background-color: var(--color-hover-overlay, #222);
+}
+
+.principal-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--color-surface, #111);
+  color: var(--color-text, #fff);
+  border: 1px solid var(--color-border, #2a2a2a);
+  border-radius: 8px;
+  min-width: 220px;
+  padding: 6px;
+  margin-top: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  z-index: 200;
+}
+
+.menu-section { display: flex; flex-direction: column; gap: 2px; }
+.menu-divider { height: 1px; background: var(--color-border, #2a2a2a); margin: 6px 0; }
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--color-text, #eee);
+}
+
+.menu-item:hover { background: var(--color-hover-overlay, #222); }
+.menu-item.manager { font-weight: 700; }
+.menu-item.active {
+  background: var(--color-primary, #4f8cff);
+  color: #111;
+}
+
+.menu-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-item-tag { opacity: 0.7; font-size: 0.85em; margin-left: 6px; }
+.menu-empty { padding: 6px 8px; opacity: 0.7; font-style: italic; }
+
 .username-container {
   display: flex;
   align-items: center;
@@ -426,6 +686,17 @@ const onLogoClick = (event) => {
 
 .username-container:hover .edit-icon {
   opacity: 1;
+}
+
+.acting-chip {
+  background: rgba(79, 140, 255, 0.15);
+  color: var(--color-primary, #4f8cff);
+  border: 1px solid rgba(79, 140, 255, 0.35);
+  border-radius: 6px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  margin-left: 4px;
 }
 
 .logout-btn {

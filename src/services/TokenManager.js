@@ -6,14 +6,28 @@ class TokenManager {
   static resultKey = 'tm_refresh_result';
   static bundleKey = 'auth_bundle';
   static deviceKey = 'device_id';
+  static backupManagerRefreshKey = 'manager_refresh_backup';
+
+  static _ss() {
+    try { return window.sessionStorage; } catch (_) { return null; }
+  }
 
   static get accessToken() {
+    try { const ss = this._ss(); if (ss) return ss.getItem('auth_token'); } catch (_) {}
     return localStorage.getItem('auth_token');
   }
 
   static set accessToken(token) {
-    if (!token) localStorage.removeItem('auth_token');
-    else localStorage.setItem('auth_token', token);
+    try {
+      const ss = this._ss();
+      if (ss) {
+        if (!token) ss.removeItem('auth_token'); else ss.setItem('auth_token', token);
+      } else {
+        if (!token) localStorage.removeItem('auth_token'); else localStorage.setItem('auth_token', token);
+      }
+    } catch (_) {
+      if (!token) localStorage.removeItem('auth_token'); else localStorage.setItem('auth_token', token);
+    }
     // Mirror into bundle for atomic reads by future code
     try {
       const bundle = this._readBundle();
@@ -23,12 +37,21 @@ class TokenManager {
   }
 
   static get refreshToken() {
+    try { const ss = this._ss(); if (ss) return ss.getItem('refresh_token'); } catch (_) {}
     return localStorage.getItem('refresh_token');
   }
 
   static set refreshToken(token) {
-    if (!token) localStorage.removeItem('refresh_token');
-    else localStorage.setItem('refresh_token', token);
+    try {
+      const ss = this._ss();
+      if (ss) {
+        if (!token) ss.removeItem('refresh_token'); else ss.setItem('refresh_token', token);
+      } else {
+        if (!token) localStorage.removeItem('refresh_token'); else localStorage.setItem('refresh_token', token);
+      }
+    } catch (_) {
+      if (!token) localStorage.removeItem('refresh_token'); else localStorage.setItem('refresh_token', token);
+    }
     // Mirror into bundle
     try {
       const bundle = this._readBundle();
@@ -39,7 +62,8 @@ class TokenManager {
 
   static _readBundle() {
     try {
-      const raw = localStorage.getItem(this.bundleKey);
+      const ss = this._ss();
+      const raw = ss ? ss.getItem(this.bundleKey) : localStorage.getItem(this.bundleKey);
       const parsed = raw ? JSON.parse(raw) : {};
       return typeof parsed === 'object' && parsed ? parsed : {};
     } catch (_) {
@@ -49,18 +73,26 @@ class TokenManager {
 
   static _writeBundle(obj) {
     try {
-      localStorage.setItem(this.bundleKey, JSON.stringify(obj || {}));
+      const ss = this._ss();
+      if (ss) ss.setItem(this.bundleKey, JSON.stringify(obj || {}));
+      else localStorage.setItem(this.bundleKey, JSON.stringify(obj || {}));
     } catch (_) {}
   }
 
   static _ensureDeviceId() {
     try {
-      let id = localStorage.getItem(this.deviceKey);
-      if (!id) {
-        id = (crypto && crypto.randomUUID && crypto.randomUUID()) || (Math.random().toString(36).slice(2) + Date.now().toString(36));
-        localStorage.setItem(this.deviceKey, id);
+      const ss = this._ss();
+      if (ss) {
+        let id = ss.getItem(this.deviceKey);
+        if (!id) {
+          id = (crypto && crypto.randomUUID && crypto.randomUUID()) || (Math.random().toString(36).slice(2) + Date.now().toString(36));
+          ss.setItem(this.deviceKey, id);
+        }
+        return id;
+      } else {
+        // Fallback to ephemeral per-page id
+        return (crypto && crypto.randomUUID && crypto.randomUUID()) || (Math.random().toString(36).slice(2) + Date.now().toString(36));
       }
-      return id;
     } catch (_) {
       // Fallback non-persistent
       return 'dev-' + Math.random().toString(36).slice(2);
@@ -154,11 +186,32 @@ class TokenManager {
       this._writeBundle(bundle);
       return true;
     } catch (e) {
-      try { localStorage.removeItem('auth_token'); } catch (_) {}
-      try { localStorage.removeItem('refresh_token'); } catch (_) {}
-      try { localStorage.removeItem(this.bundleKey); } catch (_) {}
+      try { const ss = this._ss(); if (ss) ss.removeItem('auth_token'); else localStorage.removeItem('auth_token'); } catch (_) {}
+      try { const ss = this._ss(); if (ss) ss.removeItem('refresh_token'); else localStorage.removeItem('refresh_token'); } catch (_) {}
+      try { const ss = this._ss(); if (ss) ss.removeItem(this.bundleKey); else localStorage.removeItem(this.bundleKey); } catch (_) {}
       return false;
     }
+  }
+
+  // Manager refresh backup (per-tab)
+  static setManagerRefreshBackup(token) {
+    try { const ss = this._ss(); if (ss) { if (!token) ss.removeItem(this.backupManagerRefreshKey); else ss.setItem(this.backupManagerRefreshKey, token); } } catch (_) {}
+  }
+  static getManagerRefreshBackup() {
+    try { const ss = this._ss(); if (ss) return ss.getItem(this.backupManagerRefreshKey); } catch (_) {}
+    return null;
+  }
+
+  // JWT decode helper
+  static decodeJwt(token) {
+    try {
+      if (!token || typeof token !== 'string') return null;
+      const parts = token.split('.');
+      if (parts.length < 2) return null;
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const json = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+      return JSON.parse(json);
+    } catch (_) { return null; }
   }
 
   static async refreshIfNeeded() {
@@ -166,21 +219,37 @@ class TokenManager {
     return this.accessToken;
   }
 
-  static async refreshAccessToken() {
+  static async refreshAccessToken(arg1 = undefined, arg2 = undefined) {
+    // Accept optional initiator/options for richer logging without breaking callers
+    let initiator = 'unknown';
+    let options = {};
+    try {
+      if (typeof arg1 === 'string') { initiator = arg1 || 'unknown'; options = (arg2 && typeof arg2 === 'object') ? arg2 : {}; }
+      else if (arg1 && typeof arg1 === 'object') { options = arg1; initiator = options.initiator || 'unknown'; }
+    } catch (_) {}
+    const corrId = (() => {
+      try { return options.corrId || (`rf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`); } catch (_) { return 'rf_unknown'; }
+    })();
+    const reason = options.reason || undefined;
+    if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:start', { initiator, corrId, reason });
     // Deduplicate concurrent refresh attempts within-tab
     if (this.inFlightRefreshPromise) {
+      if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:reuse_inflight', { initiator, corrId });
       try { return await this.inFlightRefreshPromise; } catch { return null; }
     }
 
     // Cross-tab lock: if another tab is refreshing, wait for it
     const lock = this._acquireCrossTabLock(15000);
     if (!lock) {
+      if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:peer_refresh_wait', { initiator, corrId });
       const result = await this._waitForPeerRefresh(8000);
+      if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:peer_refresh_done', { initiator, corrId, gotToken: !!result });
       return result;
     }
 
     this.inFlightRefreshPromise = (async () => {
       try {
+        if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:lock_acquired', { initiator, corrId, lock_ts: lock.ts });
         // Re-read refresh token just-in-time to avoid using a stale one
         let rt = this.refreshToken;
         if (!rt) {
@@ -235,24 +304,24 @@ class TokenManager {
 
           let response = null;
           try {
-            if (this.debug) console.log(`[TokenManager] Refresh attempt ${attempt}/${maxAttempts} sending...`);
+            if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:attempt_sending', { attempt, maxAttempts, corrId, initiator });
             response = await fetch('/api/v1/auth/sessions/refresh', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ refresh_token: rt, aud: 'public-v1', device_id: this._ensureDeviceId() }),
               _skipAuth: true
             });
-            if (this.debug) console.log('[TokenManager] Refresh response status:', response && response.status);
+            if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:attempt_response', { attempt, status: response && response.status, corrId, initiator });
           } catch (e) {
-            if (this.debug) console.warn(`[TokenManager] Refresh network error (attempt ${attempt})`, e?.message || e);
+            if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:network_error', { attempt, corrId, initiator, message: (e && e.message) || String(e) });
           }
 
           if (response && response.ok) {
             const data = await response.json().catch((err) => {
-              if (this.debug) console.warn('[TokenManager] Failed to parse refresh JSON', err?.message || err);
+              if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:json_parse_failed', { corrId, initiator, message: err && err.message });
               return null;
             });
-            if (this.debug) console.log('[TokenManager] Refresh body keys:', data && Object.keys(data || {}));
+            if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:response_keys', { keys: (data && Object.keys(data || {})) || [], corrId, initiator });
             if (data && data.access_token) {
               const ok = await this._applyTokensSafely(data.access_token, data.refresh_token);
               if (!ok) {
@@ -260,20 +329,20 @@ class TokenManager {
                 return null;
               }
               this.lastSuccessfulRefreshAt = Date.now();
-              if (this.debug) console.log('[TokenManager] Refresh succeeded');
+              if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:success', { corrId, initiator });
               this._announceRefreshResult(true);
               return data.access_token;
             }
-            if (this.debug) console.warn('[TokenManager] Refresh response missing access_token');
+            if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:missing_access_token', { corrId, initiator });
             this._announceRefreshResult(false);
             return null;
           }
 
           const status = response ? response.status : 'NETERR';
-          if (this.debug) console.warn('[TokenManager] Refresh non-OK status', status);
+          if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:non_ok_status', { status, attempt, corrId, initiator });
           const shouldRetry = status === 'NETERR' || isTransientStatus(status);
           if (!shouldRetry) {
-            if (this.debug) console.warn('[TokenManager] Non-transient refresh failure; not retrying', status);
+            if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:non_transient_failure', { status, corrId, initiator });
             this._announceRefreshResult(false);
             return null;
           }
@@ -288,22 +357,25 @@ class TokenManager {
           const backoff = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt - 1));
           const jitter = Math.floor(Math.random() * Math.max(1, Math.floor(backoff * 0.2)));
           const delay = backoff + jitter;
-          if (this.debug) console.log(`[TokenManager] Retry refresh in ${delay}ms (attempt ${attempt + 1}/${maxAttempts})`);
+          if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:retry_scheduled', { nextInMs: delay, nextAttempt: attempt + 1, maxAttempts, corrId, initiator });
           await sleep(delay);
         }
         this._announceRefreshResult(false);
         return null;
       } catch (e) {
-        if (this.debug) console.error('[TokenManager] Refresh error', e);
+        if (this.debug) console.error('[TokenManager]', 'refreshAccessToken:error', { corrId, initiator, message: e && e.message });
         this._announceRefreshResult(false);
         return null;
       } finally {
+        try { if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:lock_released', { corrId, initiator }); } catch (_) {}
         this._releaseCrossTabLock(lock);
       }
     })();
 
     try {
-      return await this.inFlightRefreshPromise;
+      const res = await this.inFlightRefreshPromise;
+      if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:done', { corrId, initiator, ok: !!res });
+      return res;
     } finally {
       this.inFlightRefreshPromise = null;
     }

@@ -68,15 +68,14 @@
             Recipients {{ typeof message.recipients === 'string' ? '' : `(${deduplicatedRecipients.length})` }}
           </button>
           
-          <!-- Visibility toggle - single globe emoji (solid if public, transparent if private) -->
+          <!-- Visibility indicator - always shown; toggles only when allowed -->
           <span 
-            v-if="canDeleteMessage(message) && !isSelectionMode && !inListView" 
-            @click.stop="toggleVisibility"
+            @click.stop="canToggleVisibility && toggleVisibility()"
             class="globe-emoji"
-            :class="isPublic ? 'visible' : 'hidden'"
-            :title="isPublic ? 'Make private' : 'Make public'"
-            role="button"
-            tabindex="0"
+            :class="[isPublic ? 'visible' : 'hidden', canToggleVisibility ? 'interactive' : 'non-interactive']"
+            :title="canToggleVisibility ? (isPublic ? 'Make private' : 'Make public') : (isPublic ? 'Public' : 'Private')"
+            :role="canToggleVisibility ? 'button' : null"
+            :tabindex="canToggleVisibility ? 0 : -1"
           >
             🌍
           </span>
@@ -570,6 +569,11 @@ export default {
       const publicValue = props.message.public;
       const result = publicValue === 1 || publicValue === true;
       return result;
+    });
+    
+    // Whether the globe can toggle visibility (always visible; only interactive when true)
+    const canToggleVisibility = computed(() => {
+      return canDeleteMessage(props.message) && !isSelectionMode.value && !props.inListView;
     });
     
     // Insert openPromptModal here
@@ -1282,6 +1286,7 @@ export default {
       isPublic,
       isAdmin,
       canDeleteMessage,
+      canToggleVisibility,
       isMessageUnread,
       hasReplies: computed(() => props.message.child_ids?.length > 0),
       isEndOfBranch,

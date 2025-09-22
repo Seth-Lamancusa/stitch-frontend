@@ -1,6 +1,7 @@
 import axios from 'axios'
 import store from '../store'
 import TokenManager from './TokenManager'
+import RefreshCoordinator from './RefreshCoordinator'
 import logger from './logger'
 
 // Guard symbol to avoid duplicate interceptor installation during HMR
@@ -64,8 +65,8 @@ export function installAxiosAuthInterceptor(axiosInstance) {
         logger.warn(`HTTP ${method} ${url} -> ${status || 'ERR'} in ${durationMs}ms`);
       } catch (_) {}
 
-      // If not unauthorized, or already retried, just propagate
-      if (status !== 401 || originalRequest._retry) {
+      // If not unauthorized, or already retried, or explicitly disabled, just propagate
+      if (status !== 401 || originalRequest._retry || originalRequest._noRefreshRetry) {
         return Promise.reject(error);
       }
 
@@ -75,18 +76,19 @@ export function installAxiosAuthInterceptor(axiosInstance) {
       // Attempt refresh
       try {
         const tokenBefore = TokenManager.accessToken;
-        try { logger.warn('[AUTH][axios] 401 detected; attempting refresh', { url: originalRequest?.url }); } catch (_) {}
-        const newAccess = await TokenManager.refreshAccessToken();
+        const corrId = `ax_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
+        try { logger.warn('[app] [AUTH][axios] 401 detected; attempting refresh', { url: originalRequest?.url, corrId }); } catch (_) {}
+        const newAccess = await RefreshCoordinator.getFreshAccessToken({ initiator: 'axios_interceptor', corrId, reason: `401@${originalRequest?.url || ''}` });
         if (!newAccess) {
           // If another caller refreshed and rotated tokens, retry with the updated token
           const tokenAfter = TokenManager.accessToken;
           if (tokenAfter && tokenAfter !== tokenBefore) {
             originalRequest.headers = originalRequest.headers || {};
             originalRequest.headers['Authorization'] = `Bearer ${tokenAfter}`;
-            try { logger.info('[AUTH][axios] retrying after peer refresh', { url: originalRequest?.url }); } catch (_) {}
+            try { logger.info('[app] [AUTH][axios] retrying after peer refresh', { url: originalRequest?.url, corrId }); } catch (_) {}
             return axiosInstance.request(originalRequest);
           }
-          try { logger.error('[AUTH][axios] refresh failed; forcing logout', { url: originalRequest?.url }); } catch (_) {}
+          try { logger.error('[app] [AUTH][axios] refresh failed; forcing logout', { url: originalRequest?.url, corrId }); } catch (_) {}
           await store.dispatch('auth/forceLogoutWithMessage');
           return Promise.reject(error);
         }
@@ -96,10 +98,10 @@ export function installAxiosAuthInterceptor(axiosInstance) {
         originalRequest.headers['Authorization'] = `Bearer ${newAccess}`;
 
         // Retry the original request
-        try { logger.info('[AUTH][axios] retrying request with new token', { url: originalRequest?.url }); } catch (_) {}
+        try { logger.info('[app] [AUTH][axios] retrying request with new token', { url: originalRequest?.url, corrId }); } catch (_) {}
         return axiosInstance.request(originalRequest);
       } catch (e) {
-        try { logger.error('[AUTH][axios] error during refresh or retry; forcing logout', { url: originalRequest?.url, message: e?.message }); } catch (_) {}
+        try { logger.error('[app] [AUTH][axios] error during refresh or retry; forcing logout', { url: originalRequest?.url, message: e?.message }); } catch (_) {}
         try { await store.dispatch('auth/forceLogoutWithMessage'); } catch {}
         return Promise.reject(error);
       }

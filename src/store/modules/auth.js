@@ -1,6 +1,7 @@
 import WebSocketService from '../../services/ws/WebSocketService'
 import TokenManager from '../../services/TokenManager'
-import axios from 'axios'
+import apiClient from '../../services/apiClient'
+import RefreshCoordinator from '../../services/RefreshCoordinator'
 import { parseScopes } from '../../utils/scopes'
 import { hasPermission as hasPermUtil, hasAnyPermission as hasAnyPermUtil, isAdmin as isAdminUtil } from '../../utils/permissions'
 
@@ -30,7 +31,8 @@ function mapApiUserToAuthState(userData) {
     email: primaryEmailValue,
     is_email_verified: isEmailVerified,
     is_phone_verified: isPhoneVerified,
-    has_endpoint_signing_secret: !!data.has_endpoint_signing_secret
+    has_endpoint_signing_secret: !!data.has_endpoint_signing_secret,
+    is_managed: !!data.is_managed
   };
 }
 
@@ -41,7 +43,11 @@ export default {
     user: null,
     isAuthenticated: false,
     authReady: false,
-    _initInFlight: null
+    _initInFlight: null,
+    managedUsers: [],
+    activePrincipalUid: null,
+    managerUid: null,
+    managerSnapshot: null
   },
   
   mutations: {
@@ -49,8 +55,32 @@ export default {
       state.user = user;
       state.isAuthenticated = !!user;
     },
+    SET_ACTIVE_AND_MANAGER_UIDS(state, { activeUid, managerUid }) {
+      state.activePrincipalUid = activeUid || null;
+      state.managerUid = managerUid || null;
+      // Persist per-tab for continuity across reloads
+      try {
+        sessionStorage.setItem('active_principal_uid', state.activePrincipalUid || '');
+        sessionStorage.setItem('manager_uid', state.managerUid || '');
+      } catch (_) {}
+    },
+    SET_MANAGED_USERS(state, users) { state.managedUsers = Array.isArray(users) ? users : []; },
     SET_AUTH_READY(state, ready) {
       state.authReady = ready;
+    },
+    SET_MANAGER_SNAPSHOT(state, snapshot) {
+      state.managerSnapshot = snapshot || null;
+      try {
+        if (snapshot) {
+          sessionStorage.setItem('manager_snapshot_uid', snapshot.uid || '');
+          sessionStorage.setItem('manager_snapshot_display_name', snapshot.display_name || '');
+          sessionStorage.setItem('manager_snapshot_user_tag', snapshot.user_tag || '');
+        } else {
+          sessionStorage.removeItem('manager_snapshot_uid');
+          sessionStorage.removeItem('manager_snapshot_display_name');
+          sessionStorage.removeItem('manager_snapshot_user_tag');
+        }
+      } catch (_) {}
     }
   },
   
@@ -60,7 +90,9 @@ export default {
       try { WebSocketService.cleanup(); } catch (e) {}
       try { TokenManager.accessToken = null; } catch (e) {}
       try { TokenManager.refreshToken = null; } catch (e) {}
+      try { sessionStorage.removeItem('active_principal_uid'); sessionStorage.removeItem('manager_uid'); } catch (_) {}
       commit('SET_USER', null);
+      commit('SET_MANAGER_SNAPSHOT', null);
       commit('SET_AUTH_READY', true);
     },
     async initAuth({ state, commit, dispatch }) {
@@ -70,15 +102,30 @@ export default {
           return await state._initInFlight;
         }
         const initPromise = (async () => {
+        try { console.log('[AUTH][initAuth] start', { path: typeof window !== 'undefined' ? window.location.pathname : undefined }); } catch (_) {}
+        // Restore principal ids per-tab early for UI hints
+        try {
+          const ap = sessionStorage.getItem('active_principal_uid') || '';
+          const mu = sessionStorage.getItem('manager_uid') || '';
+          if (ap || mu) commit('SET_ACTIVE_AND_MANAGER_UIDS', { activeUid: ap || null, managerUid: mu || ap || null });
+          const ms_uid = sessionStorage.getItem('manager_snapshot_uid') || '';
+          const ms_dn = sessionStorage.getItem('manager_snapshot_display_name') || '';
+          const ms_tag = sessionStorage.getItem('manager_snapshot_user_tag') || '';
+          if (ms_uid || ms_dn || ms_tag) commit('SET_MANAGER_SNAPSHOT', { uid: ms_uid || null, display_name: ms_dn || null, user_tag: ms_tag || null });
+        } catch (_) {}
         const token = TokenManager.accessToken;
         if (!token) {
           // Attempt proactive refresh if a refresh token exists
           const refresh = TokenManager.refreshToken;
           if (refresh) {
-            const newAccess = await TokenManager.refreshAccessToken();
+            const corrId = `auth_init_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
+            try { console.warn('[AUTH][initAuth] no access; attempting proactive refresh', { corrId }); } catch (_) {}
+            const newAccess = await RefreshCoordinator.getFreshAccessToken({ initiator: 'auth_init', corrId, reason: 'no_access_token' });
             if (newAccess) {
+              try { console.log('[AUTH][initAuth] proactive refresh succeeded', { corrId }); } catch (_) {}
               await dispatch('validateExistingToken');
             } else {
+              try { console.warn('[AUTH][initAuth] proactive refresh failed', { corrId }); } catch (_) {}
               commit('SET_USER', null);
             }
           } else {
@@ -87,6 +134,7 @@ export default {
           commit('SET_AUTH_READY', true);
           return;
         }
+        try { console.log('[AUTH][initAuth] access token present, validating'); } catch (_) {}
         await dispatch('validateExistingToken');
       })();
         // Record in-flight to avoid overlapping work
@@ -108,7 +156,7 @@ export default {
         const token = TokenManager.accessToken;
         if (!token) throw new Error('Not authenticated');
 
-        const resp = await axios.delete('/api/v1/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
+        const resp = await apiClient.delete('/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
         if (!resp || resp.status < 200 || resp.status >= 300) {
           const data = (resp && resp.data) || {};
           throw new Error(data.detail || 'Failed to delete account');
@@ -129,28 +177,137 @@ export default {
       }
     },
 
-    async validateExistingToken({ commit }) {
+    async validateExistingToken({ commit, dispatch }) {
+      const corrId = `auth_me_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
       try {
         const token = TokenManager.accessToken;
         if (!token) {
           commit('SET_USER', null);
+          commit('SET_ACTIVE_AND_MANAGER_UIDS', { activeUid: null, managerUid: null });
           return;
         }
         // Single call; axios interceptor handles 401 -> refresh -> retry
-        const response = await axios.get('/api/v1/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
+        try { console.log('[AUTH][validateExistingToken] GET /users/me', { corrId }); } catch (_) {}
+        const response = await apiClient.get('/users/me', { headers: { 'Authorization': `Bearer ${token}` }, corrId, _initiator: 'auth_validate' });
         const userData = response && response.data ? response.data : {};
+        try { console.log('[AUTH][validateExistingToken] /users/me success', { corrId, uid: userData && userData.uid }); } catch (_) {}
         commit('SET_USER', mapApiUserToAuthState(userData));
+        // Derive principal ids from token claims: sub and act.sub
+        try {
+          const claims = TokenManager.decodeJwt(token) || {};
+          const activeUid = claims && claims.sub ? claims.sub : (userData && userData.uid);
+          const managerUid = (claims && claims.act && claims.act.sub) ? claims.act.sub : activeUid;
+          commit('SET_ACTIVE_AND_MANAGER_UIDS', { activeUid, managerUid });
+          if (activeUid && managerUid && activeUid === managerUid) {
+            commit('SET_MANAGER_SNAPSHOT', { uid: userData && userData.uid, display_name: userData && userData.display_name, user_tag: userData && userData.user_tag });
+          }
+        } catch (_) {
+          commit('SET_ACTIVE_AND_MANAGER_UIDS', { activeUid: (userData && userData.uid) || null, managerUid: (userData && userData.uid) || null });
+          commit('SET_MANAGER_SNAPSHOT', { uid: userData && userData.uid, display_name: userData && userData.display_name, user_tag: userData && userData.user_tag });
+        }
+        // Opportunistically refresh managed users list
+        try { await dispatch('fetchManagedUsers'); } catch (_) {}
         try {
           await WebSocketService.initialize();
         } catch (e) {
           console.error('[AUTH STORE] WebSocket init failed:', e);
         }
       } catch (error) {
-        console.error('[AUTH] Token validation threw error; clearing tokens and user', error);
+        try { console.error('[AUTH] Token validation threw error; clearing tokens and user', { corrId, message: error && error.message, status: error && error.response && error.response.status }); } catch (_) { console.error('[AUTH] Token validation threw error; clearing tokens and user', error); }
         TokenManager.accessToken = null;
         TokenManager.refreshToken = null;
         commit('SET_USER', null);
+        commit('SET_ACTIVE_AND_MANAGER_UIDS', { activeUid: null, managerUid: null });
         WebSocketService.cleanup();
+      }
+    },
+    async switchPrincipal({ commit, dispatch }, { managedUid, requested_scopes = 'msg.read msg.write ws', aud = 'public-v1' }) {
+      if (!managedUid) throw new Error('managed_uid_required');
+      try {
+        // Proactively rotate to ensure we use the latest manager refresh
+        try { await TokenManager.refreshAccessToken(); } catch (_) {}
+        // Capture manager snapshot from current user before switching
+        try {
+          const cur = this.state.auth.user;
+          if (cur) commit('SET_MANAGER_SNAPSHOT', { uid: cur.uid, display_name: cur.displayName, user_tag: cur.user_tag });
+        } catch (_) {}
+        const managerRt = TokenManager.refreshToken;
+        if (!managerRt) throw new Error('no_manager_refresh_token');
+        TokenManager.setManagerRefreshBackup(managerRt);
+        WebSocketService.cleanup();
+        let device_id = null;
+        try { device_id = sessionStorage.getItem('device_id') || null; } catch (_) { device_id = null; }
+        const payload = { managed_uid: managedUid, refresh_token: managerRt, requested_scopes, aud, device_id };
+        const resp = await apiClient.post('/managed/auth/switch', payload, { headers: { 'Content-Type': 'application/json' }, _noRefreshRetry: true });
+        const data = resp && resp.data ? resp.data : {};
+        if (!data.access_token || !data.refresh_token) throw new Error('switch_failed');
+        TokenManager.accessToken = data.access_token;
+        TokenManager.refreshToken = data.refresh_token;
+        try {
+          if (data.manager_refresh_token) {
+            TokenManager.setManagerRefreshBackup(data.manager_refresh_token);
+          }
+        } catch (_) {}
+        // Persist rotated manager refresh if returned to harden return_to_self
+        try {
+          if (data.manager_refresh_token) TokenManager.setManagerRefreshBackup(data.manager_refresh_token);
+        } catch (_) {}
+        try {
+          const claims = TokenManager.decodeJwt(data.access_token) || {};
+          const activeUid = claims && claims.sub ? claims.sub : null;
+          const managerUid = (claims && claims.act && claims.act.sub) ? claims.act.sub : activeUid;
+          commit('SET_ACTIVE_AND_MANAGER_UIDS', { activeUid, managerUid });
+        } catch (_) {}
+        // Clear message cache when switching principals to prevent stale state bleed-through
+        try { await dispatch('messages/clearCache', {}, { root: true }); } catch (_) {}
+        await dispatch('validateExistingToken');
+        return { success: true };
+      } catch (e) {
+        console.error('[AUTH] switchPrincipal failed', e);
+        throw e;
+      }
+    },
+    async returnToSelf({ commit, dispatch }, { requested_scopes = 'msg.read msg.write ws', aud = 'public-v1' } = {}) {
+      try {
+        const backupRt = TokenManager.getManagerRefreshBackup();
+        if (!backupRt) throw new Error('no_backup_refresh');
+        WebSocketService.cleanup();
+        let device_id = null;
+        try { device_id = sessionStorage.getItem('device_id') || null; } catch (_) { device_id = null; }
+        const payload = { refresh_token: backupRt, requested_scopes, aud, device_id };
+        const resp = await apiClient.post('/managed/auth/return_to_self', payload, { headers: { 'Content-Type': 'application/json' }, _noRefreshRetry: true });
+        const data = resp && resp.data ? resp.data : {};
+        if (!data.access_token || !data.refresh_token) throw new Error('return_to_self_failed');
+        TokenManager.accessToken = data.access_token;
+        TokenManager.refreshToken = data.refresh_token;
+        TokenManager.setManagerRefreshBackup(null);
+        try {
+          const claims = TokenManager.decodeJwt(data.access_token) || {};
+          const activeUid = claims && claims.sub ? claims.sub : null;
+          const managerUid = (claims && claims.act && claims.act.sub) ? claims.act.sub : activeUid;
+          commit('SET_ACTIVE_AND_MANAGER_UIDS', { activeUid, managerUid });
+        } catch (_) {}
+        // Clear message cache when returning to self to ensure fresh view
+        try { await dispatch('messages/clearCache', {}, { root: true }); } catch (_) {}
+        await dispatch('validateExistingToken');
+        return { success: true };
+      } catch (e) {
+        console.error('[AUTH] returnToSelf failed', e);
+        throw e;
+      }
+    },
+    async fetchManagedUsers({ commit }) {
+      try {
+        const token = TokenManager.accessToken;
+        if (!token) { commit('SET_MANAGED_USERS', []); return []; }
+        const resp = await apiClient.get('/managed/users', { headers: { 'Authorization': `Bearer ${token}` } });
+        const users = (resp && resp.data && (resp.data.users || resp.data || [])) || [];
+        commit('SET_MANAGED_USERS', users);
+        return users;
+      } catch (e) {
+        console.error('[AUTH] fetchManagedUsers failed', e);
+        commit('SET_MANAGED_USERS', []);
+        return [];
       }
     },
 
@@ -167,7 +324,7 @@ export default {
     async searchUsers({ }, query) {
       try {
         const token = TokenManager.accessToken;
-        const response = await axios.get(`/api/v1/users/search?query=${encodeURIComponent(query)}&limit=15`, {
+        const response = await apiClient.get(`/users/search?query=${encodeURIComponent(query)}&limit=15`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = response && response.data ? response.data : {};
@@ -182,7 +339,7 @@ export default {
     async updateProfile({ commit }, profileData) {
       try {
         const token = TokenManager.accessToken;
-        const response = await axios.post('/api/v1/users/profile', profileData, {
+        const response = await apiClient.post('/users/profile', profileData, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -239,6 +396,40 @@ export default {
       }
     },
 
+    async createManagedUser({ dispatch }, { display_name, user_tag, endpoints, scopes = 'msg.read msg.write ws', private: isPrivate = false }) {
+      try {
+        const token = TokenManager.accessToken;
+        if (!token) throw new Error('Not authenticated');
+        const payload = { display_name, user_tag, scopes, private: !!isPrivate };
+        if (Array.isArray(endpoints)) payload.endpoints = endpoints;
+        
+        // Log what we're sending
+        console.log('[AUTH] createManagedUser payload:', { display_name, user_tag, scopes, private: !!isPrivate });
+        const resp = await axios.post('/api/v1/managed/users', payload, {
+          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        });
+        if (!resp || resp.status < 200 || resp.status >= 300) {
+          const data = (resp && resp.data) || {};
+          throw new Error(data.detail || 'failed_to_create_managed_user');
+        }
+        // Refresh managed users list
+        try { await dispatch('fetchManagedUsers'); } catch (_) {}
+        return resp.data;
+      } catch (error) {
+        try {
+          const status = error?.response?.status;
+          const detail = error?.response?.data?.detail;
+          if (status === 409 && typeof detail === 'string' && detail) {
+            throw new Error(detail);
+          }
+          if (status && detail) {
+            throw new Error(detail);
+          }
+        } catch (_) {}
+        throw error;
+      }
+    },
+
     async forceLogoutWithMessage({ commit, dispatch }, router = null) {
       try {
         console.warn('[AUTH] Force logout due to unauthorized/refresh-fail', {
@@ -275,6 +466,9 @@ export default {
     user: state => state.user,
     isAuthenticated: state => state.isAuthenticated,
     authReady: state => state.authReady,
+    managedUsers: state => state.managedUsers,
+    activePrincipalUid: state => state.activePrincipalUid || (state.user && state.user.uid) || null,
+    managerUid: state => state.managerUid || (state.user && state.user.uid) || null,
     // Scopes helpers
     scopesSet: state => parseScopes(state.user ? state.user.scopes : ''),
     hasScope: state => (name) => state.user ? hasPermUtil(state.user, name, TokenManager.accessToken) : false,
