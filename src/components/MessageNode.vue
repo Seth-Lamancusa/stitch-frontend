@@ -1139,18 +1139,6 @@ export default {
       checkMobileDevice();
       window.addEventListener('resize', checkMobileDevice);
       window.addEventListener('resize', handleViewportChange);
-      
-      // Initial diagnostics
-      try {
-        console.log('[MessageNode] mounted', {
-          messageId: props.message.id,
-          parentId: props.message.parent_id,
-          inListView: props.inListView,
-          isMobile: isMobile.value,
-          hasSiblings: hasSiblings.value,
-          isSelectionMode: isSelectionMode.value
-        });
-      } catch (e) {}
 
     });
     
@@ -1194,17 +1182,6 @@ export default {
     // Sibling navigator visibility flags (mirror original template conditions)
     const showSiblingNavMobile = computed(() => {
       const val = !props.inListView && !!props.message.parent_id && isMobile.value;
-      try {
-        console.log('[MessageNode] showSiblingNavMobile computed', {
-          messageId: props.message.id,
-          value: val,
-          inListView: props.inListView,
-          parentId: props.message.parent_id,
-          isMobile: isMobile.value,
-          hasSiblings: hasSiblings.value,
-          isSelectionMode: isSelectionMode.value
-        });
-      } catch (e) {}
       return val;
     });
 

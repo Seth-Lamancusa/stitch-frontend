@@ -4,6 +4,11 @@ import TokenManager from './TokenManager'
 import RefreshCoordinator from './RefreshCoordinator'
 import logger from './logger'
 
+// Lightweight correlation id generator (per request)
+function generateCorrelationId() {
+  try { return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`; } catch (_) { return 'req_unknown'; }
+}
+
 // Guard symbol to avoid duplicate interceptor installation during HMR
 const AUTH_INTERCEPTOR_INSTALLED = Symbol.for('stitch.authInterceptorInstalled')
 
@@ -26,6 +31,15 @@ export function installAxiosAuthInterceptor(axiosInstance) {
   // Stamp start time for duration metrics
   axiosInstance.interceptors.request.use((config) => {
     try { config.metadata = { start: Date.now() }; } catch (_) {}
+    // Attach per-request correlation id header if not provided
+    try {
+      config.headers = config.headers || {};
+      if (!config.headers['X-Correlation-Id']) {
+        const corrId = config.corrId || generateCorrelationId();
+        config.headers['X-Correlation-Id'] = corrId;
+        config.corrId = corrId;
+      }
+    } catch (_) {}
     // Attach Authorization header just-in-time from TokenManager unless explicitly skipped
     try {
       if (!config._skipAuth) {
@@ -76,8 +90,8 @@ export function installAxiosAuthInterceptor(axiosInstance) {
       // Attempt refresh
       try {
         const tokenBefore = TokenManager.accessToken;
-        const corrId = `ax_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
-        try { logger.warn('[app] [AUTH][axios] 401 detected; attempting refresh', { url: originalRequest?.url, corrId }); } catch (_) {}
+        const corrId = originalRequest?.corrId || `ax_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
+        try { logger.warn('[AUTH][axios] 401 detected; attempting refresh', { url: originalRequest?.url, corrId }); } catch (_) {}
         const newAccess = await RefreshCoordinator.getFreshAccessToken({ initiator: 'axios_interceptor', corrId, reason: `401@${originalRequest?.url || ''}` });
         if (!newAccess) {
           // If another caller refreshed and rotated tokens, retry with the updated token
@@ -85,10 +99,10 @@ export function installAxiosAuthInterceptor(axiosInstance) {
           if (tokenAfter && tokenAfter !== tokenBefore) {
             originalRequest.headers = originalRequest.headers || {};
             originalRequest.headers['Authorization'] = `Bearer ${tokenAfter}`;
-            try { logger.info('[app] [AUTH][axios] retrying after peer refresh', { url: originalRequest?.url, corrId }); } catch (_) {}
+            try { logger.info('[AUTH][axios] retrying after peer refresh', { url: originalRequest?.url, corrId }); } catch (_) {}
             return axiosInstance.request(originalRequest);
           }
-          try { logger.error('[app] [AUTH][axios] refresh failed; forcing logout', { url: originalRequest?.url, corrId }); } catch (_) {}
+          try { logger.error('[AUTH][axios] refresh failed; forcing logout', { url: originalRequest?.url, corrId }); } catch (_) {}
           await store.dispatch('auth/forceLogoutWithMessage');
           return Promise.reject(error);
         }
@@ -98,10 +112,10 @@ export function installAxiosAuthInterceptor(axiosInstance) {
         originalRequest.headers['Authorization'] = `Bearer ${newAccess}`;
 
         // Retry the original request
-        try { logger.info('[app] [AUTH][axios] retrying request with new token', { url: originalRequest?.url, corrId }); } catch (_) {}
+        try { logger.info('[AUTH][axios] retrying request with new token', { url: originalRequest?.url, corrId }); } catch (_) {}
         return axiosInstance.request(originalRequest);
       } catch (e) {
-        try { logger.error('[app] [AUTH][axios] error during refresh or retry; forcing logout', { url: originalRequest?.url, message: e?.message }); } catch (_) {}
+        try { logger.error('[AUTH][axios] error during refresh or retry; forcing logout', { url: originalRequest?.url, message: e?.message }); } catch (_) {}
         try { await store.dispatch('auth/forceLogoutWithMessage'); } catch {}
         return Promise.reject(error);
       }
@@ -113,6 +127,7 @@ export function installAxiosAuthInterceptor(axiosInstance) {
 const apiClient = axios.create({
   baseURL: '/api/v1',
   timeout: 10000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
   }

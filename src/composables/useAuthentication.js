@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useStore } from 'vuex';
+import RefreshCoordinator from '../services/RefreshCoordinator';
 import TokenManager from '../services/TokenManager';
 import axios from 'axios';
 
@@ -28,7 +29,6 @@ export function useAuthentication() {
     try {
       console.info('[AUTH] Manual logout requested');
       TokenManager.accessToken = null;
-      TokenManager.refreshToken = null;
       store.commit('auth/SET_USER', null);
       window.location.href = '/history';
     } catch (e) {
@@ -39,12 +39,12 @@ export function useAuthentication() {
   const signInWithPassword = async (identifier, password) => {
     try {
       error.value = null;
-      const resp = await axios.post('/api/v1/auth/password/login', { identifier, password, device_id: TokenManager._ensureDeviceId?.() });
+      const resp = await axios.post('/api/v1/auth/password/login', { identifier, password, device_id: TokenManager._ensureDeviceId?.() }, { withCredentials: true });
       const data = resp && resp.data ? resp.data : {};
       const token = data.access_token;
       if (!token) throw new Error('Missing access token');
       TokenManager.accessToken = token;
-      if (data.refresh_token) TokenManager.refreshToken = data.refresh_token;
+      // refresh token is set via httpOnly cookie
       await store.dispatch('auth/validateExistingToken');
     } catch (e) {
       const status = e?.response?.status;
@@ -69,12 +69,12 @@ export function useAuthentication() {
   const registerWithPassword = async ({ email, password, user_tag, display_name, phone, endpoint, notify }) => {
     error.value = null;
     try {
-      const resp = await axios.post('/api/v1/auth/register', { email, password, user_tag, display_name, phone, endpoint, notify, device_id: TokenManager._ensureDeviceId?.() });
+      const resp = await axios.post('/api/v1/auth/register', { email, password, user_tag, display_name, phone, endpoint, notify, device_id: TokenManager._ensureDeviceId?.() }, { withCredentials: true });
       const data = resp && resp.data ? resp.data : {};
       const token = data.access_token;
       if (!token) throw new Error('Missing access token');
       TokenManager.accessToken = token;
-      if (data.refresh_token) TokenManager.refreshToken = data.refresh_token;
+      // refresh token is set via httpOnly cookie
       await store.dispatch('auth/validateExistingToken');
     } catch (e) {
       const status = e?.response?.status;
@@ -95,13 +95,14 @@ export function useAuthentication() {
       const resp = await axios.post('/api/v1/auth/password/change', { current_password, new_password }, {
         headers: {
           'Authorization': `Bearer ${TokenManager.accessToken}`
-        }
+        },
+        withCredentials: true
       });
       const data = resp && resp.data ? resp.data : {};
       const token = data.access_token;
       if (!token) throw new Error('Missing access token');
       TokenManager.accessToken = token;
-      if (data.refresh_token) TokenManager.refreshToken = data.refresh_token;
+      // refresh token may be rotated via cookie by backend
       await store.dispatch('auth/validateExistingToken');
     } catch (e) {
       const status = e?.response?.status;
@@ -139,7 +140,7 @@ export function useAuthentication() {
     error.value = null;
     let resp;
     try {
-      resp = await axios.post('/api/v1/auth/password/reset', { email, user_tag, code, new_password });
+      resp = await axios.post('/api/v1/auth/password/reset', { email, user_tag, code, new_password }, { withCredentials: true });
     } catch (e) {
       if (e?.response?.status === 409) throw new Error('multiple_accounts_for_email');
       const info = e?.response?.data || {};
@@ -149,7 +150,7 @@ export function useAuthentication() {
     const token = data.access_token;
     if (!token) throw new Error('Missing access token');
     TokenManager.accessToken = token;
-    if (data.refresh_token) TokenManager.refreshToken = data.refresh_token;
+    // refresh token set via cookie
     await store.dispatch('auth/validateExistingToken');
   };
 
@@ -169,7 +170,7 @@ export function useAuthentication() {
     });
     const result = resp && resp.data ? resp.data : {};
     // Email verification may add msg.write to user scopes; refresh access token to pick up new scopes
-    await TokenManager.refreshAccessToken();
+    await RefreshCoordinator.getFreshAccessToken({ initiator: 'useAuthentication' });
     await store.dispatch('auth/validateExistingToken');
     return result;
   };

@@ -89,7 +89,7 @@ export default {
     _clearLocalAuth({ commit }) {
       try { WebSocketService.cleanup(); } catch (e) {}
       try { TokenManager.accessToken = null; } catch (e) {}
-      try { TokenManager.refreshToken = null; } catch (e) {}
+      // refresh token is now in httpOnly cookie; nothing to clear in JS
       try { sessionStorage.removeItem('active_principal_uid'); sessionStorage.removeItem('manager_uid'); } catch (_) {}
       commit('SET_USER', null);
       commit('SET_MANAGER_SNAPSHOT', null);
@@ -115,20 +115,15 @@ export default {
         } catch (_) {}
         const token = TokenManager.accessToken;
         if (!token) {
-          // Attempt proactive refresh if a refresh token exists
-          const refresh = TokenManager.refreshToken;
-          if (refresh) {
-            const corrId = `auth_init_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
-            try { console.warn('[AUTH][initAuth] no access; attempting proactive refresh', { corrId }); } catch (_) {}
-            const newAccess = await RefreshCoordinator.getFreshAccessToken({ initiator: 'auth_init', corrId, reason: 'no_access_token' });
-            if (newAccess) {
-              try { console.log('[AUTH][initAuth] proactive refresh succeeded', { corrId }); } catch (_) {}
-              await dispatch('validateExistingToken');
-            } else {
-              try { console.warn('[AUTH][initAuth] proactive refresh failed', { corrId }); } catch (_) {}
-              commit('SET_USER', null);
-            }
+          // Attempt proactive refresh using httpOnly cookie
+          const corrId = `auth_init_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
+          try { console.warn('[AUTH][initAuth] no access; attempting proactive refresh', { corrId }); } catch (_) {}
+          const newAccess = await RefreshCoordinator.getFreshAccessToken({ initiator: 'auth_init', corrId, reason: 'no_access_token' });
+          if (newAccess) {
+            try { console.log('[AUTH][initAuth] proactive refresh succeeded', { corrId }); } catch (_) {}
+            await dispatch('validateExistingToken');
           } else {
+            try { console.warn('[AUTH][initAuth] proactive refresh failed', { corrId }); } catch (_) {}
             commit('SET_USER', null);
           }
           commit('SET_AUTH_READY', true);
@@ -153,10 +148,7 @@ export default {
     async deleteOwnAccount({ commit, dispatch }) {
       try {
         console.warn('[AUTH] Deleting own account: initiating');
-        const token = TokenManager.accessToken;
-        if (!token) throw new Error('Not authenticated');
-
-        const resp = await apiClient.delete('/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
+        const resp = await apiClient.delete('/users/me');
         if (!resp || resp.status < 200 || resp.status >= 300) {
           const data = (resp && resp.data) || {};
           throw new Error(data.detail || 'Failed to delete account');
@@ -181,14 +173,10 @@ export default {
       const corrId = `auth_me_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
       try {
         const token = TokenManager.accessToken;
-        if (!token) {
-          commit('SET_USER', null);
-          commit('SET_ACTIVE_AND_MANAGER_UIDS', { activeUid: null, managerUid: null });
-          return;
-        }
+        if (!token) { commit('SET_USER', null); commit('SET_ACTIVE_AND_MANAGER_UIDS', { activeUid: null, managerUid: null }); return; }
         // Single call; axios interceptor handles 401 -> refresh -> retry
         try { console.log('[AUTH][validateExistingToken] GET /users/me', { corrId }); } catch (_) {}
-        const response = await apiClient.get('/users/me', { headers: { 'Authorization': `Bearer ${token}` }, corrId, _initiator: 'auth_validate' });
+        const response = await apiClient.get('/users/me', { corrId, _initiator: 'auth_validate' });
         const userData = response && response.data ? response.data : {};
         try { console.log('[AUTH][validateExistingToken] /users/me success', { corrId, uid: userData && userData.uid }); } catch (_) {}
         commit('SET_USER', mapApiUserToAuthState(userData));
@@ -215,7 +203,6 @@ export default {
       } catch (error) {
         try { console.error('[AUTH] Token validation threw error; clearing tokens and user', { corrId, message: error && error.message, status: error && error.response && error.response.status }); } catch (_) { console.error('[AUTH] Token validation threw error; clearing tokens and user', error); }
         TokenManager.accessToken = null;
-        TokenManager.refreshToken = null;
         commit('SET_USER', null);
         commit('SET_ACTIVE_AND_MANAGER_UIDS', { activeUid: null, managerUid: null });
         WebSocketService.cleanup();
@@ -225,33 +212,22 @@ export default {
       if (!managedUid) throw new Error('managed_uid_required');
       try {
         // Proactively rotate to ensure we use the latest manager refresh
-        try { await TokenManager.refreshAccessToken(); } catch (_) {}
+        try { await RefreshCoordinator.getFreshAccessToken({ initiator: 'auth_switchPrincipal' }); } catch (_) {}
         // Capture manager snapshot from current user before switching
         try {
           const cur = this.state.auth.user;
           if (cur) commit('SET_MANAGER_SNAPSHOT', { uid: cur.uid, display_name: cur.displayName, user_tag: cur.user_tag });
         } catch (_) {}
-        const managerRt = TokenManager.refreshToken;
-        if (!managerRt) throw new Error('no_manager_refresh_token');
-        TokenManager.setManagerRefreshBackup(managerRt);
+        // Manager refresh token sent via httpOnly cookie; backup not available in JS anymore
         WebSocketService.cleanup();
         let device_id = null;
-        try { device_id = sessionStorage.getItem('device_id') || null; } catch (_) { device_id = null; }
-        const payload = { managed_uid: managedUid, refresh_token: managerRt, requested_scopes, aud, device_id };
-        const resp = await apiClient.post('/managed/auth/switch', payload, { headers: { 'Content-Type': 'application/json' }, _noRefreshRetry: true });
+        try { device_id = (TokenManager._ensureDeviceId && TokenManager._ensureDeviceId()) || null; } catch (_) { device_id = null; }
+        const payload = { managed_uid: managedUid, requested_scopes, aud, device_id };
+        const resp = await apiClient.post('/managed/auth/switch', payload, { headers: { 'Content-Type': 'application/json' }, _noRefreshRetry: true, withCredentials: true });
         const data = resp && resp.data ? resp.data : {};
-        if (!data.access_token || !data.refresh_token) throw new Error('switch_failed');
+        if (!data.access_token) throw new Error('switch_failed');
         TokenManager.accessToken = data.access_token;
-        TokenManager.refreshToken = data.refresh_token;
-        try {
-          if (data.manager_refresh_token) {
-            TokenManager.setManagerRefreshBackup(data.manager_refresh_token);
-          }
-        } catch (_) {}
-        // Persist rotated manager refresh if returned to harden return_to_self
-        try {
-          if (data.manager_refresh_token) TokenManager.setManagerRefreshBackup(data.manager_refresh_token);
-        } catch (_) {}
+        // Manager backup refresh is stored in httpOnly cookie by server
         try {
           const claims = TokenManager.decodeJwt(data.access_token) || {};
           const activeUid = claims && claims.sub ? claims.sub : null;
@@ -269,18 +245,15 @@ export default {
     },
     async returnToSelf({ commit, dispatch }, { requested_scopes = 'msg.read msg.write ws', aud = 'public-v1' } = {}) {
       try {
-        const backupRt = TokenManager.getManagerRefreshBackup();
-        if (!backupRt) throw new Error('no_backup_refresh');
         WebSocketService.cleanup();
         let device_id = null;
-        try { device_id = sessionStorage.getItem('device_id') || null; } catch (_) { device_id = null; }
-        const payload = { refresh_token: backupRt, requested_scopes, aud, device_id };
-        const resp = await apiClient.post('/managed/auth/return_to_self', payload, { headers: { 'Content-Type': 'application/json' }, _noRefreshRetry: true });
+        try { device_id = (TokenManager._ensureDeviceId && TokenManager._ensureDeviceId()) || null; } catch (_) { device_id = null; }
+        const payload = { requested_scopes, aud, device_id };
+        const resp = await apiClient.post('/managed/auth/return_to_self', payload, { headers: { 'Content-Type': 'application/json' }, _noRefreshRetry: true, withCredentials: true });
         const data = resp && resp.data ? resp.data : {};
-        if (!data.access_token || !data.refresh_token) throw new Error('return_to_self_failed');
+        if (!data.access_token) throw new Error('return_to_self_failed');
         TokenManager.accessToken = data.access_token;
-        TokenManager.refreshToken = data.refresh_token;
-        TokenManager.setManagerRefreshBackup(null);
+        // Manager backup cookie cleared by server
         try {
           const claims = TokenManager.decodeJwt(data.access_token) || {};
           const activeUid = claims && claims.sub ? claims.sub : null;
@@ -338,13 +311,7 @@ export default {
 
     async updateProfile({ commit }, profileData) {
       try {
-        const token = TokenManager.accessToken;
-        const response = await apiClient.post('/users/profile', profileData, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        const response = await apiClient.post('/users/profile', profileData, { headers: { 'Content-Type': 'application/json' } });
         if (!response || response.status < 200 || response.status >= 300) {
           const errorData = (response && response.data) || {};
           throw new Error(errorData.detail || 'Failed to update profile');
@@ -353,7 +320,7 @@ export default {
 
         // Immediately refresh full user state (including contacts/notify flags) from /me
         try {
-          const meResp = await axios.get('/api/v1/users/me', { headers: { 'Authorization': `Bearer ${token}` } });
+          const meResp = await apiClient.get('/users/me');
           if (meResp && meResp.status >= 200 && meResp.status < 300) {
             const userData = meResp.data;
             commit('SET_USER', mapApiUserToAuthState(userData));
