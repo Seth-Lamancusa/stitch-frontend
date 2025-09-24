@@ -96,9 +96,7 @@ const WebSocketService = {
   getToken() {
     try { return TokenManager.accessToken; } catch (_) { return null; }
   },
-  getRefreshToken() {
-    try { return TokenManager.refreshToken; } catch (_) { return null; }
-  },
+  getRefreshToken() { return null; },
   
   maybeActivityReconnect() {
     try {
@@ -248,10 +246,7 @@ const WebSocketService = {
     try {
       const corrId = `ws_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
       this.log('Attempting token refresh due to authentication failure', { corrId });
-      try {
-        const rt = TokenManager.refreshToken;
-        if (!rt) this.warn('No refresh token present at refresh time');
-      } catch (_) {}
+      // Refresh token is httpOnly; rely on coordinator
       const newAccess = await RefreshCoordinator.getFreshAccessToken({ initiator: 'ws_attemptRefresh', corrId, reason: 'ws_auth_failure' });
       if (!newAccess) {
         this.error('Token refresh failed; skipping WS disconnected banner', { corrId });
@@ -749,7 +744,7 @@ const WebSocketService = {
           let token = TokenManager.accessToken;
           if (!token || this.shouldRefreshToken()) {
             try {
-              const refreshed = await TokenManager.refreshAccessToken();
+              const refreshed = await RefreshCoordinator.getFreshAccessToken({ initiator: 'ws_health_missing_or_stale' });
               if (refreshed) {
                 this.lastTokenRefresh = Date.now();
                 token = refreshed;

@@ -4,12 +4,14 @@ class TokenManager {
   static lastSuccessfulRefreshAt = 0;
   static lockKey = 'tm_refresh_lock';
   static resultKey = 'tm_refresh_result';
-  static bundleKey = 'auth_bundle';
   static deviceKey = 'device_id';
   static backupManagerRefreshKey = 'manager_refresh_backup';
 
   static _ss() {
     try { return window.sessionStorage; } catch (_) { return null; }
+  }
+  static _ls() {
+    try { return window.localStorage; } catch (_) { return null; }
   }
 
   static get accessToken() {
@@ -36,51 +38,25 @@ class TokenManager {
     } catch (_) {}
   }
 
-  static get refreshToken() {
-    try { const ss = this._ss(); if (ss) return ss.getItem('refresh_token'); } catch (_) {}
-    return localStorage.getItem('refresh_token');
-  }
+  static get refreshToken() { return null; }
+  static set refreshToken(token) { /* noop: httpOnly cookie */ }
 
-  static set refreshToken(token) {
-    try {
-      const ss = this._ss();
-      if (ss) {
-        if (!token) ss.removeItem('refresh_token'); else ss.setItem('refresh_token', token);
-      } else {
-        if (!token) localStorage.removeItem('refresh_token'); else localStorage.setItem('refresh_token', token);
-      }
-    } catch (_) {
-      if (!token) localStorage.removeItem('refresh_token'); else localStorage.setItem('refresh_token', token);
-    }
-    // Mirror into bundle
-    try {
-      const bundle = this._readBundle();
-      bundle.refresh_token = token || null;
-      this._writeBundle(bundle);
-    } catch (_) {}
-  }
-
-  static _readBundle() {
-    try {
-      const ss = this._ss();
-      const raw = ss ? ss.getItem(this.bundleKey) : localStorage.getItem(this.bundleKey);
-      const parsed = raw ? JSON.parse(raw) : {};
-      return typeof parsed === 'object' && parsed ? parsed : {};
-    } catch (_) {
-      return {};
-    }
-  }
-
-  static _writeBundle(obj) {
-    try {
-      const ss = this._ss();
-      if (ss) ss.setItem(this.bundleKey, JSON.stringify(obj || {}));
-      else localStorage.setItem(this.bundleKey, JSON.stringify(obj || {}));
-    } catch (_) {}
-  }
+  static _readBundle() { return {}; }
+  static _writeBundle(obj) { }
 
   static _ensureDeviceId() {
     try {
+      // Persist device_id in localStorage (shared across tabs)
+      const ls = this._ls();
+      if (ls) {
+        let id = ls.getItem(this.deviceKey);
+        if (!id) {
+          id = (crypto && crypto.randomUUID && crypto.randomUUID()) || (Math.random().toString(36).slice(2) + Date.now().toString(36));
+          ls.setItem(this.deviceKey, id);
+        }
+        return id;
+      }
+      // Fallback to sessionStorage if localStorage unavailable
       const ss = this._ss();
       if (ss) {
         let id = ss.getItem(this.deviceKey);
@@ -89,10 +65,9 @@ class TokenManager {
           ss.setItem(this.deviceKey, id);
         }
         return id;
-      } else {
-        // Fallback to ephemeral per-page id
-        return (crypto && crypto.randomUUID && crypto.randomUUID()) || (Math.random().toString(36).slice(2) + Date.now().toString(36));
       }
+      // Fallback non-persistent per page
+      return (crypto && crypto.randomUUID && crypto.randomUUID()) || (Math.random().toString(36).slice(2) + Date.now().toString(36));
     } catch (_) {
       // Fallback non-persistent
       return 'dev-' + Math.random().toString(36).slice(2);
@@ -176,19 +151,11 @@ class TokenManager {
 
   static async _applyTokensSafely(access, refresh) {
     try {
-      // Write refresh first, then access; mirror into bundle
-      if (typeof refresh !== 'undefined') this.refreshToken = refresh;
+      // Refresh token is in httpOnly cookie; ignore provided value
       if (typeof access !== 'undefined') this.accessToken = access;
-      const bundle = this._readBundle();
-      bundle.updated_at = this._now();
-      if (typeof access !== 'undefined') bundle.access_token = access || null;
-      if (typeof refresh !== 'undefined') bundle.refresh_token = refresh || null;
-      this._writeBundle(bundle);
       return true;
     } catch (e) {
       try { const ss = this._ss(); if (ss) ss.removeItem('auth_token'); else localStorage.removeItem('auth_token'); } catch (_) {}
-      try { const ss = this._ss(); if (ss) ss.removeItem('refresh_token'); else localStorage.removeItem('refresh_token'); } catch (_) {}
-      try { const ss = this._ss(); if (ss) ss.removeItem(this.bundleKey); else localStorage.removeItem(this.bundleKey); } catch (_) {}
       return false;
     }
   }
@@ -239,23 +206,30 @@ class TokenManager {
     }
 
     // Cross-tab lock: if another tab is refreshing, wait for it
-    const lock = this._acquireCrossTabLock(15000);
+    let lock = this._acquireCrossTabLock(15000);
     if (!lock) {
       if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:peer_refresh_wait', { initiator, corrId });
       const result = await this._waitForPeerRefresh(8000);
       if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:peer_refresh_done', { initiator, corrId, gotToken: !!result });
-      return result;
+      if (result) return result;
+      // Fallback: if peer did not produce a token within wait window, attempt to take lock and refresh ourselves
+      try {
+        const takeover = this._acquireCrossTabLock(15000);
+        if (!takeover) {
+          if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:peer_missing_result_cannot_takeover', { initiator, corrId });
+          return null;
+        }
+        lock = takeover;
+        if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:peer_missing_result_took_lock', { initiator, corrId, lock_ts: lock.ts });
+      } catch (_) {
+        return null;
+      }
     }
 
     this.inFlightRefreshPromise = (async () => {
       try {
         if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:lock_acquired', { initiator, corrId, lock_ts: lock.ts });
-        // Re-read refresh token just-in-time to avoid using a stale one
-        let rt = this.refreshToken;
-        if (!rt) {
-          if (this.debug) console.warn('[TokenManager] No refresh_token present at send-time');
-          return null;
-        }
+        // Cookie-based refresh flow: no client-side refresh_token required
 
         // Debug simulation knobs (set via localStorage for easy toggling from DevTools):
         // - tm_sim_latency_ms: number of ms to delay the refresh (default 0)
@@ -296,19 +270,16 @@ class TokenManager {
         while (attempt < Math.max(1, maxAttempts)) {
           attempt += 1;
 
-          // Re-read rt before each attempt in case it rotated in parallel
-          const currentRt = this.refreshToken;
-          if (currentRt && currentRt !== rt) {
-            rt = currentRt;
-          }
+          // Cookie-based: nothing to re-read here
 
           let response = null;
           try {
             if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:attempt_sending', { attempt, maxAttempts, corrId, initiator });
             response = await fetch('/api/v1/auth/sessions/refresh', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ refresh_token: rt, aud: 'public-v1', device_id: this._ensureDeviceId() }),
+              headers: { 'Content-Type': 'application/json', 'X-Correlation-Id': corrId },
+              credentials: 'include',
+              body: JSON.stringify({ aud: 'public-v1', device_id: this._ensureDeviceId() }),
               _skipAuth: true
             });
             if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:attempt_response', { attempt, status: response && response.status, corrId, initiator });
@@ -323,7 +294,7 @@ class TokenManager {
             });
             if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:response_keys', { keys: (data && Object.keys(data || {})) || [], corrId, initiator });
             if (data && data.access_token) {
-              const ok = await this._applyTokensSafely(data.access_token, data.refresh_token);
+              const ok = await this._applyTokensSafely(data.access_token, undefined);
               if (!ok) {
                 if (this.debug) console.error('[TokenManager] Failed to persist tokens; aborting');
                 return null;

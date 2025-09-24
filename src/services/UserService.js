@@ -1,4 +1,3 @@
-import TokenManager from './TokenManager';
 import apiClient from './apiClient';
 
 export default {
@@ -13,17 +12,7 @@ export default {
    */
   async updateProfile(profileData) {
     try {
-      const token = TokenManager.accessToken;
-      
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
-      
-      const response = await apiClient.post('/users/profile', profileData, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await apiClient.post('/users/profile', profileData);
       
       return response.data;
     } catch (error) {
@@ -41,18 +30,7 @@ export default {
    */
   async searchUsers(query, limit = 15) {
     try {
-      const token = TokenManager.accessToken;
-      
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
-      
-      const response = await apiClient.get('/users/search', {
-        params: { query, limit },
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await apiClient.get('/users/search', { params: { query, limit } });
       
       if (!response.data.users) {
         console.error('[Service] Missing users array in response:', response.data);
@@ -76,21 +54,10 @@ export default {
    */
   async fetchUserMessages(limit = 15, skip = 0) {
     try {
-      const token = TokenManager.accessToken;
-      
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
-      
       // Build query parameters with skip-based pagination
       const params = { limit, skip };
       
-      const response = await apiClient.get('/messages/inbox', {
-        params,
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await apiClient.get('/messages/inbox', { params });
       
       
       
@@ -112,16 +79,7 @@ export default {
   async getUserIncomingLinks(messageId, skip = 0, limit = 15, showAllLinks = false) {
     try {
       // Get token if user is authenticated, but don't require it
-      let headers = {};
-      try {
-        const token = TokenManager.accessToken;
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
-      } catch (error) {}
-      
       const response = await apiClient.get(`/links/messages/${messageId}/incoming`, {
-        headers,
         params: {
           skip,
           limit,
@@ -147,16 +105,7 @@ export default {
   async getUserOutgoingLinks(messageId, skip = 0, limit = 15, showAllLinks = false) {
     try {
       // Get token if user is authenticated, but don't require it
-      let headers = {};
-      try {
-        const token = TokenManager.accessToken;
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
-      } catch (error) {}
-      
       const response = await apiClient.get(`/links/messages/${messageId}/outgoing`, {
-        headers,
         params: {
           skip,
           limit,
@@ -179,18 +128,7 @@ export default {
    */
   async getSavedMessages(skip = 0, limit = 15) {
     try {
-      const token = TokenManager.accessToken;
-      
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
-      
-      const response = await apiClient.get('/users/saved-messages', {
-        params: { skip, limit },
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const response = await apiClient.get('/users/saved-messages', { params: { skip, limit } });
       
       
       
@@ -208,17 +146,7 @@ export default {
      */
     async getUnreadMessageCount() {
       try {
-        const token = TokenManager.accessToken;
-        
-        if (!token) {
-          throw new Error('No authentication token available');
-        }
-        
-        const response = await apiClient.get('/users/unread-total', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        const response = await apiClient.get('/users/unread-total');
         
         return response;
       } catch (error) {
@@ -235,19 +163,9 @@ export default {
     async markMessageAsRead(messageId) {
       try {
         
-        const token = TokenManager.accessToken;
-        
-        if (!token) {
-          throw new Error('No authentication token available');
-        }
-        
         // Use consolidated endpoint that accepts single id or list
         console.log('[UserService] markMessageAsRead -> POST /users/messages/mark-read', { message_id: messageId });
-        const response = await apiClient.post('/users/messages/mark-read', { message_id: messageId }, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        const response = await apiClient.post('/users/messages/mark-read', { message_id: messageId });
         console.log('[UserService] markMessageAsRead response', { status: response?.status, data: response?.data });
         return response;
       } catch (error) {
@@ -264,19 +182,9 @@ export default {
     async batchMarkAsRead(messageIds) {
       try {
         
-        const token = TokenManager.accessToken;
-        
-        if (!token) {
-          throw new Error('No authentication token available');
-        }
-        
         // Use consolidated endpoint that accepts list directly
         console.log('[UserService] batchMarkAsRead -> POST /users/messages/mark-read', { ids: messageIds });
-        const response = await apiClient.post('/users/messages/mark-read', messageIds, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        const response = await apiClient.post('/users/messages/mark-read', messageIds);
         console.log('[UserService] batchMarkAsRead response', { status: response?.status, data: response?.data });
         return response;
       } catch (error) {
@@ -293,18 +201,8 @@ export default {
     async markMessageAsUnread(messageId) {
       try {
         
-        const token = TokenManager.accessToken;
-        
-        if (!token) {
-          throw new Error('No authentication token available');
-        }
-        
         console.log('[UserService] markMessageAsUnread -> POST /users/messages/:id/mark-unread', { message_id: messageId });
-        const response = await apiClient.post(`/users/messages/${messageId}/mark-unread`, {}, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        const response = await apiClient.post(`/users/messages/${messageId}/mark-unread`, {});
         console.log('[UserService] markMessageAsUnread response', { status: response?.status, data: response?.data });
         return response;
       } catch (error) {
@@ -321,17 +219,7 @@ export default {
     async saveMessage(messageId) {
       try {
         
-        const token = TokenManager.accessToken;
-        
-        if (!token) {
-          throw new Error('No authentication token available');
-        }
-        
-        const response = await apiClient.post(`/users/messages/${messageId}/save`, {}, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        const response = await apiClient.post(`/users/messages/${messageId}/save`, {});
         
         return response;
       } catch (error) {
@@ -348,17 +236,7 @@ export default {
     async unsaveMessage(messageId) {
       try {
         
-        const token = TokenManager.accessToken;
-        
-        if (!token) {
-          throw new Error('No authentication token available');
-        }
-        
-        const response = await apiClient.delete(`/users/messages/${messageId}/save`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        const response = await apiClient.delete(`/users/messages/${messageId}/save`);
         
         return response;
       } catch (error) {
@@ -373,17 +251,7 @@ export default {
      */
     async getSavedMessagesCount() {
       try {
-        const token = TokenManager.accessToken;
-        
-        if (!token) {
-          throw new Error('No authentication token available');
-        }
-        
-        const response = await apiClient.get('/users/saved-count', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        const response = await apiClient.get('/users/saved-count');
         
         
         return response;
@@ -401,17 +269,7 @@ export default {
      */
     async deleteLink(messageIdFrom, messageIdTo) {
       try {
-        const token = TokenManager.accessToken;
-        
-        if (!token) {
-          throw new Error('No authentication token available');
-        }
-        
-        const response = await apiClient.delete(`/links/messages/${messageIdFrom}/${messageIdTo}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        const response = await apiClient.delete(`/links/messages/${messageIdFrom}/${messageIdTo}`);
         
         return response.data?.success || false;
       } catch (error) {
@@ -428,17 +286,7 @@ export default {
      */
     async createLink(messageIdFrom, messageIdTo) {
       try {
-        const token = TokenManager.accessToken;
-        
-        if (!token) {
-          throw new Error('No authentication token available');
-        }
-        
-        const response = await apiClient.post(`/links/messages/${messageIdFrom}/${messageIdTo}`, {}, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        const response = await apiClient.post(`/links/messages/${messageIdFrom}/${messageIdTo}`, {});
         
         return response.data?.success || false;
       } catch (error) {

@@ -11,6 +11,7 @@ const RefreshCoordinator = {
   failureCooldownMs: 5000,
   bc: null,
   bcSupported: typeof window !== 'undefined' && 'BroadcastChannel' in window,
+  state: 'idle', // idle | refreshing | cooldown
 
   ensureChannel() {
     if (this.bcSupported && !this.bc) {
@@ -56,11 +57,13 @@ const RefreshCoordinator = {
 
     if (this.isCooldownActive()) {
       try { console.warn('[RefreshCoordinator] failure cooldown active; skipping refresh', { initiator, corrId }); } catch (_) {}
+      this.state = 'cooldown';
       return null;
     }
 
     this.inFlightPromise = (async () => {
       try {
+        this.state = 'refreshing';
         this.broadcast('refresh_start', { initiator, corrId });
         const token = await TokenManager.refreshAccessToken({ initiator: `rc:${initiator}`, corrId, reason });
         if (!token) {
@@ -71,6 +74,7 @@ const RefreshCoordinator = {
         this.broadcast('refresh_done', { initiator, corrId, ok: true });
         return token;
       } finally {
+        if (this.isCooldownActive()) this.state = 'cooldown'; else this.state = 'idle';
         this.inFlightPromise = null;
       }
     })();
