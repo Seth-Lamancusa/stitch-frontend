@@ -1,7 +1,6 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useStore } from 'vuex';
-import RefreshCoordinator from '../services/RefreshCoordinator';
 import TokenManager from '../services/TokenManager';
 import axios from 'axios';
 
@@ -170,7 +169,7 @@ export function useAuthentication() {
     });
     const result = resp && resp.data ? resp.data : {};
     // Email verification may add msg.write to user scopes; refresh access token to pick up new scopes
-    await RefreshCoordinator.getFreshAccessToken({ initiator: 'useAuthentication' });
+    await TokenManager.refreshAccessToken({ initiator: 'useAuthentication' });
     await store.dispatch('auth/validateExistingToken');
     return result;
   };

@@ -1,7 +1,6 @@
 import axios from 'axios'
 import store from '../store'
 import TokenManager from './TokenManager'
-import RefreshCoordinator from './RefreshCoordinator'
 import logger from './logger'
 
 // Lightweight correlation id generator (per request)
@@ -92,7 +91,7 @@ export function installAxiosAuthInterceptor(axiosInstance) {
         const tokenBefore = TokenManager.accessToken;
         const corrId = originalRequest?.corrId || `ax_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
         try { logger.warn('[AUTH][axios] 401 detected; attempting refresh', { url: originalRequest?.url, corrId }); } catch (_) {}
-        const newAccess = await RefreshCoordinator.getFreshAccessToken({ initiator: 'axios_interceptor', corrId, reason: `401@${originalRequest?.url || ''}` });
+        const newAccess = await TokenManager.refreshAccessToken({ initiator: 'axios_interceptor', corrId, reason: `401@${originalRequest?.url || ''}` });
         if (!newAccess) {
           // If another caller refreshed and rotated tokens, retry with the updated token
           const tokenAfter = TokenManager.accessToken;

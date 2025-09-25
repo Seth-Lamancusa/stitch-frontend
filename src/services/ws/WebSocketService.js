@@ -1,6 +1,5 @@
 import store from '../../store';
 import TokenManager from '../../services/TokenManager';
-import RefreshCoordinator from '../../services/RefreshCoordinator';
 import WebSocketClient from './WebSocketClient';
 import IdleManager from './IdleManager';
 import NetworkVisibility from './NetworkVisibility';
@@ -137,7 +136,7 @@ const WebSocketService = {
           let token = this.getToken();
           if (!token || this.shouldRefreshToken()) {
             try {
-              const refreshed = await RefreshCoordinator.getFreshAccessToken({ initiator: 'ws_checkHealth' });
+              const refreshed = await TokenManager.refreshAccessToken({ initiator: 'ws_checkHealth' });
               if (refreshed) {
                 this.lastTokenRefresh = Date.now();
                 token = refreshed;
@@ -246,8 +245,8 @@ const WebSocketService = {
     try {
       const corrId = `ws_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
       this.log('Attempting token refresh due to authentication failure', { corrId });
-      // Refresh token is httpOnly; rely on coordinator
-      const newAccess = await RefreshCoordinator.getFreshAccessToken({ initiator: 'ws_attemptRefresh', corrId, reason: 'ws_auth_failure' });
+      // Refresh token is httpOnly; refresh directly via TokenManager
+      const newAccess = await TokenManager.refreshAccessToken({ initiator: 'ws_attemptRefresh', corrId, reason: 'ws_auth_failure' });
       if (!newAccess) {
         this.error('Token refresh failed; skipping WS disconnected banner', { corrId });
         return;
@@ -320,7 +319,7 @@ const WebSocketService = {
         let authToken = TokenManager.accessToken;
         if (!authToken || this.shouldRefreshToken()) {
           try {
-            const refreshed = await RefreshCoordinator.getFreshAccessToken({ initiator: 'ws_initialize' });
+            const refreshed = await TokenManager.refreshAccessToken({ initiator: 'ws_initialize' });
             if (refreshed) {
               this.lastTokenRefresh = Date.now();
               authToken = refreshed;
@@ -744,7 +743,7 @@ const WebSocketService = {
           let token = TokenManager.accessToken;
           if (!token || this.shouldRefreshToken()) {
             try {
-              const refreshed = await RefreshCoordinator.getFreshAccessToken({ initiator: 'ws_health_missing_or_stale' });
+              const refreshed = await TokenManager.refreshAccessToken({ initiator: 'ws_health_missing_or_stale' });
               if (refreshed) {
                 this.lastTokenRefresh = Date.now();
                 token = refreshed;

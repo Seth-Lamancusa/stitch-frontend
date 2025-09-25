@@ -2,8 +2,6 @@ class TokenManager {
   static debug = true;
   static inFlightRefreshPromise = null;
   static lastSuccessfulRefreshAt = 0;
-  static lockKey = 'tm_refresh_lock';
-  static resultKey = 'tm_refresh_result';
   static deviceKey = 'device_id';
   static backupManagerRefreshKey = 'manager_refresh_backup';
 
@@ -80,74 +78,7 @@ class TokenManager {
 
   static _now() { return Date.now(); }
 
-  static _acquireCrossTabLock(maxHoldMs = 15000) {
-    const id = this._genId();
-    const now = this._now();
-    const existingRaw = localStorage.getItem(this.lockKey);
-    try {
-      const existing = existingRaw ? JSON.parse(existingRaw) : null;
-      if (existing && typeof existing.ts === 'number' && (now - existing.ts) < maxHoldMs) {
-        return null; // someone else holds a fresh lock
-      }
-    } catch (_) {}
-    const claim = JSON.stringify({ id, ts: now });
-    try { localStorage.setItem(this.lockKey, claim); } catch (_) { /* ignore */ }
-    // Verify we own it
-    try {
-      const reread = localStorage.getItem(this.lockKey);
-      if (reread === claim) return { id, ts: now };
-    } catch (_) {}
-    return null;
-  }
-
-  static _releaseCrossTabLock(lock) {
-    try {
-      const current = localStorage.getItem(this.lockKey);
-      if (!current) return;
-      const parsed = JSON.parse(current);
-      if (parsed && lock && parsed.id === lock.id) {
-        localStorage.removeItem(this.lockKey);
-      }
-    } catch (_) {}
-  }
-
-  static async _waitForPeerRefresh(timeoutMs = 8000) {
-    const start = this._now();
-    const initialAccess = this.accessToken;
-    return new Promise((resolve) => {
-      let done = false;
-      const finish = (value) => { if (!done) { done = true; cleanup(); resolve(value); } };
-      const onStorage = (e) => {
-        try {
-          if (e && (e.key === 'auth_token' || e.key === this.resultKey || e.key === this.lockKey)) {
-            const currentAccess = this.accessToken;
-            if (currentAccess && currentAccess !== initialAccess) return finish(currentAccess);
-            if (e.key === this.resultKey) return finish(this.accessToken || null);
-            const lockRaw = localStorage.getItem(this.lockKey);
-            if (!lockRaw) return finish(this.accessToken || null);
-          }
-        } catch (_) {}
-      };
-      const tick = () => {
-        if (done) return;
-        if ((this._now() - start) >= timeoutMs) return finish(null);
-        const currentAccess = this.accessToken;
-        if (currentAccess && currentAccess !== initialAccess) return finish(currentAccess);
-        setTimeout(tick, 150);
-      };
-      const cleanup = () => {
-        try { window.removeEventListener('storage', onStorage); } catch (_) {}
-      };
-      try { window.addEventListener('storage', onStorage); } catch (_) {}
-      setTimeout(tick, 150);
-    });
-  }
-
-  static _announceRefreshResult(ok) {
-    try { localStorage.setItem(this.resultKey, JSON.stringify({ ok: !!ok, ts: this._now() })); } catch (_) {}
-    // Best-effort nudge
-    try { setTimeout(() => { try { localStorage.removeItem(this.resultKey); } catch (_) {} }, 50); } catch (_) {}
-  }
+  
 
   static async _applyTokensSafely(access, refresh) {
     try {
@@ -205,30 +136,9 @@ class TokenManager {
       try { return await this.inFlightRefreshPromise; } catch { return null; }
     }
 
-    // Cross-tab lock: if another tab is refreshing, wait for it
-    let lock = this._acquireCrossTabLock(15000);
-    if (!lock) {
-      if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:peer_refresh_wait', { initiator, corrId });
-      const result = await this._waitForPeerRefresh(8000);
-      if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:peer_refresh_done', { initiator, corrId, gotToken: !!result });
-      if (result) return result;
-      // Fallback: if peer did not produce a token within wait window, attempt to take lock and refresh ourselves
-      try {
-        const takeover = this._acquireCrossTabLock(15000);
-        if (!takeover) {
-          if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:peer_missing_result_cannot_takeover', { initiator, corrId });
-          return null;
-        }
-        lock = takeover;
-        if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:peer_missing_result_took_lock', { initiator, corrId, lock_ts: lock.ts });
-      } catch (_) {
-        return null;
-      }
-    }
-
     this.inFlightRefreshPromise = (async () => {
       try {
-        if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:lock_acquired', { initiator, corrId, lock_ts: lock.ts });
+        if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:started', { initiator, corrId });
         // Cookie-based refresh flow: no client-side refresh_token required
 
         // Debug simulation knobs (set via localStorage for easy toggling from DevTools):
@@ -301,11 +211,9 @@ class TokenManager {
               }
               this.lastSuccessfulRefreshAt = Date.now();
               if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:success', { corrId, initiator });
-              this._announceRefreshResult(true);
               return data.access_token;
             }
             if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:missing_access_token', { corrId, initiator });
-            this._announceRefreshResult(false);
             return null;
           }
 
@@ -314,7 +222,6 @@ class TokenManager {
           const shouldRetry = status === 'NETERR' || isTransientStatus(status);
           if (!shouldRetry) {
             if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:non_transient_failure', { status, corrId, initiator });
-            this._announceRefreshResult(false);
             return null;
           }
 
@@ -331,15 +238,12 @@ class TokenManager {
           if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:retry_scheduled', { nextInMs: delay, nextAttempt: attempt + 1, maxAttempts, corrId, initiator });
           await sleep(delay);
         }
-        this._announceRefreshResult(false);
         return null;
       } catch (e) {
         if (this.debug) console.error('[TokenManager]', 'refreshAccessToken:error', { corrId, initiator, message: e && e.message });
-        this._announceRefreshResult(false);
         return null;
       } finally {
-        try { if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:lock_released', { corrId, initiator }); } catch (_) {}
-        this._releaseCrossTabLock(lock);
+        try { if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:finished', { corrId, initiator }); } catch (_) {}
       }
     })();
 
