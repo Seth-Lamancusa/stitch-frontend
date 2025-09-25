@@ -1,7 +1,6 @@
 import WebSocketService from '../../services/ws/WebSocketService'
 import TokenManager from '../../services/TokenManager'
 import apiClient from '../../services/apiClient'
-import RefreshCoordinator from '../../services/RefreshCoordinator'
 import { parseScopes } from '../../utils/scopes'
 import { hasPermission as hasPermUtil, hasAnyPermission as hasAnyPermUtil, isAdmin as isAdminUtil } from '../../utils/permissions'
 
@@ -118,7 +117,7 @@ export default {
           // Attempt proactive refresh using httpOnly cookie
           const corrId = `auth_init_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
           try { console.warn('[AUTH][initAuth] no access; attempting proactive refresh', { corrId }); } catch (_) {}
-          const newAccess = await RefreshCoordinator.getFreshAccessToken({ initiator: 'auth_init', corrId, reason: 'no_access_token' });
+          const newAccess = await TokenManager.refreshAccessToken({ initiator: 'auth_init', corrId, reason: 'no_access_token' });
           if (newAccess) {
             try { console.log('[AUTH][initAuth] proactive refresh succeeded', { corrId }); } catch (_) {}
             await dispatch('validateExistingToken');
@@ -212,7 +211,7 @@ export default {
       if (!managedUid) throw new Error('managed_uid_required');
       try {
         // Proactively rotate to ensure we use the latest manager refresh
-        try { await RefreshCoordinator.getFreshAccessToken({ initiator: 'auth_switchPrincipal' }); } catch (_) {}
+        try { await TokenManager.refreshAccessToken({ initiator: 'auth_switchPrincipal' }); } catch (_) {}
         // Capture manager snapshot from current user before switching
         try {
           const cur = this.state.auth.user;
