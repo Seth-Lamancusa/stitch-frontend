@@ -52,8 +52,14 @@ const route = useRoute();
 // Clear messages store on mount
 onMounted(async () => {
   try {
-    await store.dispatch('messages/clearCache');
-    console.log(`[MessageListView] Messages store cleared on mount for mode: ${props.mode}`);
+    const ready = store.getters['auth/authReady'];
+    const authed = store.getters['auth/isAuthenticated'];
+    if (ready && !authed) {
+      await store.dispatch('messages/clearCache');
+      console.log(`[MessageListView] Messages store cleared on mount for mode: ${props.mode}`);
+    } else {
+      console.log('[MessageListView] Skipping clearCache on mount until authReady && !isAuthenticated');
+    }
   } catch (error) {
     console.error('[MessageListView] Error clearing messages store:', error);
   }
