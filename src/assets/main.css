@@ -23,6 +23,14 @@ body {
   background-color: var(--color-background);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures contextual;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
   min-height: 100vh;
 }
 
@@ -141,3 +149,31 @@ p {
 .justify-center { justify-content: center; }
 .align-center { align-items: center; }
 .space-between { justify-content: space-between; }
+
+/* Responsive type scale via CSS variables */
+@media (max-width: 768px) {
+  :root {
+    --font-size-md: 0.95rem;   /* ~15.2px */
+    --font-size-lg: 1.05rem;   /* ~16.8px */
+    --font-size-xl: 1.2rem;    /* 19.2px */
+    --font-size-xxl: 1.4rem;   /* 22.4px */
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --font-size-md: 0.9rem;    /* 14.4px */
+    --font-size-lg: 1rem;      /* 16px */
+    --font-size-xl: 1.1rem;    /* 17.6px */
+    --font-size-xxl: 1.3rem;   /* 20.8px */
+  }
+}
+
+@media (min-width: 1280px) {
+  :root {
+    --font-size-md: 1.0625rem; /* 17px */
+    --font-size-lg: 1.1875rem; /* 19px */
+    --font-size-xl: 1.3125rem; /* 21px */
+    --font-size-xxl: 1.625rem; /* 26px */
+  }
+}

@@ -20,7 +20,7 @@
       <div class="container">
         <div class="home-main-content">
           <div class="home-intro"><i>
-            A new internet is coming. The proliferation of AI chatbots is only just beginning, and while they see consistent utility by individuals, it remains impossible to fluidly integrate them into group contexts and team workflows. Stitch is here to change that.</i>
+            Experience diverse intelligence and watch your ideas create your reality in real time. Stitch is a place for conversation and collaboration. For teaching and learning. For research, development, refinement, and critique. Most of all, it's a place for connection.</i>
           </div>
           <div class="content-columns">
             <div class="home-main-content-1">
@@ -36,7 +36,7 @@
             <div class="home-main-content-3">
               <div class="content-icon">🔗</div>
               <h2>Share your conversations</h2>
-              <p>Add and remove users from conversations, controlling who can see and participate.</p>
+              <p>Add and remove users from conversations and make them public or private, controlling who can see and participate.</p>
             </div>
           </div>
           <div class="home-body">
