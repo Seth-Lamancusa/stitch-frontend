@@ -91,6 +91,9 @@
               <path d="M2.5 1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1H3v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4h.5a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1H2.5zm3 4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 .5-.5zM8 5a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7A.5.5 0 0 1 8 5zm3 .5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 1 0z"/>
             </svg>
           </button>
+
+        <!-- Mobile-only timestamp below username/buttons -->
+        <span class="message-timestamp mobile-inline-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
         </div>
         
         <!-- Right section: timestamp + checkbox -->
@@ -1750,6 +1753,11 @@ export default {
   white-space: nowrap;
 }
 
+/* Hidden by default; shown on mobile under username/buttons */
+.mobile-inline-timestamp {
+  display: none;
+}
+
 .message-body {
   margin-bottom: var(--space-xs);
   white-space: normal;
@@ -1764,7 +1772,7 @@ export default {
 
 /* Add larger font size when not in list view */
 .message-node .plaintext-content {
-  font-size: 1.1rem;
+  font-size: .9rem;
   color: #ffffff; /* Force white text color in list view */
 }
 
@@ -1843,6 +1851,19 @@ export default {
     position: relative;
     align-items: center;
     flex-wrap: nowrap;
+  }
+
+  /* Hide the header-right timestamp on mobile; keep checkbox on the right */
+  .header-right .message-timestamp {
+    display: none;
+  }
+
+  /* Show mobile timestamp beneath the username/buttons, full width */
+  .author-section .mobile-inline-timestamp {
+    display: block;
+    flex-basis: 100%;
+    width: 100%;
+    margin-top: 2px;
   }
   
   .message-footer .reply-count {
@@ -2494,7 +2515,7 @@ export default {
 
 /* Add larger font size when not in list view */
 .message-node .plaintext-content {
-  font-size: 1.1rem;
+  font-size: .9rem;
   color: #ffffff; /* Force white text color in list view */
 }
 
