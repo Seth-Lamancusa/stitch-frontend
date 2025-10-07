@@ -5,18 +5,18 @@
         <h3>Sign in</h3>
         <button class="close-button" @click.stop="onClose">×</button>
       </div>
+      <form class="modal-form" @submit.prevent="submitPassword" autocomplete="on">
       <div class="modal-content">
         <div class="panel">
           <label>Tag, Email, or Phone</label>
-          <input v-model="identifier" type="text" placeholder="tag, email, or phone" />
+          <input v-model="identifier" type="text" placeholder="tag, email, or phone" enterkeyhint="next" />
           <label>Password</label>
           <div class="password-field">
-            <input :type="showPassword ? 'text' : 'password'" v-model="password" placeholder="••••••••" @keyup.enter="submitPassword" />
+            <input :type="showPassword ? 'text' : 'password'" v-model="password" placeholder="••••••••" @keyup.enter="submitPassword" enterkeyhint="go" />
             <button type="button" class="eye-toggle" @click="showPassword = !showPassword" :aria-pressed="showPassword ? 'true' : 'false'" :title="showPassword ? 'Hide password' : 'Show password'">
               {{ showPassword ? '🙈' : '👁️' }}
             </button>
           </div>
-          <p class="hint">If your email is used by multiple accounts, sign in with your @tag.</p>
           <div class="row between">
             <span></span>
             <router-link class="forgot" to="/reset-password">Forgot password?</router-link>
@@ -25,8 +25,9 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button class="primary" :disabled="busy" :aria-busy="busy ? 'true' : 'false'" @click="submitPassword">{{ busy ? 'Signing in…' : 'Sign in' }}</button>
+        <button class="primary" :disabled="busy" :aria-busy="busy ? 'true' : 'false'" type="submit">{{ busy ? 'Signing in…' : 'Sign in' }}</button>
       </div>
+      </form>
     </div>
   </div>
 </template>
@@ -132,7 +133,7 @@ const submitPassword = async () => {
   border-radius: var(--radius-md);
   width: 90%;
   max-width: 500px;
-  height: 70vh;
+  max-height: 70vh;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   border: 1px solid var(--color-border);
   overflow: hidden;
@@ -140,6 +141,8 @@ const submitPassword = async () => {
   display: flex;
   flex-direction: column;
 }
+
+.modal-form { display: flex; flex-direction: column; flex: 0 1 auto; min-height: 0; }
 
 @keyframes modal-appear {
   from { opacity: 0; transform: translateY(20px); }
@@ -181,7 +184,7 @@ const submitPassword = async () => {
 
 .modal-content {
   padding: var(--space-lg);
-  flex: 1;
+  flex: 0 1 auto;
   overflow-y: auto;
   min-height: 0;
 }
