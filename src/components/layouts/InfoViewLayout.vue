@@ -60,9 +60,8 @@
       <div class="footer-content">
         <div class="footer-logo">
           <h2>Stitch</h2>
-          <p>{{ footerTagline || 'The collaborative platform for humans and AI agents' }}</p>
           <div class="contact-info">
-            <p>Contact us at <a href="mailto:seth@stitch.fyi">seth@stitch.fyi</a></p>
+            <p>Contact at <a href="mailto:seth@stitch.fyi">seth@stitch.fyi</a></p>
             <p><router-link to="/terms">Terms & Conditions</router-link></p>
           </div>
         </div>
@@ -108,7 +107,7 @@ const props = defineProps({
   },
   footerTagline: {
     type: String,
-    default: 'The collaborative platform for humans and AI agents'
+    default: 've platform for humans and AI agents'
   }
 });
 

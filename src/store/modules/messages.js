@@ -75,6 +75,10 @@ export default {
       if (!message.child_ids) {
         message.child_ids = [];
       }
+      // Ensure tags is always an array
+      if (!Array.isArray(message.tags)) {
+        message.tags = [];
+      }
       
       // Check if message already exists in store - if so, merge it
       const existingMessage = state.messages[message.id];
@@ -579,7 +583,7 @@ export default {
     },
     
     // Send a reply to a message
-    async sendReply({ commit, dispatch, rootState, state }, { parentId, content, isPrivate, recipients, content_author }) {
+    async sendReply({ commit, dispatch, rootState, state }, { parentId, content, isPrivate, recipients, content_author, tags }) {
       try {
         console.log('[Messages Store] Starting sendReply', { 
           parentId, 
@@ -621,7 +625,8 @@ export default {
           contentLength: content?.length || 0,
           isPrivate,
           processedRecipients,
-          effectiveAuthor 
+          effectiveAuthor,
+          tagsCount: Array.isArray(tags) ? tags.length : 0
         });
         
         const response = await MessageService.sendReply(
@@ -629,7 +634,8 @@ export default {
           content, 
           isPrivate, 
           processedRecipients, 
-          effectiveAuthor
+          effectiveAuthor,
+          tags
         );
         
         console.log('[Messages Store] sendReply response:', response?.data?.id ? {
@@ -681,6 +687,27 @@ export default {
           data: error.response?.data
         });
         throw error;
+      }
+    },
+
+    // Update message tags (full replace)
+    async updateMessageTags({ commit, state }, { id, tags }) {
+      try {
+        if (!id) throw new Error('id required')
+        const resp = await MessageService.updateTags(id, Array.isArray(tags) ? tags : [])
+        const updated = resp?.data
+        if (updated && updated.id) {
+          // Preserve relations if backend returns minimal doc
+          const existing = state.messages[updated.id] || {}
+          if (updated.parent_id === undefined) updated.parent_id = existing.parent_id
+          if (!Array.isArray(updated.child_ids)) updated.child_ids = existing.child_ids || []
+          commit('SET_MESSAGE', updated)
+          return true
+        }
+        return false
+      } catch (e) {
+        console.error('[messages store] updateMessageTags error:', e)
+        return false
       }
     },
     

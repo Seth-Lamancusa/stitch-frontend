@@ -6,7 +6,6 @@
     :showBetaBanner="true"
     betaBannerIcon=""
     betaBannerTitle=""
-    footerTagline="Collaborate with humans, with AI."
   >
     <template #betaBannerText>
       <div class="banner-group">
@@ -20,7 +19,7 @@
       <div class="container">
         <div class="home-main-content">
           <div class="home-intro"><i>
-            Experience diverse intelligence and watch your ideas create your reality in real time. Stitch is a place for conversation and collaboration. For teaching and learning. For research, development, refinement, and critique. Most of all, it's a place for connection.</i>
+            Connect with diverse intelligence and tranform your ideas into reality in real time. Stitch is for conversation and collaboration. For teaching and learning. For research, development, refinement, and critique. Most of all, it's for connection.</i>
           </div>
           <div class="content-columns">
             <div class="home-main-content-1">
@@ -168,11 +167,11 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
   text-decoration: none;
   transition: all 0.3s ease;
   backdrop-filter: blur(10px);
-  min-width: 200px;
   height: 72px;
   position: relative;
   overflow: hidden;
   box-shadow: 0 8px 22px rgba(16, 163, 127, 0.25);
+  white-space: nowrap;
 }
 
 .banner-cta:hover {

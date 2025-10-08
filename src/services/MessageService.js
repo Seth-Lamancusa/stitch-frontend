@@ -10,13 +10,14 @@ const getAuthHeaders = () => {
 }
 
 export default {
-  // Send a message or reply
-  async sendReply(parentId, content, isPrivate = false, recipients = [], content_author = null) {
+  // Send a message or reply (supports optional tags)
+  async sendReply(parentId, content, isPrivate = false, recipients = [], content_author = null, tags = null) {
     const headers = getAuthHeaders()
 
     const messageData = { content, public: !isPrivate, recipients }
     if (parentId) messageData.parent_id = parentId
     if (content_author) messageData.content_author = content_author
+    if (Array.isArray(tags)) messageData.tags = tags
 
     try {
       // Debug logging for outgoing payload
@@ -27,6 +28,7 @@ export default {
         recipients_count: Array.isArray(recipients) ? recipients.length : 0,
         content_author: content_author || null,
         is_private: !!isPrivate,
+        tags_count: Array.isArray(tags) ? tags.length : 0,
       })
 
       const response = await apiClient.post(`/messages`, [messageData], { headers })
@@ -50,6 +52,26 @@ export default {
       console.error('[MessageService] sendReply error', e)
       throw e
     }
+  },
+
+  // Update message tags (full replace)
+  async updateTags(id, tags) {
+    const headers = getAuthHeaders()
+    return apiClient.patch(`/messages/${id}`, { tags: Array.isArray(tags) ? tags : [] }, { headers })
+  },
+
+  // Unified search: content (q) and tags
+  async search({ q = null, tags = [], match = 'any', scope = 'public', skip = 0, limit = 15 } = {}) {
+    const headers = getAuthHeaders()
+    const params = new URLSearchParams()
+    if (q) params.set('q', q)
+    if (Array.isArray(tags) && tags.length > 0) params.set('tags', tags.join(','))
+    if (match) params.set('match', match)
+    if (scope) params.set('scope', scope)
+    params.set('skip', String(skip))
+    params.set('limit', String(limit))
+    const url = `/messages/search?${params.toString()}`
+    return apiClient.get(url, { headers })
   },
 
   // Add recipients to a message (or multiple messages)

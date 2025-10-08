@@ -25,7 +25,7 @@
           
           <div class="legal-card">
             <h3>Welcome to Stitch</h3>
-            <p>These Terms and Conditions ("Terms") govern your use of the Stitch multiplayer AI chat platform (the "Service"), operated by Stitch AI Inc. By accessing or using our Service, you agree to be bound by these Terms. If you disagree with any part of the Terms, you may not access the Service.</p>
+            <p>These Terms and Conditions ("Terms") govern your use of the Stitch platform (the "Service"), operated by Stitch FYI LLC. By accessing or using our Service, you agree to be bound by these Terms. If you disagree with any part of the Terms, you may not access the Service.</p>
             
             <div class="terms-highlight">
               <p><strong>Important:</strong> Stitch is an AI-powered chat platform. While we strive for high-quality, helpful, and safe AI interactions, please remember that AI responses:</p>
@@ -86,8 +86,7 @@
             <p>By continuing to access or use our Service after those revisions become effective, you agree to be bound by the revised Terms. If you do not agree to the new Terms, please stop using the Service.</p>
             
             <h3>Contact Us</h3>
-            <p>If you have any questions about these Terms, please contact us at:</p>
-            <p><strong>Email:</strong> seth@stitch.fyi</p>
+            <p>If you have any questions about these Terms, please contact at seth@stitch.fyi</p>
           </div>
         </section>
 

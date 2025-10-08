@@ -64,6 +64,19 @@
             <span class="meta-pill__text">Public</span>
           </button>
           
+          <!-- Draft Tags button -->
+          <button 
+            class="toolbar-control meta-pill" 
+            @click="toggleTagsModal"
+            :disabled="!canInteract"
+            :aria-expanded="showTagsModal"
+            aria-label="Manage draft tags"
+            title="Draft Tags"
+          >
+            <span class="meta-pill__icon"><strong>#</strong></span>
+            <span class="meta-pill__text">Draft Tags ({{ replyTags.length }})</span>
+          </button>
+          
           <!-- Recipients button -->
           <button 
             class="toolbar-control meta-pill" 
@@ -166,6 +179,16 @@
       @done="closeRecipientSelector"
     />
     
+    <!-- Tags modal -->
+    <TagsModal
+      :is-visible="showTagsModal"
+      :is-add-mode="false"
+      :existing-tags="replyTags"
+      @close="closeTagsModal"
+      @change="handleTagsChange"
+      @done="handleTagsDone"
+    />
+    
     <!-- Bot Prompt Modal moved to global component -->
   </div>
 </template>
@@ -174,6 +197,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import RecipientsModal from './modals/RecipientsModal.vue';
+import TagsModal from './modals/TagsModal.vue';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 import MessageService from '../services/MessageService.js';
 
@@ -229,6 +253,7 @@ const dragDistance = ref(0);
 // UI state
 const showRecipientSelector = ref(false);
 const showBotModal = ref(false);
+const showTagsModal = ref(false);
 
 // Textarea expansion state
 const isTextareaExpanded = ref(false);
@@ -257,6 +282,9 @@ const replyAddToAncestors = computed(() => store.getters['navigation/replyAddToA
 const isReplying = computed(() => store.getters['navigation/isReplying']);
 const botPromptModalVisible = computed(() => store.getters['navigation/botPromptModalVisible']);
 const showVerifyCTA = computed(() => !props.canInteract && props.isAuthenticated && !isEmailVerified.value);
+
+// Local draft tags (UI-only)
+const replyTags = ref([]);
 
 // Centralized validation logic
 const canSendReply = computed(() => {
@@ -773,6 +801,41 @@ const closeRecipientSelector = (event) => {
   showRecipientSelector.value = false;
 };
 
+// Tags modal handlers
+const toggleTagsModal = () => {
+  if (!showTagsModal.value) {
+    // Only dismiss keyboard when opening the modal
+    dismissMobileKeyboard();
+  }
+  showTagsModal.value = !showTagsModal.value;
+};
+
+const closeTagsModal = () => {
+  showTagsModal.value = false;
+};
+
+const handleTagsDone = (newTags) => {
+  try {
+    if (Array.isArray(newTags)) {
+      replyTags.value = newTags.slice();
+    }
+  } catch (e) {
+    // no-op
+  } finally {
+    showTagsModal.value = false;
+  }
+};
+
+const handleTagsChange = (newTags) => {
+  try {
+    if (Array.isArray(newTags)) {
+      replyTags.value = newTags.slice();
+    }
+  } catch (e) {
+    // no-op
+  }
+};
+
 // Bot prompt methods removed (handled by global modal)
 
 // Handle clicks outside reply box
@@ -783,7 +846,7 @@ const handleClickOutside = (event) => {
     return;
   }
   // Don't close if any modal is open
-  if (showRecipientSelector.value || botPromptModalVisible.value) {
+  if (showRecipientSelector.value || botPromptModalVisible.value || showTagsModal.value) {
     return;
   }
   
@@ -797,9 +860,17 @@ const handleClickOutside = (event) => {
       replySheetElement.contains(event.target) || (path && path.includes(replySheetElement))
     )
   );
+  // If a Tags modal is open anywhere (teleported), don't close when clicking inside it
+  let clickedInsideTagsModal = false;
+  try {
+    const tagsModalEl = document.querySelector('.tags-modal');
+    if (tagsModalEl) {
+      clickedInsideTagsModal = tagsModalEl.contains(event.target) || (path && path.includes(tagsModalEl));
+    }
+  } catch (e) {}
   const clickedReplyButton = Array.from(replyButtons).some(btn => btn.contains(event.target));
   
-  if (clickedInsideSheet || clickedReplyButton) {
+  if (clickedInsideSheet || clickedReplyButton || clickedInsideTagsModal) {
     return;
   }
   
@@ -2153,3 +2224,5 @@ defineExpose({
   }
 }
 </style> 
+
+

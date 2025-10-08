@@ -4,7 +4,6 @@
     pageSubtitle="Everything you need for collaborative conversations with AI"
     heroClass="featured-hero"
     :showBetaBanner="false"
-    footerTagline="Collaborate with humans, with AI."
   >
     <section class="features-main">
       <div class="container">

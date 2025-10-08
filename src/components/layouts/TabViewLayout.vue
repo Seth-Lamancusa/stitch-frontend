@@ -11,6 +11,16 @@
         <!-- Navigation Tabs (public only) -->
         <div class="navigation-tabs" role="tablist" aria-label="Main tabs">
           <router-link 
+            to="/search" 
+            class="nav-tab"
+            :class="{ 'active': activeTab === 'search' }"
+            role="tab"
+            :aria-selected="activeTab === 'search'"
+          >
+            <span class="tab-emoji" aria-hidden="true">🔎</span>
+            <span class="tab-label">Search</span>
+          </router-link>
+          <router-link 
             to="/history" 
             class="nav-tab"
             :class="{ 'active': activeTab === 'history' }"
@@ -162,7 +172,7 @@
       </div>
       <div class="feedback-button-container">
         <router-link to="/messages/2HhB" class="feedback-button">
-          💬 Leave Feedback and Questions Here!
+          💬 Leave Feedback and Questions Here
         </router-link>
       </div>
       <slot></slot>
@@ -210,6 +220,7 @@ const isAdmin = computed(() => store.getters['auth/isAdmin']);
 const authReady = computed(() => store.getters['auth/authReady']);
 const activeTab = computed(() => {
   const p = route.path || '';
+  if (p.startsWith('/search')) return 'search';
   if (p.startsWith('/public')) return 'public';
   if (p.startsWith('/history')) return 'history';
   if (p.startsWith('/saved')) return 'saved';
