@@ -21,7 +21,7 @@
       <MessageList v-if="results.length" mode="custom" :customMessages="results" :hideHeader="true" />
       <div v-else class="empty-state">Search by content with option filtration by tags.</div>
 
-      <TagsModal :is-visible="showTags" :is-add-mode="false" :existing-tags="tags" :title-text="'Search Tags'" @close="showTags=false" @done="setTags" />
+      <TagsModal :is-visible="showTags" :is-add-mode="false" :existing-tags="tags" @close="showTags=false" @done="setTags" />
     </div>
   </TabViewLayout>
   

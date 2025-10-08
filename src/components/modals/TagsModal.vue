@@ -26,7 +26,7 @@
                 v-model="newTag"
                 @keydown.enter.prevent="addTag"
                 @input="validateInput"
-                placeholder="Add a tag (letters, numbers, _)"
+                placeholder="Add a tag (letters, numbers, _, -)"
                 class="tag-input"
               />
               <div v-if="isValid === true" class="valid-indicator" title="Valid tag">✓</div>
@@ -63,7 +63,7 @@ const props = defineProps({
   existingTags: { type: Array, default: () => [] }
 });
 
-const emit = defineEmits(['close', 'done', 'change', 'blocked-add']);
+const emit = defineEmits(['close', 'done', 'change']);
 
 const isClosing = ref(false);
 const newTag = ref('');
@@ -112,11 +112,6 @@ const addTag = () => {
   if (!canAdd.value) return;
   const normalized = (newTag.value || '').trim().toLowerCase();
   if (!normalized) return;
-  // In add mode (used for existing messages), block additions for now and surface via parent
-  if (props.isAddMode) {
-    emit('blocked-add', normalized);
-    return;
-  }
   if (!tagsLocal.value.includes(normalized)) {
     tagsLocal.value.push(normalized);
   }
@@ -210,6 +205,9 @@ onMounted(() => {
   .tags-modal { min-width: unset; max-height: 90vh; }
 }
 </style>
+
+
+
 
 
 
