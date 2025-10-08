@@ -10,7 +10,7 @@
         <h2>Overview</h2>
         <p>This is a concise reference for the public API.</p>
         <p>
-          Swagger UI: <a href="/api/v1/docs" target="_blank" rel="noopener">/api/v1/docs</a>
+          Swagger UI: <a href="api.stitch.fyi/api/v1/docs" target="_blank">api.stitch.fyi/api/v1/docs</a>
         </p>
         <h2>Work in progress</h2>
         <p>For concepts, see <router-link to="/how/docs">Concepts</router-link>. For bots, see <router-link to="/how/bots">Bots</router-link>.</p>
