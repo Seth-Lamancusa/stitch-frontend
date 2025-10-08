@@ -1325,6 +1325,7 @@ export default {
       deduplicatedRecipients,
       existingTags,
       showTagsModal,
+      handleTagsDone,
       closeTagsModal,
       recipientsExcludingUser,
       authorDisplayName,
@@ -2665,6 +2666,9 @@ export default {
 }
 
 </style>
+
+
+
 
 
 
