@@ -655,7 +655,8 @@ const sendReply = async () => {
       isPrivate: !isPublic.value,
       recipients: recipients.value,
       // Ensure the author is explicitly set to the user's UID (not email)
-      content_author: currentUser.uid
+      content_author: currentUser.uid,
+      tags: replyTags.value
     });
     
     
@@ -2224,5 +2225,7 @@ defineExpose({
   }
 }
 </style> 
+
+
 
 

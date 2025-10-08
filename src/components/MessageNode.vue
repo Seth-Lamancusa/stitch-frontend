@@ -195,9 +195,8 @@
           :is-visible="showTagsModal"
           :is-add-mode="true"
           :existing-tags="existingTags"
-          @blocked-add="handleTagsBlockedAdd"
           @close="closeTagsModal"
-          @done="closeTagsModal"
+          @done="handleTagsDone"
         />
       </teleport>
       
@@ -816,8 +815,18 @@ export default {
       showTagsModal.value = true;
     };
     const closeTagsModal = () => { showTagsModal.value = false; };
-    const handleTagsBlockedAdd = () => {
-      store.commit('ui/SET_ERROR', 'Adding tags to existing messages not implemented yet.');
+    const handleTagsDone = async (newTags) => {
+      try {
+        const id = props.message?.id;
+        if (!id) return closeTagsModal();
+        const tags = Array.isArray(newTags) ? newTags : [];
+        await store.dispatch('messages/updateMessageTags', { id, tags });
+      } catch (e) {
+        console.error('[MessageNode] Failed to update tags', e);
+        store.commit('ui/SET_ERROR', 'Failed to update tags');
+      } finally {
+        closeTagsModal();
+      }
     };
 
     
@@ -1317,7 +1326,6 @@ export default {
       existingTags,
       showTagsModal,
       closeTagsModal,
-      handleTagsBlockedAdd,
       recipientsExcludingUser,
       authorDisplayName,
       authorUserTag,
@@ -2657,6 +2665,10 @@ export default {
 }
 
 </style>
+
+
+
+
 
 
 
