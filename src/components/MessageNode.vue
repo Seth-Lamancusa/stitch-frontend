@@ -68,6 +68,15 @@
             Recipients {{ typeof message.recipients === 'string' ? '' : `(${deduplicatedRecipients.length})` }}
           </button>
           
+          <!-- Tags badge -->
+          <button 
+            @click.stop="openTagsModal"
+            class="tags-toggle"
+            title="Manage tags for this message"
+          >
+            Tags ({{ existingTags.length }})
+          </button>
+          
           <!-- Visibility indicator - always shown; toggles only when allowed -->
           <span 
             @click.stop="canToggleVisibility && toggleVisibility()"
@@ -180,6 +189,18 @@
         </div>
       </div>
       
+      <!-- Tags Modal (teleported to body to avoid local stacking/highlight issues) -->
+      <teleport to="body">
+        <TagsModal
+          :is-visible="showTagsModal"
+          :is-add-mode="true"
+          :existing-tags="existingTags"
+          @blocked-add="handleTagsBlockedAdd"
+          @close="closeTagsModal"
+          @done="closeTagsModal"
+        />
+      </teleport>
+      
       <!-- Desktop sibling navigator - absolutely positioned -->
       <sibling-navigator
         v-if="showSiblingNavDesktop"
@@ -262,6 +283,7 @@ import AdaptiveMarker from './AdaptiveMarker.vue';
 import SiblingNavigator from './SiblingNavigator.vue';
 import FormattedContent from './FormattedContent/index.vue';
 import { initFormatters } from './FormattedContent/init';
+import TagsModal from './modals/TagsModal.vue';
 import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch, toRef } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute } from 'vue-router';
@@ -276,7 +298,8 @@ export default {
   components: {
     AdaptiveMarker,
     SiblingNavigator,
-    FormattedContent
+    FormattedContent,
+    TagsModal
   },
   
   props: {
@@ -780,6 +803,25 @@ export default {
       return true;
     });
     
+    // Tags support
+    const showTagsModal = ref(false);
+    const existingTags = computed(() => {
+      const tags = props.message && Array.isArray(props.message.tags) ? props.message.tags : [];
+      const set = new Set(tags.map(t => String(t || '')));
+      return Array.from(set);
+    });
+    const openTagsModal = () => {
+      // Do NOT clear replying/close reply UI; just open the modal
+      dismissMobileKeyboard();
+      showTagsModal.value = true;
+    };
+    const closeTagsModal = () => { showTagsModal.value = false; };
+    const handleTagsBlockedAdd = () => {
+      store.commit('ui/SET_ERROR', 'Adding tags to existing messages not implemented yet.');
+    };
+
+    
+    
     // New method to handle swipe navigation
     const handleSiblingNavigation = ({ direction, targetSiblingId, parentId }) => {
       // Don't navigate if in selection mode
@@ -1272,11 +1314,16 @@ export default {
       isEndOfBranch,
       hasRecipients,
       deduplicatedRecipients,
+      existingTags,
+      showTagsModal,
+      closeTagsModal,
+      handleTagsBlockedAdd,
       recipientsExcludingUser,
       authorDisplayName,
       authorUserTag,
       showParticipantsLabel,
       participantsDisplay,
+      openTagsModal,
       isUserAuthorOfContent,
       handleSiblingNavigation,
       isCurrentUser,
@@ -1586,6 +1633,28 @@ export default {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Tags toggle (blue tone) */
+.tags-toggle {
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: var(--radius-pill);
+  transition: all var(--transition-fast);
+  margin-left: 0;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(79, 140, 255, 0.12);
+  border: 1px solid rgba(79, 140, 255, 0.45);
+  color: #4F8CFF;
+}
+
+.tags-toggle:hover {
+  background-color: rgba(79, 140, 255, 0.18);
+  border-color: rgba(79, 140, 255, 0.75);
 }
 
 .recipients-toggle:not(.to-you):not(.author-toggle) {
@@ -2588,3 +2657,7 @@ export default {
 }
 
 </style>
+
+
+
+

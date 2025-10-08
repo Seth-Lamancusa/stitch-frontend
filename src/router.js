@@ -23,6 +23,11 @@ const routes = [
     path: '/',
     redirect: '/home'
   },
+  {
+    path: '/search',
+    name: 'search',
+    component: () => import('./views/app_views/SearchView.vue')
+  },
   // Import moved to admin UI; keep no public route
   {
     path: '/reset-password',
