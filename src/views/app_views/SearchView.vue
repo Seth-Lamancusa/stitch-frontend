@@ -19,7 +19,7 @@
       </div>
 
       <MessageList v-if="results.length" mode="custom" :customMessages="results" :hideHeader="true" />
-      <div v-else class="empty-state">Search by content with option filtration by tags.</div>
+      <div v-else class="empty-state">Search by content with filtration by tags.</div>
 
       <TagsModal :is-visible="showTags" :is-add-mode="false" :existing-tags="tags" @close="showTags=false" @done="setTags" />
     </div>
@@ -46,7 +46,7 @@ const removeTag = (i) => { if (i >= 0 && i < tags.value.length) tags.value.splic
 
 const runSearch = async () => {
   try {
-    const resp = await MessageService.search({ q: q.value || null, tags: tags.value, match: match.value, scope: 'public', skip: 0, limit: 15 });
+  const resp = await MessageService.search({ q: q.value || null, tags: tags.value, match: match.value, skip: 0, limit: 15 });
     const data = resp?.data || {};
     results.value = Array.isArray(data.messages) ? data.messages : [];
   } catch (e) {

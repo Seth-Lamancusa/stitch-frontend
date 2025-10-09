@@ -27,6 +27,11 @@ export function useAuthentication() {
   const logout = async () => {
     try {
       console.info('[AUTH] Manual logout requested');
+      try {
+        await axios.post('/api/v1/auth/logout', {}, { withCredentials: true });
+      } catch (e) {
+        // Non-fatal; proceed to clear local state regardless
+      }
       TokenManager.accessToken = null;
       store.commit('auth/SET_USER', null);
       window.location.href = '/history';

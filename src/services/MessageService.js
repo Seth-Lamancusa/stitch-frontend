@@ -57,17 +57,16 @@ export default {
   // Update message tags (full replace)
   async updateTags(id, tags) {
     const headers = getAuthHeaders()
-    return apiClient.patch(`/messages/${id}`, { tags: Array.isArray(tags) ? tags : [] }, { headers })
+    return apiClient.patch(`/messages/${id}/tags`, { tags: Array.isArray(tags) ? tags : [] }, { headers })
   },
 
   // Unified search: content (q) and tags
-  async search({ q = null, tags = [], match = 'any', scope = 'public', skip = 0, limit = 15 } = {}) {
+  async search({ q = null, tags = [], match = 'any', skip = 0, limit = 15 } = {}) {
     const headers = getAuthHeaders()
     const params = new URLSearchParams()
     if (q) params.set('q', q)
     if (Array.isArray(tags) && tags.length > 0) params.set('tags', tags.join(','))
     if (match) params.set('match', match)
-    if (scope) params.set('scope', scope)
     params.set('skip', String(skip))
     params.set('limit', String(limit))
     const url = `/messages/search?${params.toString()}`

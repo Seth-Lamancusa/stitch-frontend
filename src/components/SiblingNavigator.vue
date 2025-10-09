@@ -51,7 +51,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useStore } from 'vuex';
 
 const props = defineProps({
@@ -73,7 +73,7 @@ const emit = defineEmits(['navigate']);
 
 const store = useStore();
 
-// Internal loading state based on parent existence
+// Internal loading state based on parent existence (original behavior)
 const isParentLoading = computed(() => {
   // If parent ID doesn't exist or message doesn't exist, we're not loading
   if (!props.parentId) return false;
@@ -93,6 +93,32 @@ const isSiblingLoading = computed(() => {
 // Combined loading state
 const isLoading = computed(() => {
   return isParentLoading.value || isSiblingLoading.value;
+});
+
+// Debug logging to trace flicker root cause
+const parentRef = computed(() => store.getters['messages/getMessage'](props.parentId));
+watch(parentRef, (newVal, oldVal) => {
+  console.debug('[SiblingNavigator] parent change', {
+    parentId: props.parentId,
+    hadParent: !!oldVal,
+    hasParent: !!newVal,
+    childIds: Array.isArray(newVal?.child_ids) ? [...newVal.child_ids] : null
+  });
+});
+
+watch(isSiblingLoading, (v) => {
+  console.debug('[SiblingNavigator] sibling loading changed', {
+    parentId: props.parentId,
+    key: `sibling_${props.parentId}`,
+    isSiblingLoading: v
+  });
+});
+
+watch(isParentLoading, (v) => {
+  console.debug('[SiblingNavigator] parent loading changed', {
+    parentId: props.parentId,
+    isParentLoading: v
+  });
 });
 
 // Get message siblings from the store

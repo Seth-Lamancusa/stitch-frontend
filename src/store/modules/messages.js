@@ -70,16 +70,11 @@ export default {
   
   mutations: {
     SET_MESSAGE(state, message) {
-      
-      // Ensure child_ids is always an array
-      if (!message.child_ids) {
+      // Normalize light payloads but avoid clobbering existing structure
+      if (!Array.isArray(message.child_ids)) {
         message.child_ids = [];
       }
-      // Ensure tags is always an array
-      if (!Array.isArray(message.tags)) {
-        message.tags = [];
-      }
-      
+
       // Check if message already exists in store - if so, merge it
       const existingMessage = state.messages[message.id];
       if (existingMessage) {
@@ -93,11 +88,29 @@ export default {
           mergedChildIds = [...new Set([...existingMessage.child_ids, ...message.child_ids])];
         }
 
+        // Preserve structural fields if missing on payload
+        const nextRecipients = Array.isArray(message.recipients)
+          ? message.recipients
+          : (existingMessage.recipients || []);
+        const nextTags = Array.isArray(message.tags)
+          ? message.tags
+          : (existingMessage.tags || []);
+        const nextParentId = (message.parent_id !== undefined && message.parent_id !== null)
+          ? message.parent_id
+          : existingMessage.parent_id;
+        const nextTimestamp = (message.timestamp !== undefined)
+          ? message.timestamp
+          : existingMessage.timestamp;
+
         // Create the merged message
         const mergedMessage = {
           ...existingMessage, // Start with existing message properties
           ...message,         // Override with new message properties
-          child_ids: mergedChildIds // Use combined child_ids
+          child_ids: mergedChildIds, // Use combined child_ids
+          recipients: nextRecipients,
+          tags: nextTags,
+          parent_id: nextParentId,
+          timestamp: nextTimestamp,
         };
         
         // Default branch_child to last child if there are children and no previous selection (most recent)
