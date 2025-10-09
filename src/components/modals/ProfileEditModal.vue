@@ -619,6 +619,8 @@ const verifyEndpointFlow = async () => {
     // Step 2: attempt verification by echo
     await verifyEndpointWithChallenge({ endpoint: endpoint.value.trim() });
     endpointVerificationMessage.value = 'Endpoint verified';
+    // Auto-enable notify on successful verification
+    notifyPrefs.value.endpoint = true;
   } catch (e) {
     endpointVerificationMessage.value = e.message || 'Failed to verify endpoint';
   } finally {
@@ -815,8 +817,8 @@ const deleteAccount = async () => {
                   @keydown="handleKeydown"
                 />
                 <div class="notify-group">
-                  <label class="notify-toggle" :class="{ disabled: !isEndpointVerified || !isEmailVerified }">
-                    <input type="checkbox" v-model="notifyPrefs.endpoint" :disabled="!isEndpointVerified || !isEmailVerified" /><span class="notify-text">Notify</span>
+                  <label class="notify-toggle" :class="{ disabled: !isEndpointVerified || (!isEmailVerified && !isManaged) }">
+                    <input type="checkbox" v-model="notifyPrefs.endpoint" :disabled="!isEndpointVerified || (!isEmailVerified && !isManaged)" /><span class="notify-text">Notify</span>
                   </label>
                   <span v-if="isEndpointVerified" class="status-badge ok">Verified</span>
                 </div>
