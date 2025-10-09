@@ -28,6 +28,7 @@ const secretError = ref('');
 const generatedSecret = ref('');
 const hasJustRevealedSecret = ref(false);
 
+const isEmailVerified = computed(() => !!(user.value?.is_email_verified));
 const isEndpointVerified = computed(() => !!((user.value?.contacts || []).some(c => c.type === 'endpoint' && c.verified)));
 const hasSavedEndpoint = computed(() => !!((user.value?.contacts || []).find(c => c.type === 'endpoint')?.value));
 const hasEndpointSigningSecret = computed(() => !!(user.value?.has_endpoint_signing_secret));
@@ -183,6 +184,13 @@ async function setOrRotateSigningSecret() {
           <h3>API Keys</h3>
           <button class="close-button" @click="emit('close')">×</button>
         </div>
+        
+        <!-- Unverified email banner -->
+        <div v-if="user && !isEmailVerified" class="verify-banner">
+          <span>Verify your email to unlock messaging & notifications.</span>
+          <a class="verify-link" href="#" @click.prevent="emit('close')">Verify now</a>
+        </div>
+
         <div class="modal-content">
           <div v-if="errorMessage" class="error">{{ errorMessage }}</div>
           <div class="create-box">
@@ -316,7 +324,37 @@ async function setOrRotateSigningSecret() {
 .button-group{ display:flex; gap:var(--space-md); margin-left:auto; }
 .cancel-btn{ background-color: transparent; color: var(--color-text); padding: var(--space-xs) var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-size: var(--font-size-sm); font-weight: 500; }
 
+/* Verify banner */
+.verify-banner {
+  background: rgba(255, 193, 7, 0.12);
+  color: var(--color-text);
+  border: 1px solid rgba(255, 193, 7, 0.35);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 0 var(--space-lg) 0 var(--space-lg);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.verify-link {
+  color: var(--color-primary, #4f8cff);
+  text-decoration: none;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.verify-link:hover { text-decoration: underline; }
+
 @media (max-width: 600px){
+  .verify-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px 10px;
+    margin: 0 var(--space-md) 0 var(--space-md);
+  }
+  .verify-link {
+    align-self: flex-start;
+  }
   .create-grid{ grid-template-columns: 1fr; }
   .endpoint-control{ flex-direction: column; align-items: stretch; }
   .endpoint-verify{ flex-direction: column; align-items: flex-start; }
