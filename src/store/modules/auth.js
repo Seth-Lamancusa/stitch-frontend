@@ -31,7 +31,8 @@ function mapApiUserToAuthState(userData) {
     is_email_verified: isEmailVerified,
     is_phone_verified: isPhoneVerified,
     has_endpoint_signing_secret: !!data.has_endpoint_signing_secret,
-    is_managed: !!data.is_managed
+    is_managed: !!data.is_managed,
+    private: !!data.private
   };
 }
 

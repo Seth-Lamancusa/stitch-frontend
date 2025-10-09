@@ -603,9 +603,9 @@ const toggleTextareaExpansion = () => {
 const sendReply = async () => {
   if (!canSendReply.value) return;
   
-  // Make sure we have a user and email
+  // Make sure we have a user (and email for non-managed users)
   const currentUser = store.getters['auth/user'];
-  if (!currentUser || !currentUser.email) {
+  if (!currentUser || (!currentUser.email && !currentUser.is_managed)) {
     store.commit('ui/SET_ERROR', 'You need to be logged in to send messages.');
     return;
   }

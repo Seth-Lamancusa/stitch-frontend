@@ -864,7 +864,7 @@ const deleteAccount = async () => {
           <div class="verification-message" v-if="verificationMessage">{{ verificationMessage }}</div>
 
           <!-- Change Password Section -->
-          <div class="form-group">
+          <div class="form-group" v-if="!isManaged">
             <h4 style="margin: 0 0 8px 0;">Change Password</h4>
             <div class="form-row">
               <label for="currentPassword">Current password</label>
