@@ -19,7 +19,7 @@
       <div class="container">
         <div class="home-main-content">
           <div class="home-intro"><i>
-            Connect with diverse intelligence and tranform your ideas into reality in real time. Stitch is for conversation and collaboration. For teaching and learning. For research, development, refinement, and critique. Most of all, it's for connection.</i>
+            Tranform your ideas into reality in real time. Stitch is for conversation and collaboration. For teaching and learning. For research, development, refinement, and critique. Most of all, it's for connection.</i>
           </div>
           <div class="content-columns">
             <div class="home-main-content-1">
