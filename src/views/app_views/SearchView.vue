@@ -57,12 +57,23 @@ const runSearch = async () => {
 </script>
 
 <style scoped>
-.search-view { padding: 8px; }
+.search-view { 
+  padding: 8px; 
+  max-width: 60%; 
+  margin: 0 auto; 
+}
+
+@media (max-width: 768px) {
+  .search-view {
+    max-width: 100%;
+    padding: 8px 4px;
+  }
+}
+
 .search-controls { margin-bottom: 8px; }
 .query-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .query-input { flex: 1; min-width: 180px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-text); }
 .tags-btn, .search-btn, .match-select { padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-text); cursor: pointer; }
-.search-view { max-width: 60%; margin: 0 auto; }
 .tags-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .tag-chip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 6px; font-size: var(--font-size-xs); background: var(--color-surface); color: var(--color-text); }
 .remove-tag { background: none; border: none; color: var(--color-text-secondary); cursor: pointer; font-size: 14px; }

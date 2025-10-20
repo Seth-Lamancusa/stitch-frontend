@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch, computed } from 'vue';
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { useStore } from 'vuex';
 import { useAuthentication } from '@/composables/useAuthentication';
 import ApiKeysService from '@/services/ApiKeysService';
@@ -27,6 +27,22 @@ const secretBusy = ref(false);
 const secretError = ref('');
 const generatedSecret = ref('');
 const hasJustRevealedSecret = ref(false);
+
+// Mobile detection (600px breakpoint)
+const isMobile = ref(window.innerWidth <= 600);
+
+const handleResize = () => {
+  isMobile.value = window.innerWidth <= 600;
+};
+
+onMounted(() => {
+  window.addEventListener('resize', handleResize);
+  if (props.isOpen) { loadKeys(); resetDevForm(); }
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize);
+});
 
 const isEmailVerified = computed(() => !!(user.value?.is_email_verified));
 const isEndpointVerified = computed(() => !!((user.value?.contacts || []).some(c => c.type === 'endpoint' && c.verified)));
@@ -88,8 +104,6 @@ async function revoke(credId) {
     loading.value = false;
   }
 }
-
-onMounted(() => { if (props.isOpen) { loadKeys(); resetDevForm(); } });
 
 watch(() => props.isOpen, (open) => {
   if (open) { loadKeys(); resetDevForm(); }
@@ -181,97 +195,115 @@ async function setOrRotateSigningSecret() {
     <div v-if="isOpen" class="modal-overlay" @click.self="emit('close')">
       <div class="modal-container">
         <div class="modal-header">
-          <h3>API Keys</h3>
+          <h3>Dev</h3>
           <button class="close-button" @click="emit('close')">×</button>
         </div>
         
-        <!-- Unverified email banner -->
-        <div v-if="user && !isEmailVerified" class="verify-banner">
-          <span>Verify your email to unlock messaging & notifications.</span>
-          <a class="verify-link" href="#" @click.prevent="emit('close')">Verify now</a>
-        </div>
-
-        <div class="modal-content">
-          <div v-if="errorMessage" class="error">{{ errorMessage }}</div>
-          <div class="create-box">
-            <div class="row header small">Create New Key</div>
-            <div class="create-grid">
-              <label>Label</label>
-              <input placeholder="Optional label" v-model="newKeyLabel" />
-              <label>Scopes cap</label>
-              <input placeholder="e.g. msg.read msg.write" v-model="newKeyScopes" />
-              <div></div>
-              <div class="actions">
-                <button class="primary" :disabled="creating" @click="createKey">{{ creating ? 'Creating…' : 'Create Key' }}</button>
-              </div>
-            </div>
-            <div v-if="createdKeyToken" class="new-key-warning">
-              <div class="note">Copy your new API key now. It will not be shown again.</div>
-              <div class="mono token">{{ createdKeyToken }}</div>
+        <!-- Mobile warning -->
+        <div v-if="isMobile" class="mobile-warning-container">
+          <div class="mobile-warning">
+            <div class="mobile-warning-content">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                <line x1="12" y1="18" x2="12.01" y2="18"></line>
+              </svg>
+              <h4>Desktop Required</h4>
+              <p>Developer tools require a larger screen. Please access this section from a desktop or tablet device.</p>
             </div>
           </div>
+        </div>
 
-          <div class="create-box">
-            <div class="row header small">Webhook Endpoint</div>
-            <div class="create-grid">
-              <label for="endpointUrl">Endpoint URL</label>
-              <div class="endpoint-control">
-                <input id="endpointUrl" placeholder="https://bot.example.com/hook" v-model="endpoint" />
-                <span v-if="isEndpointVerified" class="status-badge ok">Verified</span>
-                <button class="secondary" @click="saveEndpoint">Save</button>
-              </div>
+        <!-- Desktop content -->
+        <div v-else>
+          <!-- Unverified email banner -->
+          <div v-if="user && !isEmailVerified" class="verify-banner">
+            <span>Verify your email to unlock messaging & notifications.</span>
+            <a class="verify-link" href="#" @click.prevent="emit('close')">Verify now</a>
+          </div>
 
-              <label>Verification</label>
-              <div class="endpoint-verify">
-                <button class="secondary" @click="verifyEndpointFlow" :disabled="verifyingEndpoint || !endpoint">{{ verifyingEndpoint ? 'Verifying…' : 'Verify' }}</button>
-                <span class="verify-tip">We POST a nonce to your endpoint; it must echo it back as JSON {nonce:"..."} or plaintext.</span>
-              </div>
-              <div class="verification-message" v-if="endpointVerificationMessage">{{ endpointVerificationMessage }}</div>
-
-              <label>Signing Secret</label>
-              <div class="endpoint-secret">
-                <button class="primary" @click="setOrRotateSigningSecret" :disabled="secretBusy || !isEndpointVerified">
-                  <span v-if="secretBusy" class="spinner small"></span>
-                  {{ secretBusy ? 'Saving…' : (hasSavedEndpoint ? 'Rotate Secret' : 'Create Secret') }}
-                </button>
-                <span v-if="hasEndpointSigningSecret" class="verified-badge" title="Signing secret exists">✓</span>
-                <span class="field-hint" v-if="!isEndpointVerified">Verify endpoint to enable</span>
-              </div>
-
-              <div v-if="hasJustRevealedSecret" class="reveal-once">
-                <div class="note">Copy your secret now (shown once):</div>
-                <div class="reveal-actions">
-                  <button class="secondary" @click="copyRevealedSecret">Copy</button>
-                  <button class="secondary" @click="dismissRevealedSecret">Dismiss</button>
+          <div class="modal-content">
+            <div v-if="errorMessage" class="error">{{ errorMessage }}</div>
+            <div class="create-box">
+              <div class="row header small">Create New Key</div>
+              <div class="create-grid">
+                <label>Label</label>
+                <input placeholder="Optional label" v-model="newKeyLabel" />
+                <label>Scopes cap</label>
+                <input placeholder="e.g. msg.read msg.write" v-model="newKeyScopes" />
+                <div></div>
+                <div class="actions">
+                  <button class="primary" :disabled="creating" @click="createKey">{{ creating ? 'Creating…' : 'Create Key' }}</button>
                 </div>
-                <input readonly :value="generatedSecret" class="mono" />
-                <div class="field-hint">This value is write-only and cannot be viewed again after dismissal.</div>
-                <div class="field-hint">Requests will include headers X-Stitch-Timestamp and X-Stitch-Signature.</div>
-                <div class="error" v-if="secretError">{{ secretError }}</div>
+              </div>
+              <div v-if="createdKeyToken" class="new-key-warning">
+                <div class="note">Copy your new API key now. It will not be shown again.</div>
+                <div class="mono token">{{ createdKeyToken }}</div>
               </div>
             </div>
-          </div>
-          <div class="table">
-            <div class="row header">
-              <div>Label</div>
-              <div>Scopes</div>
-              <div>Created</div>
-              <div>Last used</div>
-              <div></div>
+
+            <div class="create-box">
+              <div class="row header small">Webhook Endpoint</div>
+              <div class="create-grid">
+                <label for="endpointUrl">Endpoint URL</label>
+                <div class="endpoint-control">
+                  <input id="endpointUrl" placeholder="https://bot.example.com/hook" v-model="endpoint" />
+                  <span v-if="isEndpointVerified" class="status-badge ok">Verified</span>
+                  <button class="secondary" @click="saveEndpoint">Save</button>
+                </div>
+
+                <label>Verification</label>
+                <div class="endpoint-verify">
+                  <button class="secondary" @click="verifyEndpointFlow" :disabled="verifyingEndpoint || !endpoint">{{ verifyingEndpoint ? 'Verifying…' : 'Verify' }}</button>
+                  <span class="verify-tip">We POST a nonce to your endpoint; it must echo it back as JSON {nonce:"..."} or plaintext.</span>
+                </div>
+                <div class="verification-message" v-if="endpointVerificationMessage">{{ endpointVerificationMessage }}</div>
+
+                <label>Signing Secret</label>
+                <div class="endpoint-secret">
+                  <button class="primary" @click="setOrRotateSigningSecret" :disabled="secretBusy || !isEndpointVerified">
+                    <span v-if="secretBusy" class="spinner small"></span>
+                    {{ secretBusy ? 'Saving…' : (hasSavedEndpoint ? 'Rotate Secret' : 'Create Secret') }}
+                  </button>
+                  <span v-if="hasEndpointSigningSecret" class="verified-badge" title="Signing secret exists">✓</span>
+                  <span class="field-hint" v-if="!isEndpointVerified">Verify endpoint to enable</span>
+                </div>
+
+                <div v-if="hasJustRevealedSecret" class="reveal-once">
+                  <div class="note">Copy your secret now (shown once):</div>
+                  <div class="reveal-actions">
+                    <button class="secondary" @click="copyRevealedSecret">Copy</button>
+                    <button class="secondary" @click="dismissRevealedSecret">Dismiss</button>
+                  </div>
+                  <input readonly :value="generatedSecret" class="mono" />
+                  <div class="field-hint">This value is write-only and cannot be viewed again after dismissal.</div>
+                  <div class="field-hint">Requests will include headers X-Stitch-Timestamp and X-Stitch-Signature.</div>
+                  <div class="error" v-if="secretError">{{ secretError }}</div>
+                </div>
+              </div>
             </div>
-            <div v-if="loading" class="row"><div>Loading…</div></div>
-            <div v-else-if="!keys.length" class="row"><div>No active keys</div></div>
-            <div v-else v-for="k in keys" :key="k.cred_id" class="row">
-              <div>{{ k.label || '—' }}</div>
-              <div class="mono">{{ k.scopes_cap || '—' }}</div>
-              <div class="mono">{{ k.created_at?.slice(0,19).replace('T',' ') }}</div>
-              <div class="mono">{{ k.last_used_at ? k.last_used_at.slice(0,19).replace('T',' ') : '—' }}</div>
-              <div class="actions">
-                <button class="danger" :disabled="loading" @click="revoke(k.cred_id)">Revoke</button>
+            <div class="table">
+              <div class="row header">
+                <div>Label</div>
+                <div>Scopes</div>
+                <div>Created</div>
+                <div>Last used</div>
+                <div></div>
+              </div>
+              <div v-if="loading" class="row"><div>Loading…</div></div>
+              <div v-else-if="!keys.length" class="row"><div>No active keys</div></div>
+              <div v-else v-for="k in keys" :key="k.cred_id" class="row">
+                <div>{{ k.label || '—' }}</div>
+                <div class="mono">{{ k.scopes_cap || '—' }}</div>
+                <div class="mono">{{ k.created_at?.slice(0,19).replace('T',' ') }}</div>
+                <div class="mono">{{ k.last_used_at ? k.last_used_at.slice(0,19).replace('T',' ') : '—' }}</div>
+                <div class="actions">
+                  <button class="danger" :disabled="loading" @click="revoke(k.cred_id)">Revoke</button>
+                </div>
               </div>
             </div>
           </div>
         </div>
+
         <div class="modal-footer">
           <div class="button-group">
             <button class="cancel-btn" @click="emit('close')">Close</button>
@@ -324,6 +356,40 @@ async function setOrRotateSigningSecret() {
 .button-group{ display:flex; gap:var(--space-md); margin-left:auto; }
 .cancel-btn{ background-color: transparent; color: var(--color-text); padding: var(--space-xs) var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-size: var(--font-size-sm); font-weight: 500; }
 
+/* Mobile warning */
+.mobile-warning-container {
+  overflow-y: auto;
+  flex: 1;
+}
+.mobile-warning {
+  padding: var(--space-xl) var(--space-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+}
+.mobile-warning-content {
+  text-align: center;
+  max-width: 400px;
+  color: var(--color-text);
+}
+.mobile-warning-content svg {
+  margin: 0 auto 16px;
+  opacity: 0.5;
+}
+.mobile-warning-content h4 {
+  margin: 0 0 12px;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text);
+}
+.mobile-warning-content p {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
 /* Verify banner */
 .verify-banner {
   background: rgba(255, 193, 7, 0.12);
@@ -361,5 +427,6 @@ async function setOrRotateSigningSecret() {
   .endpoint-secret{ flex-direction: column; align-items: flex-start; }
 }
 </style>
+
 
 

@@ -4,6 +4,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import ThreadView from './views/app_views/ThreadView.vue';
 import NewThreadView from './views/app_views/NewThreadView.vue';
 import GraphView from './views/app_views/GraphView.vue';
+import SearchView from './views/app_views/SearchView.vue';
 import HomeView from './views/info_views/HomeView.vue';
 import ArchitectureView from './views/info_views/ArchitectureView.vue';
 import TermsView from './views/info_views/TermsView.vue';
@@ -26,7 +27,7 @@ const routes = [
   {
     path: '/search',
     name: 'search',
-    component: () => import('./views/app_views/SearchView.vue')
+    component: SearchView
   },
   // Import moved to admin UI; keep no public route
   {
