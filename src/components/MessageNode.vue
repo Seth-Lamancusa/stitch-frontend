@@ -125,7 +125,8 @@
         <div v-else class="plaintext-content">{{ truncatedContent }}</div>
       </div>
       
-      <div class="message-footer">
+      <!-- Message footer - hidden in list view -->
+      <div v-if="!inListView" class="message-footer">
         <div class="reply-count">{{ message.child_ids?.length || 0 }} 💬</div>
         
         <!-- Unified message actions - desktop layout -->
@@ -1034,15 +1035,9 @@ export default {
           processedContent = stripMarkdown(content);
         }
         
-        // Remove newlines and extra spaces
-        const contentWithoutNewlines = processedContent.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
-        
-        // Truncate to 200 characters with ellipsis if needed
-        if (contentWithoutNewlines.length > 200) {
-          return contentWithoutNewlines.substring(0, 200) + '...';
-        }
-        
-        return contentWithoutNewlines;
+        // For preview mode, return the full processed content
+        // Visual truncation is handled by CSS line-clamp
+        return processedContent;
       })(props.message.content);
     });
     
@@ -1107,11 +1102,6 @@ export default {
     // Check if device is mobile
     const checkMobileDevice = () => {
       const nextIsMobile = window.innerWidth <= 768;
-      if (isMobile.value !== nextIsMobile) {
-        try {
-          console.log('[MessageNode] isMobile changed', { messageId: props.message.id, prev: isMobile.value, next: nextIsMobile, innerWidth: window.innerWidth });
-        } catch (e) {}
-      }
       isMobile.value = nextIsMobile;
     };
     
@@ -1241,17 +1231,6 @@ export default {
 
     const showSiblingNavDesktop = computed(() => {
       const val = !props.inListView && !!props.message.parent_id && !isMobile.value;
-      try {
-        console.log('[MessageNode] showSiblingNavDesktop computed', {
-          messageId: props.message.id,
-          value: val,
-          inListView: props.inListView,
-          parentId: props.message.parent_id,
-          isMobile: isMobile.value,
-          hasSiblings: hasSiblings.value,
-          isSelectionMode: isSelectionMode.value
-        });
-      } catch (e) {}
       return val;
     });
 
@@ -1431,6 +1410,16 @@ export default {
   margin-right: auto;
   transition: transform var(--transition-fast), box-shadow var(--transition-normal);
   justify-content: stretch !important;
+}
+
+/* List view: truncate plaintext content to 3 visual lines using line-clamp */
+.message-node.list-view .plaintext-content {
+  display: -webkit-box;
+  -webkit-line-clamp: 3; /* Show max 3 rendered lines */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.5; /* Consistent line height for predictable truncation */
 }
 
 /* Only show pointer cursor in list view when not in selection mode */

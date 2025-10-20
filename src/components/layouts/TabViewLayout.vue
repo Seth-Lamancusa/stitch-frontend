@@ -1,15 +1,14 @@
 <template>
   <div class="app-layout">
     <div class="app-header">
-      <div class="header-left">
-        <div class="branding">
-          <router-link to="/home" class="logo-link" @click.prevent="onLogoClick">
-            <span class="logo-text">Stitch</span>
-          </router-link>
-        </div>
-        
-        <!-- Navigation Tabs (public only) -->
-        <div class="navigation-tabs" role="tablist" aria-label="Main tabs">
+      <div class="branding">
+        <router-link to="/home" class="logo-link" @click.prevent="onLogoClick">
+          <span class="logo-text">Stitch</span>
+        </router-link>
+      </div>
+      
+      <!-- Navigation Tabs - desktop only -->
+      <div class="navigation-tabs" role="tablist" aria-label="Main tabs">
           <router-link 
             to="/search" 
             class="nav-tab"
@@ -65,7 +64,6 @@
             <span class="tab-label">Public</span>
           </router-link>
         </div>
-      </div>
       
       <div class="user-controls">
         <div class="user-info" v-if="user">
@@ -182,7 +180,7 @@
       :isOpen="isProfileModalOpen" 
       @close="closeProfileModal" 
     />
-    <ApiKeysModal 
+    <DevModal 
       :isOpen="isApiKeysModalOpen" 
       @close="closeApiKeysModal" 
     />
@@ -191,6 +189,9 @@
       @close="closeCreateManagedModal" 
     />
     <GlobalNotifications />
+    
+    <!-- Mobile tab bar - only visible on mobile -->
+    <MobileTabBar />
   </div>
 </template>
 
@@ -202,9 +203,10 @@ import { useAuthentication } from '../../composables/useAuthentication';
 import LoginButton from '@/components/buttons/LoginButton.vue'
 import RegisterButton from '@/components/buttons/RegisterButton.vue'
 import ProfileEditModal from '../modals/ProfileEditModal.vue';
-import ApiKeysModal from '../modals/ApiKeysModal.vue';
+import DevModal from '../modals/DevModal.vue';
 import ManagedUserCreateModal from '../modals/ManagedUserCreateModal.vue';
 import GlobalNotifications from '../GlobalNotifications.vue';
+import MobileTabBar from './MobileTabBar.vue';
 import { ADMIN_ORIGIN } from '@/config/appConfig.js';
 
 const router = useRouter();
@@ -468,19 +470,13 @@ const onLogoClick = (event) => {
   top: 0;
   z-index: 100;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
   gap: var(--space-lg, 24px);
-  flex-shrink: 0;
-  min-width: 0; /* Allow tabs to scroll instead of shrinking */
 }
 
 .branding {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .logo-link {
@@ -506,6 +502,14 @@ const onLogoClick = (event) => {
   overflow-x: auto; /* Scroll if tabs overflow */
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none; /* Hide by default (Firefox) */
+  flex: 1;
+}
+
+/* Hide navigation tabs on mobile - shown in footer instead */
+@media (max-width: 768px) {
+  .navigation-tabs {
+    display: none;
+  }
 }
 
 /* Hide scrollbar by default in WebKit; reveal on interaction */
@@ -847,7 +851,18 @@ const onLogoClick = (event) => {
 .main-content {
   padding: 6px;
   overflow-y: auto;
+  overflow-x: hidden; /* Prevent horizontal overflow */
   height: 100%;
+  width: 100%;
+  max-width: 100vw;
+  box-sizing: border-box; /* Include padding in width calculation */
+}
+
+/* Add bottom padding on mobile to account for mobile tab bar */
+@media (max-width: 768px) {
+  .main-content {
+    padding-bottom: 70px; /* Height of mobile tab bar + some spacing */
+  }
 }
 
 .feedback-button-container {
@@ -914,50 +929,10 @@ const onLogoClick = (event) => {
   }
   .app-header {
     padding: 0 12px; /* Reduce header padding */
-    flex-wrap: nowrap; /* Prevent wrapping */
-  }
-  
-  .header-left {
-    gap: var(--space-md, 16px); /* Reduce gap */
-    min-width: 0; /* Allow shrinking */
-    flex: 1; /* Take available space */
   }
   
   .logo-text {
     font-size: 1.2rem; /* Smaller logo */
-  }
-  
-  .navigation-tabs {
-    gap: var(--space-xs, 8px); /* Reduce tab gaps */
-    overflow-x: auto; /* Allow horizontal scroll if needed */
-    flex-shrink: 1; /* Allow shrinking */
-    min-width: 0;
-    flex-wrap: nowrap; /* Prevent wrapping; enable horizontal scroll */
-    white-space: nowrap; /* Keep tabs on one line */
-    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
-    scrollbar-width: none; /* Hidden until interaction */
-  }
-  
-  .nav-tab {
-    padding: var(--space-xs, 6px) var(--space-sm, 10px); /* Smaller tab padding */
-    font-size: calc(var(--font-size-xs) - 1px); /* Smaller font */
-    white-space: nowrap; /* Prevent text wrapping */
-    flex-shrink: 0; /* Don't shrink tabs */
-  }
-  .tab-emoji { font-size: 14px; }
-  .tab-label { display: none; }
-  
-  .unread-inline-badge {
-    height: 14px;
-    font-size: 9px;
-    min-width: 14px;
-    padding: 0 4px;
-    margin-left: 4px;
-  }
-  
-  .loading-spinner {
-    width: 8px;
-    height: 8px;
   }
   
   .user-controls {
@@ -1025,52 +1000,8 @@ const onLogoClick = (event) => {
     min-height: 56px; /* Ensure minimum height */
   }
   
-  .header-left {
-    gap: var(--space-sm, 12px); /* Further reduce gap */
-    overflow: hidden; /* Hide overflow */
-  }
-  
   .logo-text {
     font-size: 1rem; /* Even smaller logo */
-  }
-  
-  .navigation-tabs {
-    gap: 4px; /* Minimal gap between tabs */
-    flex-shrink: 1;
-    min-width: 0;
-    width: 60%;
-    overflow-x: auto; /* Allow horizontal scroll */
-    flex-wrap: nowrap; /* Do not wrap on narrow screens */
-    white-space: nowrap; /* Keep on one line */
-    scrollbar-width: none; /* Hide until interaction */
-    -ms-overflow-style: none; /* Hide in IE/Edge until scroll */
-  }
-  
-  .navigation-tabs:hover::-webkit-scrollbar,
-  .navigation-tabs:focus-within::-webkit-scrollbar,
-  .navigation-tabs:active::-webkit-scrollbar {
-    height: 6px; /* Show scrollbar only on interaction */
-  }
-  
-  .nav-tab {
-    padding: 4px 6px; /* Minimal tab padding */
-    font-size: calc(var(--font-size-xs) - 2px); /* Very small font */
-    min-width: fit-content; /* Only take needed space */
-  }
-  .tab-emoji { font-size: 14px; }
-  .tab-label { display: none; }
-  
-  .unread-inline-badge {
-    height: 12px;
-    font-size: 8px;
-    min-width: 12px;
-    padding: 0 3px;
-    margin-left: 3px;
-  }
-  
-  .loading-spinner {
-    width: 7px;
-    height: 7px;
   }
   
   .user-controls {
@@ -1117,86 +1048,90 @@ const onLogoClick = (event) => {
   }
 }
 
-/* Stack layout vertically on ultra-narrow screens */
+/* Simplified layout on ultra-narrow screens */
 @media (max-width: 330px) {
   .app-header {
-    flex-direction: column; /* Stack everything vertically */
     padding: 8px;
-    height: auto; /* Allow height to expand */
-    min-height: 56px;
-    align-items: stretch; /* Full width for all elements */
-  }
-  
-  .header-left {
-    justify-content: space-between; /* Logo on left, user controls on right */
-    margin-bottom: 8px; /* Space between rows */
-    flex: none; /* Don't grow */
   }
   
   .branding {
     flex-shrink: 0; /* Never shrink logo */
   }
   
-  .navigation-tabs {
-    order: 2; /* Put navigation on second row */
-    justify-content: flex-start; /* Left-align tabs */
-    flex-wrap: nowrap; /* Keep one line and scroll */
-    gap: 8px; /* Restore normal gaps */
-    margin-top: 4px; /* Small space from user controls */
-    overflow-x: auto; /* Allow horizontal scroll */
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-  }
-  .navigation-tabs::-webkit-scrollbar { height: 6px; }
-  
   .user-controls {
-    order: 1; /* Keep with logo on first row */
-    margin-left: 0; /* Reset margin */
     flex-shrink: 0; /* Never shrink */
   }
   
   .user-tag {
-    display: none; /* Still hide user tag for space */
+    display: none; /* Hide user tag for space */
   }
   
   .username {
-    max-width: 60px; /* Bit more space since we have vertical room */
+    max-width: 60px;
   }
   
   .logout-btn, .login-btn, .dev-btn {
-    min-width: 0; /* Remove enforced minimum width */
+    min-width: 0;
     padding: 4px 8px;
-    font-size: calc(var(--font-size-xs)); /* Slightly larger font */
-  }
-  
-  .nav-tab {
-    padding: 6px 10px; /* Better padding with vertical layout */
-    font-size: calc(var(--font-size-xs)); /* Restore normal size */
-    min-width: fit-content;
-  }
-  .tab-emoji { font-size: 16px; }
-  .tab-label { display: none; }
-  
-  .unread-inline-badge {
-    height: 15px;
-    font-size: 9px;
-    min-width: 15px;
-    padding: 0 5px;
-    margin-left: 5px;
-  }
-  
-  .loading-spinner {
-    width: 9px;
-    height: 9px;
+    font-size: calc(var(--font-size-xs));
   }
   
   .feedback-button-container {
-    padding: 8px 6px; /* Better padding with vertical layout */
+    padding: 8px 6px;
   }
   
   .feedback-button {
-    font-size: 0.85rem; /* Good size for vertical layout */
-    padding: 8px 14px; /* Comfortable padding */
+    font-size: 0.85rem;
+    padding: 8px 14px;
+  }
+}
+</style>
+
+<style>
+/* Non-scoped global styles for mobile tab bar - ensures it works on all routes */
+@media (max-width: 768px) {
+  .mobile-tab-bar {
+    display: flex !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    background: #000 !important;
+    border-top: 1px solid #2a2a2a !important;
+    padding: 8px 0 !important;
+    z-index: 100 !important;
+    justify-content: space-around !important;
+    align-items: center !important;
+    width: 100% !important;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3) !important;
+  }
+  
+  .mobile-tab-bar .mobile-tab {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-decoration: none !important;
+    color: #aaa !important;
+    padding: 4px 8px !important;
+    flex: 1 !important;
+    max-width: 80px !important;
+    gap: 2px !important;
+  }
+  
+  .mobile-tab-bar .mobile-tab.active {
+    background-color: #4f8cff !important;
+    color: #fff !important;
+    border-radius: 4px !important;
+  }
+  
+  .mobile-tab-bar .tab-emoji {
+    font-size: 20px !important;
+    line-height: 1 !important;
+  }
+  
+  .mobile-tab-bar .tab-label {
+    font-size: 10px !important;
+    font-weight: 500 !important;
   }
 }
 </style> 

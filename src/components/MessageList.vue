@@ -477,8 +477,6 @@ onUnmounted(() => {
   
   // Clear any open action bars when MessageList is unmounted
   store.dispatch('navigation/closeActiveActionBar');
-  
-  
 });
 
 // Add computed properties for delete confirmation modal
@@ -817,6 +815,10 @@ const handleLinkDelete = async (linkData) => {
   flex: 1;
   gap: var(--space-md);
   overflow-y: auto;
+  overflow-x: hidden; /* Prevent horizontal overflow */
+  width: 100%; /* Ensure it respects parent width */
+  max-width: 100vw; /* Never exceed viewport width */
+  box-sizing: border-box; /* Include padding in width calculation */
 }
 
 .login-message {
@@ -861,9 +863,13 @@ const handleLinkDelete = async (linkData) => {
 .messages-container {
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: var(--space-sm); /* Reduced from space-md for tighter spacing in list view */
   /* Center items horizontally so previews are centered within the layout */
   align-items: center;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden; /* Prevent horizontal scroll */
 }
 
 .message-list-item {
@@ -878,6 +884,8 @@ const handleLinkDelete = async (linkData) => {
   cursor: pointer;
   position: relative;
   transition: transform var(--transition-fast), opacity var(--transition-fast);
+  box-sizing: border-box; /* Include padding in width calculation */
+  overflow-x: hidden; /* Prevent content from overflowing */
 }
 
 .message-list-item.selectable {
@@ -1196,24 +1204,30 @@ const handleLinkDelete = async (linkData) => {
   
   /* Additional mobile responsive fixes */
   .message-list-item {
-    margin: 0 2px 6px 2px; /* Add horizontal margins */
+    margin: 0; /* No margins - gap property on parent controls spacing */
+    padding-left: 4px;
+    padding-right: 4px;
   }
   
   .empty-state {
     padding: var(--space-md);
-    margin: 0 4px;
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
   }
   
   .loading-indicator {
     padding: var(--space-sm);
-    margin: 0 4px;
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
   }
   
   .new-message-btn {
     width: 52px;
     height: 52px;
     font-size: 44px;
-    bottom: var(--space-md);
+    bottom: 80px; /* Move up to avoid mobile tab bar */
     right: var(--space-md);
   }
   

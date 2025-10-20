@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useStore } from 'vuex';
 import { useAuthentication } from '@/composables/useAuthentication';
-import ApiKeysModal from '@/components/modals/ApiKeysModal.vue';
+import DevModal from '@/components/modals/DevModal.vue';
 
 const props = defineProps({
   isOpen: Boolean
@@ -936,7 +936,7 @@ const deleteAccount = async () => {
             </button>
           </div>
         </div>
-        <ApiKeysModal :isOpen="showApiKeysModal" @close="() => { showApiKeysModal = false }" />
+        <DevModal :isOpen="showApiKeysModal" @close="() => { showApiKeysModal = false }" />
         
         <!-- Unsaved changes confirmation -->
         <div v-if="showUnsavedConfirm" class="confirm-overlay" @click.self="confirmClose">
