@@ -26,7 +26,7 @@
                 v-model="newTag"
                 @keydown.enter.prevent="addTag"
                 @input="validateInput"
-                placeholder="Add a tag (letters, numbers, _, -)"
+                placeholder="Add a tag (letters, numbers, -)"
                 class="tag-input"
               />
               <div v-if="isValid === true" class="valid-indicator" title="Valid tag">✓</div>
@@ -89,7 +89,7 @@ watch(() => props.isVisible, (visible) => {
   }
 });
 
-const TAG_RE = /^[A-Za-z0-9_-]+$/;
+const TAG_RE = /^[A-Za-z0-9-]+$/;
 const MAX_TAG_LEN = 32;
 const MAX_TAGS = 20;
 
