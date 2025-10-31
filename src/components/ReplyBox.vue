@@ -89,10 +89,44 @@
             <span class="meta-pill__text">Draft Recipients ({{ recipients.length }})</span>
           </button>
           
+          <!-- Attachment button -->
+          <input 
+            ref="fileInput"
+            type="file" 
+            accept="application/pdf,image/*"
+            style="display: none"
+            @change="handleFileSelect"
+          />
+          <button 
+            class="toolbar-control meta-pill"
+            @click="fileInput?.click()"
+            :disabled="!canInteract || uploading"
+            aria-label="Attach file"
+            title="Attach file"
+          >
+            <span class="meta-pill__icon">📎</span>
+            <span class="meta-pill__text">{{ uploading ? 'Uploading...' : `Attach (${attachments.length})` }}</span>
+          </button>
+          
           <!-- Prompt moved to MessageNode. Keeping spacing consistent. -->
         </div>
 
 
+      </div>
+      
+      <!-- Attachment preview -->
+      <div v-if="attachments.length > 0" class="attachment-preview">
+        <div v-for="(att, index) in attachments" :key="att.name" class="attachment-item">
+          <span class="attachment-name">{{ att.name }}</span>
+          <button 
+            type="button" 
+            @click="removeAttachment(index)"
+            class="attachment-remove"
+            aria-label="Remove attachment"
+          >
+            ✕
+          </button>
+        </div>
       </div>
       
       <!-- Text area - hidden in add recipients mode -->
@@ -200,6 +234,7 @@ import RecipientsModal from './modals/RecipientsModal.vue';
 import TagsModal from './modals/TagsModal.vue';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 import MessageService from '../services/MessageService.js';
+import AttachmentService from '../services/AttachmentService.js';
 
 const props = defineProps({
   targetId: {
@@ -236,9 +271,14 @@ const store = useStore();
 // Refs
 const replyTextarea = ref(null);
 const replySheet = ref(null);
+const fileInput = ref(null);
 const content = ref('');
 const isSending = ref(false);
 const showSearchResults = ref(false);
+
+// Attachment state
+const attachments = ref([]);
+const uploading = ref(false);
 
 // Bottom sheet state
 const isKeyboardVisible = ref(false);
@@ -600,6 +640,28 @@ const toggleTextareaExpansion = () => {
   });
 };
 
+// Handle file upload
+const handleFileSelect = async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  try {
+    uploading.value = true;
+    const metadata = await AttachmentService.uploadFile(file);
+    attachments.value.push(metadata);
+  } catch (error) {
+    console.error('Upload failed:', error);
+    store.commit('ui/SET_ERROR', 'Failed to upload file');
+  } finally {
+    uploading.value = false;
+    if (fileInput.value) fileInput.value.value = '';
+  }
+};
+
+const removeAttachment = (index) => {
+  attachments.value.splice(index, 1);
+};
+
 const sendReply = async () => {
   if (!canSendReply.value) return;
   
@@ -656,12 +718,14 @@ const sendReply = async () => {
       recipients: recipients.value,
       // Ensure the author is explicitly set to the user's UID (not email)
       content_author: currentUser.uid,
-      tags: replyTags.value
+      tags: replyTags.value,
+      attachments: attachments.value
     });
     
     
-    // Clear the input
+    // Clear the input and attachments
     content.value = '';
+    attachments.value = [];
     
     // Reset expansion state
     isTextareaExpanded.value = false;
@@ -2223,6 +2287,47 @@ defineExpose({
     padding: 8px 10px;
     gap: 8px;
   }
+}
+
+/* Attachment preview */
+.attachment-preview {
+  padding: 8px 16px;
+  background: var(--color-surface-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.attachment-name {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-remove {
+  background: none;
+  border: none;
+  color: var(--color-text-3);
+  cursor: pointer;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.attachment-remove:hover {
+  color: var(--color-error);
 }
 </style> 
 

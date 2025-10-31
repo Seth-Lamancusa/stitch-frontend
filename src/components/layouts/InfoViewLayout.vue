@@ -13,6 +13,8 @@
           <!-- <li><router-link to="/architecture" :class="{ active: currentRoute === '/architecture' }">Architecture</router-link></li> -->
           <li><router-link to="/features" :class="{ active: currentRoute === '/features' }">Features</router-link></li>
           <li><router-link to="/how" :class="{ active: currentRoute.startsWith('/how') }">How it works</router-link></li>
+          <li><router-link to="/learn" :class="{ active: currentRoute === '/learn' }">Learn on Stitch</router-link></li>
+          <li><router-link to="/chats" :class="{ active: currentRoute === '/chats' }">Stitch Chats</router-link></li>
           <li><router-link to="/terms" :class="{ active: currentRoute === '/terms' }">Terms</router-link></li>
           <li><router-link to="/history" class="login-btn">Go to Stitch</router-link></li>
         </ul>

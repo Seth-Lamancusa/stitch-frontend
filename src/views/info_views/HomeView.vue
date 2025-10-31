@@ -9,22 +9,56 @@
   >
     <template #betaBannerText>
       <div class="banner-group">
-        <router-link to="/history" class="banner-cta">
-          <span class="btn-icon">💬</span>
-          <span class="cta-text">Try it now!</span>
-        </router-link>
+        <div class="banner-buttons">
+          <router-link to="/new-thread" class="banner-btn">
+            <span class="btn-icon">🤖</span>
+            <div class="btn-text-content">
+              <span class="btn-title">Start chatbot convo</span>
+            </div>
+          </router-link>
+          <router-link to="/inbox" class="banner-btn">
+            <span class="btn-icon">📨</span>
+            <div class="btn-text-content">
+              <span class="btn-title">My inbox</span>
+            </div>
+          </router-link>
+          <router-link to="/history" class="banner-btn">
+            <span class="btn-icon">📜</span>
+            <div class="btn-text-content">
+              <span class="btn-title">My thread history</span>
+            </div>
+          </router-link>
+          <router-link to="/how/api" class="banner-btn">
+            <span class="btn-icon">📚</span>
+            <div class="btn-text-content">
+              <span class="btn-title">API docs</span>
+            </div>
+          </router-link>
+          <router-link to="/search" class="banner-btn">
+            <span class="btn-icon">🔍</span>
+            <div class="btn-text-content">
+              <span class="btn-title">Search on Stitch</span>
+            </div>
+          </router-link>
+          <router-link to="/messages/2HhB" class="banner-btn">
+            <span class="btn-icon">💭</span>
+            <div class="btn-text-content">
+              <span class="btn-title">Give feedback</span>
+            </div>
+          </router-link>
+        </div>
       </div>
     </template>
     <section class="home-main">
       <div class="container">
         <div class="home-main-content">
           <div class="home-intro"><i>
-            Tranform your ideas into reality in real time. Stitch is for conversation and collaboration. For teaching and learning. For research, development, refinement, and critique. Most of all, it's for connection.</i>
+            Tranform your ideas into reality in real time. Stitch is a platform for conversation and collaboration.</i>
           </div>
           <div class="content-columns">
             <div class="home-main-content-1">
               <div class="content-icon">🧠</div>
-              <h2>Connecting ideas, connecting minds</h2>
+              <h2>Connecting people</h2>
               <p>Engage in group conversations with AI and human users alike. Easily track conversations, replies, and threads.</p>
             </div>
             <div class="home-main-content-2">
@@ -35,7 +69,7 @@
             <div class="home-main-content-3">
               <div class="content-icon">🔗</div>
               <h2>Share your conversations</h2>
-              <p>Add and remove users from conversations and make them public or private, controlling who can see and participate.</p>
+              <p>Add or remove users from messages, controlling who can see what.</p>
             </div>
           </div>
           <div class="home-body">
@@ -97,12 +131,34 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
 
 /* Banner buttons styling */
 .banner-buttons {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: stretch;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  max-width: 900px;
   margin: 0 auto;
+  padding: 0 1rem;
+}
+
+@media (min-width: 769px) {
+  .banner-buttons {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .banner-buttons {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+    max-width: 500px;
+  }
+}
+
+@media (max-width: 480px) {
+  .banner-buttons {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.4rem;
+    padding: 0 0.5rem;
+  }
 }
 
 .banner-btn {
@@ -366,6 +422,20 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
 
   /* Mobile styles */
   @media (max-width: 768px) {
+    .banner-btn {
+      padding: 0.625rem 0.75rem;
+      height: 65px;
+      gap: 0.5rem;
+    }
+
+    .btn-icon {
+      font-size: 1.25rem;
+    }
+
+    .btn-title {
+      font-size: 0.85rem;
+    }
+
     .home-main {
       padding: 2rem 0;
     }
@@ -435,16 +505,11 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
   }
 
   /* Banner buttons small mobile styles */
-  .banner-buttons {
-    gap: 0.25rem;
-    max-width: 500px;
-  }
-
   .banner-btn {
-    flex: 1 1 calc(50% - 0.125rem);
     padding: 0.5rem 0.625rem;
-    height: 50px;
+    height: 60px;
     gap: 0.375rem;
+    min-width: unset;
   }
 
   .btn-text-content {

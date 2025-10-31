@@ -28,6 +28,7 @@ const phoneNumberError = ref('');
 const emailError = ref('');
 const noChangesMessage = ref('');
 const updateSuccess = ref(false);
+const updateError = ref(false);
 
 // Change password state
 const currentPassword = ref('');
@@ -453,6 +454,7 @@ const handleKeydown = (e) => {
 };
 
 const updateProfile = async () => {
+  let profileUpdate = {};
   try {
     if (!validateForm()) {
       return;
@@ -460,7 +462,7 @@ const updateProfile = async () => {
     isSubmitting.value = true;
     errorMessage.value = '';
     noChangesMessage.value = '';
-    const profileUpdate = {};
+    profileUpdate = {};
     const originalPhoneNumber = user.value?.phone_number || '';
     const originalEmail = user.value?.email || '';
     const originalEndpoint = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
@@ -518,9 +520,26 @@ const updateProfile = async () => {
       errorMessage.value = 'Only one endpoint is allowed per account';
     } else if (code === 'managed_contacts_endpoints_only') {
       errorMessage.value = 'Managed users may only have an endpoint contact';
+    } else if (code && code.includes && code.includes('status code 409')) {
+      // Friendly fallback when backend didn't return a specific conflict code
+      if (Object.prototype.hasOwnProperty.call(profileUpdate, 'email')) {
+        emailError.value = 'That email is already in use';
+        errorMessage.value = '';
+      } else if (Object.prototype.hasOwnProperty.call(profileUpdate, 'phone_number')) {
+        phoneNumberError.value = 'That phone number is already in use';
+        errorMessage.value = '';
+      } else if (Object.prototype.hasOwnProperty.call(profileUpdate, 'user_tag')) {
+        tagError.value = 'That tag is already taken';
+        errorMessage.value = '';
+      } else {
+        errorMessage.value = 'That value is already in use';
+      }
     } else {
       errorMessage.value = code || 'Failed to update profile';
     }
+    // Flash error state on the Save Changes button
+    updateError.value = true;
+    setTimeout(() => { updateError.value = false; }, 1200);
   } finally {
     isSubmitting.value = false;
   }
@@ -902,9 +921,7 @@ const deleteAccount = async () => {
             </div>
           </div>
           
-          <div v-if="errorMessage" class="error-message">
-            {{ errorMessage }}
-          </div>
+          
           <!-- Danger Zone (simple) -->
           <div class="form-group" style="border-top:1px solid var(--color-border); padding-top: var(--space-sm); margin-top: 16px;">
             <h4 style="margin: 0 0 8px 0; color: var(--color-error);">Danger zone</h4>
@@ -922,12 +939,13 @@ const deleteAccount = async () => {
         </div>
 
         <div class="modal-footer">
-          <div class="error-message footer-message" v-if="noChangesMessage">
-            <span>{{ noChangesMessage }}</span>
+          <div class="footer-message">
+            <div v-if="errorMessage" class="error-message footer-error"><span>{{ errorMessage }}</span></div>
+            <div v-else-if="noChangesMessage" class="footer-hint"><span>{{ noChangesMessage }}</span></div>
           </div>
           <div class="button-group">
             <button class="cancel-btn" @click="closeModal" :disabled="isSubmitting">{{ hasFormChanges ? 'Cancel' : 'Done' }}</button>
-            <button v-if="hasFormChanges" class="update-btn" :class="{ success: updateSuccess }" @click="updateProfile" :disabled="!canSubmit">
+            <button v-if="hasFormChanges" class="update-btn" :class="{ success: updateSuccess, error: updateError }" @click="updateProfile" :disabled="!canSubmit">
               <div class="button-inner">
                 <div v-if="isSubmitting" class="spinner"></div>
                 <span v-else-if="updateSuccess" class="checkmark">✓</span>
@@ -1232,6 +1250,14 @@ const deleteAccount = async () => {
 
 .update-btn.success:hover:not(:disabled) {
   background-color: #0ea371;
+}
+
+.update-btn.error {
+  background-color: var(--color-error, #ef4444);
+}
+
+.update-btn.error:hover:not(:disabled) {
+  background-color: #dc2626;
 }
 
 .checkmark { font-weight: 700; margin-right: 6px; }
