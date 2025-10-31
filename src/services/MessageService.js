@@ -11,13 +11,14 @@ const getAuthHeaders = () => {
 
 export default {
   // Send a message or reply (supports optional tags)
-  async sendReply(parentId, content, isPrivate = false, recipients = [], content_author = null, tags = null) {
+  async sendReply(parentId, content, isPrivate = false, recipients = [], content_author = null, tags = null, attachments = null) {
     const headers = getAuthHeaders()
 
     const messageData = { content, public: !isPrivate, recipients }
     if (parentId) messageData.parent_id = parentId
     if (content_author) messageData.content_author = content_author
     if (Array.isArray(tags)) messageData.tags = tags
+    if (Array.isArray(attachments)) messageData.attachments = attachments
 
     try {
       // Debug logging for outgoing payload

@@ -12,8 +12,6 @@
         <p>
           Swagger UI: <a href="api.stitch.fyi/api/v1/docs" target="_blank">api.stitch.fyi/api/v1/docs</a>
         </p>
-        <h2>Work in progress</h2>
-        <p>For concepts, see <router-link to="/how/docs">Concepts</router-link>. For bots, see <router-link to="/how/bots">Bots</router-link>.</p>
       </div>
     </section>
   </InfoViewLayout>

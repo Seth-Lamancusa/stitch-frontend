@@ -125,6 +125,9 @@
         <div v-else class="plaintext-content">{{ truncatedContent }}</div>
       </div>
       
+      <!-- Attachments -->
+      <message-attachments :attachments="message.attachments" />
+      
       <!-- Message footer - hidden in list view -->
       <div v-if="!inListView" class="message-footer">
         <div class="reply-count">{{ message.child_ids?.length || 0 }} 💬</div>
@@ -196,8 +199,10 @@
           :is-visible="showTagsModal"
           :is-add-mode="true"
           :existing-tags="existingTags"
+          :message-id="message?.id"
           @close="closeTagsModal"
-          @done="handleTagsDone"
+          @update="handleTagsUpdate"
+          @done="closeTagsModal"
         />
       </teleport>
       
@@ -284,6 +289,7 @@ import SiblingNavigator from './SiblingNavigator.vue';
 import FormattedContent from './FormattedContent/index.vue';
 import { initFormatters } from './FormattedContent/init';
 import TagsModal from './modals/TagsModal.vue';
+import MessageAttachments from './MessageAttachments.vue';
 import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch, toRef } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute } from 'vue-router';
@@ -299,7 +305,8 @@ export default {
     AdaptiveMarker,
     SiblingNavigator,
     FormattedContent,
-    TagsModal
+    TagsModal,
+    MessageAttachments
   },
   
   props: {
@@ -371,6 +378,34 @@ export default {
     // Add refs for save button state
     const isMessageSaved = ref(false);
     const isSavingMessage = ref(false);
+    // Debug helpers to trace unexpected "[object Promise]" renderings
+    const domObserver = ref(null);
+    const debugLog = (...args) => { try { console.log('[MessageNode][debug]', ...args); } catch (e) {} };
+    const isPromiseValue = (v) => !!v && (typeof v === 'object' || typeof v === 'function') && typeof v.then === 'function';
+    const logRenderState = (contextLabel) => {
+      try {
+        const content = props.message?.content;
+        const contentType = typeof content;
+        const truncated = (typeof truncatedContent !== 'undefined' && truncatedContent && typeof truncatedContent.value !== 'undefined') ? truncatedContent.value : undefined;
+        debugLog('RenderState', {
+          context: contextLabel,
+          messageId: props.message?.id,
+          displayMode: props.displayMode,
+          inListView: props.inListView,
+          contentType,
+          isContentPromise: isPromiseValue(content),
+          contentPreview: typeof content === 'string' ? content.slice(0, 120) : content,
+          truncatedType: typeof truncated,
+          truncatedPreview: typeof truncated === 'string' ? truncated.slice(0, 120) : truncated
+        });
+        const el = messageContentRef?.value;
+        if (el) {
+          const text = el.innerText || '';
+          const tail = text.slice(-160);
+          debugLog('messageContentRef tail', { includesPromiseLiteral: text.includes('[object Promise]'), tail });
+        }
+      } catch (e) { try { console.warn('[MessageNode][debug] logRenderState error', e); } catch (_) {} }
+    };
     
     // Mobile floating action bar state - using global store
     const actionBarTouchStartY = ref(0);
@@ -816,18 +851,22 @@ export default {
       showTagsModal.value = true;
     };
     const closeTagsModal = () => { showTagsModal.value = false; };
-    const handleTagsDone = async (newTags) => {
+    
+    const handleTagsUpdate = async ({ messageId, tags }) => {
       try {
-        const id = props.message?.id;
-        if (!id) return closeTagsModal();
-        const tags = Array.isArray(newTags) ? newTags : [];
-        await store.dispatch('messages/updateMessageTags', { id, tags });
+        if (!messageId) return;
+        const tagArray = Array.isArray(tags) ? tags : [];
+        await store.dispatch('messages/updateMessageTags', { id: messageId, tags: tagArray });
       } catch (e) {
         console.error('[MessageNode] Failed to update tags', e);
         store.commit('ui/SET_ERROR', 'Failed to update tags');
-      } finally {
-        closeTagsModal();
       }
+    };
+    
+    const handleTagsDone = async (newTags) => {
+      // In the new flow, updates happen immediately on Add/Remove
+      // Done just closes the modal
+      closeTagsModal();
     };
 
     
@@ -1184,6 +1223,37 @@ export default {
       window.addEventListener('resize', checkMobileDevice);
       window.addEventListener('resize', handleViewportChange);
 
+      // Initial debug log and DOM check
+      nextTick(() => {
+        logRenderState('mounted');
+      });
+
+      // Observe DOM mutations inside message content to catch late appends
+      try {
+        if (messageContentRef.value && typeof MutationObserver !== 'undefined') {
+          domObserver.value = new MutationObserver((records) => {
+            try {
+              const el = messageContentRef.value;
+              if (!el) return;
+              const text = el.innerText || '';
+              if (text.includes('[object Promise]')) {
+                const changes = records.map(r => ({
+                  type: r.type,
+                  addedNodes: Array.from(r.addedNodes || []).map(n => ({ nodeType: n.nodeType, text: n.textContent?.slice?.(0, 80) })),
+                  removedNodes: Array.from(r.removedNodes || []).map(n => ({ nodeType: n.nodeType, text: n.textContent?.slice?.(0, 80) }))
+                }));
+                debugLog('Detected "[object Promise]" in message content', {
+                  messageId: props.message.id,
+                  displayMode: props.displayMode,
+                  changes
+                });
+              }
+            } catch (e) {}
+          });
+          domObserver.value.observe(messageContentRef.value, { childList: true, subtree: true, characterData: true });
+        }
+      } catch (e) {}
+
     });
     
     onBeforeUnmount(() => {
@@ -1191,6 +1261,9 @@ export default {
       window.removeEventListener('resize', checkMobileDevice);
       window.removeEventListener('resize', handleViewportChange);
       
+      // Disconnect observer
+      try { if (domObserver.value) { domObserver.value.disconnect(); domObserver.value = null; } } catch (e) {}
+
       
       // Close this message's action bar if it's open
       if (showActionBar.value) {
@@ -1263,6 +1336,25 @@ export default {
       try { console.log('[MessageNode] hasSiblings changed', { messageId: props.message.id, prev, next }); } catch (e) {}
     });
 
+    // Debug: watch for content changes and log state + DOM tail
+    watch(() => props.message?.content, (next, prev) => {
+      try {
+        debugLog('message.content changed', {
+          messageId: props.message?.id,
+          prevType: typeof prev,
+          nextType: typeof next,
+          prevIsPromise: isPromiseValue(prev),
+          nextIsPromise: isPromiseValue(next)
+        });
+      } catch (e) {}
+      nextTick(() => logRenderState('content-changed'));
+    });
+
+    // Debug: watch truncated content as well (preview mode path)
+    watch(() => (typeof truncatedContent !== 'undefined' ? truncatedContent.value : undefined), () => {
+      nextTick(() => logRenderState('truncated-changed'));
+    });
+
     watch(() => props.inListView, (next, prev) => {
       try { console.log('[MessageNode] inListView changed', { messageId: props.message.id, prev, next }); } catch (e) {}
     });
@@ -1304,6 +1396,7 @@ export default {
       deduplicatedRecipients,
       existingTags,
       showTagsModal,
+      handleTagsUpdate,
       handleTagsDone,
       closeTagsModal,
       recipientsExcludingUser,

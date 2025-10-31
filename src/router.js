@@ -13,6 +13,8 @@ import HowView from './views/info_views/HowView.vue';
 import HowDocsView from './views/info_views/HowDocsView.vue';
 import HowBotsView from './views/info_views/HowBotsView.vue';
 import HowApiView from './views/info_views/HowApiView.vue';
+import LearnView from './views/info_views/LearnView.vue';
+import ChatsView from './views/info_views/ChatsView.vue';
 import MessageListView from './views/app_views/MessageListView.vue';
 import PasswordResetView from './views/app_views/PasswordResetView.vue';
 import store from './store';
@@ -67,6 +69,16 @@ const routes = [
   {
     path: '/how/api',
     component: HowApiView
+  },
+  {
+    path: '/learn',
+    name: 'learn',
+    component: LearnView
+  },
+  {
+    path: '/chats',
+    name: 'chats',
+    component: ChatsView
   },
   {
     path: '/inbox',
