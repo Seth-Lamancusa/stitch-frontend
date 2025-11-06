@@ -206,6 +206,18 @@
         />
       </teleport>
       
+      <!-- Reply Order Modal -->
+      <teleport to="body">
+        <ReplyOrderModal
+          :is-visible="showReplyOrderModal"
+          :message-id="message?.id"
+          :child-ids="message?.child_ids || []"
+          :existing-reply-order="message?.reply_order || []"
+          @close="closeReplyOrderModal"
+          @update="handleReplyOrderUpdate"
+        />
+      </teleport>
+      
       <!-- Desktop sibling navigator - absolutely positioned -->
       <sibling-navigator
         v-if="showSiblingNavDesktop"
@@ -289,6 +301,7 @@ import SiblingNavigator from './SiblingNavigator.vue';
 import FormattedContent from './FormattedContent/index.vue';
 import { initFormatters } from './FormattedContent/init';
 import TagsModal from './modals/TagsModal.vue';
+import ReplyOrderModal from './modals/ReplyOrderModal.vue';
 import MessageAttachments from './MessageAttachments.vue';
 import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch, toRef } from 'vue';
 import { useStore } from 'vuex';
@@ -306,6 +319,7 @@ export default {
     SiblingNavigator,
     FormattedContent,
     TagsModal,
+    ReplyOrderModal,
     MessageAttachments
   },
   
@@ -512,6 +526,22 @@ export default {
         condition: () => !props.inListView,
         disabled: () => isCentered.value,
         active: () => isCentered.value
+      },
+      {
+        id: 'reply-order',
+        emoji: '📋',
+        text: 'Order',
+        desktopVisible: false,
+        mobileVisible: false,
+        adminOnly: false,
+        handler: openReplyOrderModal,
+        condition: () => {
+          // Only show if user can edit and message has replies
+          return !props.inListView && 
+                 canDeleteMessage(props.message) && 
+                 props.message.child_ids && 
+                 props.message.child_ids.length > 0;
+        }
       }
     ]);
     
@@ -869,6 +899,34 @@ export default {
       closeTagsModal();
     };
 
+    // Reply order support
+    const showReplyOrderModal = ref(false);
+    const openReplyOrderModal = () => {
+      dismissMobileKeyboard();
+      showReplyOrderModal.value = true;
+    };
+    const closeReplyOrderModal = () => { showReplyOrderModal.value = false; };
+    
+    const handleReplyOrderUpdate = async ({ messageId, replyOrder }) => {
+      try {
+        if (!messageId) return;
+        const response = await MessageService.updateReplyOrder(messageId, replyOrder);
+        // Update the message in store with the response
+        if (response?.data?.id) {
+          const updated = response.data;
+          // Preserve relations if backend returns minimal doc
+          const existing = store.getters['messages/getMessage'](messageId) || {};
+          if (updated.parent_id === undefined) updated.parent_id = existing.parent_id;
+          if (!Array.isArray(updated.child_ids)) updated.child_ids = existing.child_ids || [];
+          store.commit('messages/SET_MESSAGE', updated);
+        }
+        closeReplyOrderModal();
+      } catch (e) {
+        console.error('[MessageNode] Failed to update reply order', e);
+        store.commit('ui/SET_ERROR', 'Failed to update reply order');
+      }
+    };
+
     
     
     // New method to handle swipe navigation
@@ -885,27 +943,18 @@ export default {
     
     // Check if this message has siblings that can be navigated to
     const hasSiblings = computed(() => {
-
       if (!props.message.parent_id) {
         return false;
       }
       
       const parent = store.getters['messages/getMessage'](props.message.parent_id);
-
       if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) {
         return false;
       }
       
-      const hasSiblings = parent.child_ids.length > 1;
-      try {
-        console.log('[MessageNode] hasSiblings computed', {
-          messageId: props.message.id,
-          parentId: props.message.parent_id,
-          childCount: Array.isArray(parent.child_ids) ? parent.child_ids.length : 0,
-          hasSiblings
-        });
-      } catch (e) {}
-      return hasSiblings;
+      // Use getChildIds to respect reply_order
+      const orderedChildIds = store.getters['messages/getChildIds'](props.message.parent_id);
+      return orderedChildIds.length > 1;
     });
 
 
@@ -1332,9 +1381,6 @@ export default {
       try { console.log('[MessageNode] isSelectionMode changed', { messageId: props.message.id, prev, next }); } catch (e) {}
     });
 
-    watch(hasSiblings, (next, prev) => {
-      try { console.log('[MessageNode] hasSiblings changed', { messageId: props.message.id, prev, next }); } catch (e) {}
-    });
 
     // Debug: watch for content changes and log state + DOM tail
     watch(() => props.message?.content, (next, prev) => {
@@ -1399,6 +1445,10 @@ export default {
       handleTagsUpdate,
       handleTagsDone,
       closeTagsModal,
+      showReplyOrderModal,
+      openReplyOrderModal,
+      closeReplyOrderModal,
+      handleReplyOrderUpdate,
       recipientsExcludingUser,
       authorDisplayName,
       authorUserTag,
@@ -1825,8 +1875,16 @@ export default {
   opacity: 0.4; /* more transparent when private */
 }
 
+.globe-emoji.non-interactive {
+  cursor: default;
+}
+
 .globe-emoji:hover {
   transform: scale(1.1);
+}
+
+.globe-emoji.non-interactive:hover {
+  transform: none;
 }
 
 .recipients-toggle.author-toggle {

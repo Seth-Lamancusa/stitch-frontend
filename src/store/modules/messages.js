@@ -113,33 +113,73 @@ export default {
           timestamp: nextTimestamp,
         };
         
-        // Default branch_child to last child if there are children and no previous selection (most recent)
+        // Default branch_child - always use last child (furthest right) in ordered list
         const hasChildren = mergedChildIds.length > 0;
         if (hasChildren && currentBranchChild === undefined) {
-          // Find the most recent child by timestamp
-          const childMessages = mergedChildIds
-            .map(childId => state.messages[childId])
-            .filter(child => child)
-            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-          
-          mergedMessage.branch_child = childMessages.length > 0 ? 
-            childMessages[childMessages.length - 1].id : 
-            mergedChildIds[mergedChildIds.length - 1]; // Fallback to array order
+          // If reply_order is set, use last child from ordered list
+          if (mergedMessage.reply_order && Array.isArray(mergedMessage.reply_order) && mergedMessage.reply_order.length > 0) {
+            // Get ordered child IDs (respects reply_order)
+            const orderMap = new Map();
+            mergedMessage.reply_order.forEach((id, index) => {
+              orderMap.set(id, index);
+            });
+            const orderedIds = [...mergedChildIds].sort((a, b) => {
+              const aInOrder = orderMap.has(a);
+              const bInOrder = orderMap.has(b);
+              if (aInOrder && bInOrder) return orderMap.get(a) - orderMap.get(b);
+              if (aInOrder && !bInOrder) return -1;
+              if (!aInOrder && bInOrder) return 1;
+              const msgA = state.messages[a];
+              const msgB = state.messages[b];
+              if (msgA && msgB) return new Date(msgA.timestamp) - new Date(msgB.timestamp);
+              return 0;
+            });
+            // Use last child (furthest right)
+            mergedMessage.branch_child = orderedIds[orderedIds.length - 1];
+          } else {
+            // No custom order - use most recent by timestamp
+            const childMessages = mergedChildIds
+              .map(childId => state.messages[childId])
+              .filter(child => child)
+              .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            mergedMessage.branch_child = childMessages.length > 0 ? 
+              childMessages[childMessages.length - 1].id : 
+              mergedChildIds[mergedChildIds.length - 1];
+          }
         } else if (hasChildren) {
           // Keep existing selection if it's still valid
           const isBranchChildValid = mergedChildIds.includes(currentBranchChild);
           if (isBranchChildValid) {
             mergedMessage.branch_child = currentBranchChild;
           } else {
-            // Find the most recent child by timestamp as fallback
-            const childMessages = mergedChildIds
-              .map(childId => state.messages[childId])
-              .filter(child => child)
-              .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-            
-            mergedMessage.branch_child = childMessages.length > 0 ? 
-              childMessages[childMessages.length - 1].id : 
-              mergedChildIds[mergedChildIds.length - 1]; // Fallback to array order
+            // Re-select branch_child respecting reply_order - use last child
+            if (mergedMessage.reply_order && Array.isArray(mergedMessage.reply_order) && mergedMessage.reply_order.length > 0) {
+              const orderMap = new Map();
+              mergedMessage.reply_order.forEach((id, index) => {
+                orderMap.set(id, index);
+              });
+              const orderedIds = [...mergedChildIds].sort((a, b) => {
+                const aInOrder = orderMap.has(a);
+                const bInOrder = orderMap.has(b);
+                if (aInOrder && bInOrder) return orderMap.get(a) - orderMap.get(b);
+                if (aInOrder && !bInOrder) return -1;
+                if (!aInOrder && bInOrder) return 1;
+                const msgA = state.messages[a];
+                const msgB = state.messages[b];
+                if (msgA && msgB) return new Date(msgA.timestamp) - new Date(msgB.timestamp);
+                return 0;
+              });
+              // Use last child (furthest right)
+              mergedMessage.branch_child = orderedIds[orderedIds.length - 1];
+            } else {
+              const childMessages = mergedChildIds
+                .map(childId => state.messages[childId])
+                .filter(child => child)
+                .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+              mergedMessage.branch_child = childMessages.length > 0 ? 
+                childMessages[childMessages.length - 1].id : 
+                mergedChildIds[mergedChildIds.length - 1];
+            }
           }
         } else {
           mergedMessage.branch_child = null;
@@ -147,15 +187,50 @@ export default {
         
         // Update the store with merged message
         state.messages[message.id] = mergedMessage;
+        
+        // Log reply_order if present (structured logging)
+        if (mergedMessage.reply_order && Array.isArray(mergedMessage.reply_order) && mergedMessage.reply_order.length > 0) {
+          const orderedIds = mergedMessage.reply_order;
+          const unorderedIds = mergedChildIds.filter(id => !orderedIds.includes(id));
+          const unorderedWithTimestamps = unorderedIds.map(id => {
+            const msg = state.messages[id];
+            return { id, timestamp: msg?.timestamp || 'unknown' };
+          }).sort((a, b) => {
+            if (a.timestamp === 'unknown' || b.timestamp === 'unknown') return 0;
+            return new Date(a.timestamp) - new Date(b.timestamp);
+          });
+          console.log(`[SET_MESSAGE] ${message.id}: reply_order active`, {
+            replyOrder: orderedIds,
+            childIds: mergedChildIds,
+            replyOrderLength: orderedIds.length,
+            childIdsLength: mergedChildIds.length,
+            unordered: unorderedWithTimestamps.length > 0 ? unorderedWithTimestamps : undefined
+          });
+        }
       } else {
         // New message, not in store yet
-        // Default branch_child to most recent child if there are children
+        // Default branch_child - always use last child (furthest right) in ordered list
         const hasChildren = message.child_ids && message.child_ids.length > 0;
         if (hasChildren) {
-          // For new messages, child_ids should already be sorted by timestamp from backend
-          // but we can't verify timestamps since child messages might not be in store yet
-          // So we trust the backend ordering (timestamp ASC, so last = most recent)
-          message.branch_child = message.child_ids[message.child_ids.length - 1];
+          if (message.reply_order && Array.isArray(message.reply_order) && message.reply_order.length > 0) {
+            // Use last child from reply_order (furthest right)
+            const orderMap = new Map();
+            message.reply_order.forEach((id, index) => {
+              orderMap.set(id, index);
+            });
+            const orderedIds = [...message.child_ids].sort((a, b) => {
+              const aInOrder = orderMap.has(a);
+              const bInOrder = orderMap.has(b);
+              if (aInOrder && bInOrder) return orderMap.get(a) - orderMap.get(b);
+              if (aInOrder && !bInOrder) return -1;
+              if (!aInOrder && bInOrder) return 1;
+              return 0; // For new messages, timestamps may not be loaded yet
+            });
+            message.branch_child = orderedIds[orderedIds.length - 1];
+          } else {
+            // No custom order - use last child (backend sends timestamp ASC)
+            message.branch_child = message.child_ids[message.child_ids.length - 1];
+          }
         } else {
           message.branch_child = null;
         }
@@ -504,19 +579,57 @@ export default {
       while (true) {
         // If message has no branch child but has child_ids, set most recent child as branch_child
         if (!currentMessage.branch_child && currentMessage.child_ids && currentMessage.child_ids.length > 0) {
-          // Get all child messages and sort by timestamp to find the most recent
-          const childMessages = currentMessage.child_ids
+          // Get ordered child IDs (respects reply_order if set)
+          let orderedChildIds = currentMessage.child_ids;
+          if (currentMessage.reply_order && Array.isArray(currentMessage.reply_order) && currentMessage.reply_order.length > 0) {
+            // Create a map for quick lookup
+            const orderMap = new Map();
+            currentMessage.reply_order.forEach((id, index) => {
+              orderMap.set(id, index);
+            });
+            
+            // Sort: items in reply_order first (by their order), then items not in reply_order (by timestamp)
+            orderedChildIds = [...currentMessage.child_ids].sort((a, b) => {
+              const aInOrder = orderMap.has(a);
+              const bInOrder = orderMap.has(b);
+              
+              if (aInOrder && bInOrder) {
+                return orderMap.get(a) - orderMap.get(b);
+              } else if (aInOrder && !bInOrder) {
+                return -1;
+              } else if (!aInOrder && bInOrder) {
+                return 1;
+              } else {
+                const msgA = state.messages[a];
+                const msgB = state.messages[b];
+                if (msgA && msgB) {
+                  return new Date(msgA.timestamp) - new Date(msgB.timestamp);
+                }
+                return 0;
+              }
+            });
+          }
+          
+          // Get all child messages
+          const childMessages = orderedChildIds
             .map(childId => state.messages[childId])
-            .filter(child => child) // Remove any undefined children
-            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)); // Sort by timestamp ascending
+            .filter(child => child); // Remove any undefined children
           
           if (childMessages.length > 0) {
-            // Take the most recent child (last in sorted array)
-            const mostRecentChild = childMessages[childMessages.length - 1];
+            // Always use last child (furthest right) from ordered list
+            let branchChild;
+            if (currentMessage.reply_order && Array.isArray(currentMessage.reply_order) && currentMessage.reply_order.length > 0) {
+              // Use last child from ordered list (furthest right)
+              branchChild = childMessages[childMessages.length - 1];
+            } else {
+              // Sort by timestamp ascending (most recent = last)
+              const sortedByTimestamp = [...childMessages].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+              branchChild = sortedByTimestamp[sortedByTimestamp.length - 1];
+            }
             
             commit('SET_BRANCH_CHILD', { 
               messageId: currentMessage.id, 
-              childId: mostRecentChild.id
+              childId: branchChild.id
             });
             
             // Get updated message reference
@@ -1185,30 +1298,44 @@ export default {
     },
     
     // New action to handle sibling navigation
-    async navigateToSibling({ commit, state, dispatch, rootState }, { messageId, direction }) {
+    async navigateToSibling({ commit, state, dispatch, rootState, getters }, { messageId, direction }) {
       const message = state.messages[messageId];
-      if (!message || !message.child_ids || message.child_ids.length <= 1) {
+      if (!message) {
+        return false;
+      }
+      
+      // Use getChildIds to respect reply_order
+      const orderedChildIds = getters.getChildIds(messageId);
+      if (!orderedChildIds || orderedChildIds.length <= 1) {
         return false;
       }
       
       const currentChildId = message.branch_child;
-      const currentIndex = message.child_ids.indexOf(currentChildId);
+      const currentIndex = orderedChildIds.indexOf(currentChildId);
       
       if (currentIndex === -1) {
-        // If no valid current child, default to most recent by timestamp
-        const childMessages = message.child_ids
-          .map(childId => state.messages[childId])
-          .filter(child => child)
-          .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-        
-        const mostRecentChildId = childMessages.length > 0 ? 
-          childMessages[childMessages.length - 1].id : 
-          message.child_ids[message.child_ids.length - 1]; // Fallback to array order
-        
-        commit('SET_BRANCH_CHILD', { 
-          messageId: messageId, 
-          childId: mostRecentChildId
-        });
+        // If no valid current child, use last child from ordered list (furthest right)
+        if (message.reply_order && Array.isArray(message.reply_order) && message.reply_order.length > 0) {
+          commit('SET_BRANCH_CHILD', { 
+            messageId: messageId, 
+            childId: orderedChildIds[orderedChildIds.length - 1]
+          });
+        } else {
+          // Default to most recent by timestamp
+          const childMessages = orderedChildIds
+            .map(childId => state.messages[childId])
+            .filter(child => child)
+            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+          
+          const mostRecentChildId = childMessages.length > 0 ? 
+            childMessages[childMessages.length - 1].id : 
+            orderedChildIds[orderedChildIds.length - 1];
+          
+          commit('SET_BRANCH_CHILD', { 
+            messageId: messageId, 
+            childId: mostRecentChildId
+          });
+        }
         return true;
       }
       
@@ -1216,12 +1343,12 @@ export default {
       if (direction === 'prev') {
         newIndex = Math.max(0, currentIndex - 1);
       } else {
-        newIndex = Math.min(message.child_ids.length - 1, currentIndex + 1);
+        newIndex = Math.min(orderedChildIds.length - 1, currentIndex + 1);
       }
       
       // Only update if actually changing
       if (newIndex !== currentIndex) {
-        const newChildId = message.child_ids[newIndex];
+        const newChildId = orderedChildIds[newIndex];
         const oldChildId = currentChildId;
         
         // Check if the new sibling is loaded in the store
@@ -1229,28 +1356,17 @@ export default {
         
         // If the sibling isn't loaded, load it before changing branch_child
         if (!isNewChildLoaded) {
-          
-          // We need to load this message before we can navigate to it
           try {
-            // Show loading state
             commit('SET_LOADING', { key: `sibling_${messageId}`, isLoading: true });
-            
-            // Load the message
             await dispatch('loadMessage', newChildId);
-            
-            // If this loaded successfully, load its children too
             if (state.messages[newChildId]) {
-              // Load its children to populate branch
               await dispatch('loadMessageBranchDown', {
                 messageId: newChildId,
                 depth: 2
               });
             }
-            
-            // End loading state
             commit('SET_LOADING', { key: `sibling_${messageId}`, isLoading: false });
           } catch (error) {
-            console.error(`[navigateToSibling] Failed to load sibling ${newChildId}:`, error);
             commit('SET_LOADING', { key: `sibling_${messageId}`, isLoading: false });
             return false;
           }
@@ -1271,25 +1387,17 @@ export default {
         // Check if the current selection is downstream of the old sibling
         let isSelectionDownstream = false;
         if (selectedMessageId && selectedMessageId !== oldChildId) {
-          // Check if the selected message is a descendant of the old child
           isSelectionDownstream = isDescendantOf(state, selectedMessageId, oldChildId);
         }
         
         // Handle selection state
         if (wasCurrentChildSelected) {
-          // If previous sibling was selected, select the new sibling
-          console.log(`[navigateToSibling] Auto-selecting new sibling ${newChildId} because previous sibling was selected`);
           dispatch('navigation/selectMessage', newChildId, { root: true });
         } else if (isSelectionDownstream) {
-          // If selection is downstream of old sibling, clear selection
-          console.log(`[navigateToSibling] Clearing selection because selected message ${selectedMessageId} is downstream of old sibling ${oldChildId}`);
           dispatch('navigation/selectMessage', null, { root: true });
-        } else {
-          console.log(`[navigateToSibling] Not changing selection state`);
         }
         
         // Auto-mark the entire newly visible branch starting from the new sibling
-        console.log(`[navigateToSibling] 🔄 SIBLING NAVIGATION triggering auto-mark for visible branch from ${newChildId}`);
         dispatch('markVisibleBranchAsRead', newChildId);
         
         return true;
@@ -1539,7 +1647,63 @@ export default {
       const message = state.messages[parentId];
       if (!message) return [];
       
-      return message.child_ids || [];
+      const childIds = message.child_ids || [];
+      
+      // If reply_order is set, use it to order child_ids
+      if (message.reply_order && Array.isArray(message.reply_order) && message.reply_order.length > 0) {
+        // Create a map for quick lookup
+        const orderMap = new Map();
+        message.reply_order.forEach((id, index) => {
+          orderMap.set(id, index);
+        });
+        
+        // Sort: items in reply_order first (by their order), then items not in reply_order (by timestamp)
+        const ordered = [...childIds].sort((a, b) => {
+          const aInOrder = orderMap.has(a);
+          const bInOrder = orderMap.has(b);
+          
+          if (aInOrder && bInOrder) {
+            // Both in order, use reply_order position
+            return orderMap.get(a) - orderMap.get(b);
+          } else if (aInOrder && !bInOrder) {
+            // a in order, b not - a comes first
+            return -1;
+          } else if (!aInOrder && bInOrder) {
+            // b in order, a not - b comes first
+            return 1;
+          } else {
+            // Neither in order, sort by timestamp
+            const msgA = state.messages[a];
+            const msgB = state.messages[b];
+            if (msgA && msgB) {
+              return new Date(msgA.timestamp) - new Date(msgB.timestamp);
+            }
+            return 0;
+          }
+        });
+        
+        // Log unordered replies with timestamps
+        const unorderedIds = childIds.filter(id => !orderMap.has(id));
+        if (unorderedIds.length > 0) {
+          const unorderedWithTimestamps = unorderedIds.map(id => {
+            const msg = state.messages[id];
+            return { id, timestamp: msg?.timestamp || 'unknown' };
+          }).sort((a, b) => {
+            if (a.timestamp === 'unknown' || b.timestamp === 'unknown') return 0;
+            return new Date(a.timestamp) - new Date(b.timestamp);
+          });
+          console.log(`[getChildIds] ${parentId}: reply_order active`, {
+            ordered: message.reply_order,
+            unordered: unorderedWithTimestamps,
+            finalOrder: ordered
+          });
+        }
+        
+        return ordered;
+      }
+      
+      // No custom ordering, return as-is
+      return childIds;
     },
     
     getParentId: state => childId => {
@@ -1577,7 +1741,6 @@ export default {
       const startingMessage = state.messages[messageId];
       
       if (!startingMessage) {
-        console.warn(`[getVisibleBranchMessages] Message ${messageId} not found in store`);
         return [];
       }
             

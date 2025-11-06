@@ -61,6 +61,13 @@ export default {
     return apiClient.patch(`/messages/${id}/tags`, { tags: Array.isArray(tags) ? tags : [] }, { headers })
   },
 
+  // Update message reply_order (custom ordering of replies)
+  async updateReplyOrder(id, replyOrder) {
+    const headers = getAuthHeaders()
+    // replyOrder can be null to clear ordering, or an array of reply IDs
+    return apiClient.patch(`/messages/${id}/reply_order`, { reply_order: replyOrder }, { headers })
+  },
+
   // Unified search: content (q) and tags
   async search({ q = null, tags = [], match = 'any', skip = 0, limit = 15 } = {}) {
     const headers = getAuthHeaders()

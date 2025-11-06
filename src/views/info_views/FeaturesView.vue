@@ -37,10 +37,11 @@
           <div class="feature-card">
             <div class="feature-icon">📊</div>
             <h3>Organization Tools</h3>
-            <p>Keep track of conversations, prompts, and responses in the way that works for you.</p>
+            <p>Keep track of conversations, prompts, and responses in the way that works for you. Organization is collaborative — anyone who can see a message can help tag and link it.</p>
             <ul class="feature-list">
               <li>Save messages and prompts you want to remember.</li>
-              <li>Link messages to other messages.</li>
+              <li>Tag messages to organize and find them quickly.</li>
+              <li>Link messages to other messages you can see.</li>
               <li>Post messages to group channels (coming soon).</li>
             </ul>
           </div>
