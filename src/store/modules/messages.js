@@ -113,7 +113,7 @@ export default {
           timestamp: nextTimestamp,
         };
         
-        // Default branch_child - always use last child (furthest right) in ordered list
+        // Default branch_child - always use last child (furthest right) in complete list
         const hasChildren = mergedChildIds.length > 0;
         if (hasChildren && currentBranchChild === undefined) {
           // If reply_order is set, use last child from ordered list
@@ -127,14 +127,14 @@ export default {
               const aInOrder = orderMap.has(a);
               const bInOrder = orderMap.has(b);
               if (aInOrder && bInOrder) return orderMap.get(a) - orderMap.get(b);
-              if (aInOrder && !bInOrder) return -1;
-              if (!aInOrder && bInOrder) return 1;
+              if (aInOrder && !bInOrder) return 1; // b (unordered) comes first
+              if (!aInOrder && bInOrder) return -1; // a (unordered) comes first
               const msgA = state.messages[a];
               const msgB = state.messages[b];
               if (msgA && msgB) return new Date(msgA.timestamp) - new Date(msgB.timestamp);
               return 0;
             });
-            // Use last child (furthest right)
+            // Use last child (furthest right, last in complete list)
             mergedMessage.branch_child = orderedIds[orderedIds.length - 1];
           } else {
             // No custom order - use most recent by timestamp
@@ -162,14 +162,14 @@ export default {
                 const aInOrder = orderMap.has(a);
                 const bInOrder = orderMap.has(b);
                 if (aInOrder && bInOrder) return orderMap.get(a) - orderMap.get(b);
-                if (aInOrder && !bInOrder) return -1;
-                if (!aInOrder && bInOrder) return 1;
+                if (aInOrder && !bInOrder) return 1; // b (unordered) comes first
+                if (!aInOrder && bInOrder) return -1; // a (unordered) comes first
                 const msgA = state.messages[a];
                 const msgB = state.messages[b];
                 if (msgA && msgB) return new Date(msgA.timestamp) - new Date(msgB.timestamp);
                 return 0;
               });
-              // Use last child (furthest right)
+              // Use last child (furthest right, last in complete list)
               mergedMessage.branch_child = orderedIds[orderedIds.length - 1];
             } else {
               const childMessages = mergedChildIds
@@ -209,11 +209,11 @@ export default {
         }
       } else {
         // New message, not in store yet
-        // Default branch_child - always use last child (furthest right) in ordered list
+        // Default branch_child - always use last child (furthest right) in complete list
         const hasChildren = message.child_ids && message.child_ids.length > 0;
         if (hasChildren) {
           if (message.reply_order && Array.isArray(message.reply_order) && message.reply_order.length > 0) {
-            // Use last child from reply_order (furthest right)
+            // Use last child from ordered list (last in complete merged list)
             const orderMap = new Map();
             message.reply_order.forEach((id, index) => {
               orderMap.set(id, index);
@@ -222,13 +222,13 @@ export default {
               const aInOrder = orderMap.has(a);
               const bInOrder = orderMap.has(b);
               if (aInOrder && bInOrder) return orderMap.get(a) - orderMap.get(b);
-              if (aInOrder && !bInOrder) return -1;
-              if (!aInOrder && bInOrder) return 1;
+              if (aInOrder && !bInOrder) return 1; // b (unordered) comes first
+              if (!aInOrder && bInOrder) return -1; // a (unordered) comes first
               return 0; // For new messages, timestamps may not be loaded yet
             });
             message.branch_child = orderedIds[orderedIds.length - 1];
           } else {
-            // No custom order - use last child (backend sends timestamp ASC)
+            // No custom order - use last child (most recent by timestamp, backend sends timestamp ASC)
             message.branch_child = message.child_ids[message.child_ids.length - 1];
           }
         } else {
@@ -577,7 +577,7 @@ export default {
       
       // Trace downward, ensuring each node has a branch_child if it has children
       while (true) {
-        // If message has no branch child but has child_ids, set most recent child as branch_child
+        // If message has no branch child but has child_ids, set last child as branch_child
         if (!currentMessage.branch_child && currentMessage.child_ids && currentMessage.child_ids.length > 0) {
           // Get ordered child IDs (respects reply_order if set)
           let orderedChildIds = currentMessage.child_ids;
@@ -588,7 +588,7 @@ export default {
               orderMap.set(id, index);
             });
             
-            // Sort: items in reply_order first (by their order), then items not in reply_order (by timestamp)
+            // Sort: items not in reply_order first (by timestamp), then items in reply_order (by their order)
             orderedChildIds = [...currentMessage.child_ids].sort((a, b) => {
               const aInOrder = orderMap.has(a);
               const bInOrder = orderMap.has(b);
@@ -596,9 +596,9 @@ export default {
               if (aInOrder && bInOrder) {
                 return orderMap.get(a) - orderMap.get(b);
               } else if (aInOrder && !bInOrder) {
-                return -1;
+                return 1; // b (unordered) comes first
               } else if (!aInOrder && bInOrder) {
-                return 1;
+                return -1; // a (unordered) comes first
               } else {
                 const msgA = state.messages[a];
                 const msgB = state.messages[b];
@@ -616,10 +616,10 @@ export default {
             .filter(child => child); // Remove any undefined children
           
           if (childMessages.length > 0) {
-            // Always use last child (furthest right) from ordered list
+            // Always use last child (furthest right) from complete list
             let branchChild;
             if (currentMessage.reply_order && Array.isArray(currentMessage.reply_order) && currentMessage.reply_order.length > 0) {
-              // Use last child from ordered list (furthest right)
+              // Use last child from ordered list (last in complete merged list)
               branchChild = childMessages[childMessages.length - 1];
             } else {
               // Sort by timestamp ascending (most recent = last)
@@ -887,16 +887,12 @@ export default {
           // Get updated parent after REMOVE_MESSAGE_CASCADE might have modified it
           const updatedParent = state.messages[parentId];
           
-          // If parent has remaining children, set the most recent one as branch_child
+          // If parent has remaining children, set the last one as branch_child
           if (updatedParent && updatedParent.child_ids && updatedParent.child_ids.length > 0) {
-            // Find the most recent child by timestamp
-            const childMessages = updatedParent.child_ids
-              .map(childId => state.messages[childId])
-              .filter(child => child)
-              .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-            
-            const newBranchChildId = childMessages.length > 0 ? 
-              childMessages[childMessages.length - 1].id : 
+            // Use getChildIds to respect reply_order
+            const orderedChildIds = getters.getChildIds(parentId);
+            const newBranchChildId = orderedChildIds.length > 0 ? 
+              orderedChildIds[orderedChildIds.length - 1] : 
               updatedParent.child_ids[updatedParent.child_ids.length - 1]; // Fallback to array order
             
             commit('SET_BRANCH_CHILD', { 
@@ -1657,7 +1653,7 @@ export default {
           orderMap.set(id, index);
         });
         
-        // Sort: items in reply_order first (by their order), then items not in reply_order (by timestamp)
+        // Sort: items not in reply_order first (by timestamp), then items in reply_order (by their order)
         const ordered = [...childIds].sort((a, b) => {
           const aInOrder = orderMap.has(a);
           const bInOrder = orderMap.has(b);
@@ -1666,11 +1662,11 @@ export default {
             // Both in order, use reply_order position
             return orderMap.get(a) - orderMap.get(b);
           } else if (aInOrder && !bInOrder) {
-            // a in order, b not - a comes first
-            return -1;
-          } else if (!aInOrder && bInOrder) {
-            // b in order, a not - b comes first
+            // a in order, b not - b comes first (unordered first)
             return 1;
+          } else if (!aInOrder && bInOrder) {
+            // b in order, a not - a comes first (unordered first)
+            return -1;
           } else {
             // Neither in order, sort by timestamp
             const msgA = state.messages[a];

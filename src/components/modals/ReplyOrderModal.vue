@@ -8,7 +8,7 @@
 
       <div class="modal-content">
         <p class="modal-description">
-          Select replies in the order you want them displayed. Click replies below to add them to the order.
+          Select replies in the order you want them displayed. The last of them will be displayed as the default reply. Unordered replies (including those posted after order was set) will appear before (left of) partial order.
         </p>
 
         <!-- Current Order Section -->
