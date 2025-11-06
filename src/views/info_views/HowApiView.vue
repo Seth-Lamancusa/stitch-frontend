@@ -7,7 +7,7 @@
   >
     <section class="api">
       <div class="container">
-        <h2>Available for select partners<h2>
+        <h2>Available for select partners</h2>
         <p>
           Swagger UI: <a href="api.stitch.fyi/api/v1/docs" target="_blank">api.stitch.fyi/api/v1/docs</a>
         </p>
