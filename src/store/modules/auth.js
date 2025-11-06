@@ -453,10 +453,63 @@ export default {
       if (!getters.hasScope('msg.write')) return false;
       const currentUid = state.user.uid;
       const currentTag = state.user.user_tag || null;
+      // Check if user is the author
       const isAuthorByUid = (message.content_author && message.content_author === currentUid) ||
                             (message.author && message.author.uid && message.author.uid === currentUid);
       const isAuthorByTag = currentTag && message.author_user_tag && message.author_user_tag === currentTag;
-      return !!(isAuthorByUid || isAuthorByTag);
+      if (isAuthorByUid || isAuthorByTag) return true;
+      // Check if user is a manager of the message author
+      const messageAuthorUid = message.content_author || (message.author && message.author.uid);
+      if (messageAuthorUid && state.managedUsers && Array.isArray(state.managedUsers)) {
+        const isManager = state.managedUsers.some(managedUser => {
+          const managedUid = managedUser.uid || managedUser.id || managedUser._key;
+          return managedUid === messageAuthorUid;
+        });
+        if (isManager) return true;
+      }
+      return false;
+    },
+    canUpdateReplyOrder: (state, getters) => (message) => {
+      if (!state.user || !message) return false;
+      if (!getters.hasScope('msg.write')) return false;
+      const currentUid = state.user.uid;
+      const currentTag = state.user.user_tag || null;
+      // Check if user is the author
+      const isAuthorByUid = (message.content_author && message.content_author === currentUid) ||
+                            (message.author && message.author.uid && message.author.uid === currentUid);
+      const isAuthorByTag = currentTag && message.author_user_tag && message.author_user_tag === currentTag;
+      if (isAuthorByUid || isAuthorByTag) return true;
+      // Check if user is a manager of the message author
+      const messageAuthorUid = message.content_author || (message.author && message.author.uid);
+      if (messageAuthorUid && state.managedUsers && Array.isArray(state.managedUsers)) {
+        const isManager = state.managedUsers.some(managedUser => {
+          const managedUid = managedUser.uid || managedUser.id || managedUser._key;
+          return managedUid === messageAuthorUid;
+        });
+        if (isManager) return true;
+      }
+      return false;
+    },
+    canUpdateMessagePublicity: (state, getters) => (message) => {
+      if (!state.user || !message) return false;
+      if (!getters.hasScope('msg.write')) return false;
+      const currentUid = state.user.uid;
+      const currentTag = state.user.user_tag || null;
+      // Check if user is the author
+      const isAuthorByUid = (message.content_author && message.content_author === currentUid) ||
+                            (message.author && message.author.uid && message.author.uid === currentUid);
+      const isAuthorByTag = currentTag && message.author_user_tag && message.author_user_tag === currentTag;
+      if (isAuthorByUid || isAuthorByTag) return true;
+      // Check if user is a manager of the message author
+      const messageAuthorUid = message.content_author || (message.author && message.author.uid);
+      if (messageAuthorUid && state.managedUsers && Array.isArray(state.managedUsers)) {
+        const isManager = state.managedUsers.some(managedUser => {
+          const managedUid = managedUser.uid || managedUser.id || managedUser._key;
+          return managedUid === messageAuthorUid;
+        });
+        if (isManager) return true;
+      }
+      return false;
     },
   }
 }

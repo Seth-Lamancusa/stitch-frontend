@@ -536,9 +536,9 @@ export default {
         adminOnly: false,
         handler: openReplyOrderModal,
         condition: () => {
-          // Only show if user can edit and message has replies
+          // Only show if user can update reply order and message has replies
           return !props.inListView && 
-                 canDeleteMessage(props.message) && 
+                 store.getters['auth/canUpdateReplyOrder'](props.message) && 
                  props.message.child_ids && 
                  props.message.child_ids.length > 0;
         }
@@ -664,7 +664,8 @@ export default {
     
     // Whether the globe can toggle visibility (always visible; only interactive when true)
     const canToggleVisibility = computed(() => {
-      return canDeleteMessage(props.message) && !isSelectionMode.value && !props.inListView;
+      if (!currentUser.value) return false;
+      return store.getters['auth/canUpdateMessagePublicity'](props.message);
     });
     
     // Insert openPromptModal here
