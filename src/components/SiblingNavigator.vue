@@ -95,39 +95,33 @@ const isLoading = computed(() => {
   return isParentLoading.value || isSiblingLoading.value;
 });
 
-// Debug logging to trace flicker root cause
+// Watch for parent changes to update sibling order
 const parentRef = computed(() => store.getters['messages/getMessage'](props.parentId));
-watch(parentRef, (newVal, oldVal) => {
-  console.debug('[SiblingNavigator] parent change', {
-    parentId: props.parentId,
-    hadParent: !!oldVal,
-    hasParent: !!newVal,
-    childIds: Array.isArray(newVal?.child_ids) ? [...newVal.child_ids] : null
-  });
+watch(parentRef, (newVal) => {
+  if (newVal && newVal.reply_order) {
+    const orderedIds = store.getters['messages/getChildIds'](props.parentId);
+    const unorderedIds = (newVal.child_ids || []).filter(id => !newVal.reply_order.includes(id));
+    if (unorderedIds.length > 0) {
+      const unorderedWithTimestamps = unorderedIds.map(id => {
+        const msg = store.getters['messages/getMessage'](id);
+        return { id, timestamp: msg?.timestamp || 'unknown' };
+      });
+      console.log(`[SiblingNavigator] reply_order active for ${props.parentId}: ordered=${orderedIds.length}, unordered=${unorderedIds.length}`, {
+        ordered: orderedIds,
+        unordered: unorderedWithTimestamps
+      });
+    }
+  }
 });
 
-watch(isSiblingLoading, (v) => {
-  console.debug('[SiblingNavigator] sibling loading changed', {
-    parentId: props.parentId,
-    key: `sibling_${props.parentId}`,
-    isSiblingLoading: v
-  });
-});
-
-watch(isParentLoading, (v) => {
-  console.debug('[SiblingNavigator] parent loading changed', {
-    parentId: props.parentId,
-    isParentLoading: v
-  });
-});
-
-// Get message siblings from the store
+// Get message siblings from the store - use getChildIds to respect reply_order
 const siblings = computed(() => {
   const parent = store.getters['messages/getMessage'](props.parentId);
-  if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) {
+  if (!parent) {
     return [];
   }
-  return parent.child_ids;
+  // Use getChildIds getter which respects reply_order
+  return store.getters['messages/getChildIds'](props.parentId);
 });
 
 const totalSiblings = computed(() => siblings.value.length);

@@ -88,9 +88,19 @@
             <ul>
               <li><strong>Inbox</strong> — See all messages where you're a recipient and haven't read yet. Your personal notification center.</li>
               <li><strong>Bookmarks</strong> — Save messages you want to return to. Flag important decisions, useful references, or ideas worth revisiting.</li>
-              <li><strong>Links</strong> — Connect related messages across different threads. Build your own web of knowledge by linking concepts, follow-ups, or related discussions.</li>
+              <li><strong>Tags</strong> — Organize and categorize messages with tags. Anyone who can see a message can tag it, making organization a collaborative effort. Each tag shows who added it and when, and you can search messages by tags across all threads.</li>
+              <li><strong>Links</strong> — Connect related messages across different threads. Anyone who can see both messages can create a link between them. Build your own web of knowledge by linking concepts, follow-ups, or related discussions.</li>
               <li><strong>History</strong> — Browse all messages you can access, sorted by recency or organized by thread.</li>
             </ul>
+            
+            <h3 id="collaborative-enrichment">Collaborative Enrichment</h3>
+            <p>Some operations on messages are collaborative — if you can see a message, you can enrich it:</p>
+            <ul>
+              <li><strong>Tags</strong> — Add tags to help organize and find messages. Tags include metadata showing who added them and when.</li>
+              <li><strong>Links</strong> — Create connections between messages you can see, building relationships across threads.</li>
+              <li><strong>Recipients</strong> — Add people to conversations (with visibility controls for CC/BCC).</li>
+            </ul>
+            <p>This collaborative model means teams can work together to organize and structure conversations, not just the original author. The author controls the message content and publicity, while everyone with visibility can help organize and connect ideas.</p>
 
             <h2 id="collaborative-workflows">Collaborative Workflows</h2>
             <p>Stitch's structure enables workflows that traditional chat and email can't support:</p>
