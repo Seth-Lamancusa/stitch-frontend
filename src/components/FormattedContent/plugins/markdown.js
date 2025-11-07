@@ -68,6 +68,18 @@ export const markdownFormatter = createFormatter(
       const md = await getMarkdownIt();
       processedContent = md.render(processedContent);
       
+      // Add target="_blank" to all links so they open in new tabs
+      processedContent = processedContent.replace(/<a\s+([^>]*?)>/gi, (match, attrs) => {
+        // Check if target is already set
+        if (/target\s*=/i.test(attrs)) {
+          // Replace existing target with _blank
+          return `<a ${attrs.replace(/target\s*=\s*["'][^"']*["']/gi, 'target="_blank"')}>`;
+        } else {
+          // Add target="_blank" and rel for security
+          return `<a ${attrs} target="_blank" rel="noopener noreferrer">`;
+        }
+      });
+      
       // Restore protected content
       processedContent = restoreProtectedContent(processedContent, context);
       

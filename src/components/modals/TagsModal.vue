@@ -96,6 +96,14 @@ watch(() => props.isVisible, (visible) => {
   }
 });
 
+// Watch existingTags to refresh local tags after backend updates (when modal is open)
+watch(() => props.existingTags, (newTags) => {
+  if (props.isVisible && !isUpdating.value) {
+    // Refresh local tags from props when they change (e.g., after backend update)
+    tagsLocal.value = (newTags || []).slice();
+  }
+}, { deep: true });
+
 const TAG_RE = /^[A-Za-z0-9-]+$/;
 const MAX_TAG_LEN = 32;
 const MAX_TAGS = 20;
