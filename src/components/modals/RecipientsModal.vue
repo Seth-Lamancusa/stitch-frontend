@@ -87,6 +87,27 @@
             >Stage</button>
           </div>
           
+          <!-- Search results -->
+          <div class="search-results-container">
+            <div v-if="showSearchResults && searchResults && searchResults.length > 0" class="search-results-list">
+              <div 
+                v-for="(user, index) in searchResults" 
+                :key="user.uid" 
+                class="search-result-item"
+                @click.stop="selectSearchResult(user)"
+              >
+                <div class="search-result-content">
+                  <span class="search-result-name">{{ user.display_name || 'User' }}</span>
+                  <span class="search-result-tag">@{{ user.user_tag }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div v-else-if="searchResults.length === 0 && hasSearched && !isSearching" class="no-search-results">
+              No users found. Try a different search term.
+            </div>
+          </div>
+          
           <!-- Featured Bots section -->
           <div v-if="!isGuestUser" class="chatbots-section">
             <p class="chatbots-header">Featured Bots</p>
@@ -148,26 +169,6 @@
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        
-          <div class="search-results-container">
-            <div v-if="showSearchResults && searchResults && searchResults.length > 0" class="search-results-list">
-              <div 
-                v-for="(user, index) in searchResults" 
-                :key="user.uid" 
-                class="search-result-item"
-                @click.stop="selectSearchResult(user)"
-              >
-                <div class="search-result-content">
-                  <span class="search-result-name">{{ user.display_name || 'User' }}</span>
-                  <span class="search-result-tag">@{{ user.user_tag }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div v-else-if="searchResults.length === 0 && hasSearched && !isSearching" class="no-search-results">
-              No users found. Try a different search term.
             </div>
           </div>
 

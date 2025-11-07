@@ -873,8 +873,19 @@ export default {
     const showTagsModal = ref(false);
     const existingTags = computed(() => {
       const tags = props.message && Array.isArray(props.message.tags) ? props.message.tags : [];
-      const set = new Set(tags.map(t => String(t || '')));
-      return Array.from(set);
+      // Deduplicate by tag name (normalized) while preserving tag objects with metadata
+      const seen = new Set();
+      const deduplicated = [];
+      for (const tag of tags) {
+        if (!tag) continue;
+        // Get normalized tag name for deduplication
+        const tagName = typeof tag === 'string' ? tag.toLowerCase() : (tag.name || '').toLowerCase();
+        if (tagName && !seen.has(tagName)) {
+          seen.add(tagName);
+          deduplicated.push(tag);
+        }
+      }
+      return deduplicated;
     });
     const openTagsModal = () => {
       // Do NOT clear replying/close reply UI; just open the modal
