@@ -61,10 +61,10 @@ const onOverlayClick = () => {
 }
 
 // Identifier validation
-// - tag: letters, numbers, hyphen, underscore (no leading @ in input)
+// - tag: letters, numbers, hyphen (no leading @ in input)
 // - email: basic pattern user@host.tld
 // - phone: digits with optional leading +, 7-15 digits total
-const TAG_RE = /^[A-Za-z0-9_-]+$/
+const TAG_RE = /^[A-Za-z0-9-]+$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 const PHONE_RE = /^\+?\d{7,15}$/
 

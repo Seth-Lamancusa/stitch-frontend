@@ -277,12 +277,16 @@ const validateTag = () => {
   if (!tag.value.trim()) {
     return true;
   }
-  if (!/^[a-zA-Z0-9_-]+$/.test(tag.value)) {
-    tagError.value = 'Tag must contain only letters, numbers, underscores, and hyphens';
+  if (tag.value.length < 2) {
+    tagError.value = 'Tag must be at least 2 characters long';
     return false;
   }
-  if (tag.value.length < 1) {
-    tagError.value = 'Tag must be at least 1 character long';
+  if (tag.value.length > 16) {
+    tagError.value = 'Tag must be no more than 16 characters long';
+    return false;
+  }
+  if (!/^[a-zA-Z0-9-]+$/.test(tag.value)) {
+    tagError.value = 'Tag must contain only letters, numbers, and hyphens';
     return false;
   }
   return true;
