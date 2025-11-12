@@ -2049,12 +2049,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: var(--space-xs);
-  padding-top: var(--space-md);
-  border-top: 1px solid var(--color-border);
 }
-
-/* footer-left removed */
 
 .reply-count {
   font-size: var(--font-size-xs);
@@ -2792,9 +2787,6 @@ export default {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  margin-top: var(--space-xs);
-  padding-top: var(--space-md);
-  border-top: 1px solid var(--color-border);
 }
 
 .reply-count {

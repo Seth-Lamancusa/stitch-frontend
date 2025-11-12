@@ -125,7 +125,7 @@ export function installAxiosAuthInterceptor(axiosInstance) {
 // Centralized Axios client for public SPA
 const apiClient = axios.create({
   baseURL: '/api/v1',
-  timeout: 10000,
+  timeout: 15000,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
