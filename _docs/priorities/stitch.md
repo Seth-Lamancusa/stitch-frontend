@@ -5,7 +5,7 @@
 ## Now
 
 ### Big Picture
-Create a reply edge between two existing messages without creating a new message. Support both single-message stitches and subtree stitches (entire thread branches). UI: Add "Stitch" next to "Reply" and "Prompt". On mobile, keep Stitch visible; move "Save" to overflow. Modal searches by content; user selects the CHILD (or root of subtree). Thread shows "<Display Name> stitched:" between parent and child. Message node has different background color.
+Create a reply edge between two existing messages without creating a new message. Support both single-message stitches and subtree stitches (entire thread branches). Stitched detection: `replies.uid` present (stitcher uid); absent = author reply. All stitched edges require `uid` (stitcher) and `stitch_group_id` (UUID for operation grouping). Allow multiple parents per child. UI: Add "Stitch" next to "Reply" and "Prompt". On mobile, keep Stitch visible; move "Save" to overflow. Modal searches by content; user selects the CHILD (or root of subtree). Thread shows "<Display Name> stitched:" between parent and child. Message node has different background color.
 
 ### Frontend Implementation
 
@@ -32,13 +32,13 @@ Create a reply edge between two existing messages without creating a new message
 - Open `StitchModal` on click
 
 **Create `src/components/modals/StitchModal.vue`**:
-- Debounced search input for finding messages
-- Display search results (lightweight previews)
+- Debounced search input for finding messages (calls `MessageService.searchMessages()`)
+- Display search results (lightweight previews, visibility-aware)
 - User selects the CHILD (or root of subtree)
 - Toggle between single-message stitch and subtree stitch
 - Show confirmation before stitching
 - Handle loading states and errors
-- Call `MessageService.stitchReply()` or `MessageService.stitchSubtree()`
+- Call `MessageService.stitchReply({ parentId, childId })` or `MessageService.stitchSubtree({ parentId, rootChildId })`
 
 **Update Thread Rendering**:
 - Show "<Display Name> stitched:" between parent and child when edge meta present
@@ -51,16 +51,17 @@ Create a reply edge between two existing messages without creating a new message
 **Update `src/store/modules/messages.js`**:
 - Handle stitch operations in store
 - Update message relationships when stitch succeeds
-- Store stitched meta on edges
+- Store stitched meta on edges: `{ stitched_by_uid, stitched_by_display_name, stitch_group_id, is_subtree_stitch }`
 - Handle `handleReplyStitched` action for WebSocket events
+- For subtree stitches: update all affected message relationships
 
 ### 4. WebSocket Integration
 
-**Add WebSocket Handler**:
+**Add WebSocket Handler** (Consumer - frontend):
 - Listen for `reply.stitched` events
 - Payload: `{ parent_id, child_id, stitched_by: { uid, display_name }, stitch_group_id, is_subtree }`
 - Dispatch to store: `store.dispatch('messages/handleReplyStitched', data)`
-- Update visible thread if affected messages are displayed
+- Store attaches stitched meta to `{ parentId, childId }` and refreshes visible thread if needed
 - For subtree stitches: update all affected message relationships
 
 ### 5. UI/UX Considerations
@@ -166,15 +167,18 @@ Includes stitched meta when present:
 
 ## Implementation Checklist
 
-1. Frontend: Add Stitch button to message actions
-2. Frontend: Create `StitchModal.vue` with search and selection
-3. Frontend: Implement `MessageService.stitchReply()` and `MessageService.stitchSubtree()`
-4. Frontend: Update thread rendering to show stitched indicator
-5. Frontend: Add WebSocket handler for `reply.stitched` events
-6. Frontend: Handle visual distinction for stitched messages
-7. Tests: Test stitch flow (single and subtree)
-8. Tests: Test WebSocket event handling
-9. Tests: Test thread rendering with stitched edges
+1. Frontend: Add Stitch button next to "Reply" and "Prompt" in message actions (mobile: keep visible, move "Save" to overflow)
+2. Frontend: Create `StitchModal.vue` with debounced search and selection (support single/subtree toggle)
+3. Frontend: Implement `MessageService.stitchReply({ parentId, childId })` and `MessageService.stitchSubtree({ parentId, rootChildId })`
+4. Frontend: Implement `MessageService.searchMessages({ q, limit })` for modal search
+5. Frontend: Update thread rendering to show "<Display Name> stitched:" between nodes when edge meta present
+6. Frontend: Apply different background color to stitched message nodes
+7. Frontend: Visual indicator for subtree stitches (e.g., collapsible group, different background)
+8. Frontend: Add WebSocket handler for `reply.stitched` events → `store.dispatch('messages/handleReplyStitched', data)`
+9. Frontend: Handle visual distinction for stitched messages
+10. Tests: Test stitch flow (single and subtree)
+11. Tests: Test WebSocket event handling
+12. Tests: Test thread rendering with stitched edges
 
 ---
 

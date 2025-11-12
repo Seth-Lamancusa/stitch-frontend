@@ -116,8 +116,11 @@
       
       <!-- Attachment preview -->
       <div v-if="attachments.length > 0" class="attachment-preview">
-        <div v-for="(att, index) in attachments" :key="att.name" class="attachment-item">
-          <span class="attachment-name">{{ att.name }}</span>
+        <div v-for="(att, index) in attachments" :key="att.name || att.gcs_path" class="attachment-item">
+          <div class="attachment-info">
+            <span class="attachment-name">{{ att.name }}</span>
+            <span v-if="att.size" class="attachment-size">{{ formatFileSize(att.size) }}</span>
+          </div>
           <button 
             type="button" 
             @click="removeAttachment(index)"
@@ -651,7 +654,9 @@ const handleFileSelect = async (event) => {
     attachments.value.push(metadata);
   } catch (error) {
     console.error('Upload failed:', error);
-    store.commit('ui/SET_ERROR', 'Failed to upload file');
+    // Use error message from AttachmentService if available, otherwise generic message
+    const errorMessage = error.message || 'Failed to upload file. Please try again.';
+    store.commit('ui/SET_ERROR', errorMessage);
   } finally {
     uploading.value = false;
     if (fileInput.value) fileInput.value.value = '';
@@ -660,6 +665,13 @@ const handleFileSelect = async (event) => {
 
 const removeAttachment = (index) => {
   attachments.value.splice(index, 1);
+};
+
+const formatFileSize = (bytes) => {
+  if (!bytes || bytes === 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 };
 
 const sendReply = async () => {
@@ -2291,8 +2303,10 @@ defineExpose({
 
 /* Attachment preview */
 .attachment-preview {
-  padding: 8px 16px;
-  background: var(--color-surface-2);
+  padding: 0px 16px;
+  padding-top: 8px;
+  padding-bottom:0px;
+  background-color: #2A2A2A;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -2301,7 +2315,7 @@ defineExpose({
 .attachment-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 6px 10px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -2309,11 +2323,26 @@ defineExpose({
   font-size: 13px;
 }
 
+.attachment-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
 .attachment-name {
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 500;
+}
+
+.attachment-size {
+  font-size: 11px;
+  color: var(--color-text-secondary, rgba(0, 0, 0, 0.6));
+  opacity: 0.7;
 }
 
 .attachment-remove {
