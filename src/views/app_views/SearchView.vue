@@ -3,11 +3,14 @@
     <div class="search-view">
       <div class="search-controls">
         <div class="query-row">
-          <input v-model="q" class="query-input" type="text" placeholder="Search content" />
-          <button class="tags-btn" @click="openTagsModal" aria-label="Open tags modal"># Tags ({{ tags.length }})</button>
+          <input v-model="q" class="query-input" type="text" placeholder="Search content" @keydown.enter="runSearch" />
+          <select v-model="selectedTag" class="tag-select" aria-label="Filter by tag" @change="onTagSelected">
+            <option value="">{{ defaultTagOptionText }}</option>
+            <option v-for="tag in availableTags" :key="tag" :value="tag" :disabled="tags.includes(tag)">#{{ tag }}</option>
+          </select>
           <select v-model="match" class="match-select" aria-label="Match mode">
-            <option value="any">any</option>
-            <option value="all">all</option>
+            <option value="any">any tag</option>
+            <option value="all">all tags</option>
           </select>
           <button class="search-btn" @click="runSearch">Search</button>
         </div>
@@ -20,33 +23,59 @@
 
       <MessageList v-if="results.length" mode="custom" :customMessages="results" :hideHeader="true" />
       <div v-else class="empty-state">Search by content with filtration by tags.</div>
-
-      <TagsModal :is-visible="showTags" :is-add-mode="false" :existing-tags="tags" @close="showTags=false" @done="setTags" />
     </div>
   </TabViewLayout>
   
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import TabViewLayout from '../../components/layouts/TabViewLayout.vue';
 import MessageList from '../../components/MessageList.vue';
-import TagsModal from '../../components/modals/TagsModal.vue';
 import MessageService from '../../services/MessageService.js';
 
 const q = ref('');
 const tags = ref([]);
+const selectedTag = ref('');
+const availableTags = ref([]);
 const match = ref('any');
 const results = ref([]);
-const showTags = ref(false);
+const isLoadingTags = ref(false);
 
-const openTagsModal = () => { showTags.value = true; };
-const setTags = (newTags) => { tags.value = Array.isArray(newTags) ? newTags.slice() : []; showTags.value = false; };
-const removeTag = (i) => { if (i >= 0 && i < tags.value.length) tags.value.splice(i,1); };
+const defaultTagOptionText = computed(() => {
+  return tags.value.length > 0 ? 'Selected tags' : 'All tags';
+});
+
+const fetchTags = async () => {
+  try {
+    isLoadingTags.value = true;
+    const resp = await MessageService.getAllTags();
+    availableTags.value = Array.isArray(resp?.data) ? resp.data : [];
+  } catch (e) {
+    console.error('[SearchView] fetch tags error', e);
+    availableTags.value = [];
+  } finally {
+    isLoadingTags.value = false;
+  }
+};
+
+const onTagSelected = () => {
+  if (selectedTag.value && !tags.value.includes(selectedTag.value)) {
+    tags.value.push(selectedTag.value);
+  }
+  // Reset dropdown to default option
+  selectedTag.value = '';
+};
+
+const removeTag = (i) => { 
+  if (i >= 0 && i < tags.value.length) {
+    tags.value.splice(i, 1);
+  }
+};
 
 const runSearch = async () => {
   try {
-  const resp = await MessageService.search({ q: q.value || null, tags: tags.value, match: match.value, skip: 0, limit: 15 });
+    const resp = await MessageService.search({ q: q.value || null, tags: tags.value, match: match.value, skip: 0, limit: 15 });
     const data = resp?.data || {};
     results.value = Array.isArray(data.messages) ? data.messages : [];
   } catch (e) {
@@ -54,6 +83,17 @@ const runSearch = async () => {
     results.value = [];
   }
 };
+
+onMounted(() => {
+  fetchTags();
+});
+
+watch(
+  () => tags.value.slice(),
+  () => {
+    runSearch();
+  }
+);
 </script>
 
 <style scoped>
@@ -71,12 +111,14 @@ const runSearch = async () => {
 }
 
 .search-controls { margin-bottom: 8px; }
-.query-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.query-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .query-input { flex: 1; min-width: 180px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-text); }
-.tags-btn, .search-btn, .match-select { padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-text); cursor: pointer; }
-.tags-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
-.tag-chip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 6px; font-size: var(--font-size-xs); background: var(--color-surface); color: var(--color-text); }
-.remove-tag { background: none; border: none; color: var(--color-text-secondary); cursor: pointer; font-size: 14px; }
+.tag-select { min-width: 150px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-text); cursor: pointer; }
+.search-btn, .match-select { padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-text); cursor: pointer; }
+.tags-chips { display: block; margin-top: 6px; max-height: 120px; overflow-y: auto; padding: 4px; }
+.tag-chip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 6px; font-size: var(--font-size-xs); background: var(--color-surface); color: var(--color-text); margin: 2px 6px 2px 0; }
+.remove-tag { background: none; border: none; color: var(--color-text-secondary); cursor: pointer; font-size: 14px; padding: 0 4px; }
+.remove-tag:hover { color: var(--color-error); }
 .empty-state { padding: 12px; color: var(--color-text-secondary); font-style: italic; }
 </style>
 

@@ -3,7 +3,7 @@
     <div class="app-header">
       <div class="branding">
         <router-link to="/home" class="logo-link" @click.prevent="onLogoClick">
-          <span class="logo-text">Stitch</span>
+          <img src="@/assets/stitch_logo.png" alt="Stitch" class="logo-image" />
         </router-link>
       </div>
       
@@ -483,15 +483,14 @@ const onLogoClick = (event) => {
   text-decoration: none;
 }
 
-.logo-link:hover .logo-text {
+.logo-link:hover .logo-image {
   opacity: 0.9;
 }
 
-.logo-text {
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: var(--color-primary, #4f8cff);
-  letter-spacing: 1px;
+.logo-image {
+  height: 2rem;
+  width: auto;
+  display: block;
 }
 
 .navigation-tabs {
@@ -931,8 +930,8 @@ const onLogoClick = (event) => {
     padding: 0 12px; /* Reduce header padding */
   }
   
-  .logo-text {
-    font-size: 1.2rem; /* Smaller logo */
+  .logo-image {
+    height: 1.2rem; /* Smaller logo */
   }
   
   .user-controls {
@@ -1000,8 +999,8 @@ const onLogoClick = (event) => {
     min-height: 56px; /* Ensure minimum height */
   }
   
-  .logo-text {
-    font-size: 1rem; /* Even smaller logo */
+  .logo-image {
+    height: 1rem; /* Even smaller logo */
   }
   
   .user-controls {

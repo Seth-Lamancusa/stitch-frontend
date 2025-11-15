@@ -179,5 +179,11 @@ export default {
     return apiClient.get(`/messages/history?skip=${skip}&limit=${limit}`, { headers })
   },
 
+  // Get all tags for the current user
+  async getAllTags() {
+    const headers = getAuthHeaders()
+    return apiClient.get(`/messages/tags`, { headers })
+  },
+
   
 }

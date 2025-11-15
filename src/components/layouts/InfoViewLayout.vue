@@ -5,7 +5,7 @@
       <nav class="main-nav">
         <div class="logo">
           <router-link to="/home" class="logo-link">
-            <span class="logo-text">Stitch</span>
+            <img src="@/assets/stitch_logo.png" alt="Stitch" class="logo-image" />
           </router-link>
         </div>
         <ul class="nav-links" :class="{ active: isMenuOpen }">
@@ -166,15 +166,14 @@ onBeforeUnmount(() => {
   text-decoration: none;
 }
 
-.logo-link:hover .logo-text {
+.logo-link:hover .logo-image {
   opacity: 0.9;
 }
 
-.logo-text {
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: var(--color-primary, #4f8cff);
-  letter-spacing: 1px;
+.logo-image {
+  height: 2rem;
+  width: auto;
+  display: block;
 }
 
 /* Contact info styling */
