@@ -32,7 +32,9 @@ function mapApiUserToAuthState(userData) {
     is_phone_verified: isPhoneVerified,
     has_endpoint_signing_secret: !!data.has_endpoint_signing_secret,
     is_managed: !!data.is_managed,
-    private: !!data.private
+    private: !!data.private,
+    bio: typeof data.bio === 'string' ? data.bio : '',
+    is_bot: !!data.is_bot
   };
 }
 
@@ -308,6 +310,28 @@ export default {
       }
     },
 
+    async convertToManagedUser({ commit, dispatch }, { uid, managerUid }) {
+      try {
+        const token = TokenManager.accessToken;
+        const response = await apiClient.post(`/managed/users/${uid}/convert-to-managed`, 
+          { manager_uid: managerUid },
+          { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } }
+        );
+        if (!response || response.status < 200 || response.status >= 300) {
+          const errorData = (response && response.data) || {};
+          throw new Error(errorData.detail || 'Failed to convert to managed user');
+        }
+        // Refresh user data after conversion
+        await dispatch('validateExistingToken');
+        return response.data;
+      } catch (error) {
+        console.error('Error converting to managed user:', error);
+        const errorData = error && error.response && error.response.data ? error.response.data : {};
+        const detail = errorData.detail || error.message || 'Failed to convert to managed user';
+        throw new Error(detail);
+      }
+    },
+
 
     async updateProfile({ commit }, profileData) {
       try {
@@ -335,6 +359,8 @@ export default {
               user_tag: result.profile.user_tag,
               phone_number: result.profile.phone_number ?? null,
               email: result.profile.email ?? null,
+              bio: typeof result.profile.bio === 'string' ? result.profile.bio : '',
+              is_bot: typeof result.profile.is_bot === 'boolean' ? result.profile.is_bot : !!currentUser.is_bot,
               contact: null
             });
           }

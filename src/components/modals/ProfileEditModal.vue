@@ -14,18 +14,23 @@ const store = useStore();
 const user = computed(() => store.getters['auth/user']);
 const isManaged = computed(() => !!(user.value && user.value.is_managed));
 
+const BIO_MAX_LENGTH = 500;
+
 const displayName = ref('');
 const tag = ref('');
 const phoneNumber = ref('');
 const email = ref('');
+const bio = ref('');
 const endpoint = ref('');
 const isPrivate = ref(false);
+const isBot = ref(false);
 const isSubmitting = ref(false);
 const errorMessage = ref('');
 const tagError = ref('');
 const displayNameError = ref('');
 const phoneNumberError = ref('');
 const emailError = ref('');
+const bioError = ref('');
 const noChangesMessage = ref('');
 const updateSuccess = ref(false);
 const updateError = ref(false);
@@ -216,8 +221,10 @@ const resetForm = () => {
   tag.value = user.value?.user_tag || '';
   phoneNumber.value = user.value?.phone_number || '';
   email.value = user.value?.email || '';
+  bio.value = user.value?.bio || '';
   endpoint.value = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
   isPrivate.value = !!(user.value?.private);
+  isBot.value = !!(user.value?.is_bot);
   const _contacts = (user.value?.contacts || []);
   notifyPrefs.value = {
     email: !!_contacts.find(c => c.type==='email' && c.notify),
@@ -229,6 +236,7 @@ const resetForm = () => {
   displayNameError.value = '';
   phoneNumberError.value = '';
   emailError.value = '';
+  bioError.value = '';
   noChangesMessage.value = '';
   emailCode.value = '';
   phoneCode.value = '';
@@ -252,6 +260,17 @@ const resetForm = () => {
   showConfirmPassword.value = false;
   // hide phone consent info by default
   showPhoneConsent.value = false;
+  // Reset convert to managed user state
+  managerSearchQuery.value = '';
+  managerSearchResults.value = [];
+  showManagerSearchResults.value = false;
+  isSearchingManager.value = false;
+  hasSearchedManager.value = false;
+  isManagerValid.value = null;
+  selectedManager.value = null;
+  convertToManagedError.value = '';
+  convertToManagedSuccess.value = '';
+  if (managerSearchTimeout) { clearTimeout(managerSearchTimeout); managerSearchTimeout = null; }
 };
 
 onMounted(() => {
@@ -262,6 +281,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (emailCooldownTimerId) clearInterval(emailCooldownTimerId);
   if (phoneCooldownTimerId) clearInterval(phoneCooldownTimerId);
+  if (managerSearchTimeout) clearTimeout(managerSearchTimeout);
   window.removeEventListener('keydown', onGlobalKeydown);
 });
 
@@ -331,6 +351,7 @@ const hasFormChanges = computed(() => {
   const originalEmail = user.value?.email || '';
   const originalEndpoint = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
   const originalPrivate = !!(user.value?.private);
+  const originalBio = user.value?.bio || '';
 
   const displayNameChanged = normalizeTrimmed(displayName.value) !== normalizeTrimmed(originalDisplayName);
   const tagChanged = normalizeLowerTrimmed(tag.value) !== normalizeLowerTrimmed(originalTag);
@@ -338,8 +359,10 @@ const hasFormChanges = computed(() => {
   const emailChanged = normalizeLowerTrimmed(email.value) !== normalizeLowerTrimmed(originalEmail);
   const endpointChanged = normalizeEndpointForCompare(endpoint.value) !== normalizeEndpointForCompare(originalEndpoint);
   const privateChanged = !!isPrivate.value !== originalPrivate;
+  const bioChanged = normalizeTrimmed(bio.value) !== normalizeTrimmed(originalBio);
+  const botChanged = !!isBot.value !== !!(user.value?.is_bot);
 
-  return displayNameChanged || tagChanged || phoneChanged || emailChanged || endpointChanged || privateChanged || notifyPrefsChanged();
+  return displayNameChanged || tagChanged || phoneChanged || emailChanged || endpointChanged || privateChanged || bioChanged || botChanged || notifyPrefsChanged();
 });
 
 // Function to determine if the update button should be enabled
@@ -348,6 +371,7 @@ const canSubmit = computed(() => {
          !displayNameError.value && 
          !phoneNumberError.value &&
          !emailError.value &&
+         !bioError.value &&
          !isSubmitting.value;
 });
 
@@ -356,6 +380,7 @@ const validateForm = () => {
   displayNameError.value = '';
   phoneNumberError.value = '';
   emailError.value = '';
+  bioError.value = '';
   noChangesMessage.value = '';
   if (!hasFormChanges.value) {
     noChangesMessage.value = 'Make changes before updating';
@@ -363,12 +388,19 @@ const validateForm = () => {
   }
   const originalPhoneNumber = user.value?.phone_number || '';
   const isPhoneNumberBeingCleared = originalPhoneNumber && !phoneNumber.value.trim();
-  if (!displayName.value.trim() && !tag.value.trim() && !phoneNumber.value.trim() && !email.value.trim() && !isPhoneNumberBeingCleared) {
+  const originalBio = user.value?.bio || '';
+  const bioChanged = normalizeTrimmed(bio.value) !== normalizeTrimmed(originalBio);
+  const botChanged = !!isBot.value !== !!(user.value?.is_bot);
+  if (!displayName.value.trim() && !tag.value.trim() && !phoneNumber.value.trim() && !email.value.trim() && !bio.value.trim() && !isPhoneNumberBeingCleared && !bioChanged && !botChanged) {
     errorMessage.value = 'Please fill at least one field';
     return false;
   }
   if (displayName.value.trim() && displayName.value.length > 50) {
     displayNameError.value = 'Display name should be less than 50 characters';
+    isValid = false;
+  }
+  if (bio.value && bio.value.length > BIO_MAX_LENGTH) {
+    bioError.value = `Bio must be ${BIO_MAX_LENGTH} characters or less`;
     isValid = false;
   }
   if (!validateTag()) {
@@ -469,6 +501,7 @@ const updateProfile = async () => {
     profileUpdate = {};
     const originalPhoneNumber = user.value?.phone_number || '';
     const originalEmail = user.value?.email || '';
+    const originalBio = user.value?.bio || '';
     const originalEndpoint = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
     const originalPrivate = !!(user.value?.private);
 
@@ -491,8 +524,15 @@ const updateProfile = async () => {
       const trimmed = normalizeTrimmed(endpoint.value);
       profileUpdate.endpoint = trimmed || null;
     }
+    if (normalizeTrimmed(bio.value) !== normalizeTrimmed(originalBio)) {
+      const trimmedBio = normalizeTrimmed(bio.value);
+      profileUpdate.bio = trimmedBio || null;
+    }
     if (!!isPrivate.value !== originalPrivate) {
       profileUpdate.private = !!isPrivate.value;
+    }
+    if (!!isBot.value !== !!(user.value?.is_bot)) {
+      profileUpdate.is_bot = !!isBot.value;
     }
     if (notifyPrefsChanged()) {
       profileUpdate.notify = { ...notifyPrefs.value };
@@ -505,7 +545,15 @@ const updateProfile = async () => {
     setTimeout(() => { updateSuccess.value = false; }, 1800);
   } catch (error) {
     const code = error && error.message;
-    if (code === 'user_tag_conflict') {
+    if (code === 'bio_too_long') {
+      bioError.value = `Bio must be ${BIO_MAX_LENGTH} characters or less`;
+      errorMessage.value = '';
+    } else if (code === 'invalid_bio') {
+      bioError.value = 'Bio must be plain text';
+      errorMessage.value = '';
+    } else if (code === 'invalid_is_bot') {
+      errorMessage.value = 'Invalid bot flag value';
+    } else if (code === 'user_tag_conflict') {
       tagError.value = 'That tag is already taken';
       errorMessage.value = '';
     } else if (code === 'email_conflict') {
@@ -534,6 +582,9 @@ const updateProfile = async () => {
         errorMessage.value = '';
       } else if (Object.prototype.hasOwnProperty.call(profileUpdate, 'user_tag')) {
         tagError.value = 'That tag is already taken';
+        errorMessage.value = '';
+      } else if (Object.prototype.hasOwnProperty.call(profileUpdate, 'bio')) {
+        bioError.value = 'That bio value is not allowed';
         errorMessage.value = '';
       } else {
         errorMessage.value = 'That value is already in use';
@@ -688,6 +739,149 @@ const cancelClose = () => {
   showUnsavedConfirm.value = false;
 };
 
+// Convert to managed user state
+const managerSearchQuery = ref('');
+const managerSearchResults = ref([]);
+const showManagerSearchResults = ref(false);
+const isSearchingManager = ref(false);
+const hasSearchedManager = ref(false);
+const isManagerValid = ref(null);
+const selectedManager = ref(null);
+const convertToManagedBusy = ref(false);
+const convertToManagedError = ref('');
+const convertToManagedSuccess = ref('');
+let managerSearchTimeout = null;
+
+const canConvertToManaged = computed(() => {
+  return selectedManager.value && selectedManager.value.uid && !convertToManagedBusy.value;
+});
+
+const searchManager = (event) => {
+  clearTimeout(managerSearchTimeout);
+  const query = event.target.value.trim();
+  
+  isSearchingManager.value = query.length >= 1;
+  
+  if (query.length < 1) {
+    isManagerValid.value = null;
+    managerSearchResults.value = [];
+    showManagerSearchResults.value = false;
+    selectedManager.value = null;
+    return;
+  }
+  
+  managerSearchTimeout = setTimeout(async () => {
+    try {
+      isSearchingManager.value = true;
+      hasSearchedManager.value = true;
+      
+      const results = await store.dispatch('auth/searchUsers', query);
+      
+      if (!results || !Array.isArray(results)) {
+        managerSearchResults.value = [];
+        showManagerSearchResults.value = false;
+        isManagerValid.value = false;
+        selectedManager.value = null;
+      } else {
+        // Filter out current user (can't be own manager)
+        const currentUserUid = user.value?.uid;
+        const filteredResults = results.filter(u => u.uid !== currentUserUid);
+        
+        managerSearchResults.value = filteredResults;
+        showManagerSearchResults.value = filteredResults.length > 0;
+        
+        if (filteredResults.length > 0) {
+          isManagerValid.value = true;
+          // Pre-select if exact match
+          const exactMatch = filteredResults.find(u => 
+            u.user_tag.toLowerCase() === query.toLowerCase() ||
+            u.display_name.toLowerCase() === query.toLowerCase()
+          );
+          if (exactMatch && !selectedManager.value) {
+            selectedManager.value = exactMatch;
+            managerSearchQuery.value = `${exactMatch.display_name} (@${exactMatch.user_tag})`;
+            showManagerSearchResults.value = false;
+          }
+        } else {
+          isManagerValid.value = false;
+          selectedManager.value = null;
+        }
+      }
+      
+      isSearchingManager.value = false;
+    } catch (error) {
+      console.error('Error searching manager:', error);
+      isManagerValid.value = false;
+      managerSearchResults.value = [];
+      showManagerSearchResults.value = false;
+      selectedManager.value = null;
+      isSearchingManager.value = false;
+    }
+  }, 300);
+};
+
+const selectManager = (user) => {
+  selectedManager.value = user;
+  managerSearchQuery.value = `${user.display_name} (@${user.user_tag})`;
+  showManagerSearchResults.value = false;
+  isManagerValid.value = true;
+};
+
+const clearManagerSearch = () => {
+  managerSearchQuery.value = '';
+  isManagerValid.value = null;
+  managerSearchResults.value = [];
+  isSearchingManager.value = false;
+  hasSearchedManager.value = false;
+  showManagerSearchResults.value = false;
+  selectedManager.value = null;
+};
+
+const convertToManaged = async () => {
+  if (!selectedManager.value || !selectedManager.value.uid) {
+    convertToManagedError.value = 'Please select a manager';
+    return;
+  }
+  
+  if (selectedManager.value.uid === user.value?.uid) {
+    convertToManagedError.value = 'You cannot be your own manager';
+    return;
+  }
+  
+  convertToManagedError.value = '';
+  convertToManagedSuccess.value = '';
+  
+  if (!window.confirm('Converting to a managed user will remove your email and phone contacts, keeping only endpoint contacts. Continue?')) {
+    return;
+  }
+  
+  try {
+    convertToManagedBusy.value = true;
+    await store.dispatch('auth/convertToManagedUser', {
+      uid: user.value.uid,
+      managerUid: selectedManager.value.uid
+    });
+    convertToManagedSuccess.value = 'Successfully converted to managed user';
+    // Reset form to refresh user data
+    setTimeout(() => {
+      resetForm();
+    }, 1500);
+  } catch (e) {
+    const errorMsg = e.message || 'Failed to convert to managed user';
+    if (errorMsg.includes('already_managed')) {
+      convertToManagedError.value = 'This account is already a managed user';
+    } else if (errorMsg.includes('cannot_be_own_manager')) {
+      convertToManagedError.value = 'You cannot be your own manager';
+    } else if (errorMsg.includes('manager_not_found')) {
+      convertToManagedError.value = 'Manager not found';
+    } else {
+      convertToManagedError.value = errorMsg;
+    }
+  } finally {
+    convertToManagedBusy.value = false;
+  }
+};
+
 // Delete account (simple)
 const deleteBusy = ref(false);
 const deleteError = ref('');
@@ -734,6 +928,20 @@ const deleteAccount = async () => {
           
           <div class="form-group">
             <div class="form-row">
+              <label for="bio">Bio</label>
+              <textarea
+                id="bio"
+                v-model="bio"
+                :maxlength="BIO_MAX_LENGTH"
+                placeholder="Share a short description"
+              ></textarea>
+            </div>
+            <div class="field-error" v-if="bioError">{{ bioError }}</div>
+            <div class="field-hint">Let others know who you are. {{ (bio && bio.length) || 0 }}/{{ BIO_MAX_LENGTH }} characters.</div>
+          </div>
+          
+          <div class="form-group">
+            <div class="form-row">
               <label for="tag">Tag</label>
               <input 
                 id="tag" 
@@ -757,7 +965,18 @@ const deleteAccount = async () => {
                 <span class="notify-text">Private account</span>
               </label>
             </div>
-            <div class="field-hint">Private profiles are visible only to users you follow or manage, or who follow or manage you.</div>
+            <div class="field-hint">Private profiles are visible only to users you manage, or who manage you.</div>
+          </div>
+
+          <div class="form-group">
+            <div class="form-row privacy-row">
+              <label style="min-width:auto;">Bot identity</label>
+              <label class="notify-toggle">
+                <input type="checkbox" v-model="isBot" />
+                <span class="notify-text">Mark this account as a bot</span>
+              </label>
+            </div>
+            <div class="field-hint">Bots display a 🤖 badge throughout the app.</div>
           </div>
 
           <div class="form-group contact-section" v-if="!isManaged">
@@ -887,6 +1106,61 @@ const deleteAccount = async () => {
         <hr />
 
           <div class="verification-message" v-if="verificationMessage">{{ verificationMessage }}</div>
+
+          <!-- Convert to Managed User Section -->
+          <div class="form-group" v-if="!isManaged">
+            <h4 style="margin: 0 0 8px 0;">Convert to Managed User</h4>
+            <div class="field-hint" style="margin-bottom: 12px;">Convert this account to a managed user account. You'll need to select a manager.</div>
+            
+            <div class="recipient-input-container">
+              <div class="input-wrapper" :class="{ 'valid': isManagerValid === true, 'invalid': isManagerValid === false, 'searching': isSearchingManager }">
+                <input 
+                  v-model="managerSearchQuery" 
+                  @input="searchManager"
+                  @keydown.escape="clearManagerSearch"
+                  placeholder="Search for manager by username or tag" 
+                  class="recipient-input"
+                />
+                <div v-if="isSearchingManager" class="search-indicator" title="Searching...">
+                  <div class="spinner"></div>
+                </div>
+                <div v-else-if="isManagerValid === true" class="valid-indicator" title="Valid manager">✓</div>
+                <div v-else-if="isManagerValid === false" class="invalid-indicator" title="Invalid manager">✗</div>
+              </div>
+              <button 
+                @click="convertToManaged" 
+                class="add-recipient-btn"
+                :disabled="!canConvertToManaged || convertToManagedBusy"
+              >
+                <div v-if="convertToManagedBusy" class="spinner" style="margin-right: 6px;"></div>
+                {{ convertToManagedBusy ? 'Converting...' : 'Convert' }}
+              </button>
+            </div>
+
+            <!-- Search results -->
+            <div class="search-results-container">
+              <div v-if="showManagerSearchResults && managerSearchResults && managerSearchResults.length > 0" class="search-results-list">
+                <div 
+                  v-for="(user, index) in managerSearchResults" 
+                  :key="user.uid" 
+                  class="search-result-item"
+                  @click.stop="selectManager(user)"
+                >
+                  <div class="search-result-content">
+                    <span class="search-result-name">{{ user.display_name || 'User' }}</span>
+                    <span class="search-result-tag">@{{ user.user_tag }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else-if="managerSearchResults.length === 0 && hasSearchedManager && !isSearchingManager" class="no-search-results">
+                No users found. Try a different search term.
+              </div>
+            </div>
+
+            <div class="field-error" v-if="convertToManagedError">{{ convertToManagedError }}</div>
+            <div class="field-hint" v-if="convertToManagedSuccess" style="color: var(--color-success, #10b981);">{{ convertToManagedSuccess }}</div>
+          </div>
 
           <!-- Change Password Section -->
           <div class="form-group" v-if="!isManaged">
@@ -1076,7 +1350,8 @@ const deleteAccount = async () => {
   font-size: var(--font-size-sm);
 }
 
-.form-group input {
+.form-group input,
+.form-group textarea {
   width: 100%;
   padding: var(--space-xs) var(--space-md);
   border: 1px solid var(--color-border);
@@ -1085,6 +1360,12 @@ const deleteAccount = async () => {
   color: var(--color-text);
   font-size: var(--font-size-sm);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.form-group textarea {
+  min-height: 100px;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.4;
 }
 
 .password-field { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; }
@@ -1102,7 +1383,8 @@ const deleteAccount = async () => {
   min-width: 140px;
 }
 
-.form-group input:focus {
+.form-group input:focus,
+.form-group textarea:focus {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 2px var(--color-primary-light);
@@ -1306,6 +1588,157 @@ const deleteAccount = async () => {
 .confirm-title { font-weight: 600; margin-bottom: 6px; }
 .confirm-text { font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: 12px; }
 .confirm-actions { display: flex; gap: 12px; justify-content: flex-end; }
+/* Convert to managed user styles (reused from RecipientsModal) */
+.recipient-input-container {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.input-wrapper {
+  flex: 1;
+  position: relative;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-input-bg, var(--color-surface));
+  transition: all 0.2s ease;
+}
+
+.input-wrapper:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 79, 140, 255), 0.2);
+}
+
+.input-wrapper.valid {
+  border-color: var(--color-success);
+}
+
+.input-wrapper.invalid {
+  border-color: var(--color-error);
+}
+
+.input-wrapper.searching {
+  border-color: var(--color-primary);
+}
+
+.recipient-input {
+  width: 100%;
+  padding: 12px 40px 12px 12px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  outline: none;
+}
+
+.recipient-input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+.search-indicator,
+.valid-indicator,
+.invalid-indicator {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.valid-indicator {
+  color: var(--color-success);
+  font-weight: bold;
+}
+
+.invalid-indicator {
+  color: var(--color-error);
+  font-weight: bold;
+}
+
+.add-recipient-btn {
+  padding: 12px 16px;
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-recipient-btn:hover:not(:disabled) {
+  background-color: var(--color-primary-dark);
+  transform: translateY(-1px);
+}
+
+.add-recipient-btn:disabled {
+  background-color: var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.search-results-container {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.search-results-list {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.search-result-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border);
+  transition: background-color 0.2s ease;
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.search-result-item:hover {
+  background-color: var(--color-hover-overlay);
+}
+
+.search-result-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.search-result-name {
+  font-weight: 500;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+}
+
+.search-result-tag {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.no-search-results {
+  padding: 16px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-style: italic;
+}
+
 @media (max-width: 600px) {
   .modal-container { width: 96%; max-width: 560px; max-height: 86vh; }
   .form-row { flex-direction: column; align-items: stretch; gap: 6px; }
@@ -1317,5 +1750,7 @@ const deleteAccount = async () => {
   .notify-toggle { align-self: flex-start; width: auto; }
   .verify-row { align-items: flex-start; flex-wrap: wrap; }
   .code-input { max-width: 100%; }
+  .recipient-input-container { flex-direction: column; }
+  .add-recipient-btn { width: 100%; }
 }
 </style> 

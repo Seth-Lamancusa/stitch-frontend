@@ -95,8 +95,17 @@
                   role="menuitem"
                   @click="onSelectPrincipal(managerUid)"
                 >
-                  <span class="menu-item-name">{{ managerDisplayName }}</span>
-                  <span v-if="managerTag" class="menu-item-tag">@{{ managerTag }}</span>
+                  <div class="menu-item-main">
+                    <span class="menu-item-name">{{ managerDisplayName }}</span>
+                    <span v-if="managerTag" class="menu-item-tag">@{{ managerTag }}</span>
+                  </div>
+                  <span
+                    v-if="switchingPrincipalUid === managerUid"
+                    class="menu-item-status"
+                    aria-hidden="true"
+                  >
+                    <span class="menu-switch-spinner"></span>
+                  </span>
                 </div>
               </div>
               <div class="menu-divider"></div>
@@ -114,8 +123,17 @@
                     role="menuitem"
                     @click="onSelectPrincipal(m && (m.uid || m.id || m._key))"
                   >
-                    <span class="menu-item-name">{{ getUserDisplayName(m) }}</span>
-                    <span v-if="m && m.user_tag" class="menu-item-tag">@{{ m.user_tag }}</span>
+                    <div class="menu-item-main">
+                      <span class="menu-item-name">{{ getUserDisplayName(m) }}</span>
+                      <span v-if="m && m.user_tag" class="menu-item-tag">@{{ m.user_tag }}</span>
+                    </div>
+                    <span
+                      v-if="switchingPrincipalUid === resolveUid(m)"
+                      class="menu-item-status"
+                      aria-hidden="true"
+                    >
+                      <span class="menu-switch-spinner"></span>
+                    </span>
                   </div>
                   <div v-if="managedUsers.length === 0" class="menu-empty">No managed users</div>
                 </template>
@@ -238,6 +256,7 @@ const isPrincipalMenuOpen = ref(false);
 const principalMenuWrapperRef = ref(null);
 const usernameContainerRef = ref(null);
 const activePrincipalUidLocal = ref(null);
+const switchingPrincipalUid = ref(null);
 const isCreateManagedModalOpen = ref(false);
 
 // Public SPA: no internal/admin tabs here
@@ -374,18 +393,36 @@ const togglePrincipalMenu = async () => {
 };
 const closePrincipalMenu = () => { isPrincipalMenuOpen.value = false; };
 const onSelectPrincipal = async (_uid) => {
+  if (!_uid || switchingPrincipalUid.value) return;
+  const currentActive = activePrincipalUid.value;
+  if (_uid === currentActive) {
+    closePrincipalMenu();
+    return;
+  }
+  const manager = managerUid.value;
+  const isTargetManager = !!manager && _uid === manager;
+  const mustHopThroughManager = !isTargetManager && isDelegated.value;
+
+  switchingPrincipalUid.value = _uid;
+  activePrincipalUidLocal.value = _uid;
   try {
-    if (!_uid) return;
-    const manager = managerUid.value;
-    if (_uid === manager) {
+    if (isTargetManager) {
       await store.dispatch('auth/returnToSelf');
-    } else {
-      await store.dispatch('auth/switchPrincipal', { managedUid: _uid });
+      closePrincipalMenu();
+      return;
     }
+
+    if (mustHopThroughManager) {
+      await store.dispatch('auth/returnToSelf');
+    }
+
+    await store.dispatch('auth/switchPrincipal', { managedUid: _uid });
+    closePrincipalMenu();
   } catch (e) {
     console.error('[TabViewLayout] principal switch failed', e);
   } finally {
-    closePrincipalMenu();
+    switchingPrincipalUid.value = null;
+    activePrincipalUidLocal.value = null;
   }
 };
 const onCreateManagedUser = () => { closePrincipalMenu(); isCreateManagedModalOpen.value = true; };
@@ -659,8 +696,36 @@ const onLogoClick = (event) => {
   color: #111;
 }
 
+.menu-item-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
 .menu-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.menu-item-tag { opacity: 0.7; font-size: 0.85em; margin-left: 6px; }
+.menu-item-tag {
+  opacity: 0.7;
+  font-size: 0.85em;
+  margin-left: auto;
+  padding-left: 6px;
+  text-align: right;
+}
+.menu-item-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+.menu-switch-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0, 0, 0, 0.3);
+  border-top-color: rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
 .menu-empty { padding: 6px 8px; opacity: 0.7; font-style: italic; }
 
 .username-container {

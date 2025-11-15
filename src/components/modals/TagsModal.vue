@@ -29,24 +29,15 @@
           </div>
 
           <div class="existing-tags-select" v-if="availableTags.length">
-            <label class="select-label" for="existing-tags-select">Add from existing</label>
-            <select
-              id="existing-tags-select"
-              v-model="selectedExistingTag"
-              class="tag-dropdown"
-              @change="addExistingTag"
-              :disabled="isLoadingTags"
-            >
-              <option value="">{{ defaultTagOptionText }}</option>
-              <option
-                v-for="tag in availableTags"
-                :key="`existing-${tag}`"
-                :value="tag"
-                :disabled="isTagSelected(tag)"
-              >
-                #{{ tag }}
-              </option>
-            </select>
+            <label class="select-label">Add from existing</label>
+            <TagDropdown
+              :available-tags="availableTags"
+              :selected-tags="selectedTagNames"
+              placeholder="All tags"
+              selected-label="Selected tags"
+              log-label="TagsModal TagDropdown"
+              @select="handleExistingTagSelect"
+            />
           </div>
 
           <div class="tags-list">
@@ -77,6 +68,7 @@
 <script setup>
 import { ref, watch, computed, onMounted, nextTick } from 'vue';
 import MessageService from '../../services/MessageService.js';
+import TagDropdown from '../TagDropdown.vue';
 
 const props = defineProps({
   isVisible: { type: Boolean, default: false },
@@ -93,7 +85,6 @@ const newTag = ref('');
 const isValid = ref(null);
 const tagInput = ref(null);
 const availableTags = ref([]);
-const selectedExistingTag = ref('');
 const isLoadingTags = ref(false);
 
 // Local working copy of tags
@@ -120,6 +111,10 @@ const displayTags = computed(() => {
   });
 });
 
+const selectedTagNames = computed(() =>
+  displayTags.value.map((tag) => getTagName(tag))
+);
+
 const fetchAvailableTags = async () => {
   try {
     isLoadingTags.value = true;
@@ -137,7 +132,6 @@ watch(() => props.isVisible, (visible) => {
   if (visible) {
     // Initialize local list from existingTags when opening
     tagsLocal.value = (props.existingTags || []).slice();
-    selectedExistingTag.value = '';
     fetchAvailableTags();
     // Autofocus
     nextTick(() => {
@@ -252,18 +246,11 @@ const addTag = async () => {
   nextTick(() => { try { tagInput.value && tagInput.value.focus(); } catch (_) {} });
 };
 
-const addExistingTag = async () => {
-  if (!selectedExistingTag.value || isUpdating.value) return;
-
-  const normalized = selectedExistingTag.value.trim().toLowerCase();
-  if (!normalized || isTagSelected(normalized)) {
-    selectedExistingTag.value = '';
-    return;
-  }
-
+const handleExistingTagSelect = async (tag) => {
+  if (!tag || isUpdating.value) return;
+  const normalized = (tag || '').toString().trim().toLowerCase();
+  if (!normalized || isTagSelected(normalized)) return;
   tagsLocal.value.push(normalized);
-  selectedExistingTag.value = '';
-
   await emitTagUpdates();
 };
 
@@ -335,12 +322,10 @@ onMounted(() => {
 .add-tag-btn { padding: 10px 16px; background-color: var(--color-primary); color: var(--color-text-inverse); border: none; border-radius: var(--radius-md); font-weight: 500; font-size: var(--font-size-sm); cursor: pointer; }
 .add-tag-btn:disabled { background-color: var(--color-border); color: var(--color-text-secondary); cursor: not-allowed; }
 
-.tags-list { min-height: 40px; margin-top: 12px; }
+.tags-list { min-height: 40px; margin-top: 12px; max-height: 150px; overflow-y: auto; padding-right: 4px; }
 .tags-rows { display: flex; flex-direction: column; gap: 8px; }
 .existing-tags-select { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
 .select-label { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
-.tag-dropdown { padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background-color: var(--color-surface); color: var(--color-text); }
-.tag-dropdown:disabled { opacity: 0.6; cursor: not-allowed; }
 .tag-row { 
   display: flex; 
   align-items: center; 

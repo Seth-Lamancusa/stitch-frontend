@@ -11,7 +11,7 @@ const props = defineProps({
   mode: {
     type: String,
     required: true,
-    validator: (val) => ['inbox', 'public', 'history', 'saved', 'incoming-links', 'outgoing-links'].includes(val)
+    validator: (val) => ['inbox', 'public', 'history', 'saved', 'incoming-links', 'outgoing-links', 'custom'].includes(val)
   },
   // Custom messages to display instead of fetching from store
   customMessages: {
@@ -76,7 +76,7 @@ const currentRequestId = ref(0);
 const localLoadingState = ref(false);
 
 // Mode classification helpers
-const isLocalMode = computed(() => ['saved', 'public', 'history', 'incoming-links', 'outgoing-links'].includes(props.mode));
+const isLocalMode = computed(() => ['saved', 'public', 'history', 'incoming-links', 'outgoing-links', 'custom'].includes(props.mode));
 const isStoreMode = computed(() => ['inbox', 'admin'].includes(props.mode));
 const requiresAuth = computed(() => ['inbox', 'saved', 'history'].includes(props.mode));
 

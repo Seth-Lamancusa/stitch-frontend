@@ -4,10 +4,14 @@
       <div class="search-controls">
         <div class="query-row">
           <input v-model="q" class="query-input" type="text" placeholder="Search content" @keydown.enter="runSearch" />
-          <select v-model="selectedTag" class="tag-select" aria-label="Filter by tag" @change="onTagSelected">
-            <option value="">{{ defaultTagOptionText }}</option>
-            <option v-for="tag in availableTags" :key="tag" :value="tag" :disabled="tags.includes(tag)">#{{ tag }}</option>
-          </select>
+          <TagDropdown
+            :available-tags="availableTags"
+            :selected-tags="tags"
+            placeholder="All tags"
+            selected-label="Selected tags"
+            log-label="SearchView TagDropdown"
+            @select="handleTagSelected"
+          />
           <select v-model="match" class="match-select" aria-label="Match mode">
             <option value="any">any tag</option>
             <option value="all">all tags</option>
@@ -29,22 +33,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import TabViewLayout from '../../components/layouts/TabViewLayout.vue';
 import MessageList from '../../components/MessageList.vue';
+import TagDropdown from '../../components/TagDropdown.vue';
 import MessageService from '../../services/MessageService.js';
 
 const q = ref('');
 const tags = ref([]);
-const selectedTag = ref('');
 const availableTags = ref([]);
 const match = ref('any');
 const results = ref([]);
 const isLoadingTags = ref(false);
-
-const defaultTagOptionText = computed(() => {
-  return tags.value.length > 0 ? 'Selected tags' : 'All tags';
-});
 
 const fetchTags = async () => {
   try {
@@ -59,12 +59,11 @@ const fetchTags = async () => {
   }
 };
 
-const onTagSelected = () => {
-  if (selectedTag.value && !tags.value.includes(selectedTag.value)) {
-    tags.value.push(selectedTag.value);
+const handleTagSelected = (tag) => {
+  if (!tag) return;
+  if (!tags.value.includes(tag)) {
+    tags.value.push(tag);
   }
-  // Reset dropdown to default option
-  selectedTag.value = '';
 };
 
 const removeTag = (i) => { 
@@ -113,9 +112,8 @@ watch(
 .search-controls { margin-bottom: 8px; }
 .query-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .query-input { flex: 1; min-width: 180px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-text); }
-.tag-select { min-width: 150px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-text); cursor: pointer; }
 .search-btn, .match-select { padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-text); cursor: pointer; }
-.tags-chips { display: block; margin-top: 6px; max-height: 120px; overflow-y: auto; padding: 4px; }
+.tags-chips { display: block; margin-top: 6px; max-height: 250px; overflow-y: auto; padding: 4px; }
 .tag-chip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 6px; font-size: var(--font-size-xs); background: var(--color-surface); color: var(--color-text); margin: 2px 6px 2px 0; }
 .remove-tag { background: none; border: none; color: var(--color-text-secondary); cursor: pointer; font-size: 14px; padding: 0 4px; }
 .remove-tag:hover { color: var(--color-error); }
