@@ -70,71 +70,6 @@ const showCurrentPassword = ref(false);
 const showNewPassword = ref(false);
 const showConfirmPassword = ref(false);
 
-// Endpoint signing secret management (write-only)
-const secretBusy = ref(false);
-const secretError = ref('');
-const generatedSecret = ref(''); // reveal-once buffer
-const hasJustRevealedSecret = ref(false);
-
-function base64UrlEncode(bytes) {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  const b64 = btoa(binary).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-  return b64;
-}
-
-function generateStrongSecret(lengthBytes = 32) {
-  const arr = new Uint8Array(lengthBytes);
-  (window.crypto || window.msCrypto).getRandomValues(arr);
-  return base64UrlEncode(arr);
-}
-
-const revealSecretOnce = (secret) => {
-  generatedSecret.value = secret;
-  hasJustRevealedSecret.value = true;
-};
-
-const dismissRevealedSecret = () => {
-  generatedSecret.value = '';
-  hasJustRevealedSecret.value = false;
-};
-
-const copyRevealedSecret = async () => {
-  try {
-    await navigator.clipboard.writeText(generatedSecret.value);
-  } catch (e) {
-    secretError.value = 'Failed to copy';
-    setTimeout(() => { secretError.value = ''; }, 2000);
-  }
-};
-
-const setOrRotateSigningSecret = async () => {
-  secretError.value = '';
-  if (!endpoint.value || !endpoint.value.trim()) {
-    secretError.value = 'Add and verify an endpoint first';
-    return;
-  }
-  try {
-    secretBusy.value = true;
-    const newSecret = generateStrongSecret(32);
-    const payload = {
-      endpoint_signing_secret: newSecret,
-    };
-    // No Key-Id in contract; single secret per endpoint
-    // Include endpoint if changed locally (backend can also infer current contact)
-    const originalEndpoint = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
-    if (endpoint.value !== originalEndpoint) {
-      payload.endpoint = endpoint.value.trim();
-    }
-    await store.dispatch('auth/updateProfile', payload);
-    // After successful write, the auth store refreshes /me and sets has_endpoint_signing_secret
-    revealSecretOnce(newSecret);
-  } catch (e) {
-    secretError.value = e.message || 'Failed to update signing secret';
-  } finally {
-    secretBusy.value = false;
-  }
-};
 
 // API Keys modal state
 const showApiKeysModal = ref(false);
@@ -147,8 +82,6 @@ const isEndpointVerified = computed(() => !!((user.value?.contacts || []).some(c
 const hasSavedEmail = computed(() => !!(user.value?.email));
 const hasSavedPhone = computed(() => !!(user.value?.phone_number));
 const hasSavedEndpoint = computed(() => !!((user.value?.contacts || []).find(c => c.type === 'endpoint')?.value));
-// Signing secret presence flag from /me
-const hasEndpointSigningSecret = computed(() => !!(user.value?.has_endpoint_signing_secret));
 
 // ------------------------------------------------------------
 // Normalization helpers for equality/dirty checks
@@ -250,10 +183,6 @@ const resetForm = () => {
   phoneCooldown.value = 0;
   if (emailCooldownTimerId) { clearInterval(emailCooldownTimerId); emailCooldownTimerId = null; }
   if (phoneCooldownTimerId) { clearInterval(phoneCooldownTimerId); phoneCooldownTimerId = null; }
-  // No Key-Id in contract
-  generatedSecret.value = '';
-  hasJustRevealedSecret.value = false;
-  secretError.value = '';
   // reset password visibility toggles
   showCurrentPassword.value = false;
   showNewPassword.value = false;
@@ -1072,35 +1001,6 @@ const deleteAccount = async () => {
               <span class="verify-tip" title="We POST a nonce to your endpoint; it must echo it back as JSON {nonce: '...'} or plaintext.">Your server must echo the posted nonce (JSON {nonce:"..."} or plaintext).</span>
             </div>
             <div class="verification-message" v-if="endpointVerificationMessage">{{ endpointVerificationMessage }}</div>
-
-            <!-- Endpoint Signing Secret (write-only) -->
-            
-            <div class="form-row" style="margin-top: 8px; align-items: center;">
-              <label>Endpoint Signing Secret</label>
-              <div style="display:flex; gap:8px; align-items:center; width:100%;">
-                <button class="update-btn" @click="setOrRotateSigningSecret" :disabled="secretBusy || !isEndpointVerified">
-                  <div class="button-inner">
-                    <div v-if="secretBusy" class="spinner"></div>
-                    {{ secretBusy ? 'Saving…' : (hasSavedEndpoint ? 'Rotate Secret' : 'Create Secret') }}
-                  </div>
-                </button>
-                <span v-if="hasEndpointSigningSecret" class="verified-badge" title="Signing secret exists">✓</span>
-                <span class="field-hint" v-if="!isEndpointVerified">Verify endpoint to enable</span>
-              </div>
-            </div>
-            <div v-if="hasJustRevealedSecret" class="verify-row" style="margin-top:8px;">
-              <div style="display:flex; flex-direction:column; gap:6px; width:100%;">
-                <div style="display:flex; gap:8px; align-items:center;">
-                  <span class="verify-label">Copy your secret now (shown once):</span>
-                  <button class="verify-btn" @click="copyRevealedSecret">Copy</button>
-                  <button class="verify-btn" @click="dismissRevealedSecret">Dismiss</button>
-                </div>
-                <input readonly :value="generatedSecret" style="font-family: monospace;" />
-                <div class="field-hint">This value is write-only and cannot be viewed again after dismissal.</div>
-                <div class="field-hint">Requests will include headers X-Stitch-Timestamp and X-Stitch-Signature.</div>
-                <div class="field-error" v-if="secretError">{{ secretError }}</div>
-              </div>
-            </div>
           </div>
 
         <hr />

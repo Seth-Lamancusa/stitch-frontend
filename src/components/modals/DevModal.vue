@@ -214,9 +214,9 @@ async function setOrRotateSigningSecret() {
         </div>
 
         <!-- Desktop content -->
-        <div v-else>
+        <div v-else class="desktop-content-wrapper">
           <!-- Unverified email banner -->
-          <div v-if="user && !isEmailVerified" class="verify-banner">
+          <div v-if="user && !isEmailVerified && !(user && user.is_managed)" class="verify-banner">
             <span>Verify your email to unlock messaging & notifications.</span>
             <a class="verify-link" href="#" @click.prevent="emit('close')">Verify now</a>
           </div>
@@ -229,7 +229,10 @@ async function setOrRotateSigningSecret() {
                 <label>Label</label>
                 <input placeholder="Optional label" v-model="newKeyLabel" />
                 <label>Scopes cap</label>
-                <input placeholder="e.g. msg.read msg.write" v-model="newKeyScopes" />
+                <div>
+                  <input placeholder="e.g. msg.read msg.write" v-model="newKeyScopes" />
+                  <div class="field-hint">Leave empty to use default: msg.read msg.write</div>
+                </div>
                 <div></div>
                 <div class="actions">
                   <button class="primary" :disabled="creating" @click="createKey">{{ creating ? 'Creating…' : 'Create Key' }}</button>
@@ -320,11 +323,12 @@ async function setOrRotateSigningSecret() {
 .fade-enter-from,.fade-leave-to{ opacity:0; }
 .modal-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.75); display:flex; align-items:center; justify-content:center; z-index:var(--z-index-modal); backdrop-filter: blur(2px); }
 .modal-container{ background:var(--color-surface); border-radius:var(--radius-md); width:92%; max-width:720px; max-height:82vh; box-shadow:var(--color-card-shadow); overflow:hidden; display:flex; flex-direction:column; }
-.modal-header{ display:flex; justify-content:space-between; align-items:center; padding:var(--space-md) var(--space-lg); border-bottom:1px solid var(--color-border); }
+.modal-header{ display:flex; justify-content:space-between; align-items:center; padding:var(--space-md) var(--space-lg); border-bottom:1px solid var(--color-border); flex-shrink:0; }
 .modal-header h3{ margin:0; color:var(--color-text); font-size:var(--font-size-lg); font-weight:600; }
 .close-button{ background:none; border:none; font-size:var(--font-size-xl); cursor:pointer; color:var(--color-text); opacity:.7; height:24px; width:24px; display:flex; align-items:center; justify-content:center; padding:0; }
 .close-button:hover{ opacity:1; }
-.modal-content{ padding:var(--space-lg); overflow-y:auto; flex:1; }
+.desktop-content-wrapper{ display:flex; flex-direction:column; flex:1; min-height:0; }
+.modal-content{ padding:var(--space-lg); overflow-y:auto; flex:1; min-height:0; }
 .error{ color: var(--color-error); margin-bottom: 8px; }
 .create-box{ border:1px solid var(--color-border); border-radius:8px; padding:12px; margin-bottom:12px; }
 .create-grid{ display:grid; grid-template-columns: 120px 1fr; gap:8px 12px; align-items:center; }
@@ -340,6 +344,7 @@ async function setOrRotateSigningSecret() {
 .status-badge.ok{ background: rgba(16,185,129,.12); color: var(--color-success, #10b981); border-color: rgba(16,185,129,.35); }
 .verify-tip{ font-size: var(--font-size-xs); color: var(--color-text-secondary); }
 .verification-message{ font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+.field-hint{ font-size: var(--font-size-xs); color: var(--color-text-secondary); margin-top: 4px; }
 .reveal-once{ display:flex; flex-direction:column; gap:6px; grid-column: 1 / -1; }
 .spinner.small{ width:12px; height:12px; border:2px solid rgba(0,0,0,0.3); border-top-color: var(--color-text-inverse); border-radius:50%; animation: spin 1s linear infinite; display:inline-block; margin-right:4px; vertical-align: middle; }
 .row.header.small{ font-weight:600; border-bottom:1px solid var(--color-border); padding-bottom:6px; margin-bottom:10px; }
@@ -352,7 +357,7 @@ async function setOrRotateSigningSecret() {
 .token{ word-break: break-all; }
 .actions .danger{ background:transparent; color: var(--color-error); border:1px solid var(--color-border); padding:6px 10px; border-radius:6px; cursor:pointer; }
 .actions .primary{ background: var(--color-primary); color: var(--color-text-inverse); border:none; padding:6px 10px; border-radius:6px; cursor:pointer; }
-.modal-footer{ display:flex; padding:var(--space-md) var(--space-lg); border-top:1px solid var(--color-border); }
+.modal-footer{ display:flex; padding:var(--space-md) var(--space-lg); border-top:1px solid var(--color-border); flex-shrink:0; }
 .button-group{ display:flex; gap:var(--space-md); margin-left:auto; }
 .cancel-btn{ background-color: transparent; color: var(--color-text); padding: var(--space-xs) var(--space-md); border: 1px solid var(--color-border); border-radius: var(--radius-md); cursor: pointer; font-size: var(--font-size-sm); font-weight: 500; }
 

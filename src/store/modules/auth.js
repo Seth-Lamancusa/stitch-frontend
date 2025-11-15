@@ -391,15 +391,13 @@ export default {
 
     async createManagedUser({ dispatch }, { display_name, user_tag, endpoints, scopes = 'msg.read msg.write ws', private: isPrivate = false }) {
       try {
-        const token = TokenManager.accessToken;
-        if (!token) throw new Error('Not authenticated');
         const payload = { display_name, user_tag, scopes, private: !!isPrivate };
         if (Array.isArray(endpoints)) payload.endpoints = endpoints;
         
         // Log what we're sending
         console.log('[AUTH] createManagedUser payload:', { display_name, user_tag, scopes, private: !!isPrivate });
-        const resp = await axios.post('/api/v1/managed/users', payload, {
-          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+        const resp = await apiClient.post('/managed/users', payload, {
+          headers: { 'Content-Type': 'application/json' }
         });
         if (!resp || resp.status < 200 || resp.status >= 300) {
           const data = (resp && resp.data) || {};

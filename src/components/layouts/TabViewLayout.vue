@@ -301,7 +301,7 @@ const activePrincipalUid = computed(() => store.getters['auth/activePrincipalUid
 const managerUid = computed(() => store.getters['auth/managerUid'] || resolveUid(user.value));
 const getUserDisplayName = (u) => {
   if (!u) return 'Unknown';
-  return u.displayName || (u.user_tag ? `@${u.user_tag}` : (u.email || 'Unknown'));
+  return u.displayName || u.display_name || (u.user_tag ? `@${u.user_tag}` : (u.email || 'Unknown'));
 };
 // Manager row should always reflect the true manager principal (act.sub when acting-as)
 const managerDisplayName = computed(() => {
