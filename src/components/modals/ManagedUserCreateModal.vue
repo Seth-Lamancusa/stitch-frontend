@@ -75,7 +75,6 @@ const onCreate = async () => {
           <div class="field">
             <label>Endpoints (optional)</label>
             <input v-model="endpoints" type="text" placeholder="e.g. https://bot.example.com/hook" />
-            <div class="hint">No backend call yet. This is a placeholder for styling and flow.</div>
           </div>
         </div>
         <div class="footer">
@@ -103,7 +102,7 @@ input{ background: var(--color-input-background,#000); color: var(--color-text,#
 .hint{ font-size: 12px; color: var(--color-text-secondary,#aaa); }
 .footer{ display:flex; justify-content:flex-end; gap:10px; padding:12px 14px; border-top:1px solid var(--color-border,#2a2a2a); }
 .btn{ background:transparent; color: var(--color-text,#fff); border:1px solid var(--color-border,#2a2a2a); border-radius:6px; padding:6px 10px; cursor:pointer; }
-.btn.primary{ background: var(--color-primary,#4f8cff); border-color: var(--color-primary,#4f8cff); color:#fff; }
+.btn.primary{ background: #fff; border-color: var(--color-border,#2a2a2a); color: #000; }
 .btn:disabled{ opacity:0.6; cursor:not-allowed; }
 .error{ margin-right:auto; color: var(--color-error, #ef4444); font-size: 12px; }
 </style>
