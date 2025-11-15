@@ -28,6 +28,27 @@
             </button>
           </div>
 
+          <div class="existing-tags-select" v-if="availableTags.length">
+            <label class="select-label" for="existing-tags-select">Add from existing</label>
+            <select
+              id="existing-tags-select"
+              v-model="selectedExistingTag"
+              class="tag-dropdown"
+              @change="addExistingTag"
+              :disabled="isLoadingTags"
+            >
+              <option value="">{{ defaultTagOptionText }}</option>
+              <option
+                v-for="tag in availableTags"
+                :key="`existing-${tag}`"
+                :value="tag"
+                :disabled="isTagSelected(tag)"
+              >
+                #{{ tag }}
+              </option>
+            </select>
+          </div>
+
           <div class="tags-list">
             <div v-if="displayTags.length === 0" class="no-tags">No tags yet</div>
             <div v-else class="tags-rows">
@@ -55,6 +76,7 @@
 
 <script setup>
 import { ref, watch, computed, onMounted, nextTick } from 'vue';
+import MessageService from '../../services/MessageService.js';
 
 const props = defineProps({
   isVisible: { type: Boolean, default: false },
@@ -70,9 +92,22 @@ const isUpdating = ref(false);
 const newTag = ref('');
 const isValid = ref(null);
 const tagInput = ref(null);
+const availableTags = ref([]);
+const selectedExistingTag = ref('');
+const isLoadingTags = ref(false);
 
 // Local working copy of tags
 const tagsLocal = ref([]);
+
+const defaultTagOptionText = computed(() => {
+  return (tagsLocal.value || []).length > 0 ? 'Selected tags' : 'All tags';
+});
+
+const isTagSelected = (tag) => {
+  const normalized = (tag || '').toLowerCase();
+  const existingNames = (tagsLocal.value || []).map(t => getTagName(t).toLowerCase());
+  return existingNames.includes(normalized);
+};
 
 // Display tags - handles both string and object formats
 const displayTags = computed(() => {
@@ -85,10 +120,25 @@ const displayTags = computed(() => {
   });
 });
 
+const fetchAvailableTags = async () => {
+  try {
+    isLoadingTags.value = true;
+    const resp = await MessageService.getAllTags();
+    availableTags.value = Array.isArray(resp?.data) ? resp.data : [];
+  } catch (e) {
+    console.error('[TagsModal] fetch tags error', e);
+    availableTags.value = [];
+  } finally {
+    isLoadingTags.value = false;
+  }
+};
+
 watch(() => props.isVisible, (visible) => {
   if (visible) {
     // Initialize local list from existingTags when opening
     tagsLocal.value = (props.existingTags || []).slice();
+    selectedExistingTag.value = '';
+    fetchAvailableTags();
     // Autofocus
     nextTick(() => {
       try { tagInput.value && tagInput.value.focus(); } catch (_) {}
@@ -165,6 +215,23 @@ const validateInput = () => {
   isValid.value = TAG_RE.test(normalized) && normalized.length <= MAX_TAG_LEN && !existingNames.includes(normalized);
 };
 
+const emitTagUpdates = async () => {
+  const tagNames = tagsLocal.value.map(t => getTagName(t));
+  if (props.isAddMode && props.messageId) {
+    isUpdating.value = true;
+    try {
+      emit('update', { messageId: props.messageId, tags: tagNames });
+      await new Promise(resolve => setTimeout(resolve, 300));
+    } catch (e) {
+      console.error('Failed to update tags:', e);
+    } finally {
+      isUpdating.value = false;
+    }
+  } else {
+    emit('change', tagNames);
+  }
+};
+
 const addTag = async () => {
   if (!canAdd.value || isUpdating.value) return;
   
@@ -180,27 +247,24 @@ const addTag = async () => {
   newTag.value = '';
   isValid.value = null;
   
-  // If in add mode and we have a messageId, update immediately
-  if (props.isAddMode && props.messageId) {
-    isUpdating.value = true;
-    try {
-      // Extract just the tag names for the update
-      const tagNames = tagsLocal.value.map(t => getTagName(t));
-      emit('update', { messageId: props.messageId, tags: tagNames });
-      // Wait a bit for the backend to respond
-      await new Promise(resolve => setTimeout(resolve, 300));
-    } catch (e) {
-      console.error('Failed to update tags:', e);
-    } finally {
-      isUpdating.value = false;
-    }
-  } else {
-    // For new message mode, just emit change
-    const tagNames = tagsLocal.value.map(t => getTagName(t));
-    emit('change', tagNames);
-  }
+  await emitTagUpdates();
   
   nextTick(() => { try { tagInput.value && tagInput.value.focus(); } catch (_) {} });
+};
+
+const addExistingTag = async () => {
+  if (!selectedExistingTag.value || isUpdating.value) return;
+
+  const normalized = selectedExistingTag.value.trim().toLowerCase();
+  if (!normalized || isTagSelected(normalized)) {
+    selectedExistingTag.value = '';
+    return;
+  }
+
+  tagsLocal.value.push(normalized);
+  selectedExistingTag.value = '';
+
+  await emitTagUpdates();
 };
 
 const removeTag = async (index) => {
@@ -208,23 +272,7 @@ const removeTag = async (index) => {
   
   tagsLocal.value.splice(index, 1);
   
-  // If in add mode and we have a messageId, update immediately
-  if (props.isAddMode && props.messageId) {
-    isUpdating.value = true;
-    try {
-      const tagNames = tagsLocal.value.map(t => getTagName(t));
-      emit('update', { messageId: props.messageId, tags: tagNames });
-      await new Promise(resolve => setTimeout(resolve, 300));
-    } catch (e) {
-      console.error('Failed to update tags:', e);
-    } finally {
-      isUpdating.value = false;
-    }
-  } else {
-    // For new message mode, just emit change
-    const tagNames = tagsLocal.value.map(t => getTagName(t));
-    emit('change', tagNames);
-  }
+  await emitTagUpdates();
 };
 
 const closeModal = () => {
@@ -289,6 +337,10 @@ onMounted(() => {
 
 .tags-list { min-height: 40px; margin-top: 12px; }
 .tags-rows { display: flex; flex-direction: column; gap: 8px; }
+.existing-tags-select { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.select-label { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
+.tag-dropdown { padding: 10px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background-color: var(--color-surface); color: var(--color-text); }
+.tag-dropdown:disabled { opacity: 0.6; cursor: not-allowed; }
 .tag-row { 
   display: flex; 
   align-items: center; 
