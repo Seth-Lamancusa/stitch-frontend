@@ -130,9 +130,6 @@ h4 { font-size: var(--font-size-md); }
 h5 { font-size: var(--font-size-sm); }
 h6 { font-size: var(--font-size-xs); }
 
-p {
-  margin-bottom: var(--space-md);
-}
 
 /* Utility classes */
 .text-center { text-align: center; }

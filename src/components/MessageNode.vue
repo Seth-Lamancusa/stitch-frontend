@@ -121,7 +121,11 @@
       
       <!-- Message body -->
       <div class="message-body">
-        <formatted-content v-if="displayMode === 'full'" :content="message.content" />
+        <formatted-content 
+          v-if="displayMode === 'full'" 
+          :content="message.content" 
+          :options="formattedContentOptions"
+        />
         <div v-else class="plaintext-content">{{ truncatedContent }}</div>
       </div>
       
@@ -1140,6 +1144,37 @@ export default {
         return processedContent;
       })(props.message.content);
     });
+
+    const renderTagSet = computed(() => {
+      const tags = props.message?.tags;
+      if (!Array.isArray(tags)) return new Set();
+      const set = new Set();
+      tags.forEach(tag => {
+        const value = typeof tag === 'string' ? tag : tag?.name;
+        if (typeof value === 'string' && value.trim()) {
+          set.add(value.toLowerCase());
+        }
+      });
+      return set;
+    });
+
+    const renderMentionSet = computed(() => {
+      const recipients = props.message?.recipients;
+      if (!Array.isArray(recipients)) return new Set();
+      const set = new Set();
+      recipients.forEach(recipient => {
+        const tag = (typeof recipient === 'object' ? recipient?.user_tag : recipient) || '';
+        if (typeof tag === 'string' && tag.trim()) {
+          set.add(tag.toLowerCase());
+        }
+      });
+      return set;
+    });
+
+    const formattedContentOptions = computed(() => ({
+      validTags: renderTagSet.value,
+      validMentions: renderMentionSet.value
+    }));
     
     // const handleReformat = async () => {
     //   if (isReformatting.value) return;
@@ -1477,6 +1512,7 @@ export default {
       copyMessageJson,
       copyMessageText,
       truncatedContent,
+      formattedContentOptions,
       // isReformatting,
       // handleReformat,
       messageContentRef,
@@ -1998,6 +2034,7 @@ export default {
 
 .message-content p {
   color: #ffffff; /* Force white text color */
+  margin-bottom: .6rem;
 }
 
 /* Add larger font size when not in list view */
@@ -2049,7 +2086,6 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 12px
 }
 
 .reply-count {
@@ -2737,6 +2773,7 @@ export default {
 
 .message-content p {
   color: #ffffff; /* Force white text color */
+  margin-bottom: .6rem;
 }
 
 /* Add larger font size when not in list view */
