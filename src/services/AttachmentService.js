@@ -9,7 +9,8 @@ const ALLOWED_TYPES = [
   'image/jpg',
   'image/png',
   'image/gif',
-  'image/webp'
+  'image/webp',
+  'text/plain'
 ]
 
 const getAuthHeaders = () => {
@@ -30,7 +31,7 @@ const validateFile = (file) => {
                       fileType.startsWith('image/')
   
   if (!isValidType) {
-    throw new Error(`File type not supported. Please upload a PDF or image file (jpg, png, gif, webp)`)
+    throw new Error(`File type not supported. Please upload a PDF, text file (.txt), or image file (jpg, png, gif, webp)`)
   }
   
   return true
