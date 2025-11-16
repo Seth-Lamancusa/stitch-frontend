@@ -137,21 +137,60 @@
         <div v-if="showVerifyCTA" class="verify-cta" role="button" tabindex="0" @click.stop.prevent="handleVerifyClick" aria-label="Verify your email to get started">
           <span class="verify-cta__text">Verify your email to get started!</span>
         </div>
-        <div v-else class="textarea-wrapper">
+        <div v-else class="textarea-wrapper" ref="textareaWrapper">
+          <div
+            class="reply-overlay"
+            aria-hidden="true"
+            ref="highlightOverlay"
+            v-html="overlayHtml"
+          ></div>
           <textarea 
             v-model="content" 
             :placeholder="placeholderText" 
             class="reply-sheet__textarea"
             ref="replyTextarea"
             @keydown="handleTextareaKeyDown"
+            @keyup="handleTextareaKeyUp"
+            @click="handleTextareaClick"
             @focus="handleTextareaFocus"
             @blur="handleTextareaBlur"
-            @input="autoResizeTextarea"
+            @input="handleTextareaInput"
+            @scroll="syncOverlayScroll"
             :disabled="!canInteract"
             :class="{ 'disabled': !canInteract }"
             aria-label="Message content"
             rows="1"
           ></textarea>
+          <div
+            v-if="mentionDropdown.visible"
+            class="mention-dropdown"
+            :style="mentionDropdownStyle"
+            ref="mentionDropdownElement"
+          >
+            <div v-if="mentionDropdown.loading" class="mention-dropdown__status">
+              Searching…
+            </div>
+            <div
+              v-else-if="mentionDropdown.results.length === 0"
+              class="mention-dropdown__status"
+            >
+              {{ mentionDropdown.query.length > 0 ? 'No matches' : 'Type to search' }}
+            </div>
+            <ul v-else class="mention-dropdown__list">
+              <li
+                v-for="(result, index) in mentionDropdown.results"
+                :key="result.uid"
+                class="mention-dropdown__item"
+                :class="{ 'is-active': index === mentionDropdown.highlightedIndex }"
+                @mousedown.prevent="selectMentionResult(index)"
+              >
+                <span class="mention-dropdown__name">
+                  {{ result.display_name || result.user_tag }}
+                </span>
+                <span class="mention-dropdown__tag">@{{ result.user_tag }}</span>
+              </li>
+            </ul>
+          </div>
           
           <!-- Expand/Collapse toggle arrow -->
           <button 
@@ -231,7 +270,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, reactive } from 'vue';
 import { useStore } from 'vuex';
 import RecipientsModal from './modals/RecipientsModal.vue';
 import TagsModal from './modals/TagsModal.vue';
@@ -271,13 +310,23 @@ const emit = defineEmits(['send', 'cancel', 'send-success', 'send-error', 'open-
 // Setup store
 const store = useStore();
 
+const TAG_TOKEN_RE = /(^|[\s([{])#([A-Za-z0-9-]{1,32})(?![A-Za-z0-9-])/gm;
+const MENTION_TOKEN_RE = /(^|[\s([{])@([A-Za-z0-9-]{2,16})(?![A-Za-z0-9-])(?=[^\w@.]|$)/gm;
+const BOUNDARY_REGEX = /[\s.,!?;:)\]}'"`]/;
+const MAX_DRAFT_TAGS = 20;
+
 // Refs
 const replyTextarea = ref(null);
 const replySheet = ref(null);
 const fileInput = ref(null);
+const textareaWrapper = ref(null);
 const content = ref('');
 const isSending = ref(false);
 const showSearchResults = ref(false);
+const highlightOverlay = ref(null);
+const mentionDropdownElement = ref(null);
+const overlayHtml = ref('&nbsp;');
+const suppressedTags = ref(new Set());
 
 // Attachment state
 const attachments = ref([]);
@@ -321,13 +370,55 @@ const isPublic = computed({
   set: (value) => store.dispatch('navigation/updateReplyVisibility', value)
 });
 const recipients = computed(() => store.getters['navigation/replyRecipients']);
+const normalizedReplyTagSet = computed(() => {
+  const set = new Set();
+  (replyTags.value || []).forEach(tag => {
+    if (typeof tag === 'string') {
+      set.add(tag.toLowerCase());
+    }
+  });
+  return set;
+});
+const inlineTrackedTags = ref(new Set());
+const inlineTrackedRecipients = ref(new Set()); // Track user_tags of recipients added via inline mentions
+const mentionableUserTagSet = computed(() => {
+  const set = new Set();
+  const list = recipients.value || [];
+  list.forEach(recipient => {
+    const rawTag = (typeof recipient === 'object' ? recipient?.user_tag : recipient) || '';
+    if (typeof rawTag === 'string' && rawTag.trim()) {
+      set.add(rawTag.toLowerCase());
+    }
+  });
+  return set;
+});
 const replyAddToAncestors = computed(() => store.getters['navigation/replyAddToAncestors']);
 const isReplying = computed(() => store.getters['navigation/isReplying']);
 const botPromptModalVisible = computed(() => store.getters['navigation/botPromptModalVisible']);
 const showVerifyCTA = computed(() => !props.canInteract && props.isAuthenticated && !isEmailVerified.value);
 
-// Local draft tags (UI-only)
-const replyTags = ref([]);
+// Draft tags sourced from navigation store
+const replyTags = computed(() => store.getters['navigation/replyTags'] || []);
+
+const mentionDropdown = reactive({
+  visible: false,
+  query: '',
+  position: { top: 0, left: 0, bottom: null },
+  maxHeight: 240,
+  results: [],
+  highlightedIndex: 0,
+  loading: false,
+  anchorStart: null,
+  anchorEnd: null
+});
+let mentionSearchTimeout = null;
+
+// Positioning constants - adjust these to fine-tune dropdown placement
+const MENTION_DROPDOWN_WIDTH = 260;        // Width of the dropdown (px)
+const DROPDOWN_VERTICAL_GAP = 42;           // Gap between caret and dropdown (px) - increase for more space
+const MIN_DROPDOWN_HEIGHT = 140;           // Minimum height when space is limited (px)
+const MAX_DROPDOWN_HEIGHT = 320;           // Maximum height when there's plenty of space (px)
+let suppressNextMentionDetection = false;
 
 // Centralized validation logic
 const canSendReply = computed(() => {
@@ -358,6 +449,19 @@ const placeholderText = computed(() => {
   }
   
   return "Type your message...";
+});
+
+const mentionDropdownStyle = computed(() => {
+  const style = {
+    left: `${mentionDropdown.position.left || 0}px`,
+    maxHeight: `${mentionDropdown.maxHeight || MAX_DROPDOWN_HEIGHT}px`
+  };
+  if (typeof mentionDropdown.position.bottom === 'number') {
+    style.bottom = `${mentionDropdown.position.bottom}px`;
+  } else {
+    style.top = `${mentionDropdown.position.top || 0}px`;
+  }
+  return style;
 });
 
 // Generate reply header text
@@ -524,6 +628,52 @@ const handleTouchEnd = () => {
   dragDistance.value = 0;
 };
 
+const closeMentionDropdown = () => {
+  mentionDropdown.visible = false;
+  mentionDropdown.query = '';
+  mentionDropdown.results = [];
+  mentionDropdown.highlightedIndex = 0;
+  mentionDropdown.loading = false;
+  mentionDropdown.anchorStart = null;
+  mentionDropdown.anchorEnd = null;
+};
+
+const scheduleMentionSearch = (query) => {
+  if (mentionSearchTimeout) {
+    clearTimeout(mentionSearchTimeout);
+    mentionSearchTimeout = null;
+  }
+  if (!query || query.length < 1) {
+    mentionDropdown.results = [];
+    mentionDropdown.loading = false;
+    mentionDropdown.highlightedIndex = -1;
+    return;
+  }
+  mentionDropdown.loading = true;
+  mentionDropdown.highlightedIndex = 0;
+  mentionSearchTimeout = setTimeout(async () => {
+    try {
+      const results = await store.dispatch('auth/searchUsers', query);
+      const resultArray = Array.isArray(results) ? results : [];
+      mentionDropdown.results = resultArray;
+      // Update position when results arrive
+      if (mentionDropdown.visible && replyTextarea.value) {
+        updateMentionDropdownPosition(replyTextarea.value.selectionStart ?? 0);
+      }
+    } catch (e) {
+      console.error('[MentionDropdown] Search error:', e);
+      mentionDropdown.results = [];
+    } finally {
+      mentionDropdown.loading = false;
+      if (mentionDropdown.results.length === 0) {
+        mentionDropdown.highlightedIndex = -1;
+      } else if (mentionDropdown.highlightedIndex < 0) {
+        mentionDropdown.highlightedIndex = 0;
+      }
+    }
+  }, 200);
+};
+
 // Keyboard handling
 const handleTextareaFocus = () => {
   ensureReplyingActive();
@@ -543,6 +693,15 @@ const handleTextareaFocus = () => {
 };
 
 const handleTextareaBlur = () => {
+  // Delay closing dropdown to allow clicks on dropdown items
+  setTimeout(() => {
+    // Check if dropdown is still supposed to be visible (user might have clicked on it)
+    const activeElement = document.activeElement;
+    const isClickingDropdown = activeElement?.closest('.mention-dropdown');
+    if (!isClickingDropdown) {
+      closeMentionDropdown();
+    }
+  }, 150);
   // Reset keyboard state
   setTimeout(() => {
     isKeyboardVisible.value = false;
@@ -550,6 +709,46 @@ const handleTextareaBlur = () => {
 };
 
 const handleTextareaKeyDown = (event) => {
+  if (mentionDropdown.visible) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      suppressNextMentionDetection = true;
+      moveMentionHighlight(1);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      suppressNextMentionDetection = true;
+      moveMentionHighlight(-1);
+      return;
+    }
+    if (event.key === 'Enter') {
+      const hasSelection = mentionDropdown.results.length > 0 && mentionDropdown.highlightedIndex >= 0;
+      if (hasSelection) {
+        event.preventDefault();
+        suppressNextMentionDetection = true;
+        selectMentionResult(mentionDropdown.highlightedIndex);
+        return;
+      }
+    }
+    if (event.key === 'Tab') {
+      if (mentionDropdown.results.length > 0) {
+        event.preventDefault();
+        suppressNextMentionDetection = true;
+        const targetIndex = mentionDropdown.highlightedIndex >= 0
+          ? mentionDropdown.highlightedIndex
+          : 0;
+        selectMentionResult(targetIndex);
+        return;
+      }
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeMentionDropdown();
+      suppressNextMentionDetection = true;
+      return;
+    }
+  }
   if (event.key === 'Enter') {
     const isMobile = window.innerWidth <= 768;
     // Mobile: Enter should create a newline; Shift+Enter also newline (default)
@@ -631,6 +830,17 @@ const autoResizeTextarea = () => {
     textarea.style.overflowY = 'hidden';
   }
   
+  syncOverlayScroll();
+  if (mentionDropdown.visible) {
+    updateMentionDropdownPosition(mentionDropdown.anchorEnd ?? replyTextarea.value?.selectionStart ?? 0);
+  }
+  
+  // Log diagnostics after resize (only in dev)
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    nextTick(() => {
+      logAlignmentDiagnostics();
+    });
+  }
 };
 
 // Toggle textarea expansion
@@ -641,6 +851,233 @@ const toggleTextareaExpansion = () => {
   nextTick(() => {
     autoResizeTextarea();
   });
+};
+
+
+const calculateCaretCoordinates = (selectionEnd) => {
+  const textarea = replyTextarea.value;
+  const wrapper = textareaWrapper.value;
+  if (!textarea || !wrapper) return null;
+  const computed = window.getComputedStyle(textarea);
+  const div = document.createElement('div');
+  const properties = [
+    'boxSizing', 'width', 'fontSize', 'fontFamily', 'fontWeight', 'fontStyle',
+    'letterSpacing', 'textTransform', 'textAlign', 'lineHeight',
+    'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+    'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
+    'whiteSpace'
+  ];
+  properties.forEach(prop => {
+    div.style[prop] = computed[prop];
+  });
+  div.style.position = 'absolute';
+  div.style.visibility = 'hidden';
+  div.style.whiteSpace = 'pre-wrap';
+  div.style.wordWrap = 'break-word';
+  div.style.overflow = 'hidden';
+  div.style.width = `${textarea.clientWidth}px`;
+  const text = textarea.value.substring(0, selectionEnd);
+  div.textContent = text.endsWith('\n') ? `${text}\u200b` : text;
+  const span = document.createElement('span');
+  span.textContent = textarea.value.substring(selectionEnd) || '.';
+  div.appendChild(span);
+  document.body.appendChild(div);
+  const spanRect = span.getBoundingClientRect();
+  const wrapperRect = wrapper.getBoundingClientRect();
+  const top = spanRect.top - wrapperRect.top - textarea.scrollTop;
+  const left = spanRect.left - wrapperRect.left - textarea.scrollLeft;
+  document.body.removeChild(div);
+  return { top, left };
+};
+
+// Check for overflow clipping on parent elements
+const checkOverflowClipping = (element) => {
+  const parents = [];
+  let current = element.parentElement;
+  while (current && current !== document.body) {
+    const styles = window.getComputedStyle(current);
+    const overflow = styles.overflow + styles.overflowX + styles.overflowY;
+    if (overflow.includes('hidden') || overflow.includes('auto') || overflow.includes('scroll')) {
+      const rect = current.getBoundingClientRect();
+      parents.push({
+        element: current,
+        className: current.className,
+        overflow: overflow,
+        boundingRect: rect,
+        clipsDropdown: (() => {
+          const dropdownRect = element.getBoundingClientRect();
+          return (
+            dropdownRect.top < rect.top ||
+            dropdownRect.bottom > rect.bottom ||
+            dropdownRect.left < rect.left ||
+            dropdownRect.right > rect.right
+          );
+        })()
+      });
+    }
+    current = current.parentElement;
+  }
+  return parents;
+};
+
+const updateMentionDropdownPosition = (caretIndex) => {
+  if (!mentionDropdown.visible) {
+    return;
+  }
+  const textarea = replyTextarea.value;
+  if (!textarea) {
+    return;
+  }
+  const coords = calculateCaretCoordinates(caretIndex ?? textarea.selectionStart ?? 0);
+  if (!coords) {
+    return;
+  }
+  const wrapper = textareaWrapper.value;
+  const wrapperHeight = wrapper?.clientHeight || 0;
+  
+  // Horizontal positioning: align with caret, but keep dropdown within wrapper bounds
+  const maxLeft = Math.max(((wrapper?.clientWidth || 0) - MENTION_DROPDOWN_WIDTH), 0);
+  const nextLeft = Math.min(Math.max(coords.left, 0), maxLeft);
+  
+  // Vertical positioning: calculate how much space is available above the caret
+  // This determines the max height the dropdown can grow to
+  const availableAbove = Math.max(coords.top - DROPDOWN_VERTICAL_GAP, MIN_DROPDOWN_HEIGHT);
+  const clampedMaxHeight = Math.min(Math.max(availableAbove, MIN_DROPDOWN_HEIGHT), MAX_DROPDOWN_HEIGHT);
+  
+  // Bottom offset: distance from bottom of wrapper to caret position + gap
+  // This positions the dropdown above the textarea, anchored to the bottom
+  const bottomOffset = Math.max(wrapperHeight - coords.top + DROPDOWN_VERTICAL_GAP, DROPDOWN_VERTICAL_GAP);
+
+  mentionDropdown.maxHeight = clampedMaxHeight;
+  mentionDropdown.position = {
+    top: null,
+    bottom: bottomOffset,
+    left: nextLeft
+  };
+  
+  // Verify position after Vue renders the element
+  nextTick(() => {
+    const el = mentionDropdownElement.value;
+    if (el) {
+      const finalRect = el.getBoundingClientRect();
+      const wrapperRect = wrapper?.getBoundingClientRect();
+      const clippingParents = checkOverflowClipping(el);
+      
+      if (clippingParents.length > 0) {
+        console.warn('[MentionDropdown] ⚠️ Parent overflow clipping detected:', clippingParents);
+      }
+      
+      if (finalRect.width === 0 || finalRect.height === 0) {
+        console.warn('[MentionDropdown] ⚠️ Dropdown has zero dimensions!');
+      }
+      
+      if (finalRect.top < 0 || finalRect.left < 0 || 
+          finalRect.bottom > window.innerHeight || 
+          finalRect.right > window.innerWidth) {
+        console.warn('[MentionDropdown] ⚠️ Dropdown is outside viewport!', {
+          offTop: finalRect.top < 0 ? finalRect.top : 0,
+          offLeft: finalRect.left < 0 ? finalRect.left : 0,
+          offBottom: finalRect.bottom > window.innerHeight ? finalRect.bottom - window.innerHeight : 0,
+          offRight: finalRect.right > window.innerWidth ? finalRect.right - window.innerWidth : 0
+        });
+      }
+    } else {
+      console.warn('[MentionDropdown] ⚠️ Element not found after render!');
+    }
+  });
+};
+
+const detectMentionTrigger = (textarea) => {
+  if (!textarea) return;
+  const caretIndex = textarea.selectionStart ?? 0;
+  const textBeforeCaret = textarea.value.slice(0, caretIndex);
+  const mentionMatch = textBeforeCaret.match(/(^|[\s([{>])@([A-Za-z0-9-]{0,16})$/);
+  if (!mentionMatch) {
+    closeMentionDropdown();
+    return;
+  }
+  const query = mentionMatch[2] || '';
+  const mentionStart = caretIndex - query.length - 1;
+  mentionDropdown.visible = true;
+  mentionDropdown.query = query;
+  mentionDropdown.anchorStart = mentionStart >= 0 ? mentionStart : 0;
+  mentionDropdown.anchorEnd = caretIndex;
+  mentionDropdown.highlightedIndex = mentionDropdown.results.length ? Math.min(mentionDropdown.highlightedIndex, mentionDropdown.results.length - 1) : (query.length > 0 ? 0 : -1);
+  updateMentionDropdownPosition(caretIndex);
+  scheduleMentionSearch(query);
+};
+
+const handleTextareaInput = (event) => {
+  detectMentionTrigger(event.target);
+};
+
+const handleTextareaKeyUp = (event) => {
+  if (suppressNextMentionDetection) {
+    suppressNextMentionDetection = false;
+    return;
+  }
+  detectMentionTrigger(event.target);
+};
+
+const handleTextareaClick = (event) => {
+  detectMentionTrigger(event.target);
+};
+
+const moveMentionHighlight = (delta) => {
+  if (!mentionDropdown.results.length) return;
+  const total = mentionDropdown.results.length;
+  let next = mentionDropdown.highlightedIndex;
+  if (next < 0) next = 0;
+  next = (next + delta + total) % total;
+  mentionDropdown.highlightedIndex = next;
+};
+
+const ensureMentionRecipient = (user) => {
+  if (!user || !user.uid) return;
+  const current = recipients.value || [];
+  const exists = current.some(recipient => recipient && recipient.uid === user.uid);
+  if (!exists) {
+    store.dispatch('navigation/addRecipient', {
+      uid: user.uid,
+      display_name: user.display_name,
+      user_tag: user.user_tag,
+      email: user.email,
+      public: true
+    });
+  }
+};
+
+const insertMentionResult = (user) => {
+  const textarea = replyTextarea.value;
+  if (!textarea || mentionDropdown.anchorStart === null) return;
+  const start = mentionDropdown.anchorStart;
+  const end = mentionDropdown.anchorEnd ?? textarea.selectionStart ?? start;
+  const mentionText = `@${user.user_tag}`;
+  const before = content.value.slice(0, start);
+  const after = content.value.slice(end);
+  const insertion = `${mentionText} `;
+  content.value = `${before}${insertion}${after}`;
+  nextTick(() => {
+    const caretPosition = before.length + insertion.length;
+    if (replyTextarea.value) {
+      replyTextarea.value.setSelectionRange(caretPosition, caretPosition);
+    }
+    autoResizeTextarea();
+    updateOverlayHtml();
+    detectMentionTrigger(replyTextarea.value);
+  });
+  ensureMentionRecipient(user);
+  // Track this recipient as added via inline mention
+  if (user.user_tag) {
+    inlineTrackedRecipients.value.add(user.user_tag.toLowerCase());
+  }
+  closeMentionDropdown();
+};
+
+const selectMentionResult = (index) => {
+  const user = mentionDropdown.results[index];
+  if (!user) return;
+  insertMentionResult(user);
 };
 
 // Handle file upload
@@ -674,8 +1111,395 @@ const formatFileSize = (bytes) => {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 };
 
+const escapeHtml = (text = '') => {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+};
+
+const escapeAttribute = (text = '') => escapeHtml(text);
+
+const collectTokenMatches = (text, baseRegex, tokenPrefix, shouldHighlight, type) => {
+  const matches = [];
+  const regex = new RegExp(baseRegex.source, baseRegex.flags);
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const prefix = match[1] || '';
+    const body = match[2] || '';
+    const normalized = body.toLowerCase();
+    if (!shouldHighlight(normalized)) {
+      continue;
+    }
+    const tokenText = `${tokenPrefix}${body}`;
+    const start = match.index + prefix.length;
+    const end = start + tokenText.length;
+    matches.push({ start, end, text: tokenText, normalized, type });
+  }
+  return matches;
+};
+
+const buildHighlightedHtml = (rawText = '') => {
+  if (!rawText) {
+    return '&nbsp;';
+  }
+  const tagMatches = collectTokenMatches(
+    rawText,
+    TAG_TOKEN_RE,
+    '#',
+    (token) => normalizedReplyTagSet.value.has(token),
+    'tag'
+  );
+  const mentionMatches = collectTokenMatches(
+    rawText,
+    MENTION_TOKEN_RE,
+    '@',
+    (token) => mentionableUserTagSet.value.has(token),
+    'mention'
+  );
+  const matches = [...tagMatches, ...mentionMatches].sort((a, b) => a.start - b.start);
+  let cursor = 0;
+  let html = '';
+  for (const match of matches) {
+    if (match.start < cursor) {
+      continue;
+    }
+    html += escapeHtml(rawText.slice(cursor, match.start));
+    const className = match.type === 'tag'
+      ? 'reply-overlay-token reply-overlay-token--tag'
+      : 'reply-overlay-token reply-overlay-token--mention';
+    html += `<span class="${className}" data-token="${escapeAttribute(match.normalized)}">${escapeHtml(match.text)}</span>`;
+    cursor = match.end;
+  }
+  html += escapeHtml(rawText.slice(cursor));
+  const processed = html.replace(/\n/g, '<br />');
+  return processed || '&nbsp;';
+};
+
+const logAlignmentDiagnostics = () => {
+  if (!replyTextarea.value || !highlightOverlay.value) return;
+  
+  const textarea = replyTextarea.value;
+  const overlay = highlightOverlay.value;
+  
+  const textareaStyles = window.getComputedStyle(textarea);
+  const overlayStyles = window.getComputedStyle(overlay);
+  
+  // Measure character width at different positions
+  const testText = content.value || '';
+  const measureChar = (char, index) => {
+    const before = testText.slice(0, index);
+    const after = testText.slice(index + 1);
+    const div = document.createElement('div');
+    div.style.position = 'absolute';
+    div.style.visibility = 'hidden';
+    div.style.whiteSpace = 'pre-wrap';
+    div.style.fontFamily = textareaStyles.fontFamily;
+    div.style.fontSize = textareaStyles.fontSize;
+    div.style.fontWeight = textareaStyles.fontWeight;
+    div.style.fontStyle = textareaStyles.fontStyle;
+    div.style.letterSpacing = textareaStyles.letterSpacing;
+    div.style.lineHeight = textareaStyles.lineHeight;
+    div.style.padding = textareaStyles.padding;
+    div.style.boxSizing = textareaStyles.boxSizing;
+    div.textContent = before + char + after;
+    document.body.appendChild(div);
+    const width = div.offsetWidth;
+    document.body.removeChild(div);
+    return width;
+  };
+  
+  const charWidths = [];
+  if (testText.length > 0) {
+    for (let i = 0; i < Math.min(testText.length, 50); i++) {
+      const char = testText[i];
+      const width = measureChar(char, i);
+      charWidths.push({ char, index: i, width });
+    }
+  }
+  
+  console.log('[Alignment Diagnostics]', {
+    textarea: {
+      width: textarea.offsetWidth,
+      clientWidth: textarea.clientWidth,
+      scrollWidth: textarea.scrollWidth,
+      padding: textareaStyles.padding,
+      paddingLeft: textareaStyles.paddingLeft,
+      paddingRight: textareaStyles.paddingRight,
+      paddingTop: textareaStyles.paddingTop,
+      paddingBottom: textareaStyles.paddingBottom,
+      margin: textareaStyles.margin,
+      border: textareaStyles.border,
+      borderLeftWidth: textareaStyles.borderLeftWidth,
+      borderRightWidth: textareaStyles.borderRightWidth,
+      boxSizing: textareaStyles.boxSizing,
+      fontFamily: textareaStyles.fontFamily,
+      fontSize: textareaStyles.fontSize,
+      fontWeight: textareaStyles.fontWeight,
+      fontStyle: textareaStyles.fontStyle,
+      letterSpacing: textareaStyles.letterSpacing,
+      lineHeight: textareaStyles.lineHeight,
+      wordSpacing: textareaStyles.wordSpacing,
+      textIndent: textareaStyles.textIndent,
+      tabSize: textareaStyles.tabSize,
+      whiteSpace: textareaStyles.whiteSpace,
+      overflowWrap: textareaStyles.overflowWrap,
+      wordBreak: textareaStyles.wordBreak
+    },
+    overlay: {
+      width: overlay.offsetWidth,
+      clientWidth: overlay.clientWidth,
+      scrollWidth: overlay.scrollWidth,
+      padding: overlayStyles.padding,
+      paddingLeft: overlayStyles.paddingLeft,
+      paddingRight: overlayStyles.paddingRight,
+      paddingTop: overlayStyles.paddingTop,
+      paddingBottom: overlayStyles.paddingBottom,
+      margin: overlayStyles.margin,
+      border: overlayStyles.border,
+      borderLeftWidth: overlayStyles.borderLeftWidth,
+      borderRightWidth: overlayStyles.borderRightWidth,
+      boxSizing: overlayStyles.boxSizing,
+      fontFamily: overlayStyles.fontFamily,
+      fontSize: overlayStyles.fontSize,
+      fontWeight: overlayStyles.fontWeight,
+      fontStyle: overlayStyles.fontStyle,
+      letterSpacing: overlayStyles.letterSpacing,
+      lineHeight: overlayStyles.lineHeight,
+      wordSpacing: overlayStyles.wordSpacing,
+      textIndent: overlayStyles.textIndent,
+      tabSize: overlayStyles.tabSize,
+      whiteSpace: overlayStyles.whiteSpace,
+      overflowWrap: overlayStyles.overflowWrap,
+      wordBreak: overlayStyles.wordBreak
+    },
+    differences: {
+      widthDiff: textarea.offsetWidth - overlay.offsetWidth,
+      clientWidthDiff: textarea.clientWidth - overlay.clientWidth,
+      paddingLeftDiff: parseFloat(textareaStyles.paddingLeft) - parseFloat(overlayStyles.paddingLeft),
+      paddingRightDiff: parseFloat(textareaStyles.paddingRight) - parseFloat(overlayStyles.paddingRight),
+      fontSizeDiff: parseFloat(textareaStyles.fontSize) - parseFloat(overlayStyles.fontSize),
+      letterSpacingDiff: parseFloat(textareaStyles.letterSpacing) - parseFloat(overlayStyles.letterSpacing),
+      lineHeightDiff: parseFloat(textareaStyles.lineHeight) - parseFloat(overlayStyles.lineHeight)
+    },
+    charWidths: charWidths.slice(0, 20), // First 20 chars
+    contentLength: testText.length,
+    contentPreview: testText.slice(0, 100)
+  });
+};
+
+const updateOverlayHtml = () => {
+  const html = buildHighlightedHtml(content.value || '');
+  overlayHtml.value = html;
+  // Diagnostic logging
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    console.log('[ReplyBox overlay]', {
+      contentLength: content.value?.length || 0,
+      htmlLength: html.length,
+      replyTagsCount: replyTags.value.length,
+      replyTags: replyTags.value,
+      recipientsCount: recipients.value.length,
+      normalizedTagSet: Array.from(normalizedReplyTagSet.value),
+      mentionSet: Array.from(mentionableUserTagSet.value),
+      htmlPreview: html.slice(0, 200)
+    });
+    // Log alignment diagnostics after DOM update
+    nextTick(() => {
+      logAlignmentDiagnostics();
+    });
+  }
+};
+
+const syncOverlayScroll = () => {
+  if (!replyTextarea.value || !highlightOverlay.value) return;
+  highlightOverlay.value.scrollTop = replyTextarea.value.scrollTop;
+  highlightOverlay.value.scrollLeft = replyTextarea.value.scrollLeft;
+  if (mentionDropdown.visible) {
+    updateMentionDropdownPosition(mentionDropdown.anchorEnd ?? replyTextarea.value.selectionStart ?? 0);
+  }
+};
+
+const normalizeTagValueLocal = (tag) => {
+  if (typeof tag !== 'string') return null;
+  const trimmed = tag.trim().toLowerCase();
+  if (!trimmed) return null;
+  if (trimmed.length > 32) return null;
+  if (!/^[a-z0-9-]+$/.test(trimmed)) return null;
+  return trimmed;
+};
+
+const normalizeTagListInput = (tags) => {
+  if (!Array.isArray(tags)) return [];
+  const normalized = [];
+  const seen = new Set();
+  for (const tag of tags) {
+    const normalizedTag = normalizeTagValueLocal(tag);
+    if (!normalizedTag || seen.has(normalizedTag)) continue;
+    normalized.push(normalizedTag);
+    seen.add(normalizedTag);
+    if (normalized.length >= MAX_DRAFT_TAGS) break;
+  }
+  return normalized;
+};
+
+const setReplyTagsList = (tags) => {
+  const normalized = normalizeTagListInput(tags);
+  const current = replyTags.value || [];
+  let changed = normalized.length !== current.length;
+  if (!changed) {
+    for (let i = 0; i < normalized.length; i += 1) {
+      if (normalized[i] !== current[i]) {
+        changed = true;
+        break;
+      }
+    }
+  }
+  if (!changed) {
+    return;
+  }
+  store.dispatch('navigation/setReplyTags', normalized);
+  const tracker = inlineTrackedTags.value;
+  const nextTracker = new Set();
+  normalized.forEach(tag => {
+    if (tracker.has(tag)) {
+      nextTracker.add(tag);
+    }
+  });
+  inlineTrackedTags.value = nextTracker;
+};
+
+const applyModalTags = (tags, shouldClose) => {
+  if (!Array.isArray(tags)) {
+    if (shouldClose) {
+      showTagsModal.value = false;
+    }
+    return;
+  }
+  const normalized = normalizeTagListInput(tags);
+  const previous = replyTags.value.slice();
+  setReplyTagsList(normalized);
+  const removed = previous.filter(tag => !normalized.includes(tag));
+  if (removed.length > 0) {
+    const nextSuppressed = new Set(suppressedTags.value);
+    removed.forEach(tag => nextSuppressed.add(tag));
+    suppressedTags.value = nextSuppressed;
+  }
+  if (shouldClose) {
+    showTagsModal.value = false;
+  }
+};
+
+const collectCommittedTagTokens = (text, allowTerminalBoundary = false) => {
+  const regex = new RegExp(TAG_TOKEN_RE.source, TAG_TOKEN_RE.flags);
+  const ordered = [];
+  const set = new Set();
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const normalized = (match[2] || '').toLowerCase();
+    if (!normalized) continue;
+    const prefix = match[1] || '';
+    const tokenText = `#${match[2] || ''}`;
+    const tokenStart = match.index + prefix.length;
+    const tokenEnd = tokenStart + tokenText.length;
+    const nextChar = text[tokenEnd];
+    const hasBoundary = typeof nextChar === 'string'
+      ? BOUNDARY_REGEX.test(nextChar)
+      : allowTerminalBoundary;
+    if (!hasBoundary || set.has(normalized)) {
+      continue;
+    }
+    set.add(normalized);
+    ordered.push(normalized);
+  }
+  return { ordered, set };
+};
+
+const reconcileInlineTagsWithContent = (activeTokenSet) => {
+  const tracker = inlineTrackedTags.value;
+  if (!tracker.size) return;
+  const tagsToRemove = new Set();
+  tracker.forEach(tag => {
+    if (!activeTokenSet.has(tag)) {
+      tagsToRemove.add(tag);
+    }
+  });
+  if (!tagsToRemove.size) return;
+  tagsToRemove.forEach(tag => tracker.delete(tag));
+  const filtered = replyTags.value.filter(tag => !tagsToRemove.has(tag));
+  setReplyTagsList(filtered);
+};
+
+const collectCommittedMentionTokens = (text) => {
+  const regex = new RegExp(MENTION_TOKEN_RE.source, MENTION_TOKEN_RE.flags);
+  const set = new Set();
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const normalized = (match[2] || '').toLowerCase();
+    if (!normalized) continue;
+    set.add(normalized);
+  }
+  return set;
+};
+
+const reconcileInlineRecipientsWithContent = (activeMentionSet) => {
+  const tracker = inlineTrackedRecipients.value;
+  if (!tracker.size) return;
+  const recipientsToRemove = new Set();
+  tracker.forEach(userTag => {
+    if (!activeMentionSet.has(userTag)) {
+      recipientsToRemove.add(userTag);
+    }
+  });
+  if (!recipientsToRemove.size) return;
+  recipientsToRemove.forEach(userTag => tracker.delete(userTag));
+  const current = recipients.value || [];
+  const filtered = current.filter(recipient => {
+    const recipientTag = (typeof recipient === 'object' ? recipient?.user_tag : recipient) || '';
+    const normalizedTag = typeof recipientTag === 'string' ? recipientTag.toLowerCase() : '';
+    return !recipientsToRemove.has(normalizedTag);
+  });
+  store.commit('navigation/SET_REPLY_RECIPIENTS', filtered);
+};
+
+const autoStageTagsFromContent = (allowTerminalBoundary = false) => {
+  const text = content.value || '';
+  const { ordered, set } = collectCommittedTagTokens(text, allowTerminalBoundary);
+  const presentSet = set;
+  // Cleanup suppressed tags that are no longer present
+  const nextSuppressed = new Set();
+  suppressedTags.value.forEach(tag => {
+    if (presentSet.has(tag)) {
+      nextSuppressed.add(tag);
+    }
+  });
+  if (nextSuppressed.size !== suppressedTags.value.size) {
+    suppressedTags.value = nextSuppressed;
+  }
+  if (ordered.length === 0) {
+    reconcileInlineTagsWithContent(presentSet);
+    return;
+  }
+  const staged = replyTags.value.slice();
+  let changed = false;
+  for (const tag of ordered) {
+    if (suppressedTags.value.has(tag)) continue;
+    if (staged.includes(tag)) continue;
+    if (staged.length >= MAX_DRAFT_TAGS) break;
+    staged.push(tag);
+    inlineTrackedTags.value.add(tag);
+    changed = true;
+  }
+  if (changed) {
+    setReplyTagsList(staged);
+  }
+  reconcileInlineTagsWithContent(presentSet);
+};
+
 const sendReply = async () => {
   if (!canSendReply.value) return;
+  autoStageTagsFromContent(true);
   
   // Make sure we have a user (and email for non-managed users)
   const currentUser = store.getters['auth/user'];
@@ -738,6 +1562,10 @@ const sendReply = async () => {
     // Clear the input and attachments
     content.value = '';
     attachments.value = [];
+    setReplyTagsList([]);
+    suppressedTags.value = new Set();
+    inlineTrackedTags.value = new Set();
+    inlineTrackedRecipients.value = new Set();
     
     // Reset expansion state
     isTextareaExpanded.value = false;
@@ -892,25 +1720,11 @@ const closeTagsModal = () => {
 };
 
 const handleTagsDone = (newTags) => {
-  try {
-    if (Array.isArray(newTags)) {
-      replyTags.value = newTags.slice();
-    }
-  } catch (e) {
-    // no-op
-  } finally {
-    showTagsModal.value = false;
-  }
+  applyModalTags(newTags, true);
 };
 
 const handleTagsChange = (newTags) => {
-  try {
-    if (Array.isArray(newTags)) {
-      replyTags.value = newTags.slice();
-    }
-  } catch (e) {
-    // no-op
-  }
+  applyModalTags(newTags, false);
 };
 
 // Bot prompt methods removed (handled by global modal)
@@ -960,21 +1774,72 @@ onMounted(async () => {
   document.addEventListener('click', handleClickOutside);
   
   // Initialize textarea sizing
+   autoStageTagsFromContent();
   nextTick(() => {
     autoResizeTextarea();
+    updateOverlayHtml();
   });
 });
 
 // Watch content changes to ensure textarea resizes properly
 watch(content, () => {
+  autoStageTagsFromContent();
+  // Reconcile inline recipients with content
+  const text = content.value || '';
+  const activeMentionSet = collectCommittedMentionTokens(text);
+  reconcileInlineRecipientsWithContent(activeMentionSet);
   nextTick(() => {
     autoResizeTextarea();
+    updateOverlayHtml();
   });
+});
+
+watch(replyTags, () => {
+  nextTick(() => {
+    updateOverlayHtml();
+  });
+}, { deep: true });
+
+watch(recipients, (newRecipients) => {
+  // Clean up tracker: remove any tracked recipients that are no longer in the list
+  const currentTags = new Set();
+  (newRecipients || []).forEach(recipient => {
+    const tag = (typeof recipient === 'object' ? recipient?.user_tag : recipient) || '';
+    if (typeof tag === 'string' && tag.trim()) {
+      currentTags.add(tag.toLowerCase());
+    }
+  });
+  const tracker = inlineTrackedRecipients.value;
+  const toRemove = [];
+  tracker.forEach(userTag => {
+    if (!currentTags.has(userTag)) {
+      toRemove.push(userTag);
+    }
+  });
+  toRemove.forEach(userTag => tracker.delete(userTag));
+  nextTick(() => {
+    updateOverlayHtml();
+  });
+}, { deep: true });
+
+
+// Expose debug helper to window for console access
+onMounted(() => {
+  // Expose alignment diagnostics for manual debugging
+  if (typeof window !== 'undefined') {
+    window.__debugReplyBoxAlignment = () => {
+      logAlignmentDiagnostics();
+    };
+  }
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutsideSearch);
   document.removeEventListener('click', handleClickOutside);
+  if (mentionSearchTimeout) {
+    clearTimeout(mentionSearchTimeout);
+    mentionSearchTimeout = null;
+  }
 });
 
 const handleClickOutsideSearch = (event) => {
@@ -1320,6 +2185,131 @@ defineExpose({
   display: flex;
   align-items: flex-end;
   margin-bottom: 10px; /* Add space at bottom without affecting textarea height */
+  overflow: visible;
+}
+
+.reply-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 4px 12px 8px 12px;
+  padding-right: 36px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  pointer-events: none;
+  color: transparent;
+  font-family: inherit;
+  font-size: var(--font-size-md);
+  line-height: 1.5;
+  letter-spacing: inherit;
+  font-weight: inherit;
+  font-style: inherit;
+  font-variant: inherit;
+  font-feature-settings: inherit;
+  tab-size: inherit;
+  box-sizing: border-box;
+  z-index: 3;
+  border-radius: 12px;
+  min-height: 36px;
+  border: 1px solid transparent;
+  box-sizing: border-box;
+}
+
+:deep(.reply-overlay-token) {
+  --reply-overlay-token-bg: transparent;
+  --reply-overlay-token-border: transparent;
+  position: relative;
+  border-radius: 2px;
+  padding: 0;
+  display: inline;
+  min-height: 0;
+  min-width: 0;
+  color: var(--color-text);
+  line-height: inherit;
+  z-index: 0;
+}
+
+:deep(.reply-overlay-token::before) {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -2px;
+  right: -2px;
+  border-radius: 2px;
+  background-color: var(--reply-overlay-token-bg);
+  box-shadow: inset 0 0 0 1px var(--reply-overlay-token-border);
+  z-index: -1;
+  pointer-events: none;
+}
+
+:deep(.reply-overlay-token--tag) {
+  --reply-overlay-token-bg: rgba(255, 196, 76, 0.28);
+  --reply-overlay-token-border: rgba(255, 196, 76, 0.35);
+}
+
+:deep(.reply-overlay-token--mention) {
+  --reply-overlay-token-bg: rgba(92, 192, 255, 0.28);
+  --reply-overlay-token-border: rgba(92, 192, 255, 0.35);
+}
+
+.mention-dropdown {
+  position: absolute;
+  z-index: 1000;
+  min-width: 220px;
+  max-width: 320px;
+  max-height: 320px;
+  background: var(--color-surface);
+  border: 2px solid var(--color-primary);
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  padding: 6px 0;
+  color: var(--color-text);
+  overflow-y: auto;
+  /* Ensure visibility */
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: block !important;
+}
+
+.mention-dropdown__status {
+  padding: 8px 14px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.mention-dropdown__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.mention-dropdown__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  cursor: pointer;
+  gap: 12px;
+}
+
+.mention-dropdown__item.is-active,
+.mention-dropdown__item:hover {
+  background-color: var(--color-hover-overlay);
+}
+
+.mention-dropdown__name {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+}
+
+.mention-dropdown__tag {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 
 .reply-sheet__textarea {
@@ -1331,7 +2321,7 @@ defineExpose({
   margin: 0;
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  background-color: var(--color-surface);
+  background-color: transparent;
   color: var(--color-text);
   font-family: inherit;
   font-size: var(--font-size-md);
@@ -1340,6 +2330,9 @@ defineExpose({
   transition: border-color 0.2s ease, height 0.2s ease;
   box-sizing: border-box;
   overflow-y: hidden; /* Will be controlled by autoResizeTextarea */
+  position: relative;
+  z-index: 1;
+  caret-color: var(--color-text);
 }
 
 .reply-sheet__textarea:focus {
@@ -2359,6 +3352,7 @@ defineExpose({
   color: var(--color-error);
 }
 </style> 
+
 
 
 

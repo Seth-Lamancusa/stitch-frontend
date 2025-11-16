@@ -59,6 +59,7 @@ const formatFileSize = (bytes) => {
   color: var(--color-text);
   font-size: 14px;
   transition: background 0.2s;
+  margin-bottom: .6rem;
 }
 
 .attachment-link:hover {

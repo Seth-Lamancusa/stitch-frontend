@@ -12,6 +12,7 @@ import markdownFormatter from './plugins/markdown';
 import latexFormatter from './plugins/latex';
 import codeFormatter from './plugins/code';
 import mcpExamplesFormatter from './plugins/mcp_examples';
+import mentionsHashtagsFormatter from './plugins/mentions_hashtags';
 
 // Track if the system has been initialized
 let isInitialized = false;
@@ -35,6 +36,7 @@ export function initFormatters(options = {}) {
     registerFormatter(markdownFormatter);
     registerFormatter(latexFormatter);
     registerFormatter(codeFormatter);
+    registerFormatter(mentionsHashtagsFormatter);
     
     // Register custom formatters provided in options
     if (options.formatters && Array.isArray(options.formatters)) {

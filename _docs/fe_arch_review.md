@@ -264,6 +264,139 @@ export default {
 
 ---
 
+## ReplyBox.vue Decomposition Plan
+
+**Current State:** 3300+ lines in `script setup`, combining modal shell, toolbar controls, draft state, mentions, attachment uploads, tag/recipient modals, send orchestration, and store synchronization.
+
+### Phase 1: Extract UI Shell + Presentational Subcomponents
+
+**1. ReplyShell.vue** (~150 lines)
+- Backdrop, bottom-sheet container, ARIA wiring, open/close transitions
+- Props: `visible`, `isKeyboardVisible`, `isClosing`
+- Emits: `touchstart`, `touchmove`, `touchend`, `close`
+
+**2. ReplyHeader.vue** (~60 lines)
+- Title resolver (`Replying to @tag`, `New Message`, `Add Recipients`)
+- Close button + CTA slot
+- Props: `mode`, `targetMessage`, `canClose`
+- Emits: `close`
+
+**3. ReplyToolbar.vue** (~220 lines)
+- Visibility pill, tags pill, recipients pill, attachment trigger, disabled states
+- Props: `isPublic`, `tagsCount`, `recipientCount`, `uploading`, `canInteract`
+- Emits: `toggle-visibility`, `open-tags`, `open-recipients`, `attach`
+
+**4. ReplyAttachments.vue** (~120 lines)
+- Attachment chips with name/size and remove buttons
+- Props: `attachments`
+- Emits: `remove(index)`
+
+**5. ReplyTextarea.vue** (~250 lines)
+- Textarea, overlay/highlight layer, send button, expand toggle, verify CTA
+- Props: `value`, `placeholder`, `canInteract`, `isSending`, `showSuccess`, `hasMultipleLines`, `isExpanded`
+- Emits: `update:value`, `keydown`, `keyup`, `input`, `focus`, `blur`, `scroll`, `send`, `toggle-expand`, `click`
+
+**6. MentionDropdown.vue** (~140 lines)
+- Listbox rendering, loading/empty states, ARIA keyboard support
+- Props: `visible`, `results`, `highlightedIndex`, `position`, `loading`
+- Emits: `select(index)`, `navigate(delta)`, `close`
+
+**7. AddRecipientsPanel.vue** (~120 lines)
+- Existing recipient list, helper text, CTA buttons
+- Props: `existingRecipients`, `isVisible`
+- Emits: `done`
+
+### Phase 2: Extract Composables
+
+**1. useReplyDraft.js** (~180 lines)
+- `content`, placeholder resolution, CTA gating, `canSendReply`, success flash timer
+- Syncs navigation store flags (`isReplying`, `replyAddToAncestors`)
+
+**2. useReplyVisibility.js** (~80 lines)
+- Toggle logic, keyboard focus preservation, outside-click suppression
+- Bridges to `navigation/updateReplyVisibility`
+
+**3. useDraftTags.js** (~90 lines)
+- Keeps `replyTags` computed, normalization sets, suppression tracking
+- Emits events for toolbar badges + `TagsModal`
+
+**4. useDraftRecipients.js** (~120 lines)
+- Wraps `navigation/replyRecipients`, add recipients mode, selectors
+- Derives `mentionableUserTagSet`
+
+**5. useAttachments.js** (~160 lines)
+- File input refs, size validation, upload progress, uses `AttachmentService`
+- Handles `removeAttachment`, `formatFileSize`
+
+**6. useMentionDropdown.js** (~220 lines)
+- Regex scanning, anchor management, async search debounce (dispatches `auth/searchUsers`)
+- Keyboard navigation, positioning calculations, overlay sync
+
+**7. useReplySheetGestures.js** (~130 lines)
+- Touch drag detection, skip controls, closing thresholds
+
+**8. useReplyKeyboard.js** (~100 lines)
+- Mobile keyboard visibility, focus helpers, hotkeys (`Enter`, `Shift+Enter`, `Escape`)
+
+**9. useTextareaAutosize.js** (~70 lines)
+- Tracks `hasMultipleLines`, `isTextareaExpanded`, overlay sync with scroll
+
+### Phase 3: Extract Utilities & Services
+
+**1. utils/replyTokens.js**
+- Shared regex (`TAG_TOKEN_RE`, `MENTION_TOKEN_RE`, `BOUNDARY_REGEX`)
+- Helpers for highlighting + serialization
+
+**2. utils/replyValidation.js**
+- `validateContent(content, attachments, recipients)` returning normalized errors
+- Checks max tags (20), attachment limits, permission gating
+
+**3. utils/mentionPositioning.js**
+- Pure functions for caret → viewport conversion, dropdown placement constants
+
+**4. services/ReplyComposerService.js**
+- Wraps `MessageService.sendReply`, `AttachmentService.upload`, and store dispatches
+- Handles retries, analytics, error normalization before emitting `send-success/error`
+
+### Phase 4: Recompose Entry Component
+
+**ReplyBox.vue** (~300 lines)
+- Imports shell subcomponents + composables
+- Stitches together shared store dependencies (`navigation`, `auth`)
+- Emits `send`, `cancel`, `open-profile` with clean payloads
+- Relies on `ReplyComposerService` so future MessageService refactors only touch the service layer
+
+### Phase 5: Styles & Theming
+
+- `ReplyBox/styles/base.css` (shell + layout)
+- `ReplyBox/styles/toolbar.css`
+- `ReplyBox/styles/textarea.css`
+- `ReplyBox/styles/dropdown.css`
+- Reuse CSS variables (`--space-*`, `--color-surface`) aligned with `MessageNode` extraction
+
+### Benefits
+
+1. **Parallel Workstreams:** MessageNode and ReplyBox refactors can progress independently while sharing tokens/composables.
+2. **Service Boundary:** ReplyComposerService aligns with ongoing MessageService plan; ReplyBox no longer imports the API client directly.
+3. **Reusability:** Mention dropdown, attachment list, and toolbar pills become reusable in future compose/editor experiences.
+4. **Stability:** Smaller units simplify regression testing for reply/send flows.
+
+### Testing Checkpoints
+
+- [ ] Replying to existing message (desktop + mobile)
+- [ ] Starting a new thread
+- [ ] Visibility toggle persists + syncs to store
+- [ ] Tags modal open/update
+- [ ] Recipient selector open/update + add recipients mode panel
+- [ ] Attach file (success + failure paths)
+- [ ] Mentions dropdown search, keyboard nav, insertion
+- [ ] Send button states (disabled, sending, success flash, failures)
+- [ ] Gesture to dismiss sheet vs interacting with pills
+- [ ] Verify CTA flow (opens profile modal, closes box)
+- [ ] Screen reader focus order + ARIA labels
+
+---
+
 ## messages.js Store Module Decomposition Plan
 
 **Current State:** 1757 lines - excessively large monolithic Vuex store module

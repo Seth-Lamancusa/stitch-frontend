@@ -1,3 +1,29 @@
+const TAG_PATTERN = /^[A-Za-z0-9-]{1,32}$/;
+const MAX_DRAFT_TAGS = 20;
+
+function normalizeTagValue(tag) {
+  if (typeof tag !== 'string') return null;
+  const trimmed = tag.trim().toLowerCase();
+  if (!trimmed || trimmed.length > 32) return null;
+  if (!TAG_PATTERN.test(trimmed)) return null;
+  return trimmed;
+}
+
+function normalizeTagList(tags) {
+  if (!Array.isArray(tags)) return [];
+  const normalized = [];
+  const seen = new Set();
+  for (const tag of tags) {
+    const normalizedTag = normalizeTagValue(typeof tag === 'string' ? tag : tag?.name);
+    if (!normalizedTag) continue;
+    if (seen.has(normalizedTag)) continue;
+    normalized.push(normalizedTag);
+    seen.add(normalizedTag);
+    if (normalized.length >= MAX_DRAFT_TAGS) break;
+  }
+  return normalized;
+}
+
 export default {
   namespaced: true,
   
@@ -11,6 +37,7 @@ export default {
       isPublic: true,
       recipients: [],  // Recipients for new message drafts
       addToAncestors: true, // Default: add staged recipients to all ancestors when sending
+      tags: [], // Draft tags staged for the pending reply
     },
     // Separate state for add mode recipients
     addModeRecipients: [], // Recipients being staged for adding to existing message
@@ -73,6 +100,28 @@ export default {
     
     SET_REPLY_RECIPIENTS(state, recipients) {
       state.replySettings.recipients = recipients;
+    },
+    
+    SET_REPLY_TAGS(state, tags) {
+      state.replySettings.tags = normalizeTagList(tags);
+    },
+    
+    ADD_REPLY_TAG(state, tag) {
+      const normalized = normalizeTagValue(tag);
+      if (!normalized) return;
+      if (state.replySettings.tags.includes(normalized)) return;
+      if (state.replySettings.tags.length >= MAX_DRAFT_TAGS) return;
+      state.replySettings.tags = [...state.replySettings.tags, normalized];
+    },
+    
+    REMOVE_REPLY_TAG(state, tag) {
+      if (!tag) return;
+      const normalized = tag.toLowerCase();
+      state.replySettings.tags = state.replySettings.tags.filter(t => t !== normalized);
+    },
+    
+    CLEAR_REPLY_TAGS(state) {
+      state.replySettings.tags = [];
     },
     
     ADD_REPLY_RECIPIENT(state, recipient) {
@@ -219,6 +268,7 @@ export default {
     isReplying: state => state.isReplying,
     replyIsPublic: state => state.replySettings.isPublic,
     replyRecipients: state => state.replySettings.recipients,
+    replyTags: state => state.replySettings.tags,
     replyAddToAncestors: state => state.replySettings.addToAncestors,
     
     // Add mode recipients getters
@@ -369,6 +419,22 @@ export default {
       }
     },
     
+    setReplyTags({ commit }, tags) {
+      commit('SET_REPLY_TAGS', tags);
+    },
+    
+    addReplyTag({ commit }, tag) {
+      commit('ADD_REPLY_TAG', tag);
+    },
+    
+    removeReplyTag({ commit }, tag) {
+      commit('REMOVE_REPLY_TAG', tag);
+    },
+    
+    clearReplyTags({ commit }) {
+      commit('CLEAR_REPLY_TAGS');
+    },
+    
     setPreviousRoute({ commit }, route) {
       commit('SET_PREVIOUS_ROUTE', route);
     },
@@ -394,8 +460,9 @@ export default {
       const isPublic = message.public === 1 || message.public === true;
       commit('SET_REPLY_PUBLIC', isPublic);
       
-      // 2. Start with empty recipients
+      // 2. Start with empty recipients and tags
       commit('CLEAR_REPLY_RECIPIENTS');
+      commit('CLEAR_REPLY_TAGS');
       
       // 3. Build recipients list for new message based on parent
       const newRecipients = [];
