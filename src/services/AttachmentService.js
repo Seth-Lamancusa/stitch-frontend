@@ -2,7 +2,7 @@
 import apiClient from './apiClient'
 import TokenManager from './TokenManager'
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
 const ALLOWED_TYPES = [
   'application/pdf',
   'image/jpeg',
@@ -21,7 +21,7 @@ const getAuthHeaders = () => {
 const validateFile = (file) => {
   // Check file size
   if (file.size > MAX_FILE_SIZE) {
-    throw new Error(`File size exceeds 10MB limit. Your file is ${(file.size / 1024 / 1024).toFixed(2)}MB`)
+    throw new Error(`File size exceeds 100MB limit. Your file is ${(file.size / 1024 / 1024).toFixed(2)}MB`)
   }
   
   // Check file type
@@ -66,7 +66,7 @@ export default {
         } else if (status === 403) {
           throw new Error('You do not have permission to upload files.')
         } else if (status === 413) {
-          throw new Error('File is too large. Maximum size is 10MB.')
+          throw new Error('File is too large. Maximum size is 100MB.')
         } else {
           throw new Error(`Upload failed: ${message || 'Unknown error'}`)
         }
