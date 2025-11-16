@@ -93,7 +93,7 @@
           <input 
             ref="fileInput"
             type="file" 
-            accept="application/pdf,image/*"
+            accept="application/pdf,image/*,text/plain,.txt"
             multiple
             style="display: none"
             @change="handleFileSelect"
