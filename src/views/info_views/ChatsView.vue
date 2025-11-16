@@ -1,7 +1,7 @@
 <template>
   <InfoViewLayout
     pageTitle="Stitch Chats"
-    pageSubtitle="Interact with podcasts by joining the conversation yourself"
+    pageSubtitle="The world's first interactive podcast"
     heroClass="chats-hero"
     :showBetaBanner="false"
   >
