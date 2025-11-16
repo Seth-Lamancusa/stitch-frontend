@@ -905,7 +905,6 @@ const deleteAccount = async () => {
                 <span class="notify-text">Mark this account as a bot</span>
               </label>
             </div>
-            <div class="field-hint">Bots display a 🤖 badge throughout the app.</div>
           </div>
 
           <div class="form-group contact-section" v-if="!isManaged">
