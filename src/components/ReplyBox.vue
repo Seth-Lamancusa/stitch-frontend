@@ -94,6 +94,7 @@
             ref="fileInput"
             type="file" 
             accept="application/pdf,image/*"
+            multiple
             style="display: none"
             @change="handleFileSelect"
           />
@@ -101,8 +102,8 @@
             class="toolbar-control meta-pill"
             @click="fileInput?.click()"
             :disabled="!canInteract || uploading"
-            aria-label="Attach file"
-            title="Attach file"
+            aria-label="Attach files"
+            title="Attach files"
           >
             <span class="meta-pill__icon">📎</span>
             <span class="meta-pill__text">{{ uploading ? 'Uploading...' : `Attach (${attachments.length})` }}</span>
@@ -1082,22 +1083,35 @@ const selectMentionResult = (index) => {
 
 // Handle file upload
 const handleFileSelect = async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
+  const files = Array.from(event.target.files || []);
+  if (files.length === 0) return;
   
-  try {
-    uploading.value = true;
-    const metadata = await AttachmentService.uploadFile(file);
-    attachments.value.push(metadata);
-  } catch (error) {
-    console.error('Upload failed:', error);
-    // Use error message from AttachmentService if available, otherwise generic message
-    const errorMessage = error.message || 'Failed to upload file. Please try again.';
-    store.commit('ui/SET_ERROR', errorMessage);
-  } finally {
-    uploading.value = false;
-    if (fileInput.value) fileInput.value.value = '';
+  uploading.value = true;
+  const errors = [];
+  
+  // Upload files sequentially to avoid overwhelming the server
+  for (const file of files) {
+    try {
+      const metadata = await AttachmentService.uploadFile(file);
+      attachments.value.push(metadata);
+    } catch (error) {
+      console.error('Upload failed for file:', file.name, error);
+      // Collect error messages but continue with other files
+      const errorMessage = error.message || 'Failed to upload file. Please try again.';
+      errors.push(`${file.name}: ${errorMessage}`);
+    }
   }
+  
+  // Show error message if any uploads failed
+  if (errors.length > 0) {
+    const errorMessage = errors.length === 1 
+      ? errors[0] 
+      : `${errors.length} files failed to upload:\n${errors.join('\n')}`;
+    store.commit('ui/SET_ERROR', errorMessage);
+  }
+  
+  uploading.value = false;
+  if (fileInput.value) fileInput.value.value = '';
 };
 
 const removeAttachment = (index) => {
