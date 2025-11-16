@@ -67,11 +67,29 @@
       
       <div class="user-controls">
         <div class="user-info" v-if="user">
-          <div class="username-container" ref="usernameContainerRef" @click="openProfileModal">
+          <div
+            class="username-container"
+            ref="usernameContainerRef"
+            :class="{ 'is-switching': isSwitchingPrincipal }"
+            :aria-busy="isSwitchingPrincipal"
+            :aria-disabled="isSwitchingPrincipal"
+            :title="isSwitchingPrincipal ? switchingStatusMessage : 'Edit profile'"
+            @click="openProfileModal"
+          >
             <span class="username">{{ displayedPrincipalName }}</span>
             <span v-if="displayedPrincipalTag" class="user-tag">@{{ displayedPrincipalTag }}</span>
             <span v-if="isDelegated" class="acting-chip" title="Acting as">Acting as</span>
-            <span class="edit-icon" title="Edit profile">✎</span>
+            <span
+              v-if="isSwitchingPrincipal"
+              class="profile-switch-status"
+              role="status"
+              aria-live="polite"
+              :aria-label="switchingStatusMessage"
+            >
+              <span class="profile-switch-spinner" aria-hidden="true"></span>
+              <span class="profile-switch-text" aria-hidden="true">{{ switchingStatusMessage }}</span>
+            </span>
+            <span v-else class="edit-icon" title="Edit profile">✎</span>
           </div>
           <div class="principal-menu-wrapper">
             <button
@@ -91,7 +109,10 @@
               <div class="menu-section">
                 <div
                   class="menu-item manager"
-                  :class="{ active: effectiveActivePrincipalUid === managerUid }"
+                  :class="{
+                    active: activePrincipalUid === managerUid,
+                    pending: switchingPrincipalUid === managerUid
+                  }"
                   role="menuitem"
                   @click="onSelectPrincipal(managerUid)"
                 >
@@ -117,11 +138,14 @@
                 <template v-else>
                   <div
                     v-for="m in managedUsers"
-                    :key="(m && (m.uid || m.id || m._key)) || Math.random()"
+                    :key="resolveUid(m) || Math.random()"
                     class="menu-item"
-                    :class="{ active: (m && (m.uid || m.id || m._key)) === effectiveActivePrincipalUid }"
+                    :class="{
+                      active: resolveUid(m) === activePrincipalUid,
+                      pending: switchingPrincipalUid === resolveUid(m)
+                    }"
                     role="menuitem"
-                    @click="onSelectPrincipal(m && (m.uid || m.id || m._key))"
+                    @click="onSelectPrincipal(resolveUid(m))"
                   >
                     <div class="menu-item-main">
                       <span class="menu-item-name">{{ getUserDisplayName(m) }}</span>
@@ -210,6 +234,11 @@
     
     <!-- Mobile tab bar - only visible on mobile -->
     <MobileTabBar />
+    <div
+      v-if="isSwitchingPrincipal"
+      class="switching-overlay"
+      aria-hidden="true"
+    ></div>
   </div>
 </template>
 
@@ -255,8 +284,8 @@ const isApiKeysModalOpen = ref(false);
 const isPrincipalMenuOpen = ref(false);
 const principalMenuWrapperRef = ref(null);
 const usernameContainerRef = ref(null);
-const activePrincipalUidLocal = ref(null);
 const switchingPrincipalUid = ref(null);
+const isSwitchingPrincipal = computed(() => !!switchingPrincipalUid.value);
 const isCreateManagedModalOpen = ref(false);
 
 // Public SPA: no internal/admin tabs here
@@ -327,12 +356,11 @@ const managerTag = computed(() => {
   if (snap && snap.user_tag) return snap.user_tag;
   return (user.value && user.value.user_tag) ? user.value.user_tag : null;
 });
-const effectiveActivePrincipalUid = computed(() => activePrincipalUidLocal.value || activePrincipalUid.value);
-
 // Header: show selected principal name/tag
 const displayedPrincipal = computed(() => {
-  const current = effectiveActivePrincipalUid.value;
+  const current = activePrincipalUid.value;
   const manager = managerUid.value;
+  if (!current) return user.value;
   if (current === manager) return user.value;
   const list = managedUsers.value || [];
   return list.find((u) => resolveUid(u) === current) || user.value;
@@ -346,6 +374,7 @@ const isDelegated = computed(() => {
     return !!(active && manager && active !== manager);
   } catch (_) { return false; }
 });
+const switchingStatusMessage = computed(() => (isSwitchingPrincipal.value ? 'Switching…' : ''));
 
 const togglePrincipalMenu = async () => {
   const next = !isPrincipalMenuOpen.value;
@@ -404,7 +433,6 @@ const onSelectPrincipal = async (_uid) => {
   const mustHopThroughManager = !isTargetManager && isDelegated.value;
 
   switchingPrincipalUid.value = _uid;
-  activePrincipalUidLocal.value = _uid;
   try {
     if (isTargetManager) {
       await store.dispatch('auth/returnToSelf');
@@ -422,7 +450,6 @@ const onSelectPrincipal = async (_uid) => {
     console.error('[TabViewLayout] principal switch failed', e);
   } finally {
     switchingPrincipalUid.value = null;
-    activePrincipalUidLocal.value = null;
   }
 };
 const onCreateManagedUser = () => { closePrincipalMenu(); isCreateManagedModalOpen.value = true; };
@@ -455,7 +482,7 @@ watch(
 );
 
 const openProfileModal = () => {
-  if (user.value) {
+  if (user.value && !isSwitchingPrincipal.value) {
     isProfileModalOpen.value = true;
   }
 };
@@ -493,6 +520,7 @@ const onLogoClick = (event) => {
   grid-template-rows: auto 1fr;
   height: var(--app-height, 100vh);
   background: var(--color-background, #fff);
+  position: relative;
 }
 
 .app-header {
@@ -695,6 +723,10 @@ const onLogoClick = (event) => {
   background: var(--color-primary, #4f8cff);
   color: #111;
 }
+.menu-item.pending {
+  opacity: 0.65;
+  cursor: wait;
+}
 
 .menu-item-main {
   display: flex;
@@ -743,6 +775,17 @@ const onLogoClick = (event) => {
   background-color: var(--color-hover-overlay, #222);
 }
 
+.username-container.is-switching {
+  cursor: default;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.username-container.is-switching .username,
+.username-container.is-switching .user-tag {
+  opacity: 0.7;
+}
+
 .username {
   display: inline-block;
   max-width: 150px;
@@ -776,6 +819,45 @@ const onLogoClick = (event) => {
   font-size: 11px;
   line-height: 1.4;
   margin-left: 4px;
+}
+
+.profile-switch-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--color-text-secondary, #bbb);
+}
+
+.profile-switch-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: var(--color-primary, #4f8cff);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.profile-switch-text {
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 600px) {
+  .profile-switch-text {
+    display: none;
+  }
+}
+
+.switching-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 500;
+  pointer-events: all;
+  cursor: wait;
 }
 
 .logout-btn {
