@@ -12,7 +12,7 @@
           <div class="coming-soon-icon">🎙️</div>
           <h2>Coming Soon</h2>
           <p>
-            Podcast transcripts are uploaded to Stitch, where you can reply to anything a speaker said yourself. They can write back in the same Stitch thread.
+            Podcast transcripts are uploaded to Stitch, where you can reply to anything a speaker said yourself. They can write back in the same Stitch thread. We believe in the importance of open dialogue and honest conversation between individuals of different backgrounds and beliefs.
           </p>
         </div>
       </div>
