@@ -53,7 +53,7 @@
       <div class="container">
         <div class="home-main-content">
           <div class="home-intro"><i>
-            Tranform your ideas into reality in real time. Stitch is a digital platform for conversation and collaboration.</i>
+            Turn your ideas into reality in real time. Stitch is a digital platform for conversation and collaboration. Stitch fosters human autonomy alongside machine automation.</i>
           </div>
           <div class="content-columns">
             <div class="home-main-content-1">
