@@ -254,6 +254,18 @@ header {
   background: var(--legal-hero-bg);
 }
 
+.about-hero {
+  background: var(--about-hero-bg);
+}
+
+.how-hero {
+  background: var(--how-hero-bg);
+}
+
+.chats-hero {
+  background: var(--chats-hero-bg);
+}
+
 .hero-content {
   max-width: 800px;
   text-align: center;

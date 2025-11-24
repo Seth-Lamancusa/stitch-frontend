@@ -60,7 +60,7 @@
     <footer>
       <div class="footer-content">
         <div class="footer-logo">
-          <h2>Stitch</h2>
+          <img src="@/assets/stitch_logo.png" alt="Stitch" class="footer-logo-image" />
           <div class="contact-info">
             <p>Contact at <a href="mailto:seth@stitch.fyi">seth@stitch.fyi</a></p>
             <p><router-link to="/terms">Terms & Conditions</router-link></p>
@@ -175,6 +175,13 @@ onBeforeUnmount(() => {
   display: block;
 }
 
+.footer-logo-image {
+  height: 2.5rem;
+  width: auto;
+  display: block;
+  margin: 0 auto 1rem;
+}
+
 /* Contact info styling */
 .contact-info {
   font-size: 0.9rem;
@@ -204,7 +211,6 @@ onBeforeUnmount(() => {
   top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
 }
 
 /* Remove all underlines from links */
