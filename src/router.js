@@ -6,13 +6,11 @@ import NewThreadView from './views/app_views/NewThreadView.vue';
 import GraphView from './views/app_views/GraphView.vue';
 import SearchView from './views/app_views/SearchView.vue';
 import HomeView from './views/info_views/HomeView.vue';
+import AboutView from './views/info_views/AboutView.vue';
 import ArchitectureView from './views/info_views/ArchitectureView.vue';
 import TermsView from './views/info_views/TermsView.vue';
 import FeaturesView from './views/info_views/FeaturesView.vue';
 import HowView from './views/info_views/HowView.vue';
-import HowDocsView from './views/info_views/HowDocsView.vue';
-import HowBotsView from './views/info_views/HowBotsView.vue';
-import HowApiView from './views/info_views/HowApiView.vue';
 import ChatsView from './views/info_views/ChatsView.vue';
 import MessageListView from './views/app_views/MessageListView.vue';
 import PasswordResetView from './views/app_views/PasswordResetView.vue';
@@ -42,6 +40,11 @@ const routes = [
     component: HomeView
   },
   {
+    path: '/about',
+    name: 'about',
+    component: AboutView
+  },
+  {
     path: '/architecture',
     component: ArchitectureView
   },
@@ -56,18 +59,6 @@ const routes = [
   {
     path: '/how',
     component: HowView
-  },
-  {
-    path: '/how/docs',
-    component: HowDocsView
-  },
-  {
-    path: '/how/bots',
-    component: HowBotsView
-  },
-  {
-    path: '/how/api',
-    component: HowApiView
   },
   {
     path: '/chats',

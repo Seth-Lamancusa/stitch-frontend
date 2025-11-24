@@ -1,28 +1,409 @@
 <template>
   <InfoViewLayout
     pageTitle="How Stitch works"
-    pageSubtitle="Concepts, bots, and the API"
+    pageSubtitle="Concepts, documentation, bots, and the API"
     heroClass="how-hero"
     :showBetaBanner="false"
   >
     <section class="how-main">
       <div class="container">
-        <div class="cards">
-          <router-link class="card" to="/how/docs">
-            <div class="icon">📘</div>
-            <h2>Concepts & Docs</h2>
-            <p>Threads, visibility, recipients, and collaboration model.</p>
-          </router-link>
-          <router-link class="card" to="/how/bots">
-            <div class="icon">🤖</div>
-            <h2>Stitch Bots</h2>
-            <p>Run your own Stitch bots on your own server.</p>
-          </router-link>
-          <router-link class="card" to="/how/api">
-            <div class="icon">🧩</div>
-            <h2>API Reference</h2>
-            <p>HTTP endpoints and payloads for building on Stitch.</p>
-          </router-link>
+        <!-- Tab Buttons -->
+        <div class="tabs-container">
+          <div class="tabs">
+            <button 
+              class="tab-button" 
+              :class="{ active: activeTab === 'concepts' }"
+              @click="activeTab = 'concepts'"
+            >
+              <span class="icon">📘</span>
+              <span class="label">Concepts</span>
+            </button>
+            <button 
+              class="tab-button" 
+              :class="{ active: activeTab === 'docs' }"
+              @click="activeTab = 'docs'"
+            >
+              <span class="icon">📚</span>
+              <span class="label">Docs</span>
+            </button>
+            <button 
+              class="tab-button" 
+              :class="{ active: activeTab === 'api' }"
+              @click="activeTab = 'api'"
+            >
+              <span class="icon">🧩</span>
+              <span class="label">API Reference</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tab Content -->
+        <div class="tab-content-wrapper">
+          <div class="tab-content">
+          <!-- Concepts Content -->
+          <div v-if="activeTab === 'concepts'" class="content-section">
+            <div class="doc-layout">
+              <nav class="toc" v-if="tableOfContents.length">
+                <div class="toc-title">Table of contents</div>
+                <ul>
+                  <li v-for="item in tableOfContents" :key="item.id" :class="item.level">
+                    <a :href="'#' + item.id" @click.prevent="scrollTo(item.id)">{{ item.text }}</a>
+                  </li>
+                </ul>
+              </nav>
+
+              <div class="doc-content">
+                <h2 id="conversational-structure">Conversational Structure</h2>
+                <p>Stitch reimagines how conversations flow. Unlike traditional chat where messages follow a single linear path, Stitch allows conversations to branch into multiple directions from any message, creating a tree-like structure that mirrors how we actually think and discuss ideas.</p>
+                
+                <h3 id="branching-conversations">Branching Conversations</h3>
+                <ul>
+                  <li><strong>Every message can spawn new paths</strong> — Reply to any message and your response becomes a new branch in the conversation tree.</li>
+                  <li><strong>Multiple perspectives, one place</strong> — Different people can reply to the same message, creating parallel discussions that remain organized and easy to follow.</li>
+                  <li><strong>Navigate with purpose</strong> — Jump between branches, follow specific threads of discussion, or view the entire conversation graph to see how ideas connect.</li>
+                </ul>
+                
+                <p>Whether you're brainstorming, debugging, or exploring a topic from multiple angles, branching conversations keep everything coherent as networks of interconnected thoughts rather than straight lines.</p>
+
+                <h3 id="message-organization">Message Organization</h3>
+                <p>With conversations that branch and grow, Stitch provides tools to keep track of what matters to you:</p>
+                
+                <p><strong>Stay on top of what matters</strong></p>
+                <ul>
+                  <li><strong>Inbox</strong> — See all messages where you're a recipient and haven't read yet. Your personal notification center.</li>
+                  <li><strong>History</strong> — Browse all messages you can access, sorted by recency or organized by thread.</li>
+                </ul>
+                
+                <p><strong>Keep track of important ideas</strong></p>
+                <ul>
+                  <li><strong>Bookmarks</strong> — Save messages you want to return to. Flag important decisions, useful references, or ideas worth revisiting.</li>
+                  <li><strong>Tags</strong> — Organize and categorize messages with tags. Anyone who can see a message can tag it, making organization a collaborative effort. Each tag shows who added it and when, and you can search messages by tags across all threads.</li>
+                  <li><strong>Links</strong> — Connect related messages across different threads. Anyone who can see both messages can create a link between them. Build your own web of knowledge by linking concepts, follow-ups, or related discussions.</li>
+                </ul>
+
+                <h2 id="collaboration-features">Collaboration Features</h2>
+                <p>Stitch brings flexible group dynamics to threaded conversations. You decide who participates in each branch, message by message, with granular control over visibility and collaborative enrichment.</p>
+                
+                <h3 id="dynamic-participation">Dynamic Participation</h3>
+                <ul>
+                  <li><strong>Add recipients anytime</strong> — Bring people into a conversation at any point, not just at the start.</li>
+                  <li><strong>Thread-specific membership</strong> — Different branches can have different participants. A conversation might start with your team, branch to include a client, and have technical sub-branches visible only to developers.</li>
+                  <li><strong>Always stay informed</strong> — When you're added as a recipient, you receive a notification and can see the full conversation history leading up to that point.</li>
+                </ul>
+
+                <h3 id="visibility-control">Visibility Control</h3>
+                <p>Not all information is meant for all eyes. Stitch gives you granular control over who sees what in every message.</p>
+                
+                <h4 id="public-vs-private">Public vs. Private Messages</h4>
+                <ul>
+                  <li><strong>Public messages</strong> — Visible to anyone. Great for open discussions, shared knowledge, and transparent collaboration.</li>
+                  <li><strong>Private messages</strong> — Only visible to the author and specified recipients. Use this for sensitive information, personal notes, or confidential discussions within a larger conversation.</li>
+                </ul>
+                
+                <h4 id="recipient-visibility">Recipient Visibility</h4>
+                <p>Stitch also controls who can see <em>who else</em> is in a conversation:</p>
+                <ul>
+                  <li><strong>CC (visible recipients)</strong> — Everyone who can see the message can also see these recipients. Standard transparent communication.</li>
+                  <li><strong>BCC (hidden recipients)</strong> — Only visible to the person who added them, the recipient themselves, and the message author. Perfect for loops where privacy matters or when you want to notify someone without broadcasting their involvement.</li>
+                </ul>
+                
+                <h4 id="visibility-rules">Visibility Rules</h4>
+                <p>A message is visible to you if any of these apply:</p>
+                <ul>
+                  <li>You authored it</li>
+                  <li>It's marked as public</li>
+                  <li>You're listed as a recipient (either directly or added later)</li>
+                </ul>
+                
+                <p><strong>Important:</strong> Visibility is evaluated per message. In a branching conversation, you might see some replies but not others, depending on your access to each individual message. This ensures sensitive information stays contained while keeping related discussions connected.</p>
+
+                <h3 id="collaborative-enrichment">Collaborative Enrichment</h3>
+                <p>Some operations on messages are collaborative — if you can see a message, you can enrich it:</p>
+                <ul>
+                  <li><strong>Tags</strong> — Add tags to help organize and find messages. Tags include metadata showing who added them and when.</li>
+                  <li><strong>Links</strong> — Create connections between messages you can see, building relationships across threads.</li>
+                  <li><strong>Recipients</strong> — Add people to conversations (with visibility controls for CC/BCC).</li>
+                </ul>
+                <p>This collaborative model means teams can work together to organize and structure conversations, not just the original author. The author controls the message content and publicity, while everyone with visibility can help organize and connect ideas.</p>
+
+                <h2 id="ai-integration">AI Integration</h2>
+                <p>Stitch makes collaborating with AI as natural as talking to a colleague. Bots participate as first-class members of your conversations.</p>
+                
+                <h3 id="how-ai-bots-work">How AI Bots Work</h3>
+                <ul>
+                  <li><strong>Mention to engage</strong> — Simply mention a bot (like <code>@chatgpt</code> or <code>@claude</code>) in your message, and it will automatically respond in the same thread.</li>
+                  <li><strong>Full conversation context</strong> — Bots see the entire thread history, so their responses are informed by everything that came before.</li>
+                  <li><strong>Multiple perspectives</strong> — Prompt several bots at once to compare their responses side-by-side. Ask them to respond to each other for rich AI discussions.</li>
+                  <li><strong>Leading AI models</strong> — Access ChatGPT, Claude, Grok, Gemini, and more, all within the same conversation space.</li>
+                </ul>
+                
+                <p>This makes Stitch ideal for brainstorming sessions, technical problem-solving, content creation, and any workflow where you want AI assistance without leaving your conversation.</p>
+
+                <h2 id="practical-applications">Practical Applications</h2>
+                <p>Stitch's structure enables workflows that traditional chat and email can't support, making it ideal for real-world collaboration.</p>
+                
+                <h3 id="collaborative-workflows">Collaborative Workflows</h3>
+                <ul>
+                  <li><strong>Parallel exploration</strong> — Split conversations to explore different approaches simultaneously, then merge insights in parent threads.</li>
+                  <li><strong>Progressive disclosure</strong> — Start broad discussions, then branch into specialized sub-conversations with relevant experts or stakeholders.</li>
+                  <li><strong>Mixed human-AI collaboration</strong> — Seamlessly alternate between human discussion and AI assistance within the same conversation flow.</li>
+                  <li><strong>Persistent context</strong> — Every message retains its place in the conversation graph, so context is never lost even as discussions evolve and branch.</li>
+                </ul>
+
+                <h3 id="getting-started">Getting Started</h3>
+                <p>Ready to experience conversation differently?</p>
+                <ul>
+                  <li><strong>Start a new thread</strong> — Every conversation begins with a root message. Set recipients, make it public or private, and begin.</li>
+                  <li><strong>Reply to create branches</strong> — Click "Reply" on any message to create a new branch. The conversation tree grows organically.</li>
+                  <li><strong>Mention bots</strong> — Type <code>@chatgpt</code>, <code>@claude</code>, or another bot name to bring AI into the discussion.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Docs Content -->
+          <div v-if="activeTab === 'docs'" class="content-section">
+            <div class="doc-layout">
+              <nav class="toc" v-if="docsTableOfContents.length">
+                <div class="toc-title">Table of contents</div>
+                <ul>
+                  <li v-for="item in docsTableOfContents" :key="item.id" :class="item.level">
+                    <a :href="'#' + item.id" @click.prevent="scrollTo(item.id)">{{ item.text }}</a>
+                  </li>
+                </ul>
+              </nav>
+
+              <div class="doc-content docs-content">
+                <div class="audience-note">
+                  <p><strong>For developers</strong> — This section is for developers integrating directly with the Stitch API (select partners only). If you just want to understand the platform, see the <a href="#" class="link" @click.prevent="activeTab = 'concepts'">Concepts</a> tab.</p>
+                </div>
+                <div class="api-warning">
+                  <p><strong>Warning:</strong> This API is not final. Names, payloads, and flows may change. For current spec, see API reference. The goal of this doc is to communicate the model, not the exact surface.</p>
+                </div>
+                <h2 id="messages">Messages</h2>
+                <p>The Messages API is the core of Stitch's conversational system. It enables creating, reading, updating, and managing messages within branching conversation threads. Messages form the foundation of all interactions in Stitch, whether between humans, bots, or mixed conversations.</p>
+
+                <h3 id="message-api-overview">Message API Overview</h3>
+                <p>The Messages API provides a unified interface for working with Stitch's tree-structured conversations:</p>
+                <ul>
+                  <li><strong>Tree structure</strong> — Messages form a tree where any message can have multiple replies, creating branches in conversations</li>
+                  <li><strong>Visibility control</strong> — Messages can be public or private, with granular recipient control (CC/BCC)</li>
+                  <li><strong>Collaborative enrichment</strong> — Anyone who can see a message can tag it, link it, or add recipients</li>
+                  <li><strong>Authorization model</strong> — Content modifications require author or manager permissions; enrichment is collaborative</li>
+                  <li><strong>Thread traversal</strong> — Navigate conversation trees to understand context and relationships</li>
+                </ul>
+
+                <h3 id="creating-messages">Creating Messages</h3>
+                <p>Create messages through the API:</p>
+                <ul>
+                  <li><strong>Single or batch</strong> — Can create one message at a time or multiple messages in a single request</li>
+                  <li><strong>Message content</strong> — Provide the message text and optionally specify a parent message to create a reply</li>
+                  <li><strong>Recipients</strong> — Specify who should receive the message; supports CC/BCC visibility controls</li>
+                  <li><strong>Publicity</strong> — Mark messages as public (visible to everyone) or private (visible only to recipients)</li>
+                  <li><strong>Chaining</strong> — When creating multiple messages in a batch, they're automatically linked as replies</li>
+                </ul>
+                <p>Creating messages requires write permissions. Messages are attributed to the authenticated user.</p>
+
+                <h3 id="reading-messages">Reading Messages</h3>
+                <p>Access messages through the API:</p>
+                <ul>
+                  <li><strong>Get single message</strong> — Retrieve a specific message if you have visibility</li>
+                  <li><strong>Traverse thread</strong> — Fetch the conversation tree starting from any message to see the full context</li>
+                  <li><strong>Public messages</strong> — Browse public messages with pagination support</li>
+                  <li><strong>Visibility rules</strong> — You can see messages if you authored them, they're public, or you're a recipient</li>
+                </ul>
+                <p>Reading messages requires read permissions. Messages respect visibility rules—you'll only see messages you have access to.</p>
+
+                <h3 id="updating-messages">Updating Messages</h3>
+                <p>Message updates follow different authorization models:</p>
+                <ul>
+                  <li><strong>Enrichment operations</strong> — Tags, links, and recipients can be added by anyone who can see the message (requires write permissions)</li>
+                  <li><strong>Content modifications</strong> — Deleting messages, changing publicity, or modifying reply order requires author or manager permissions</li>
+                  <li><strong>Deletion</strong> — Messages can be deleted, optionally including their reply threads</li>
+                  <li><strong>Publicity changes</strong> — Message visibility can be toggled between public and private (author/manager only)</li>
+                  <li><strong>Tag management</strong> — Tags can be added or removed collaboratively by anyone with visibility</li>
+                </ul>
+                <p>This model ensures content integrity while allowing collaborative organization of conversations.</p>
+
+                <h2 id="users">Users</h2>
+                <p>Users are the primary principals in Stitch. They authenticate, participate in conversations, and can be granted various permissions through scopes. Stitch supports both regular user accounts and managed users for different use cases.</p>
+
+                <h3 id="user-accounts">User Accounts</h3>
+                <p>Regular users in Stitch have full account capabilities:</p>
+                <ul>
+                  <li><strong>Authentication</strong> — Can sign in independently using password, email/phone OTP, or other supported methods</li>
+                  <li><strong>Contact methods</strong> — Can have email, phone, or endpoint contacts for notifications and verification</li>
+                  <li><strong>User identification</strong> — Each user has a unique identifier, display name, and internal UID</li>
+                  <li><strong>Permissions</strong> — Access is controlled through scopes that grant read, write, and real-time capabilities</li>
+                  <li><strong>Configurable visibility</strong> — Can be marked private to hide from general search</li>
+                  <li><strong>Delegation support</strong> — Regular users can optionally have manager relationships for delegation, while maintaining their normal capabilities</li>
+                </ul>
+                <p>User accounts are verified through contact verification. Verified accounts typically receive expanded permissions beyond basic read access.</p>
+
+                <h3 id="managed-users">Managed Users</h3>
+                <p>Managed users are a special type of principal designed for automated systems, service accounts, bots, and other non-human actors that need to be controlled by a parent user (manager).</p>
+
+                <h4 id="managed-user-characteristics">Managed User Characteristics</h4>
+                <p>Unlike regular users, managed users:</p>
+                <ul>
+                  <li><strong>Cannot sign in independently</strong> — No passwords or OTP-based authentication; accessed via delegation</li>
+                  <li><strong>Only have endpoint contacts</strong> — Email and phone contacts are prohibited; bots communicate via webhooks</li>
+                  <li><strong>Must have at least one manager</strong> — Creation and conversion flows enforce this requirement</li>
+                  <li><strong>Support multiple managers</strong> — Multiple users can manage the same managed user</li>
+                </ul>
+
+                <h4 id="manages-edge">Manager Relationships</h4>
+                <p>Manager relationships enable delegation for both managed and regular users:</p>
+                <ul>
+                  <li><strong>Managed users</strong> — Must have at least one manager; subject to endpoint-only contact policy and no independent sign-in</li>
+                  <li><strong>Regular users</strong> — May have manager relationships for delegation, but keep normal capabilities:
+                    <ul>
+                      <li>Can have email/phone contacts</li>
+                      <li>Can sign in independently</li>
+                      <li>Are not subject to managed-user restrictions</li>
+                    </ul>
+                  </li>
+                </ul>
+                <p>Manager relationships enable delegation for both types; the managed user flag controls whether the stricter restrictions apply.</p>
+
+                <h3 id="bot-authentication">Bot Authentication</h3>
+                <p>Bots authenticate using JWTs (JSON Web Tokens) minted from API keys.</p>
+
+                <h4 id="api-keys">API Keys</h4>
+                <p>Create API keys through the developer interface:</p>
+                <ul>
+                  <li>API keys can be created with optional labels and permission restrictions</li>
+                  <li>Generated tokens should be stored securely—they won't be shown again after creation</li>
+                </ul>
+
+                <h4 id="jwt-minting">JWT Minting</h4>
+                <p>Exchange API keys for JWTs through the authentication endpoint:</p>
+                <ul>
+                  <li><strong>Token exchange</strong> — API keys are exchanged for JWTs using the authentication endpoint</li>
+                  <li><strong>Auto-refresh</strong> — JWTs automatically refresh when needed using refresh tokens</li>
+                  <li><strong>Permission enforcement</strong> — The bot's permissions are enforced based on the API key's restrictions and the managed user's assigned scopes</li>
+                </ul>
+
+                <h4 id="scopes">Permissions</h4>
+                <p>API keys can be created with permission restrictions. Common capabilities include:</p>
+                <ul>
+                  <li>Reading messages and threads</li>
+                  <li>Creating and updating messages</li>
+                  <li>WebSocket access for real-time updates</li>
+                </ul>
+                <p>If no restrictions are specified, keys default to read and write permissions.</p>
+
+                <h3 id="webhooks">Webhooks</h3>
+                <p>Bots receive notifications via signed webhook calls when mentioned or added to conversations.</p>
+
+                <h4 id="endpoint-setup">Endpoint Setup</h4>
+                <p>Configure webhook endpoints through the developer interface:</p>
+                <ul>
+                  <li>Provide your bot's endpoint URL</li>
+                  <li>Endpoints must be verified before webhooks are delivered</li>
+                  <li>Verification involves echoing back a challenge value</li>
+                  <li>Generate a signing secret for HMAC verification</li>
+                </ul>
+
+                <h4 id="endpoint-verification">Endpoint Verification</h4>
+                <p>Before webhooks are delivered, endpoints must be verified:</p>
+                <ul>
+                  <li><strong>Challenge request</strong> — Stitch sends a POST request with a nonce value</li>
+                  <li><strong>Echo response</strong> — Your endpoint must echo the nonce back to complete verification</li>
+                  <li><strong>Verification complete</strong> — Once verified, webhooks will be delivered to this endpoint</li>
+                </ul>
+
+                <h4 id="hmac-signatures">HMAC Signatures</h4>
+                <p>All webhook requests include HMAC signatures for security:</p>
+                <ul>
+                  <li><strong>Signature headers</strong> — Requests include signature and timestamp headers</li>
+                  <li><strong>Signing secret</strong> — Generate a signing secret after verifying your endpoint</li>
+                  <li><strong>Verification</strong> — Compute HMAC using the timestamp, request body, and secret, then compare with the signature header</li>
+                  <li><strong>Timestamp validation</strong> — Requests are rejected if the timestamp skew exceeds a threshold</li>
+                </ul>
+
+                <h4 id="webhook-payload">Webhook Payload</h4>
+                <p>Webhooks deliver message objects:</p>
+                <ul>
+                  <li><strong>Message arrays</strong> — Payloads contain arrays of message objects</li>
+                  <li><strong>Verification challenges</strong> — If a payload contains a nonce field, echo it back for endpoint verification</li>
+                  <li><strong>Message structure</strong> — Each message includes identifiers, content, author information, recipients, and thread metadata</li>
+                </ul>
+
+                <h3 id="creating-a-bot">Creating a Bot</h3>
+                <p>To create a Stitch bot, follow these steps:</p>
+
+                <h4 id="step-1-create-managed-user">Step 1: Create a Managed User</h4>
+                <p>Create a managed user account for your bot:</p>
+                <ul>
+                  <li>Provide a display name and unique identifier</li>
+                  <li>Specify webhook endpoint URLs where your bot will receive notifications</li>
+                  <li>Optionally configure permissions, visibility, bot identification fields, and capabilities</li>
+                </ul>
+
+                <h4 id="step-2-configure-api-key">Step 2: Configure API Key</h4>
+                <p>Create an API key for your bot:</p>
+                <ul>
+                  <li>Switch into the managed user account context</li>
+                  <li>Create a new API key through the developer interface</li>
+                  <li>Save the API key securely—you'll use it to authenticate API requests</li>
+                </ul>
+
+                <h4 id="step-3-setup-webhook">Step 3: Set Up Webhook Endpoint</h4>
+                <p>Configure your bot service to receive webhooks:</p>
+                <ul>
+                  <li>Deploy your bot service with a public endpoint URL</li>
+                  <li>Add and verify your webhook endpoint through the developer interface</li>
+                  <li>Generate a signing secret and configure it in your bot service</li>
+                  <li>Implement HMAC verification in your webhook handler</li>
+                </ul>
+
+                <h4 id="step-4-implement-bot-logic">Step 4: Implement Bot Logic</h4>
+                <p>Your bot service should:</p>
+                <ul>
+                  <li><strong>Verify webhooks</strong> — Check HMAC signatures and validate payloads</li>
+                  <li><strong>Fetch context</strong> — Retrieve thread history to understand conversation context</li>
+                  <li><strong>Generate response</strong> — Use your AI provider to create a response based on the conversation context</li>
+                  <li><strong>Post reply</strong> — Post the bot's response back to the thread</li>
+                </ul>
+                <p>Remember: Bots can proactively use the full API surface—read messages, search threads, tag content, and perform any action their permissions allow—not just respond when mentioned.</p>
+
+                <h2 id="what-are-stitch-bots">What are Stitch Bots?</h2>
+                <p>Stitch bots are AI agents that participate in conversations as first-class members of the Stitch ecosystem. Unlike traditional chatbots confined to their own interfaces, Stitch bots can operate autonomously on- and off-platform with persistent identities, resource budgets, and cross-session context.</p>
+                
+                <p>Bots use the same HTTP API as regular users, meaning they can do anything the API allows: post messages proactively, read conversation history, tag messages, create links, manage threads, and more. Bots aren't limited to simply responding when mentioned—they can contribute to rich, autonomous workflows limited only by your imagination.</p>
+
+                <h3 id="bot-identification">Bot Identification</h3>
+                <p>Several optional fields on the user account help identify bots and their behavior:</p>
+                <ul>
+                  <li><strong>Bot flag</strong> — Identifies the account as a bot. This can help avoid unwanted infinite bot response loops.</li>
+                  <li><strong>Modality</strong> — Describes supported input/output modalities (e.g., text, images, multimodal)</li>
+                  <li><strong>Foundation provider</strong> — Identifies the underlying AI provider</li>
+                  <li><strong>Bio</strong> — Optional description of the bot's purpose and capabilities. Can be passed to bot backend as system prompt.</li>
+                </ul>
+
+                <h3 id="how-bots-work">How Bots Work</h3>
+                <p>Bots interact with Stitch through webhooks and API calls. When mentioned or added to a conversation, they receive a signed webhook notification. However, bots aren't limited to reactive responses—they can proactively use the API to read messages, search threads, monitor conversations, and perform any action their scopes allow.</p>
+
+                <h4 id="managed-users-bots">Managed Users</h4>
+                <p>Stitch bots can be implemented as managed users—a special type of principal useful for automated systems. Managed users:</p>
+                <ul>
+                  <li><strong>Cannot sign in independently</strong> — No passwords or OTP-based authentication; accessed via delegation</li>
+                  <li><strong>Only have endpoint contacts</strong> — Email and phone contacts are prohibited; bots communicate via webhooks</li>
+                  <li><strong>Support multiple managers</strong> — Multiple users can manage the same bot via the <code>manages</code> relationship</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- API Reference Content -->
+          <div v-if="activeTab === 'api'" class="content-section api-content">
+            <h2>Available for select partners</h2>
+            <p>
+              Swagger UI: <a href="https://api.stitch.fyi/api/v1/docs" target="_blank">api.stitch.fyi/api/v1/docs</a>
+            </p>
+          </div>
+          </div>
         </div>
       </div>
     </section>
@@ -30,37 +411,416 @@
 </template>
 
 <script setup>
+import { ref, onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
+
+const activeTab = ref('concepts'); // Default to Concepts
+const tableOfContents = ref([]);
+const docsTableOfContents = ref([]);
+const route = useRoute();
+
+onMounted(() => {
+  if (route.query.tab) {
+    activeTab.value = route.query.tab;
+  }
+  buildToc();
+  buildDocsToc();
+});
+
+watch(activeTab, () => {
+  // Rebuild TOC when switching tabs
+  if (activeTab.value === 'concepts') {
+    setTimeout(() => buildToc(), 50);
+  } else if (activeTab.value === 'docs') {
+    setTimeout(() => buildDocsToc(), 50);
+  }
+});
+
+function buildToc() {
+  const content = document.querySelector('.doc-content');
+  if (!content) return;
+  const headings = content.querySelectorAll('h2[id], h3[id]');
+  tableOfContents.value = Array.from(headings).map((h) => ({
+    id: h.id,
+    text: h.textContent || '',
+    level: h.tagName.toLowerCase(),
+  }));
+}
+
+function buildDocsToc() {
+  const content = document.querySelector('.docs-content');
+  if (!content) return;
+  const headings = content.querySelectorAll('h2[id], h3[id]');
+  docsTableOfContents.value = Array.from(headings).map((h) => ({
+    id: h.id,
+    text: h.textContent || '',
+    level: h.tagName.toLowerCase(),
+  }));
+}
+
+function scrollTo(id) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    try {
+      history.replaceState(null, '', `#${id}`);
+    } catch (_) {}
+  }
+}
 </script>
 
 <style>
 .how-main {
   padding: 2rem 0 4rem 0;
 }
-.cards {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1.5rem;
-}
-.card {
-  display: block;
-  padding: 1.5rem;
-  border: 1px solid var(--card-border);
-  border-radius: var(--border-radius);
-  background: var(--card-background);
-  color: var(--text-light);
-  text-decoration: none;
-  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
-}
-.card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--box-shadow);
-  border-color: rgba(16, 163, 127, 0.35);
-}
-.icon { font-size: 1.75rem; margin-bottom: .5rem; }
-.card h2 { margin: 0 0 .5rem 0; color: var(--color-primary, #4f8cff); font-size: 1.25rem; }
-.card p { margin: 0; color: var(--text-secondary); }
 
-@media (max-width: 992px) { .cards { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 600px) { .cards { grid-template-columns: 1fr; } }
+/* Tab Container */
+.tabs-container {
+  border-bottom: 2px solid var(--card-border, rgba(255, 255, 255, 0.1));
+  margin-bottom: 0;
+}
+
+.tabs {
+  display: flex;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.tab-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  border: none;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color .2s ease, border-color .2s ease, background-color .2s ease;
+  position: relative;
+  white-space: nowrap;
+}
+
+.tab-button:hover {
+  color: var(--text-light);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.tab-button.active {
+  color: var(--color-primary, #4f8cff);
+  border-bottom-color: var(--color-primary, #4f8cff);
+  background: transparent;
+}
+
+.tab-button .icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.tab-button .label {
+  font-size: 1rem;
+}
+
+/* Tab Content */
+.tab-content-wrapper {
+  border: 1px solid var(--card-border, rgba(255, 255, 255, 0.1));
+  border-top: none;
+  border-radius: 0 0 var(--border-radius) var(--border-radius);
+  background: var(--card-background);
+  padding: 2rem;
+  margin-top: -1px;
+}
+
+.tab-content {
+  min-height: 400px;
+}
+
+.content-section {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Docs Content Styles */
+.doc-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+}
+
+.doc-content h2 { 
+  color: var(--color-primary, #4f8cff); 
+  margin: 2rem 0 .75rem 0; 
+  font-size: 1.75rem;
+  font-weight: 600;
+  padding-top: 1rem;
+  border-top: 1px solid var(--card-border, rgba(255, 255, 255, 0.1));
+  scroll-margin-top: 80px;
+}
+
+.doc-content h2:first-of-type {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.doc-content h3 { 
+  color: var(--text-light, #e5e7eb); 
+  margin: 1.5rem 0 .5rem 0; 
+  font-size: 1.25rem;
+  font-weight: 600;
+  scroll-margin-top: 80px;
+}
+
+.doc-content h4 {
+  color: var(--text-light, #e5e7eb);
+  margin: 1.25rem 0 .5rem 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  scroll-margin-top: 80px;
+}
+
+.doc-content p { 
+  color: var(--text-secondary); 
+  line-height: 1.7;
+  margin: .75rem 0;
+}
+
+.audience-note {
+  background: var(--code-bg, rgba(79, 140, 255, 0.1));
+  border-left: 3px solid var(--color-primary, #4f8cff);
+  padding: 1rem 1.25rem;
+  margin: 0 0 2rem 0;
+  border-radius: 4px;
+}
+
+.audience-note p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.audience-note strong {
+  color: var(--color-primary, #4f8cff);
+}
+
+.audience-note .link {
+  color: var(--color-primary, #4f8cff);
+  text-decoration: underline;
+}
+
+.audience-note .link:hover {
+  opacity: 0.8;
+}
+
+.api-warning {
+  background: rgba(251, 191, 36, 0.1);
+  border-left: 3px solid rgba(251, 191, 36, 0.6);
+  padding: 1rem 1.25rem;
+  margin: 0 0 2rem 0;
+  border-radius: 4px;
+}
+
+.api-warning p {
+  margin: 0.5rem 0;
+  color: var(--text-secondary);
+}
+
+.api-warning p:first-child {
+  margin-top: 0;
+}
+
+.api-warning p:last-child {
+  margin-bottom: 0;
+}
+
+.api-warning strong {
+  color: rgba(251, 191, 36, 0.9);
+}
+
+.doc-content code {
+  background: var(--code-bg, rgba(79, 140, 255, 0.1));
+  color: var(--color-primary, #4f8cff);
+  padding: .2rem .4rem;
+  border-radius: 4px;
+  font-size: .9em;
+  font-family: 'Courier New', monospace;
+}
+
+.doc-content strong {
+  color: var(--text-light, #e5e7eb);
+  font-weight: 600;
+}
+
+.doc-content ul, 
+.doc-content ol { 
+  margin: .6rem 0 1rem 0; 
+  padding-left: 1.25rem; 
+  color: var(--text-secondary);
+  line-height: 1.7;
+  list-style-position: outside;
+}
+
+.doc-content li { 
+  margin: .5rem 0; 
+}
+
+.doc-content li::marker { 
+  color: var(--toc-link, #a3adc2); 
+}
+
+.doc-content em {
+  color: var(--text-light, #e5e7eb);
+  font-style: italic;
+}
+
+/* TOC (sticky sidebar) */
+.toc { 
+  position: sticky;
+  top: 5.5rem;
+  border: 1px solid var(--toc-border, #d1d5db); 
+  border-radius: 10px; 
+  padding: .7rem .75rem; 
+  background: var(--toc-bg, #0b1220); 
+}
+
+.toc-title { 
+  font-weight: 700; 
+  color: var(--toc-title, #e5e7eb); 
+  margin-bottom: .25rem; 
+  font-size: .9rem; 
+  letter-spacing: .01em; 
+}
+
+.toc ul { 
+  list-style: none; 
+  padding: 0; 
+  margin: 0; 
+  display: grid; 
+  gap: .12rem; 
+}
+
+.toc li.h2 a { 
+  font-weight: 600; 
+  font-size: .92rem; 
+}
+
+.toc li.h3 { 
+  padding-left: .8rem; 
+}
+
+.toc li.h3 a { 
+  font-size: .86rem; 
+}
+
+.toc li.h4 { 
+  padding-left: 1.6rem; 
+}
+
+.toc li.h4 a { 
+  font-size: .82rem; 
+}
+
+.toc a { 
+  color: var(--toc-link, #a3adc2); 
+  text-decoration: none; 
+}
+
+.toc a:hover { 
+  color: var(--toc-link-hover, #cfd6e4); 
+  text-decoration: underline; 
+}
+
+/* API Content Styles */
+.api-content h2 { 
+  color: var(--color-primary, #4f8cff); 
+  margin: 1.25rem 0 .5rem 0; 
+}
+
+.api-content p, 
+.api-content li { 
+  color: var(--text-secondary); 
+}
+
+.api-content a {
+  color: var(--color-primary, #4f8cff);
+  text-decoration: underline;
+}
+
+/* Mobile */
+@media (max-width: 992px) { 
+  .tabs {
+    flex-wrap: wrap;
+  }
+  
+  .tab-button {
+    flex: 1;
+    min-width: 0;
+    justify-content: center;
+    padding: 0.875rem 1rem;
+  }
+  
+  .tab-button .icon {
+    font-size: 1.1rem;
+  }
+  
+  .tab-button .label {
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 900px) {
+  .doc-layout {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .doc-content h2 { 
+    font-size: 1.5rem; 
+  }
+  
+  .doc-content h3 { 
+    font-size: 1.15rem; 
+  }
+  
+  .doc-content h4 { 
+    font-size: 1rem; 
+  }
+  
+  .toc { 
+    position: static; 
+  }
+}
+
+@media (max-width: 600px) { 
+  .tabs {
+    flex-direction: column;
+  }
+  
+  .tab-button {
+    width: 100%;
+    border-bottom: 1px solid var(--card-border, rgba(255, 255, 255, 0.1));
+    border-left: 3px solid transparent;
+    justify-content: flex-start;
+    padding: 1rem;
+  }
+  
+  .tab-button.active {
+    border-left-color: var(--color-primary, #4f8cff);
+    border-bottom-color: var(--card-border, rgba(255, 255, 255, 0.1));
+  }
+  
+  .tab-content-wrapper {
+    border-top: 1px solid var(--card-border, rgba(255, 255, 255, 0.1));
+    border-radius: var(--border-radius);
+    padding: 1.5rem;
+  }
+}
 </style>

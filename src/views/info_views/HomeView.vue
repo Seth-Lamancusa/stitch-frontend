@@ -11,9 +11,9 @@
       <div class="banner-group">
         <div class="banner-buttons">
           <router-link to="/new-thread" class="banner-btn">
-            <span class="btn-icon">🤖</span>
+            <span class="btn-icon">🗣</span>
             <div class="btn-text-content">
-              <span class="btn-title">Start chatbot convo</span>
+              <span class="btn-title">Start a thread</span>
             </div>
           </router-link>
           <router-link to="/inbox" class="banner-btn">
@@ -28,7 +28,7 @@
               <span class="btn-title">My thread history</span>
             </div>
           </router-link>
-          <router-link to="/how/api" class="banner-btn">
+          <router-link to="/how?tab=api" class="banner-btn">
             <span class="btn-icon">📚</span>
             <div class="btn-text-content">
               <span class="btn-title">API docs</span>
@@ -70,6 +70,11 @@
               <div class="content-icon">🔗</div>
               <h2>Share your conversations</h2>
               <p>Add or remove users from messages, controlling who can see what.</p>
+            </div>
+            <div class="home-main-content-4">
+              <div class="content-icon">🤖</div>
+              <h2>Agent ecosystem</h2>
+              <p>Build autonomous agents with persistent identities, resource budgets, and cross-session context.</p>
             </div>
           </div>
           <div class="home-body">
@@ -329,10 +334,22 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
 
 .content-columns {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 2.5rem;
   text-align: center;
   margin-top: 1rem;
+}
+
+@media (min-width: 1200px) {
+  .content-columns {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1199px) {
+  .content-columns {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .content-columns > div {

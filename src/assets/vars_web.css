@@ -62,6 +62,9 @@
   --featured-hero-bg: linear-gradient(135deg, rgba(110, 72, 170, 0.15) 0%, rgba(157, 80, 187, 0.1) 100%);
   --roadmap-hero-bg: linear-gradient(135deg, rgba(16, 163, 127, 0.15) 0%, rgba(110, 72, 170, 0.1) 100%);
   --legal-hero-bg: linear-gradient(135deg, rgba(16, 163, 127, 0.1) 0%, rgba(31, 197, 157, 0.1) 100%);
+  --about-hero-bg: linear-gradient(135deg, rgba(16, 163, 127, 0.1) 0%, rgba(255, 255, 255, 0.1) 100%);
+  --how-hero-bg: linear-gradient(135deg, rgba(16, 163, 127, 0.1) 0%, rgba(31, 197, 157, 0.1) 100%);
+  --chats-hero-bg: linear-gradient(135deg, rgba(16, 163, 127, 0.1) 0%, rgba(31, 197, 157, 0.1) 100%);
   
   /* Button Colors */
   --button-primary-bg: #10a37f;
