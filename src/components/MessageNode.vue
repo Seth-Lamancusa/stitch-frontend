@@ -34,8 +34,35 @@
         </span>
         
         <div class="author-info">
-          <span class="message-author" :class="{ 'current-user-name': isCurrentUser }">{{ showParticipantsLabel ? participantsDisplay : authorDisplayName }}</span>
-          <span v-if="!showParticipantsLabel && authorUserTag" class="author-user-tag">@{{ authorUserTag }}</span>
+          <template v-if="showParticipantsLabel">
+            <template v-for="(participant, index) in participantItems" :key="participant.key">
+              <UserDisplay
+                :display-name="participant.displayName"
+                :user-tag="participant.userTag"
+                :show-tag="false"
+                :is-bot="participant.isBot"
+                name-class="message-author"
+                variant="message"
+              />
+              <span
+                v-if="index < participantItems.length - 1"
+                class="participants-separator"
+              >
+                ,&nbsp;
+              </span>
+            </template>
+          </template>
+          <UserDisplay
+            v-else
+            :display-name="authorDisplayName"
+            :user-tag="authorUserTag"
+            :show-tag="!!authorUserTag"
+            :is-current-user="isCurrentUser"
+            :is-bot="message.author_is_bot || false"
+            name-class="message-author"
+            tag-class="author-user-tag"
+            variant="message"
+          />
         </div>
         
         <!-- Envelope icon for recipients - unread (closed) / read (open) -->
@@ -307,6 +334,7 @@ import { initFormatters } from './FormattedContent/init';
 import TagsModal from './modals/TagsModal.vue';
 import ReplyOrderModal from './modals/ReplyOrderModal.vue';
 import MessageAttachments from './MessageAttachments.vue';
+import UserDisplay from './common/UserDisplay.vue';
 import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch, toRef } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute } from 'vue-router';
@@ -324,7 +352,8 @@ export default {
     FormattedContent,
     TagsModal,
     ReplyOrderModal,
-    MessageAttachments
+    MessageAttachments,
+    UserDisplay
   },
   
   props: {
@@ -754,44 +783,52 @@ export default {
     });
 
     // Build a deduped list of participant display names (author + recipients)
-    const participantsDisplay = computed(() => {
-      if (!showParticipantsLabel.value) {
-        return authorDisplayName.value;
-      }
+    const participantItems = computed(() => {
+      if (!showParticipantsLabel.value) return [];
 
-      const namesSet = new Set();
-      const addName = (raw) => {
-        if (!raw) return;
-        const name = String(raw).trim();
-        if (!name) return;
-        const key = name.toLowerCase();
-        if (!namesSet.has(key)) {
-          namesSet.add(key);
-        }
+      const items = [];
+      const seen = new Set();
+      const addParticipant = ({ displayName, userTag = null, isBot = false }) => {
+        const keySource = displayName || userTag || '';
+        const key = String(keySource).trim().toLowerCase();
+        if (!key) return;
+        if (seen.has(key)) return;
+        seen.add(key);
+        items.push({
+          key: `${key}-${items.length}`,
+          displayName: displayName || userTag || 'Unknown',
+          userTag,
+          isBot: !!isBot
+        });
       };
 
-      // Include author first
-      addName(props.message.author_display_name);
-
-      // Include deduped recipients' display names (fallback to user_tag)
-      if (typeof props.message.recipients !== 'string' && Array.isArray(props.message.recipients)) {
-        deduplicatedRecipients.value.forEach(recipient => {
-          addName(recipient.display_name || recipient.user_tag);
+      const authorName = authorDisplayName.value || '';
+      if (authorName || authorUserTag.value) {
+        addParticipant({
+          displayName: authorName || authorUserTag.value || '',
+          userTag: authorUserTag.value,
+          isBot: props.message.author_is_bot
         });
       }
 
-      // Return a comma-separated list preserving insertion order
-      return Array.from(namesSet).map(k => {
-        // Recover original casing by finding first matching source
-        // Prefer author name, then recipients
-        if (props.message.author_display_name && props.message.author_display_name.toLowerCase() === k) {
-          return props.message.author_display_name;
-        }
-        const rec = (typeof props.message.recipients !== 'string' && Array.isArray(props.message.recipients))
-          ? props.message.recipients.find(r => (r.display_name && r.display_name.toLowerCase() === k) || (r.user_tag && r.user_tag.toLowerCase() === k))
-          : null;
-        return (rec && (rec.display_name || rec.user_tag)) || k;
-      }).join(', ');
+      if (typeof props.message.recipients !== 'string' && Array.isArray(props.message.recipients)) {
+        deduplicatedRecipients.value.forEach((recipient) => {
+          const name = recipient.display_name || recipient.user_tag;
+          addParticipant({
+            displayName: name,
+            userTag: recipient.user_tag || null,
+            isBot: recipient.is_bot
+          });
+        });
+      }
+
+      return items;
+    });
+    
+    const showAuthorCapabilities = computed(() => {
+      const msg = props.message || {};
+      if (!msg.author_is_bot) return false;
+      return !!(msg.author_input_modalities || msg.author_output_modalities || msg.author_foundation_provider);
     });
     
     // Check if the current user is the author of the message
@@ -1500,7 +1537,8 @@ export default {
       authorDisplayName,
       authorUserTag,
       showParticipantsLabel,
-      participantsDisplay,
+      participantItems,
+      showAuthorCapabilities,
       openTagsModal,
       isUserAuthorOfContent,
       handleSiblingNavigation,
@@ -1599,7 +1637,7 @@ export default {
   max-width: 800px;
   margin-left: auto;
   margin-right: auto;
-  transition: transform var(--transition-fast), box-shadow var(--transition-normal);
+  transition: box-shadow var(--transition-normal);
   justify-content: stretch !important;
 }
 
@@ -1646,8 +1684,12 @@ export default {
 }
 
 .message-node.list-view:hover {
-  transform: translateY(-2px);
   box-shadow: var(--color-card-shadow, 0 4px 6px rgba(0, 0, 0, 0.1));
+}
+
+.message-node.list-view:hover .message-content {
+  background-color: var(--color-hover-overlay, rgba(0, 0, 0, 0.02));
+  border-color: var(--color-primary-light, rgba(0, 123, 255, 0.3));
 }
 
 .message-node.list-view .message-body {
@@ -1666,6 +1708,7 @@ export default {
   width: 100%;
   position: relative;
   z-index: 1;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
 /* Add space and adjust positioning for sibling navigation on desktop */

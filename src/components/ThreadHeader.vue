@@ -266,7 +266,7 @@ defineEmits(['back', 'openGraph', 'copy', 'exitSelection', 'logout', 'openProfil
   cursor: not-allowed;
 }
 
-.admin-badge, .guest-badge {
+.guest-badge {
   display: inline-block;
   width: 18px;
   height: 18px;
@@ -277,10 +277,6 @@ defineEmits(['back', 'openGraph', 'copy', 'exitSelection', 'logout', 'openProfil
   margin-left: var(--space-xs);
 }
 
-.admin-badge {
-  background-color: var(--color-primary);
-  color: var(--color-text-inverse);
-}
 
 .guest-badge {
   background-color: var(--color-text-secondary);
@@ -315,7 +311,7 @@ defineEmits(['back', 'openGraph', 'copy', 'exitSelection', 'logout', 'openProfil
     display: none;
   }
   .edit-icon { display: none; }
-  .admin-badge, .guest-badge {
+  .guest-badge {
     width: 14px;
     height: 14px;
     line-height: 14px;
@@ -336,7 +332,7 @@ defineEmits(['back', 'openGraph', 'copy', 'exitSelection', 'logout', 'openProfil
     padding: 4px 8px;
     font-size: calc(var(--font-size-sm) - 1px);
   }
-  .admin-badge, .guest-badge {
+  .guest-badge {
     width: 12px;
     height: 12px;
     line-height: 12px;

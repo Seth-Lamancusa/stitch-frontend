@@ -31,10 +31,14 @@ function mapApiUserToAuthState(userData) {
     is_email_verified: isEmailVerified,
     is_phone_verified: isPhoneVerified,
     has_endpoint_signing_secret: !!data.has_endpoint_signing_secret,
+    has_api_access: !!data.has_api_access,
     is_managed: !!data.is_managed,
     private: !!data.private,
     bio: typeof data.bio === 'string' ? data.bio : '',
-    is_bot: !!data.is_bot
+    is_bot: !!data.is_bot,
+    input_modalities: typeof data.input_modalities === 'string' ? data.input_modalities : null,
+    output_modalities: typeof data.output_modalities === 'string' ? data.output_modalities : null,
+    foundation_provider: typeof data.foundation_provider === 'string' ? data.foundation_provider : null
   };
 }
 
@@ -361,6 +365,9 @@ export default {
               email: result.profile.email ?? null,
               bio: typeof result.profile.bio === 'string' ? result.profile.bio : '',
               is_bot: typeof result.profile.is_bot === 'boolean' ? result.profile.is_bot : !!currentUser.is_bot,
+              input_modalities: typeof result.profile.input_modalities === 'string' ? result.profile.input_modalities : null,
+              output_modalities: typeof result.profile.output_modalities === 'string' ? result.profile.output_modalities : null,
+              foundation_provider: typeof result.profile.foundation_provider === 'string' ? result.profile.foundation_provider : null,
               contact: null
             });
           }
@@ -467,6 +474,7 @@ export default {
 
     // Common role-style flags derived from scopes
     isAdmin: (state) => isAdminUtil(state.user, TokenManager.accessToken),
+    isApiAllowed: (state) => !!(state.user && state.user.has_api_access),
     // Interaction capability: can the user create/write messages
     canInteract: (state, getters) => getters.hasAnyScope(['msg.write', 'admin']),
 
