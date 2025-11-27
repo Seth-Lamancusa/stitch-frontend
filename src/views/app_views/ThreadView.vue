@@ -1495,7 +1495,7 @@ const closeProfileModal = () => {
   cursor: not-allowed;
 }
 
-.whitelist-badge, .admin-badge, .non-whitelist-badge, .guest-badge {
+.whitelist-badge, .non-whitelist-badge, .guest-badge {
   display: inline-block;
   width: 18px;
   height: 18px;
@@ -1511,10 +1511,6 @@ const closeProfileModal = () => {
   color: var(--color-text-inverse);
 }
 
-.admin-badge {
-  background-color: var(--color-primary);
-  color: var(--color-text-inverse);
-}
 
 .non-whitelist-badge {
   background-color: var(--color-warning);
@@ -1611,7 +1607,7 @@ const closeProfileModal = () => {
     display: none;
   }
   
-  .whitelist-badge, .admin-badge, .non-whitelist-badge, .guest-badge, .auth-loading-badge {
+  .whitelist-badge, .non-whitelist-badge, .guest-badge, .auth-loading-badge {
     width: 14px;
     height: 14px;
     line-height: 14px;
@@ -1666,7 +1662,7 @@ const closeProfileModal = () => {
     font-size: calc(var(--font-size-xs) - 1px);
   }
   
-  .whitelist-badge, .admin-badge, .non-whitelist-badge, .guest-badge, .auth-loading-badge {
+  .whitelist-badge, .non-whitelist-badge, .guest-badge, .auth-loading-badge {
     width: 12px;
     height: 12px;
     line-height: 12px;

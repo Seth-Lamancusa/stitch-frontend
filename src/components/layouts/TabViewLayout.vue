@@ -76,8 +76,15 @@
             :title="isSwitchingPrincipal ? switchingStatusMessage : 'Edit profile'"
             @click="openProfileModal"
           >
-            <span class="username">{{ displayedPrincipalName }}</span>
-            <span v-if="displayedPrincipalTag" class="user-tag">@{{ displayedPrincipalTag }}</span>
+            <UserDisplay
+              :user="displayedPrincipal"
+              :display-name="displayedPrincipalName"
+              :user-tag="displayedPrincipalTag"
+              :show-tag="!!displayedPrincipalTag"
+              name-class="username"
+              tag-class="user-tag"
+              variant="header"
+            />
             <span v-if="isDelegated" class="acting-chip" title="Acting as">Acting as</span>
             <span
               v-if="isSwitchingPrincipal"
@@ -117,8 +124,15 @@
                   @click="onSelectPrincipal(managerUid)"
                 >
                   <div class="menu-item-main">
-                    <span class="menu-item-name">{{ managerDisplayName }}</span>
-                    <span v-if="managerTag" class="menu-item-tag">@{{ managerTag }}</span>
+                    <UserDisplay
+                      :user="managerPrincipal"
+                      :display-name="managerDisplayName"
+                      :user-tag="managerTag"
+                      :show-tag="!!managerTag"
+                      name-class="menu-item-name"
+                      tag-class="menu-item-tag"
+                      variant="menu"
+                    />
                   </div>
                   <span
                     v-if="switchingPrincipalUid === managerUid"
@@ -148,8 +162,15 @@
                     @click="onSelectPrincipal(resolveUid(m))"
                   >
                     <div class="menu-item-main">
-                      <span class="menu-item-name">{{ getUserDisplayName(m) }}</span>
-                      <span v-if="m && m.user_tag" class="menu-item-tag">@{{ m.user_tag }}</span>
+                      <UserDisplay
+                        :user="m"
+                        :display-name="getUserDisplayName(m)"
+                        :user-tag="m && m.user_tag"
+                        :show-tag="!!(m && m.user_tag)"
+                        name-class="menu-item-name"
+                        tag-class="menu-item-tag"
+                        variant="menu"
+                      />
                     </div>
                     <span
                       v-if="switchingPrincipalUid === resolveUid(m)"
@@ -173,15 +194,6 @@
 
           <!-- Auth status badges - only shown when auth is ready -->
           <template v-if="authReady">
-            <!-- Admin badge links out to admin origin -->
-            <a
-              v-can="'admin'"
-              class="admin-badge"
-              :href="ADMIN_ORIGIN"
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Admin"
-            >⛊</a>
           </template>
 
           <!-- Loading spinner when auth is not ready -->
@@ -254,6 +266,7 @@ import DevModal from '../modals/DevModal.vue';
 import ManagedUserCreateModal from '../modals/ManagedUserCreateModal.vue';
 import GlobalNotifications from '../GlobalNotifications.vue';
 import MobileTabBar from './MobileTabBar.vue';
+import UserDisplay from '../common/UserDisplay.vue';
 import { ADMIN_ORIGIN } from '@/config/appConfig.js';
 
 const router = useRouter();
@@ -355,6 +368,18 @@ const managerTag = computed(() => {
   const snap = store.state.auth && store.state.auth.managerSnapshot;
   if (snap && snap.user_tag) return snap.user_tag;
   return (user.value && user.value.user_tag) ? user.value.user_tag : null;
+});
+const managerPrincipal = computed(() => {
+  const list = managedUsers.value || [];
+  const manager = managerUid.value;
+  if (!manager) return user.value;
+  const resolvedCurrentUser = resolveUid(user.value);
+  if (resolvedCurrentUser && resolvedCurrentUser === manager) return user.value;
+  const found = list.find(u => resolveUid(u) === manager);
+  if (found) return found;
+  const snap = store.state.auth && store.state.auth.managerSnapshot;
+  if (snap) return snap;
+  return user.value;
 });
 // Header: show selected principal name/tag
 const displayedPrincipal = computed(() => {
@@ -935,7 +960,7 @@ const onLogoClick = (event) => {
   }
 }
 
-.whitelist-badge, .admin-badge, .non-whitelist-badge, .guest-badge {
+.whitelist-badge, .non-whitelist-badge, .guest-badge {
   display: inline-block;
   width: 18px;
   height: 18px;
@@ -951,10 +976,6 @@ const onLogoClick = (event) => {
   color: var(--color-text-inverse, #fff);
 }
 
-.admin-badge {
-  background-color: var(--color-primary, #4f8cff);
-  color: var(--color-text-inverse, #fff);
-}
 
 .non-whitelist-badge {
   background-color: var(--color-warning, #ffb300);
@@ -1111,7 +1132,7 @@ const onLogoClick = (event) => {
   }
   
   
-  .whitelist-badge, .admin-badge, .non-whitelist-badge, .guest-badge, .auth-loading-badge {
+  .whitelist-badge, .non-whitelist-badge, .guest-badge, .auth-loading-badge {
     width: 14px; /* Smaller badges */
     height: 14px;
     line-height: 14px;
@@ -1170,7 +1191,7 @@ const onLogoClick = (event) => {
     font-size: calc(var(--font-size-xs) - 1px);
   }
   
-  .whitelist-badge, .admin-badge, .non-whitelist-badge, .guest-badge, .auth-loading-badge {
+  .whitelist-badge, .non-whitelist-badge, .guest-badge, .auth-loading-badge {
     width: 12px; /* Very small badges */
     height: 12px;
     line-height: 12px;

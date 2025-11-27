@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, onUnmounted, nextTick, watch } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
-import MessageNode from './MessageNode.vue';
+import MessagePreview from './MessagePreview.vue';
 import DeleteConfirmModal from './modals/DeleteConfirmModal.vue';
 import { onActivated } from 'vue';
 
@@ -484,7 +484,7 @@ const showDeleteConfirm = computed(() => store.getters['ui/showDeleteConfirm']);
 const messageToDelete = computed(() => store.getters['ui/messageToDelete']);
 const isDeleting = ref(false);
 
-// Add method to handle delete request from MessageNode
+// Add method to handle delete request from MessagePreview
 const handleDeleteRequest = (message) => {
   store.dispatch('ui/showDeleteConfirm', message);
 };
@@ -726,14 +726,14 @@ const handleLinkDelete = async (linkData) => {
         <p>{{ loginPromptMessage }}</p>
       </div>
 
-      <!-- Messages list - now using MessageNode component -->
+      <!-- Messages list - now using MessagePreview component -->
       <div 
         v-for="thread in threads" 
         :key="thread.id" 
         class="message-list-item"
         :class="{ 'selectable': selectable, 'link-mode': isLinkMode }"
       >
-        <!-- Link delete button - positioned outside MessageNode -->
+        <!-- Link delete button - positioned outside MessagePreview -->
         <button 
           v-if="isLinkMode"
           @click.stop="handleLinkDelete({
@@ -750,20 +750,13 @@ const handleLinkDelete = async (linkData) => {
           <span v-else class="delete-icon">🗑️</span>
         </button>
         
-        <MessageNode
+        <MessagePreview
           :message="thread"
           :displayMode="'preview'"
           :selectable="selectable"
           :selected="selectedMessageIds.has(thread.id)"
           :compact="compact"
-          :is-selected="false"
-          :indent-level="0"
-          :loaded-replies="getReplyCount(thread)"
-          :total-replies="getReplyCount(thread)"
-          :can-reply="false"
-          :inListView="true"
           :currentTab="activeTab"
-          :threadMessages="getThreadMessages(thread.id)"
           @delete="handleDeleteRequest"
           @navigate="viewMessage"
           @selectionToggled="handleMessageSelection"
@@ -956,13 +949,13 @@ const handleLinkDelete = async (linkData) => {
   100% { transform: rotate(360deg); }
 }
 
-/* Ensure MessageNode takes remaining space in link mode */
-.message-list-item.link-mode .message-node {
+/* Ensure MessagePreview takes remaining space in link mode */
+.message-list-item.link-mode .message-preview {
   flex: 1;
 }
 
-/* Ensure MessageNode spans full width of the centered container */
-.message-list-item .message-node {
+/* Ensure MessagePreview spans full width of the centered container */
+.message-list-item .message-preview {
   width: 100%;
 }
 

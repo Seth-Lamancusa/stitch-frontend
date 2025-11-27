@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useStore } from 'vuex';
 import { useAuthentication } from '@/composables/useAuthentication';
 import DevModal from '@/components/modals/DevModal.vue';
+import UserDisplay from '../common/UserDisplay.vue';
 
 const props = defineProps({
   isOpen: Boolean
@@ -24,6 +25,9 @@ const bio = ref('');
 const endpoint = ref('');
 const isPrivate = ref(false);
 const isBot = ref(false);
+const inputModalities = ref('');
+const outputModalities = ref('');
+const foundationProvider = ref('');
 const isSubmitting = ref(false);
 const errorMessage = ref('');
 const tagError = ref('');
@@ -31,6 +35,7 @@ const displayNameError = ref('');
 const phoneNumberError = ref('');
 const emailError = ref('');
 const bioError = ref('');
+const botCapabilitiesError = ref('');
 const noChangesMessage = ref('');
 const updateSuccess = ref(false);
 const updateError = ref(false);
@@ -158,6 +163,9 @@ const resetForm = () => {
   endpoint.value = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
   isPrivate.value = !!(user.value?.private);
   isBot.value = !!(user.value?.is_bot);
+  inputModalities.value = user.value?.input_modalities || '';
+  outputModalities.value = user.value?.output_modalities || '';
+  foundationProvider.value = user.value?.foundation_provider || '';
   const _contacts = (user.value?.contacts || []);
   notifyPrefs.value = {
     email: !!_contacts.find(c => c.type==='email' && c.notify),
@@ -170,6 +178,7 @@ const resetForm = () => {
   phoneNumberError.value = '';
   emailError.value = '';
   bioError.value = '';
+  botCapabilitiesError.value = '';
   noChangesMessage.value = '';
   emailCode.value = '';
   phoneCode.value = '';
@@ -218,6 +227,12 @@ onUnmounted(() => {
 watch(phoneNumber, (v) => {
   if (!v || !v.trim()) {
     showPhoneConsent.value = false;
+  }
+});
+
+watch(isBot, (value) => {
+  if (!value) {
+    botCapabilitiesError.value = '';
   }
 });
 
@@ -281,6 +296,9 @@ const hasFormChanges = computed(() => {
   const originalEndpoint = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
   const originalPrivate = !!(user.value?.private);
   const originalBio = user.value?.bio || '';
+  const originalInputModalities = user.value?.input_modalities || '';
+  const originalOutputModalities = user.value?.output_modalities || '';
+  const originalFoundationProvider = user.value?.foundation_provider || '';
 
   const displayNameChanged = normalizeTrimmed(displayName.value) !== normalizeTrimmed(originalDisplayName);
   const tagChanged = normalizeLowerTrimmed(tag.value) !== normalizeLowerTrimmed(originalTag);
@@ -290,8 +308,11 @@ const hasFormChanges = computed(() => {
   const privateChanged = !!isPrivate.value !== originalPrivate;
   const bioChanged = normalizeTrimmed(bio.value) !== normalizeTrimmed(originalBio);
   const botChanged = !!isBot.value !== !!(user.value?.is_bot);
+  const inputModalitiesChanged = normalizeTrimmed(inputModalities.value) !== normalizeTrimmed(originalInputModalities);
+  const outputModalitiesChanged = normalizeTrimmed(outputModalities.value) !== normalizeTrimmed(originalOutputModalities);
+  const foundationProviderChanged = normalizeTrimmed(foundationProvider.value) !== normalizeTrimmed(originalFoundationProvider);
 
-  return displayNameChanged || tagChanged || phoneChanged || emailChanged || endpointChanged || privateChanged || bioChanged || botChanged || notifyPrefsChanged();
+  return displayNameChanged || tagChanged || phoneChanged || emailChanged || endpointChanged || privateChanged || bioChanged || botChanged || inputModalitiesChanged || outputModalitiesChanged || foundationProviderChanged || notifyPrefsChanged();
 });
 
 // Function to determine if the update button should be enabled
@@ -310,6 +331,7 @@ const validateForm = () => {
   phoneNumberError.value = '';
   emailError.value = '';
   bioError.value = '';
+  botCapabilitiesError.value = '';
   noChangesMessage.value = '';
   if (!hasFormChanges.value) {
     noChangesMessage.value = 'Make changes before updating';
@@ -348,6 +370,11 @@ const validateForm = () => {
     } catch (_) {
       isValid = false;
     }
+  }
+  const hasCapabilityValues = !!(normalizeTrimmed(inputModalities.value) || normalizeTrimmed(outputModalities.value) || normalizeTrimmed(foundationProvider.value));
+  if (!isBot.value && hasCapabilityValues) {
+    botCapabilitiesError.value = 'Enable the bot toggle to describe capabilities.';
+    isValid = false;
   }
   return isValid;
 };
@@ -433,6 +460,9 @@ const updateProfile = async () => {
     const originalBio = user.value?.bio || '';
     const originalEndpoint = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
     const originalPrivate = !!(user.value?.private);
+    const originalInputModalities = user.value?.input_modalities || '';
+    const originalOutputModalities = user.value?.output_modalities || '';
+    const originalFoundationProvider = user.value?.foundation_provider || '';
 
     // Only include changed fields (normalized)
     if (normalizeTrimmed(displayName.value) !== normalizeTrimmed(user.value?.displayName || '')) {
@@ -463,6 +493,18 @@ const updateProfile = async () => {
     if (!!isBot.value !== !!(user.value?.is_bot)) {
       profileUpdate.is_bot = !!isBot.value;
     }
+    if (normalizeTrimmed(inputModalities.value) !== normalizeTrimmed(originalInputModalities)) {
+      const trimmed = normalizeTrimmed(inputModalities.value);
+      profileUpdate.input_modalities = trimmed || null;
+    }
+    if (normalizeTrimmed(outputModalities.value) !== normalizeTrimmed(originalOutputModalities)) {
+      const trimmed = normalizeTrimmed(outputModalities.value);
+      profileUpdate.output_modalities = trimmed || null;
+    }
+    if (normalizeTrimmed(foundationProvider.value) !== normalizeTrimmed(originalFoundationProvider)) {
+      const trimmed = normalizeTrimmed(foundationProvider.value);
+      profileUpdate.foundation_provider = trimmed || null;
+    }
     if (notifyPrefsChanged()) {
       profileUpdate.notify = { ...notifyPrefs.value };
     }
@@ -482,6 +524,18 @@ const updateProfile = async () => {
       errorMessage.value = '';
     } else if (code === 'invalid_is_bot') {
       errorMessage.value = 'Invalid bot flag value';
+    } else if (code === 'bot_fields_require_is_bot') {
+      botCapabilitiesError.value = 'Enable the bot toggle before setting bot capabilities.';
+      errorMessage.value = '';
+    } else if (code === 'invalid_input_modalities') {
+      botCapabilitiesError.value = 'Enter input modalities as a comma-separated list (e.g., "txt, png").';
+      errorMessage.value = '';
+    } else if (code === 'invalid_output_modalities') {
+      botCapabilitiesError.value = 'Enter output modalities as a comma-separated list.';
+      errorMessage.value = '';
+    } else if (code === 'invalid_foundation_provider') {
+      botCapabilitiesError.value = 'Enter a provider name.';
+      errorMessage.value = '';
     } else if (code === 'user_tag_conflict') {
       tagError.value = 'That tag is already taken';
       errorMessage.value = '';
@@ -840,8 +894,12 @@ const deleteAccount = async () => {
         </div>
         
         <div class="modal-content">
-          <div class="form-group">
-            <div class="form-row">
+          <section class="form-section">
+            <div class="section-header">
+              <h4>Profile basics</h4>
+              <p>Update what people see on your public profile.</p>
+            </div>
+            <div class="field">
               <label for="displayName">Display Name</label>
               <input 
                 id="displayName" 
@@ -850,13 +908,10 @@ const deleteAccount = async () => {
                 placeholder="Your public display name"
                 @keydown="handleKeydown"
               />
+              <div class="field-error" v-if="displayNameError">{{ displayNameError }}</div>
+              <div v-else class="field-hint">This name will be visible to everyone.</div>
             </div>
-            <div class="field-error" v-if="displayNameError">{{ displayNameError }}</div>
-            <div v-else class="field-hint">This name will be visible to everyone</div>
-          </div>
-          
-          <div class="form-group">
-            <div class="form-row">
+            <div class="field">
               <label for="bio">Bio</label>
               <textarea
                 id="bio"
@@ -864,13 +919,10 @@ const deleteAccount = async () => {
                 :maxlength="BIO_MAX_LENGTH"
                 placeholder="Share a short description"
               ></textarea>
+              <div class="field-error" v-if="bioError">{{ bioError }}</div>
+              <div class="field-hint">Let others know who you are. {{ (bio && bio.length) || 0 }}/{{ BIO_MAX_LENGTH }} characters.</div>
             </div>
-            <div class="field-error" v-if="bioError">{{ bioError }}</div>
-            <div class="field-hint">Let others know who you are. {{ (bio && bio.length) || 0 }}/{{ BIO_MAX_LENGTH }} characters.</div>
-          </div>
-          
-          <div class="form-group">
-            <div class="form-row">
+            <div class="field">
               <label for="tag">Tag</label>
               <input 
                 id="tag" 
@@ -880,163 +932,212 @@ const deleteAccount = async () => {
                 @keydown="handleKeydown"
                 @blur="validateTag"
               />
+              <div class="field-error" v-if="tagError">{{ tagError }}</div>
+              <div v-else class="field-hint">A unique identifier (letters, numbers, underscores, or hyphens).</div>
             </div>
-            <div class="field-error" v-if="tagError">{{ tagError }}</div>
-            <div v-else class="field-hint">A unique identifier for your account (letters, numbers, underscores, and hyphens only)</div>
-          </div>
+          </section>
 
-          <!-- Privacy settings moved to first section -->
-          <div class="form-group">
-            <div class="form-row privacy-row">
-              <label style="min-width:auto;">Privacy</label>
-              <label class="notify-toggle">
+          <section class="form-section">
+            <div class="section-header">
+              <h4>Account settings</h4>
+              <p>Control how your account behaves across Stitch.</p>
+            </div>
+            <div class="field">
+              <label class="toggle-pill">
                 <input type="checkbox" v-model="isPrivate" />
                 <span class="notify-text">Private account</span>
               </label>
+              <div class="field-hint">Private profiles are visible only to users you manage or who manage you.</div>
             </div>
-            <div class="field-hint">Private profiles are visible only to users you manage, or who manage you.</div>
-          </div>
-
-          <div class="form-group">
-            <div class="form-row privacy-row">
-              <label style="min-width:auto;">Bot identity</label>
-              <label class="notify-toggle">
+            <div class="field">
+              <label class="toggle-pill">
                 <input type="checkbox" v-model="isBot" />
                 <span class="notify-text">Mark this account as a bot</span>
               </label>
             </div>
-          </div>
+          </section>
 
-          <div class="form-group contact-section" v-if="!isManaged">
-            <div class="form-row">
-              <label for="email">Email</label>
-              <div class="control">
-                <input 
-                  id="email" 
-                  v-model="email" 
-                  type="email" 
-                  placeholder="you@example.com"
-                  :disabled="user?.is_managed"
-                  @keydown="handleKeydown"
-                  @blur="validateEmail"
+          <section class="form-section bot-capabilities-section">
+            <div class="section-header">
+              <h4>Bot capabilities</h4>
+              <p v-if="isBot">Help people understand what this bot can handle.</p>
+              <p v-else>Enable the bot toggle to describe capabilities.</p>
+            </div>
+            <div v-if="isBot" class="capabilities-fields">
+              <div class="field">
+                <label for="inputModalities">Input modalities</label>
+                <input
+                  id="inputModalities"
+                  v-model="inputModalities"
+                  type="text"
+                  placeholder="e.g., txt, png, pdf"
                 />
-                <div class="notify-group">
+                <div class="field-hint">Comma-separated list of supported input filetypes.</div>
+              </div>
+              <div class="field">
+                <label for="outputModalities">Output modalities</label>
+                <input
+                  id="outputModalities"
+                  v-model="outputModalities"
+                  type="text"
+                  placeholder="e.g., txt, png"
+                />
+                <div class="field-hint">Comma-separated list of output filetypes.</div>
+              </div>
+              <div class="field">
+                <label for="foundationProvider">Foundation provider</label>
+                <input
+                  id="foundationProvider"
+                  v-model="foundationProvider"
+                  type="text"
+                  placeholder="e.g., OpenAI, Anthropic"
+                />
+                <div class="field-hint">Optional provider label (for bots that delegate raw response generation).</div>
+              </div>
+            </div>
+            <div class="field-error" v-if="botCapabilitiesError">{{ botCapabilitiesError }}</div>
+          </section>
+
+          <section class="form-section">
+            <div class="section-header">
+              <h4>Contact & notifications</h4>
+              <p>Verified channels can receive security alerts and automation events.</p>
+            </div>
+
+            <div class="field" v-if="!isManaged">
+              <div class="field-header">
+                <label for="email">Email</label>
+                <div class="field-meta">
                   <label class="notify-toggle" :class="{ disabled: !isEmailVerified || user?.is_managed }">
                     <input type="checkbox" v-model="notifyPrefs.email" :disabled="!isEmailVerified || user?.is_managed" /><span class="notify-text">Notify</span>
                   </label>
                   <span v-if="isEmailVerified" class="status-badge ok">Verified</span>
                 </div>
               </div>
-            </div>
-            <div class="field-error" v-if="emailError">{{ emailError }}</div>
-            <div class="verify-row warn" v-if="!isEmailVerified && hasSavedEmail">
-              <span class="verify-label">Unverified</span>
-              <button class="verify-btn" @click="sendEmailCode" :disabled="requestingEmailCode || emailCooldown > 0">{{ requestingEmailCode ? 'Sending…' : (emailCooldown > 0 ? `Resend in ${emailCooldown}s` : 'Send Code') }}</button>
-              <input class="code-input" v-model="emailCode" placeholder="Enter code" />
-              <button class="verify-btn" v-if="emailCodeSent" @click="confirmEmailCode" :disabled="verifyingEmail || !emailCode.trim()">{{ verifyingEmail ? 'Verifying…' : 'Verify' }}</button>
-            </div>
-          </div>
-
-          
-          
-          <div class="form-group contact-section" v-if="!isManaged">
-            <div class="form-row">
-              <label for="phoneNumber">Phone Number</label>
-              <div class="control">
-                <div class="input-with-icon">
-                  <input 
-                    id="phoneNumber" 
-                    v-model="phoneNumber" 
-                    type="tel" 
-                    placeholder="(555) 123-4567"
-                    :disabled="user?.is_managed"
-                    @keydown="handleKeydown"
-                    @blur="validatePhoneNumber"
-                  />
-                  <button type="button" class="info-btn" @click="showPhoneConsent = !showPhoneConsent" :aria-pressed="showPhoneConsent ? 'true' : 'false'" title="SMS consent details">ⓘ</button>
+              <input 
+                id="email" 
+                v-model="email" 
+                type="email" 
+                placeholder="you@example.com"
+                :disabled="user?.is_managed"
+                @keydown="handleKeydown"
+                @blur="validateEmail"
+              />
+              <div class="field-error" v-if="emailError">{{ emailError }}</div>
+              <div class="verification-stack warn" v-if="!isEmailVerified && hasSavedEmail">
+                <span class="verify-label">Unverified</span>
+                <div class="verification-actions">
+                  <button class="verify-btn" @click="sendEmailCode" :disabled="requestingEmailCode || emailCooldown > 0">{{ requestingEmailCode ? 'Sending…' : (emailCooldown > 0 ? `Resend in ${emailCooldown}s` : 'Send Code') }}</button>
+                  <input class="code-input" v-model="emailCode" placeholder="Enter code" />
+                  <button class="verify-btn" v-if="emailCodeSent" @click="confirmEmailCode" :disabled="verifyingEmail || !emailCode.trim()">{{ verifyingEmail ? 'Verifying…' : 'Verify' }}</button>
                 </div>
-                <div class="notify-group">
+              </div>
+            </div>
+
+            <div class="field" v-if="!isManaged">
+              <div class="field-header">
+                <label for="phoneNumber">Phone Number</label>
+                <div class="field-meta">
                   <label class="notify-toggle" :class="{ disabled: !isPhoneVerified || !isEmailVerified || user?.is_managed }">
                     <input type="checkbox" v-model="notifyPrefs.phone" :disabled="!isPhoneVerified || !isEmailVerified || user?.is_managed" /><span class="notify-text">Notify</span>
                   </label>
                   <span v-if="isPhoneVerified" class="status-badge ok">Verified</span>
                 </div>
               </div>
-            </div>
-            <div class="field-error" v-if="phoneNumberError">{{ phoneNumberError }}</div>
-            <div class="verify-row warn" v-if="!isPhoneVerified && hasSavedPhone">
-              <span class="verify-label">Unverified</span>
-              <button class="verify-btn" @click="sendPhoneCode" :disabled="requestingPhoneCode || phoneCooldown > 0">{{ requestingPhoneCode ? 'Sending…' : (phoneCooldown > 0 ? `Resend in ${phoneCooldown}s` : 'Send Code') }}</button>
-              <input class="code-input" v-model="phoneCode" placeholder="Enter code" />
-              <button class="verify-btn" v-if="phoneCodeSent" @click="confirmPhoneCode" :disabled="verifyingPhone || !phoneCode.trim()">{{ verifyingPhone ? 'Verifying…' : 'Verify' }}</button>
-            </div>
-            <div v-if="showPhoneConsent && phoneNumber.trim()" class="consent-message">
-              <p>By providing your phone number, you agree to receive text messages from Stitch at the number provided. Message and data rates may apply. Message frequency varies. To opt-out, remove your phone number here. View our Terms of Service and Privacy Policy at <a href="https://stitch.fyi/terms" target="_blank" rel="noopener noreferrer">stitch.fyi/terms</a>.</p>
-            </div>
-          </div>
-
-          <div class="form-group contact-section">
-            <div class="form-row">
-              <label for="endpoint">Webhook Endpoint</label>
-              <div class="control">
+              <div class="input-with-icon">
                 <input 
-                  id="endpoint" 
-                  v-model="endpoint" 
-                  type="url" 
-                  placeholder="https://bot.example.com/hook"
+                  id="phoneNumber" 
+                  v-model="phoneNumber" 
+                  type="tel" 
+                  placeholder="(555) 123-4567"
+                  :disabled="user?.is_managed"
                   @keydown="handleKeydown"
+                  @blur="validatePhoneNumber"
                 />
-                <div class="notify-group">
+                <button type="button" class="info-btn" @click="showPhoneConsent = !showPhoneConsent" :aria-pressed="showPhoneConsent ? 'true' : 'false'" title="SMS consent details">ⓘ</button>
+              </div>
+              <div class="field-error" v-if="phoneNumberError">{{ phoneNumberError }}</div>
+              <div class="verification-stack warn" v-if="!isPhoneVerified && hasSavedPhone">
+                <span class="verify-label">Unverified</span>
+                <div class="verification-actions">
+                  <button class="verify-btn" @click="sendPhoneCode" :disabled="requestingPhoneCode || phoneCooldown > 0">{{ requestingPhoneCode ? 'Sending…' : (phoneCooldown > 0 ? `Resend in ${phoneCooldown}s` : 'Send Code') }}</button>
+                  <input class="code-input" v-model="phoneCode" placeholder="Enter code" />
+                  <button class="verify-btn" v-if="phoneCodeSent" @click="confirmPhoneCode" :disabled="verifyingPhone || !phoneCode.trim()">{{ verifyingPhone ? 'Verifying…' : 'Verify' }}</button>
+                </div>
+              </div>
+              <div v-if="showPhoneConsent && phoneNumber.trim()" class="consent-message">
+                <p>By providing your phone number, you agree to receive text messages from Stitch at the number provided. Message and data rates may apply. Message frequency varies. To opt-out, remove your phone number here. View our Terms of Service and Privacy Policy at <a href="https://stitch.fyi/terms" target="_blank" rel="noopener noreferrer">stitch.fyi/terms</a>.</p>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="field-header">
+                <label for="endpoint">Webhook Endpoint</label>
+                <div class="field-meta">
                   <label class="notify-toggle" :class="{ disabled: !isEndpointVerified || (!isEmailVerified && !isManaged) }">
                     <input type="checkbox" v-model="notifyPrefs.endpoint" :disabled="!isEndpointVerified || (!isEmailVerified && !isManaged)" /><span class="notify-text">Notify</span>
                   </label>
                   <span v-if="isEndpointVerified" class="status-badge ok">Verified</span>
                 </div>
               </div>
-            </div>
-            <div class="verify-row warn" v-if="!isEndpointVerified && hasSavedEndpoint"> 
-              <span class="verify-label">Unverified</span>
-              <button class="verify-btn" @click="verifyEndpointFlow" :disabled="verifyingEndpoint || !endpoint">{{ verifyingEndpoint ? 'Verifying…' : 'Verify' }}</button>
-              <span class="verify-tip" title="We POST a nonce to your endpoint; it must echo it back as JSON {nonce: '...'} or plaintext.">Your server must echo the posted nonce (JSON {nonce:"..."} or plaintext).</span>
-            </div>
-            <div class="verification-message" v-if="endpointVerificationMessage">{{ endpointVerificationMessage }}</div>
-          </div>
-
-        <hr />
-
-          <div class="verification-message" v-if="verificationMessage">{{ verificationMessage }}</div>
-
-          <!-- Convert to Managed User Section -->
-          <div class="form-group" v-if="!isManaged">
-            <h4 style="margin: 0 0 8px 0;">Convert to Managed User</h4>
-            <div class="field-hint" style="margin-bottom: 12px;">Convert this account to a managed user account. You'll need to select a manager.</div>
-            
-            <div class="recipient-input-container">
-              <div class="input-wrapper" :class="{ 'valid': isManagerValid === true, 'invalid': isManagerValid === false, 'searching': isSearchingManager }">
-                <input 
-                  v-model="managerSearchQuery" 
-                  @input="searchManager"
-                  @keydown.escape="clearManagerSearch"
-                  placeholder="Search for manager by username or tag" 
-                  class="recipient-input"
-                />
-                <div v-if="isSearchingManager" class="search-indicator" title="Searching...">
-                  <div class="spinner"></div>
+              <input 
+                id="endpoint" 
+                v-model="endpoint" 
+                type="url" 
+                placeholder="https://bot.example.com/hook"
+                @keydown="handleKeydown"
+              />
+              <div class="verification-stack warn" v-if="!isEndpointVerified && hasSavedEndpoint"> 
+                <div class="verification-header">
+                  <span class="verify-label">Unverified</span>
+                  <span class="verify-tip" title="We POST a nonce to your endpoint; it must echo it back as JSON {nonce: '...'} or plaintext.">Your server must echo the posted nonce.</span>
                 </div>
-                <div v-else-if="isManagerValid === true" class="valid-indicator" title="Valid manager">✓</div>
-                <div v-else-if="isManagerValid === false" class="invalid-indicator" title="Invalid manager">✗</div>
+                <div class="verification-actions">
+                  <button class="verify-btn" @click="verifyEndpointFlow" :disabled="verifyingEndpoint || !endpoint">{{ verifyingEndpoint ? 'Verifying…' : 'Verify' }}</button>
+                </div>
               </div>
-              <button 
-                @click="convertToManaged" 
-                class="add-recipient-btn"
-                :disabled="!canConvertToManaged || convertToManagedBusy"
-              >
-                <div v-if="convertToManagedBusy" class="spinner" style="margin-right: 6px;"></div>
-                {{ convertToManagedBusy ? 'Converting...' : 'Convert' }}
-              </button>
+              <div class="verification-message" v-if="endpointVerificationMessage">{{ endpointVerificationMessage }}</div>
             </div>
 
-            <!-- Search results -->
+            <div class="verification-message" v-if="verificationMessage">{{ verificationMessage }}</div>
+          </section>
+
+          <section class="form-section" v-if="!isManaged">
+            <div class="section-header">
+              <h4>Convert to managed user</h4>
+              <p>Choose a manager to convert this account. Email and phone access will be removed.</p>
+            </div>
+            <div class="field">
+              <label for="managerSearch">Find a manager</label>
+              <div class="recipient-input-container">
+                <div class="manager-input-wrapper" :class="{ 'valid': isManagerValid === true, 'invalid': isManagerValid === false, 'searching': isSearchingManager }">
+                  <input
+                    id="managerSearch"
+                    v-model="managerSearchQuery"
+                    @input="searchManager"
+                    @keydown.escape="clearManagerSearch"
+                    placeholder="Search by username or tag"
+                    class="manager-input"
+                    autocomplete="off"
+                    data-lpignore="true"
+                    data-form-type="other"
+                  />
+                  <div v-if="isSearchingManager" class="input-indicator" title="Searching...">
+                    <div class="spinner"></div>
+                  </div>
+                  <div v-else-if="isManagerValid === true" class="input-indicator success" title="Valid manager">✓</div>
+                  <div v-else-if="isManagerValid === false" class="input-indicator error" title="Invalid manager">✗</div>
+                </div>
+                <button 
+                  @click="convertToManaged" 
+                  class="add-recipient-btn"
+                  :disabled="!canConvertToManaged || convertToManagedBusy"
+                >
+                  <div v-if="convertToManagedBusy" class="spinner" style="margin-right: 6px;"></div>
+                  {{ convertToManagedBusy ? 'Converting...' : 'Convert' }}
+                </button>
+              </div>
+            </div>
             <div class="search-results-container">
               <div v-if="showManagerSearchResults && managerSearchResults && managerSearchResults.length > 0" class="search-results-list">
                 <div 
@@ -1046,49 +1147,55 @@ const deleteAccount = async () => {
                   @click.stop="selectManager(user)"
                 >
                   <div class="search-result-content">
-                    <span class="search-result-name">{{ user.display_name || 'User' }}</span>
-                    <span class="search-result-tag">@{{ user.user_tag }}</span>
+                <UserDisplay
+                    :user="user"
+                  :display-name="user.display_name || 'User'"
+                  :user-tag="user.user_tag"
+                  :show-tag="!!user.user_tag"
+                  name-class="search-result-name"
+                  tag-class="search-result-tag"
+                  variant="menu"
+                />
                   </div>
                 </div>
               </div>
-
               <div v-else-if="managerSearchResults.length === 0 && hasSearchedManager && !isSearchingManager" class="no-search-results">
                 No users found. Try a different search term.
               </div>
             </div>
-
             <div class="field-error" v-if="convertToManagedError">{{ convertToManagedError }}</div>
             <div class="field-hint" v-if="convertToManagedSuccess" style="color: var(--color-success, #10b981);">{{ convertToManagedSuccess }}</div>
-          </div>
+          </section>
 
-          <!-- Change Password Section -->
-          <div class="form-group" v-if="!isManaged">
-            <h4 style="margin: 0 0 8px 0;">Change Password</h4>
-            <div class="form-row">
+          <section class="form-section" v-if="!isManaged">
+            <div class="section-header">
+              <h4>Change password</h4>
+              <p>Minimum 8 characters, must include a letter and a number.</p>
+            </div>
+            <div class="field">
               <label for="currentPassword">Current password</label>
               <div class="password-field">
                 <input id="currentPassword" :type="showCurrentPassword ? 'text' : 'password'" v-model="currentPassword" placeholder="••••••••" />
                 <button type="button" class="eye-toggle" @click="showCurrentPassword = !showCurrentPassword" :aria-pressed="showCurrentPassword ? 'true' : 'false'" :title="showCurrentPassword ? 'Hide password' : 'Show password'">{{ showCurrentPassword ? '🙈' : '👁️' }}</button>
               </div>
             </div>
-            <div class="form-row" style="margin-top: 8px;">
+            <div class="field">
               <label for="newPassword">New password</label>
               <div class="password-field">
                 <input id="newPassword" :type="showNewPassword ? 'text' : 'password'" v-model="newPassword" placeholder="••••••••" />
                 <button type="button" class="eye-toggle" @click="showNewPassword = !showNewPassword" :aria-pressed="showNewPassword ? 'true' : 'false'" :title="showNewPassword ? 'Hide password' : 'Show password'">{{ showNewPassword ? '🙈' : '👁️' }}</button>
               </div>
             </div>
-            <div class="form-row" style="margin-top: 8px;">
-              <label for="confirmPassword">Confirm new</label>
+            <div class="field">
+              <label for="confirmPassword">Confirm new password</label>
               <div class="password-field">
                 <input id="confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" v-model="confirmPassword" placeholder="••••••••" />
                 <button type="button" class="eye-toggle" @click="showConfirmPassword = !showConfirmPassword" :aria-pressed="showConfirmPassword ? 'true' : 'false'" :title="showConfirmPassword ? 'Hide password' : 'Show password'">{{ showConfirmPassword ? '🙈' : '👁️' }}</button>
               </div>
             </div>
-            <div class="field-hint">Minimum 8 characters, must include a letter and a number.</div>
             <div class="field-error" v-if="changePwError">{{ changePwError }}</div>
             <div class="field-hint" v-if="changePwSuccess" style="color: var(--color-success, #10b981);">{{ changePwSuccess }}</div>
-            <div style="display:flex; justify-content:flex-end; margin-top: 10px;">
+            <div class="field-actions">
               <button class="update-btn" @click="submitPasswordChange" :disabled="changePwBusy">
                 <div class="button-inner">
                   <div v-if="changePwBusy" class="spinner"></div>
@@ -1096,23 +1203,23 @@ const deleteAccount = async () => {
                 </div>
               </button>
             </div>
-          </div>
-          
-          
-          <!-- Danger Zone (simple) -->
-          <div class="form-group" style="border-top:1px solid var(--color-border); padding-top: var(--space-sm); margin-top: 16px;">
-            <h4 style="margin: 0 0 8px 0; color: var(--color-error);">Danger zone</h4>
-            <div class="field-hint">Deleting your account is permanent and cannot be undone.</div>
-            <div class="field-error" v-if="deleteError" style="margin-top: 6px;">{{ deleteError }}</div>
-            <div style="display:flex; justify-content:flex-end; margin-top: 10px;">
-              <button class="update-btn" :disabled="deleteBusy" style="background: #ef4444;" @click="deleteAccount">
+          </section>
+
+          <section class="form-section danger-zone">
+            <div class="section-header">
+              <h4>Danger zone</h4>
+              <p>Deleting your account is permanent and cannot be undone.</p>
+            </div>
+            <div class="field-error" v-if="deleteError">{{ deleteError }}</div>
+            <div class="field-actions">
+              <button class="update-btn" :disabled="deleteBusy" @click="deleteAccount">
                 <div class="button-inner">
                   <div v-if="deleteBusy" class="spinner"></div>
                   {{ deleteBusy ? 'Deleting…' : 'Delete account' }}
                 </div>
               </button>
             </div>
-          </div>
+          </section>
         </div>
 
         <div class="modal-footer">
@@ -1237,20 +1344,74 @@ const deleteAccount = async () => {
   padding: var(--space-lg);
   overflow-y: auto;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
 }
 
-.form-group {
-  margin-bottom: var(--space-lg);
+.form-section {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, var(--radius-md));
+  padding: var(--space-lg);
+  background-color: var(--color-surface);
+  box-shadow: var(--color-card-shadow, none);
 }
 
-.form-group label {
+.section-header {
+  margin-bottom: var(--space-md);
+}
+
+.section-header h4 {
+  margin: 0;
+  font-size: var(--font-size-md);
   color: var(--color-text);
-  font-weight: 500;
+}
+
+.section-header p {
+  margin: 4px 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--space-md);
+}
+
+.field:last-child {
+  margin-bottom: 0;
+}
+
+.field label {
+  color: var(--color-text);
+  font-weight: 600;
   font-size: var(--font-size-sm);
 }
 
-.form-group input,
-.form-group textarea {
+.field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.field-header label {
+  margin-bottom: 0;
+}
+
+.field-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.field input,
+.field textarea {
   width: 100%;
   padding: var(--space-xs) var(--space-md);
   border: 1px solid var(--color-border);
@@ -1260,45 +1421,74 @@ const deleteAccount = async () => {
   font-size: var(--font-size-sm);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
-.form-group textarea {
+
+.field textarea {
   min-height: 100px;
   resize: vertical;
   font-family: inherit;
   line-height: 1.4;
 }
 
-.password-field { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; }
-.password-field input { padding-right: 36px; }
-.eye-toggle { margin-left: 6px; background: transparent; border: 1px solid var(--color-border); color: var(--color-text); border-radius: var(--radius-sm); cursor: pointer; padding: 6px 8px; font-size: 14px; }
-.eye-toggle:hover { background: var(--color-hover-overlay); }
-
-.form-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-}
-
-.form-row label {
-  min-width: 140px;
-}
-
-.form-group input:focus,
-.form-group textarea:focus {
+.field input:focus,
+.field textarea:focus {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 2px var(--color-primary-light);
 }
 
+.password-field {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.password-field input {
+  padding-right: 36px;
+}
+
+.eye-toggle {
+  margin-left: 6px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  padding: 6px 8px;
+  font-size: 14px;
+}
+
+.eye-toggle:hover {
+  background: var(--color-hover-overlay);
+}
+
 .field-hint {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .field-error {
   font-size: var(--font-size-xs);
   color: var(--color-error);
-  margin-top: 4px;
+  margin-top: 2px;
+}
+
+.toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-input-background);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  width: fit-content;
+}
+
+.toggle-pill input[type="checkbox"] {
+  margin: 0;
 }
 
 .consent-message {
@@ -1306,7 +1496,6 @@ const deleteAccount = async () => {
   border: 1px solid rgba(52, 152, 219, 0.2);
   border-radius: var(--radius-md);
   padding: var(--space-md);
-  margin-bottom: var(--space-lg);
   margin-top: var(--space-md);
 }
 
@@ -1420,6 +1609,12 @@ const deleteAccount = async () => {
   margin-right: var(--space-xs);
 }
 
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .update-btn:hover:not(:disabled) {
   background-color: var(--color-primary-dark);
 }
@@ -1445,115 +1640,292 @@ const deleteAccount = async () => {
   background-color: #dc2626;
 }
 
-.checkmark { font-weight: 700; margin-right: 6px; }
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.checkmark {
+  font-weight: 700;
+  margin-right: 6px;
 }
 
-.verify-row { display: flex; gap: 8px; align-items: center; margin-top: 16px; margin-bottom: 0px; padding: 8px 10px; border-radius: 8px; }
-.verify-row.warn { background: rgba(234, 179, 8, 0.10); border: 1px solid rgba(234,179,8,0.35); }
-.verify-label { font-size: 12px; font-weight: 600; color: #b45309; }
-.verify-btn { border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); padding: 6px 10px; border-radius: 6px; cursor: pointer; }
-.code-input { max-width: 120px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-input-background); color: var(--color-text); }
-.verification-message { font-size: var(--font-size-xs); color: var(--color-text-secondary); margin: 6px 0; }
-.verified-badge { color: var(--color-success, #10b981); margin-left: 6px; font-size: 14px; }
-.notify-group { display: inline-flex; align-items: center; gap: 8px; }
-.notify-toggle { display:inline-grid; grid-auto-flow: column; align-items:center; column-gap: 6px; font-size: 12px; padding: 2px 4px; }
-.notify-toggle input[type="checkbox"] { margin: 0; padding: 0; }
-.notify-text { display: inline-block; line-height: 1; }
-.notify-toggle.disabled { opacity: 0.6; }
-.control { display:flex; align-items:center; gap: 8px; width: 100%; }
-.input-with-icon { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr auto; align-items: center; gap: 6px; width: 100%; }
-.status-badge { font-size: 11px; padding: 2px 6px; border-radius: 10px; border: 1px solid var(--color-border); color: var(--color-text-secondary); }
-.status-badge.ok { background: rgba(16, 185, 129, 0.12); color: var(--color-success, #10b981); border-color: rgba(16,185,129,0.35); }
-.status-badge.warn { background: rgba(234, 179, 8, 0.12); color: #eab308; border-color: rgba(234,179,8,0.35); }
-.verify-tip { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
-.contact-section { border-top: 1px solid var(--color-border); padding-top: var(--space-sm); margin-top: 16px; }
-.form-row { margin-top: 12px; }
+.verify-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #b45309;
+}
 
-.privacy-row { align-items: center; justify-content: space-between; }
-/* Ensure the privacy toggle doesn't inherit the generic 140px label min-width */
-.privacy-row label.notify-toggle { min-width: 0; width: auto; }
-@media (max-width: 600px) {
-  .privacy-row { justify-content: flex-start; gap: 12px; }
+.verify-btn {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.verify-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.code-input {
+  max-width: 140px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-input-background);
+  color: var(--color-text);
+}
+
+.verification-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+}
+
+.verification-stack.warn {
+  background: rgba(234, 179, 8, 0.10);
+  border: 1px solid rgba(234,179,8,0.35);
+}
+
+.verification-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.verification-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.verification-message {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin: 6px 0;
+}
+
+.bot-capabilities-section .capabilities-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-md);
+}
+
+.bot-capabilities-section .muted {
+  color: var(--color-text-secondary);
+}
+
+.notify-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.notify-toggle {
+  display: inline-grid;
+  grid-auto-flow: column;
+  align-items: center;
+  column-gap: 6px;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+
+.notify-toggle input[type="checkbox"] {
+  margin: 0;
+  padding: 0;
+}
+
+.notify-text {
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.notify-toggle.disabled {
+  opacity: 0.6;
+}
+
+.control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.input-with-icon {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.status-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.status-badge.ok {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--color-success, #10b981);
+  border-color: rgba(16,185,129,0.35);
+}
+
+.status-badge.warn {
+  background: rgba(234, 179, 8, 0.12);
+  color: #eab308;
+  border-color: rgba(234,179,8,0.35);
+}
+
+.verify-tip {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.field-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.danger-zone {
+  border-color: rgba(239, 68, 68, 0.45);
+  background-color: rgba(239, 68, 68, 0.05);
+}
+
+.danger-zone .section-header h4 {
+  color: var(--color-error);
+}
+
+.danger-zone .update-btn {
+  background: #ef4444;
+}
+
+.danger-zone .update-btn:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.danger-zone .update-btn:disabled {
+  opacity: 0.7;
 }
 
 /* Unsaved changes confirmation styles */
-.confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: calc(var(--z-index-modal) + 1); }
-.confirm-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 16px; width: 92%; max-width: 420px; box-shadow: var(--color-card-shadow); }
-.confirm-title { font-weight: 600; margin-bottom: 6px; }
-.confirm-text { font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: 12px; }
-.confirm-actions { display: flex; gap: 12px; justify-content: flex-end; }
-/* Convert to managed user styles (reused from RecipientsModal) */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: calc(var(--z-index-modal) + 1);
+}
+
+.confirm-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  width: 92%;
+  max-width: 420px;
+  box-shadow: var(--color-card-shadow);
+}
+
+.confirm-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.confirm-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: 12px;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+/* Convert to managed user styles */
 .recipient-input-container {
   display: flex;
   gap: 8px;
   margin-bottom: 16px;
 }
 
-.input-wrapper {
+.manager-input-wrapper {
   flex: 1;
-  position: relative;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background-color: var(--color-input-bg, var(--color-surface));
-  transition: all 0.2s ease;
+  background-color: var(--color-input-background);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  align-items: center;
+  padding-right: 8px;
 }
 
-.input-wrapper:focus-within {
+.manager-input-wrapper:focus-within {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 79, 140, 255), 0.2);
 }
 
-.input-wrapper.valid {
+.manager-input-wrapper.valid {
   border-color: var(--color-success);
 }
 
-.input-wrapper.invalid {
+.manager-input-wrapper.invalid {
   border-color: var(--color-error);
 }
 
-.input-wrapper.searching {
+.manager-input-wrapper.searching {
   border-color: var(--color-primary);
 }
 
-.recipient-input {
+.manager-input {
   width: 100%;
-  padding: 12px 40px 12px 12px;
-  border: none;
+  padding: 10px 12px;
+  border: none !important;
   background: transparent;
   color: var(--color-text);
   font-size: var(--font-size-sm);
   outline: none;
+  box-shadow: none !important;
+  border-radius: 0;
 }
 
-.recipient-input::placeholder {
+.manager-input:focus {
+  border: none !important;
+  outline: none;
+  box-shadow: none !important;
+}
+
+.manager-input::placeholder {
   color: var(--color-text-secondary);
 }
 
-.search-indicator,
-.valid-indicator,
-.invalid-indicator {
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
+.input-indicator {
   display: flex;
   align-items: center;
   justify-content: center;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  min-width: 20px;
+  font-size: 14px;
 }
 
-.valid-indicator {
+.input-indicator.success {
   color: var(--color-success);
-  font-weight: bold;
 }
 
-.invalid-indicator {
+.input-indicator.error {
   color: var(--color-error);
-  font-weight: bold;
 }
 
 .add-recipient-btn {
@@ -1639,17 +2011,56 @@ const deleteAccount = async () => {
 }
 
 @media (max-width: 600px) {
-  .modal-container { width: 96%; max-width: 560px; max-height: 86vh; }
-  .form-row { flex-direction: column; align-items: stretch; gap: 6px; }
-  .form-row label { min-width: 0; width: 100%; }
-  .control { flex-direction: column; align-items: stretch; gap: 6px; }
-  .input-with-icon { width: 100%; }
-  .notify-group { align-self: flex-start; width: auto; }
-  .status-badge { align-self: flex-start; }
-  .notify-toggle { align-self: flex-start; width: auto; }
-  .verify-row { align-items: flex-start; flex-wrap: wrap; }
-  .code-input { max-width: 100%; }
-  .recipient-input-container { flex-direction: column; }
-  .add-recipient-btn { width: 100%; }
+  .modal-container {
+    width: 96%;
+    max-width: 560px;
+    max-height: 86vh;
+  }
+
+  .modal-content {
+    padding: var(--space-md);
+  }
+
+  .form-section {
+    padding: var(--space-md);
+  }
+
+  .control {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .input-with-icon {
+    width: 100%;
+  }
+
+  .field-meta {
+    /* On mobile, keep meta next to label or wrap if needed? */
+    /* If there's no space, it might wrap naturally if we allow it */
+  }
+
+  .notify-group,
+  .status-badge,
+  .notify-toggle {
+    align-self: flex-start;
+  }
+
+  .field-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .recipient-input-container {
+    flex-direction: column;
+  }
+
+  .add-recipient-btn {
+    width: 100%;
+  }
+
+  .code-input {
+    max-width: 100%;
+  }
 }
-</style> 
+</style>
