@@ -48,7 +48,19 @@ const onCreate = async () => {
     } catch (_) {}
     emit('close');
   } catch (e) {
-    errorMessage.value = e?.message || 'Failed to create managed user';
+    const code = e && e.message;
+    if (code === 'user_tag_conflict') {
+      errorMessage.value = 'That tag is already taken. Try a different one.';
+    } else if (code === 'multiple_endpoints_not_allowed') {
+      errorMessage.value = 'Only one endpoint URL is allowed for a managed user.';
+    } else if (code === 'endpoints_must_be_list_of_strings') {
+      errorMessage.value = 'Endpoints must be provided as a list of URLs.';
+    } else if (code && code.startsWith('Username must')) {
+      // Reuse backend username validation messages but align terminology to "tag"
+      errorMessage.value = code.replace('Username', 'Tag');
+    } else {
+      errorMessage.value = code || 'Failed to create managed user';
+    }
   } finally {
     isBusy.value = false;
   }
@@ -70,7 +82,13 @@ const onCreate = async () => {
           </div>
           <div class="field">
             <label>User tag</label>
-            <input v-model="userTag" type="text" placeholder="e.g. acmebot" />
+            <input
+              v-model="userTag"
+              type="text"
+              placeholder="e.g. acmebot"
+              maxlength="24"
+            />
+            <div class="hint">2–24 characters: letters, numbers, and hyphens only.</div>
           </div>
           <div class="field">
             <label>Endpoints (optional)</label>

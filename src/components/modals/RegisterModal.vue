@@ -15,14 +15,15 @@
           <input 
             v-model="userTag" 
             type="text" 
-            placeholder="2-16 characters: letters, numbers, and hyphens only" 
+            placeholder="2-24 characters: letters, numbers, and hyphens only" 
             pattern="[A-Za-z0-9-]*"
-            title="2-16 characters: letters, numbers, and hyphens only"
+            title="2-24 characters: letters, numbers, and hyphens only"
             id="register-username"
             name="username"
             autocomplete="username"
             autocapitalize="off"
             spellcheck="false"
+            maxlength="24"
             @input="onTagInput"
           />
           <p v-if="tagError" class="error">{{ tagError }}</p>
@@ -127,8 +128,8 @@ const validateTag = () => {
     tagError.value = 'Tag must be at least 2 characters long'
     return false
   }
-  if (tag.length > 16) {
-    tagError.value = 'Tag must be no more than 16 characters long'
+  if (tag.length > 24) {
+    tagError.value = 'Tag must be no more than 24 characters long'
     return false
   }
   if (!/^[A-Za-z0-9-]+$/.test(tag)) {
@@ -188,8 +189,8 @@ const selectNotify = (channel) => {
 const onTagInput = () => {
   userTag.value = (userTag.value || '').replace(/[^A-Za-z0-9-]/g, '')
   // Enforce max length
-  if (userTag.value.length > 16) {
-    userTag.value = userTag.value.substring(0, 16)
+  if (userTag.value.length > 24) {
+    userTag.value = userTag.value.substring(0, 24)
   }
   validateTag()
 }
