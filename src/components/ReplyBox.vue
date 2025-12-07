@@ -312,7 +312,7 @@ const emit = defineEmits(['send', 'cancel', 'send-success', 'send-error', 'open-
 const store = useStore();
 
 const TAG_TOKEN_RE = /(^|[\s([{])#([A-Za-z0-9-]{1,32})(?![A-Za-z0-9-])/gm;
-const MENTION_TOKEN_RE = /(^|[\s([{])@([A-Za-z0-9-]{2,16})(?![A-Za-z0-9-])(?=[^\w@.]|$)/gm;
+const MENTION_TOKEN_RE = /(^|[\s([{])@([A-Za-z0-9-]{2,24})(?![A-Za-z0-9-])(?=[^\w@.]|$)/gm;
 const BOUNDARY_REGEX = /[\s.,!?;:)\]}'"`]/;
 const MAX_DRAFT_TAGS = 20;
 
@@ -835,13 +835,6 @@ const autoResizeTextarea = () => {
   if (mentionDropdown.visible) {
     updateMentionDropdownPosition(mentionDropdown.anchorEnd ?? replyTextarea.value?.selectionStart ?? 0);
   }
-  
-  // Log diagnostics after resize (only in dev)
-  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    nextTick(() => {
-      logAlignmentDiagnostics();
-    });
-  }
 };
 
 // Toggle textarea expansion
@@ -964,10 +957,6 @@ const updateMentionDropdownPosition = (caretIndex) => {
       const wrapperRect = wrapper?.getBoundingClientRect();
       const clippingParents = checkOverflowClipping(el);
       
-      if (clippingParents.length > 0) {
-        console.warn('[MentionDropdown] ⚠️ Parent overflow clipping detected:', clippingParents);
-      }
-      
       if (finalRect.width === 0 || finalRect.height === 0) {
         console.warn('[MentionDropdown] ⚠️ Dropdown has zero dimensions!');
       }
@@ -992,7 +981,7 @@ const detectMentionTrigger = (textarea) => {
   if (!textarea) return;
   const caretIndex = textarea.selectionStart ?? 0;
   const textBeforeCaret = textarea.value.slice(0, caretIndex);
-  const mentionMatch = textBeforeCaret.match(/(^|[\s([{>])@([A-Za-z0-9-]{0,16})$/);
+  const mentionMatch = textBeforeCaret.match(/(^|[\s([{>])@([A-Za-z0-9-]{0,24})$/);
   if (!mentionMatch) {
     closeMentionDropdown();
     return;
@@ -1192,138 +1181,9 @@ const buildHighlightedHtml = (rawText = '') => {
   return processed || '&nbsp;';
 };
 
-const logAlignmentDiagnostics = () => {
-  if (!replyTextarea.value || !highlightOverlay.value) return;
-  
-  const textarea = replyTextarea.value;
-  const overlay = highlightOverlay.value;
-  
-  const textareaStyles = window.getComputedStyle(textarea);
-  const overlayStyles = window.getComputedStyle(overlay);
-  
-  // Measure character width at different positions
-  const testText = content.value || '';
-  const measureChar = (char, index) => {
-    const before = testText.slice(0, index);
-    const after = testText.slice(index + 1);
-    const div = document.createElement('div');
-    div.style.position = 'absolute';
-    div.style.visibility = 'hidden';
-    div.style.whiteSpace = 'pre-wrap';
-    div.style.fontFamily = textareaStyles.fontFamily;
-    div.style.fontSize = textareaStyles.fontSize;
-    div.style.fontWeight = textareaStyles.fontWeight;
-    div.style.fontStyle = textareaStyles.fontStyle;
-    div.style.letterSpacing = textareaStyles.letterSpacing;
-    div.style.lineHeight = textareaStyles.lineHeight;
-    div.style.padding = textareaStyles.padding;
-    div.style.boxSizing = textareaStyles.boxSizing;
-    div.textContent = before + char + after;
-    document.body.appendChild(div);
-    const width = div.offsetWidth;
-    document.body.removeChild(div);
-    return width;
-  };
-  
-  const charWidths = [];
-  if (testText.length > 0) {
-    for (let i = 0; i < Math.min(testText.length, 50); i++) {
-      const char = testText[i];
-      const width = measureChar(char, i);
-      charWidths.push({ char, index: i, width });
-    }
-  }
-  
-  console.log('[Alignment Diagnostics]', {
-    textarea: {
-      width: textarea.offsetWidth,
-      clientWidth: textarea.clientWidth,
-      scrollWidth: textarea.scrollWidth,
-      padding: textareaStyles.padding,
-      paddingLeft: textareaStyles.paddingLeft,
-      paddingRight: textareaStyles.paddingRight,
-      paddingTop: textareaStyles.paddingTop,
-      paddingBottom: textareaStyles.paddingBottom,
-      margin: textareaStyles.margin,
-      border: textareaStyles.border,
-      borderLeftWidth: textareaStyles.borderLeftWidth,
-      borderRightWidth: textareaStyles.borderRightWidth,
-      boxSizing: textareaStyles.boxSizing,
-      fontFamily: textareaStyles.fontFamily,
-      fontSize: textareaStyles.fontSize,
-      fontWeight: textareaStyles.fontWeight,
-      fontStyle: textareaStyles.fontStyle,
-      letterSpacing: textareaStyles.letterSpacing,
-      lineHeight: textareaStyles.lineHeight,
-      wordSpacing: textareaStyles.wordSpacing,
-      textIndent: textareaStyles.textIndent,
-      tabSize: textareaStyles.tabSize,
-      whiteSpace: textareaStyles.whiteSpace,
-      overflowWrap: textareaStyles.overflowWrap,
-      wordBreak: textareaStyles.wordBreak
-    },
-    overlay: {
-      width: overlay.offsetWidth,
-      clientWidth: overlay.clientWidth,
-      scrollWidth: overlay.scrollWidth,
-      padding: overlayStyles.padding,
-      paddingLeft: overlayStyles.paddingLeft,
-      paddingRight: overlayStyles.paddingRight,
-      paddingTop: overlayStyles.paddingTop,
-      paddingBottom: overlayStyles.paddingBottom,
-      margin: overlayStyles.margin,
-      border: overlayStyles.border,
-      borderLeftWidth: overlayStyles.borderLeftWidth,
-      borderRightWidth: overlayStyles.borderRightWidth,
-      boxSizing: overlayStyles.boxSizing,
-      fontFamily: overlayStyles.fontFamily,
-      fontSize: overlayStyles.fontSize,
-      fontWeight: overlayStyles.fontWeight,
-      fontStyle: overlayStyles.fontStyle,
-      letterSpacing: overlayStyles.letterSpacing,
-      lineHeight: overlayStyles.lineHeight,
-      wordSpacing: overlayStyles.wordSpacing,
-      textIndent: overlayStyles.textIndent,
-      tabSize: overlayStyles.tabSize,
-      whiteSpace: overlayStyles.whiteSpace,
-      overflowWrap: overlayStyles.overflowWrap,
-      wordBreak: overlayStyles.wordBreak
-    },
-    differences: {
-      widthDiff: textarea.offsetWidth - overlay.offsetWidth,
-      clientWidthDiff: textarea.clientWidth - overlay.clientWidth,
-      paddingLeftDiff: parseFloat(textareaStyles.paddingLeft) - parseFloat(overlayStyles.paddingLeft),
-      paddingRightDiff: parseFloat(textareaStyles.paddingRight) - parseFloat(overlayStyles.paddingRight),
-      fontSizeDiff: parseFloat(textareaStyles.fontSize) - parseFloat(overlayStyles.fontSize),
-      letterSpacingDiff: parseFloat(textareaStyles.letterSpacing) - parseFloat(overlayStyles.letterSpacing),
-      lineHeightDiff: parseFloat(textareaStyles.lineHeight) - parseFloat(overlayStyles.lineHeight)
-    },
-    charWidths: charWidths.slice(0, 20), // First 20 chars
-    contentLength: testText.length,
-    contentPreview: testText.slice(0, 100)
-  });
-};
-
 const updateOverlayHtml = () => {
   const html = buildHighlightedHtml(content.value || '');
   overlayHtml.value = html;
-  // Diagnostic logging
-  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-    console.log('[ReplyBox overlay]', {
-      contentLength: content.value?.length || 0,
-      htmlLength: html.length,
-      replyTagsCount: replyTags.value.length,
-      replyTags: replyTags.value,
-      recipientsCount: recipients.value.length,
-      normalizedTagSet: Array.from(normalizedReplyTagSet.value),
-      mentionSet: Array.from(mentionableUserTagSet.value),
-      htmlPreview: html.slice(0, 200)
-    });
-    // Log alignment diagnostics after DOM update
-    nextTick(() => {
-      logAlignmentDiagnostics();
-    });
-  }
 };
 
 const syncOverlayScroll = () => {
@@ -1837,15 +1697,6 @@ watch(recipients, (newRecipients) => {
 }, { deep: true });
 
 
-// Expose debug helper to window for console access
-onMounted(() => {
-  // Expose alignment diagnostics for manual debugging
-  if (typeof window !== 'undefined') {
-    window.__debugReplyBoxAlignment = () => {
-      logAlignmentDiagnostics();
-    };
-  }
-});
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutsideSearch);

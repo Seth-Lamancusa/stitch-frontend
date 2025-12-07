@@ -1,7 +1,7 @@
 import { createFormatter } from './base';
 
 const TAG_TOKEN_RE = /(^|[\s([{])#([A-Za-z0-9-]{1,32})(?![A-Za-z0-9-])/gm;
-const MENTION_TOKEN_RE = /(^|[\s([{])@([A-Za-z0-9-]{2,16})(?![A-Za-z0-9-])(?=[^\w@.]|$)/gm;
+const MENTION_TOKEN_RE = /(^|[\s([{])@([A-Za-z0-9-]{2,24})(?![A-Za-z0-9-])(?=[^\w@.]|$)/gm;
 const SKIP_TAGS = new Set(['CODE', 'PRE', 'KBD', 'SAMP']);
 
 const normalizeSet = (source) => {
