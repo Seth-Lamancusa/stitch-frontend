@@ -27,7 +27,7 @@ const isPrivate = ref(false);
 const isBot = ref(false);
 const inputModalities = ref('');
 const outputModalities = ref('');
-const foundationProvider = ref('');
+const thirdPartyIntegrations = ref('');
 const isSubmitting = ref(false);
 const errorMessage = ref('');
 const tagError = ref('');
@@ -165,7 +165,7 @@ const resetForm = () => {
   isBot.value = !!(user.value?.is_bot);
   inputModalities.value = user.value?.input_modalities || '';
   outputModalities.value = user.value?.output_modalities || '';
-  foundationProvider.value = user.value?.foundation_provider || '';
+  thirdPartyIntegrations.value = user.value?.third_party_integrations || '';
   const _contacts = (user.value?.contacts || []);
   notifyPrefs.value = {
     email: !!_contacts.find(c => c.type==='email' && c.notify),
@@ -245,8 +245,8 @@ const validateTag = () => {
     tagError.value = 'Tag must be at least 2 characters long';
     return false;
   }
-  if (tag.value.length > 16) {
-    tagError.value = 'Tag must be no more than 16 characters long';
+  if (tag.value.length > 24) {
+    tagError.value = 'Tag must be no more than 24 characters long';
     return false;
   }
   if (!/^[a-zA-Z0-9-]+$/.test(tag.value)) {
@@ -298,7 +298,7 @@ const hasFormChanges = computed(() => {
   const originalBio = user.value?.bio || '';
   const originalInputModalities = user.value?.input_modalities || '';
   const originalOutputModalities = user.value?.output_modalities || '';
-  const originalFoundationProvider = user.value?.foundation_provider || '';
+  const originalThirdPartyIntegrations = user.value?.third_party_integrations || '';
 
   const displayNameChanged = normalizeTrimmed(displayName.value) !== normalizeTrimmed(originalDisplayName);
   const tagChanged = normalizeLowerTrimmed(tag.value) !== normalizeLowerTrimmed(originalTag);
@@ -310,9 +310,9 @@ const hasFormChanges = computed(() => {
   const botChanged = !!isBot.value !== !!(user.value?.is_bot);
   const inputModalitiesChanged = normalizeTrimmed(inputModalities.value) !== normalizeTrimmed(originalInputModalities);
   const outputModalitiesChanged = normalizeTrimmed(outputModalities.value) !== normalizeTrimmed(originalOutputModalities);
-  const foundationProviderChanged = normalizeTrimmed(foundationProvider.value) !== normalizeTrimmed(originalFoundationProvider);
+  const thirdPartyIntegrationsChanged = normalizeTrimmed(thirdPartyIntegrations.value) !== normalizeTrimmed(originalThirdPartyIntegrations);
 
-  return displayNameChanged || tagChanged || phoneChanged || emailChanged || endpointChanged || privateChanged || bioChanged || botChanged || inputModalitiesChanged || outputModalitiesChanged || foundationProviderChanged || notifyPrefsChanged();
+  return displayNameChanged || tagChanged || phoneChanged || emailChanged || endpointChanged || privateChanged || bioChanged || botChanged || inputModalitiesChanged || outputModalitiesChanged || thirdPartyIntegrationsChanged || notifyPrefsChanged();
 });
 
 // Function to determine if the update button should be enabled
@@ -371,8 +371,8 @@ const validateForm = () => {
       isValid = false;
     }
   }
-  const hasCapabilityValues = !!(normalizeTrimmed(inputModalities.value) || normalizeTrimmed(outputModalities.value) || normalizeTrimmed(foundationProvider.value));
-  if (!isBot.value && hasCapabilityValues) {
+    const hasCapabilityValues = !!(normalizeTrimmed(inputModalities.value) || normalizeTrimmed(outputModalities.value) || normalizeTrimmed(thirdPartyIntegrations.value));
+    if (!isBot.value && hasCapabilityValues) {
     botCapabilitiesError.value = 'Enable the bot toggle to describe capabilities.';
     isValid = false;
   }
@@ -462,7 +462,7 @@ const updateProfile = async () => {
     const originalPrivate = !!(user.value?.private);
     const originalInputModalities = user.value?.input_modalities || '';
     const originalOutputModalities = user.value?.output_modalities || '';
-    const originalFoundationProvider = user.value?.foundation_provider || '';
+    const originalThirdPartyIntegrations = user.value?.third_party_integrations || '';
 
     // Only include changed fields (normalized)
     if (normalizeTrimmed(displayName.value) !== normalizeTrimmed(user.value?.displayName || '')) {
@@ -501,9 +501,9 @@ const updateProfile = async () => {
       const trimmed = normalizeTrimmed(outputModalities.value);
       profileUpdate.output_modalities = trimmed || null;
     }
-    if (normalizeTrimmed(foundationProvider.value) !== normalizeTrimmed(originalFoundationProvider)) {
-      const trimmed = normalizeTrimmed(foundationProvider.value);
-      profileUpdate.foundation_provider = trimmed || null;
+    if (normalizeTrimmed(thirdPartyIntegrations.value) !== normalizeTrimmed(originalThirdPartyIntegrations)) {
+      const trimmed = normalizeTrimmed(thirdPartyIntegrations.value);
+      profileUpdate.third_party_integrations = trimmed || null;
     }
     if (notifyPrefsChanged()) {
       profileUpdate.notify = { ...notifyPrefs.value };
@@ -533,8 +533,8 @@ const updateProfile = async () => {
     } else if (code === 'invalid_output_modalities') {
       botCapabilitiesError.value = 'Enter output modalities as a comma-separated list.';
       errorMessage.value = '';
-    } else if (code === 'invalid_foundation_provider') {
-      botCapabilitiesError.value = 'Enter a provider name.';
+    } else if (code === 'invalid_third_party_integrations') {
+      botCapabilitiesError.value = 'Enter a valid integration name.';
       errorMessage.value = '';
     } else if (code === 'user_tag_conflict') {
       tagError.value = 'That tag is already taken';
@@ -929,6 +929,7 @@ const deleteAccount = async () => {
                 v-model="tag" 
                 type="text" 
                 placeholder="Your unique tag"
+                maxlength="24"
                 @keydown="handleKeydown"
                 @blur="validateTag"
               />
@@ -985,14 +986,14 @@ const deleteAccount = async () => {
                 <div class="field-hint">Comma-separated list of output filetypes.</div>
               </div>
               <div class="field">
-                <label for="foundationProvider">Foundation provider</label>
+                <label for="thirdPartyIntegrations">3rd party integrations</label>
                 <input
-                  id="foundationProvider"
-                  v-model="foundationProvider"
+                  id="thirdPartyIntegrations"
+                  v-model="thirdPartyIntegrations"
                   type="text"
                   placeholder="e.g., OpenAI, Anthropic"
                 />
-                <div class="field-hint">Optional provider label (for bots that delegate raw response generation).</div>
+                <div class="field-hint">Optional 3rd party integrations list.</div>
               </div>
             </div>
             <div class="field-error" v-if="botCapabilitiesError">{{ botCapabilitiesError }}</div>

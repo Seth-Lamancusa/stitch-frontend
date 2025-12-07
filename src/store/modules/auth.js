@@ -38,7 +38,7 @@ function mapApiUserToAuthState(userData) {
     is_bot: !!data.is_bot,
     input_modalities: typeof data.input_modalities === 'string' ? data.input_modalities : null,
     output_modalities: typeof data.output_modalities === 'string' ? data.output_modalities : null,
-    foundation_provider: typeof data.foundation_provider === 'string' ? data.foundation_provider : null
+    third_party_integrations: typeof data.third_party_integrations === 'string' ? data.third_party_integrations : (typeof data.foundation_provider === 'string' ? data.foundation_provider : null)
   };
 }
 
@@ -367,7 +367,7 @@ export default {
               is_bot: typeof result.profile.is_bot === 'boolean' ? result.profile.is_bot : !!currentUser.is_bot,
               input_modalities: typeof result.profile.input_modalities === 'string' ? result.profile.input_modalities : null,
               output_modalities: typeof result.profile.output_modalities === 'string' ? result.profile.output_modalities : null,
-              foundation_provider: typeof result.profile.foundation_provider === 'string' ? result.profile.foundation_provider : null,
+              third_party_integrations: typeof result.profile.third_party_integrations === 'string' ? result.profile.third_party_integrations : null,
               contact: null
             });
           }

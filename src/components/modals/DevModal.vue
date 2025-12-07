@@ -29,6 +29,7 @@ const secretBusy = ref(false);
 const secretError = ref('');
 const generatedSecret = ref('');
 const hasJustRevealedSecret = ref(false);
+const endpointRotationHint = ref('');
 
 // Mobile detection (600px breakpoint)
 const isMobile = ref(window.innerWidth <= 600);
@@ -50,6 +51,13 @@ const isEmailVerified = computed(() => !!(user.value?.is_email_verified));
 const isEndpointVerified = computed(() => !!((user.value?.contacts || []).some(c => c.type === 'endpoint' && c.verified)));
 const hasSavedEndpoint = computed(() => !!((user.value?.contacts || []).find(c => c.type === 'endpoint')?.value));
 const hasEndpointSigningSecret = computed(() => !!(user.value?.has_endpoint_signing_secret));
+const originalEndpoint = computed(() => (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '');
+const endpointChanged = computed(() => {
+  const current = (endpoint.value || '').trim();
+  const original = (originalEndpoint.value || '').trim();
+  return !!original && !!current && current !== original;
+});
+const hasSecretForCurrentEndpoint = computed(() => hasEndpointSigningSecret.value && !endpointChanged.value);
 
 function base64UrlEncode(bytes) {
   let binary = '';
@@ -160,16 +168,23 @@ function resetDevForm() {
   generatedSecret.value = '';
   hasJustRevealedSecret.value = false;
   secretError.value = '';
+  endpointRotationHint.value = '';
 }
 
 async function saveEndpoint() {
   if (!isApiAllowed.value) return;
   try {
-    const originalEndpoint = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
+    const prevEndpoint = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
     const next = (endpoint.value || '').trim();
-    if (next === originalEndpoint) return;
+    if (next === prevEndpoint) return;
     const payload = { endpoint: next || null };
     await store.dispatch('auth/updateProfile', payload);
+    // If there was a signing secret before and the URL changed, hint that it should be rotated.
+    if (hasEndpointSigningSecret.value && prevEndpoint && next && next !== prevEndpoint) {
+      endpointRotationHint.value = 'Endpoint URL updated. After verifying this URL, rotate your signing secret so it matches the new endpoint.';
+    } else {
+      endpointRotationHint.value = '';
+    }
     resetDevForm();
   } catch (e) {
     endpointVerificationMessage.value = e.message || 'Failed to update endpoint';
@@ -288,6 +303,10 @@ async function setOrRotateSigningSecret() {
                     <span v-if="isEndpointVerified" class="status-badge ok">Verified</span>
                     <button class="secondary" @click="saveEndpoint">Save</button>
                   </div>
+                  <div v-if="endpointChanged && hasEndpointSigningSecret" class="endpoint-warning">
+                    <strong>Heads up:</strong> You changed your endpoint URL. After saving and verifying this URL, click
+                    <em>Rotate Secret</em> below to generate a new signing secret. Existing secrets are tied to the previous URL.
+                  </div>
 
                   <label>Verification</label>
                   <div class="endpoint-verify">
@@ -302,7 +321,7 @@ async function setOrRotateSigningSecret() {
                       <span v-if="secretBusy" class="spinner small"></span>
                       {{ secretBusy ? 'Saving…' : (hasSavedEndpoint ? 'Rotate Secret' : 'Create Secret') }}
                     </button>
-                    <span v-if="hasEndpointSigningSecret" class="verified-badge" title="Signing secret exists">✓</span>
+                    <span v-if="hasSecretForCurrentEndpoint" class="verified-badge" title="Signing secret exists for this endpoint">✓</span>
                     <span class="field-hint" v-if="!isEndpointVerified">Verify endpoint to enable</span>
                   </div>
 
@@ -389,6 +408,16 @@ async function setOrRotateSigningSecret() {
 .endpoint-secret{ display:flex; align-items:center; gap:8px; }
 .endpoint-secret .primary{ background: var(--color-primary); color: var(--color-text-inverse); border:none; padding:6px 10px; border-radius:6px; cursor:pointer; }
 .verified-badge { color: var(--color-success, #10b981); margin-left: 6px; font-size: 14px; }
+.endpoint-warning {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: var(--font-size-xs);
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: var(--color-text-secondary);
+}
 .status-badge{ font-size:11px; padding:2px 6px; border-radius:10px; border:1px solid var(--color-border); color: var(--color-text-secondary); }
 .status-badge.ok{ background: rgba(16,185,129,.12); color: var(--color-success, #10b981); border-color: rgba(16,185,129,.35); }
 .verify-tip{ font-size: var(--font-size-xs); color: var(--color-text-secondary); }
