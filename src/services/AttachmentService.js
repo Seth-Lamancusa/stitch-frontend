@@ -46,7 +46,7 @@ export default {
     formData.append('file', file)
     
     try {
-      const response = await apiClient.post('/attachments/upload', formData, {
+      const response = await apiClient.post('/files/upload', formData, {
         headers: {
           ...getAuthHeaders(),
           'Content-Type': 'multipart/form-data'

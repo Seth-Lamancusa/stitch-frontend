@@ -33,6 +33,10 @@ export default {
     isReplying: false,
     previousRoute: '/history', // Default to history as fallback
     activeTab: 'public', // Track which navigation tab is active
+    // List scroll position per tab (for restoring when navigating back)
+    listScrollPositions: {}, // { 'inbox': 150, 'public': 0, ... }
+    // Cached list state per tab (messages, pagination) for preserving across navigation
+    listCache: {}, // { 'public': { messages: [...], currentSkip: 30, isAllLoaded: false }, ... }
     replySettings: {
       isPublic: true,
       recipients: [],  // Recipients for new message drafts
@@ -88,6 +92,26 @@ export default {
     
     SET_ACTIVE_TAB(state, tab) {
       state.activeTab = tab;
+    },
+    
+    SET_LIST_SCROLL_POSITION(state, { tab, position }) {
+      state.listScrollPositions[tab] = position;
+    },
+    
+    CLEAR_LIST_SCROLL_POSITION(state, tab) {
+      delete state.listScrollPositions[tab];
+    },
+    
+    SET_LIST_CACHE(state, { tab, messages, currentSkip, isAllLoaded }) {
+      state.listCache[tab] = { messages, currentSkip, isAllLoaded };
+    },
+    
+    CLEAR_LIST_CACHE(state, tab) {
+      if (tab) {
+        delete state.listCache[tab];
+      } else {
+        state.listCache = {};
+      }
     },
     
     SET_REPLY_PUBLIC(state, isPublic) {
@@ -292,6 +316,12 @@ export default {
     
     activeTab: state => state.activeTab,
     
+    // List scroll position getter
+    getListScrollPosition: state => tab => state.listScrollPositions[tab] || 0,
+    
+    // List cache getter
+    getListCache: state => tab => state.listCache[tab] || null,
+    
     // Global action bar getters
     activeActionBarMessageId: state => state.activeActionBarMessageId,
     isActionBarOpen: state => messageId => state.activeActionBarMessageId === messageId,
@@ -439,12 +469,43 @@ export default {
       commit('SET_PREVIOUS_ROUTE', route);
     },
     
-    async setActiveTab({ commit, dispatch }, tab) {
+    saveListScrollPosition({ commit }, { tab, position }) {
+      commit('SET_LIST_SCROLL_POSITION', { tab, position });
+    },
+    
+    clearListScrollPosition({ commit }, tab) {
+      commit('CLEAR_LIST_SCROLL_POSITION', tab);
+    },
+    
+    saveListCache({ commit }, { tab, messages, currentSkip, isAllLoaded }) {
+      console.log(`[Navigation] Saving list cache for "${tab}" - ${messages?.length} messages`);
+      commit('SET_LIST_CACHE', { tab, messages, currentSkip, isAllLoaded });
+    },
+    
+    clearListCache({ commit }, tab) {
+      console.log(`[Navigation] Clearing list cache${tab ? ` for "${tab}"` : ' (all)'}`);
+      commit('CLEAR_LIST_CACHE', tab);
+    },
+    
+    async setActiveTab({ commit, state, dispatch }, tab) {
+      // Only clear caches if the tab is actually changing
+      const previousTab = state.activeTab;
+      const isTabChange = previousTab !== tab;
+      
       // Set the tab immediately for responsive UI
       commit('SET_ACTIVE_TAB', tab);
      
-      // Clear message cache when switching tabs to trigger fresh load
-      await dispatch('messages/clearCache', {}, { root: true });
+      // Only clear caches when explicitly switching to a different tab
+      if (isTabChange) {
+        console.log(`[Navigation] Tab changed from "${previousTab}" to "${tab}" - clearing caches`);
+        // Clear the list cache for all tabs when switching (so we get fresh data)
+        commit('CLEAR_LIST_CACHE', null);
+        
+        // Clear message cache when switching tabs to trigger fresh load
+        await dispatch('messages/clearCache', {}, { root: true });
+      } else {
+        console.log(`[Navigation] Tab "${tab}" re-activated (same tab) - preserving caches`);
+      }
     },
     
     syncReplySettings({ commit, state, rootGetters, rootState }, messageId) {

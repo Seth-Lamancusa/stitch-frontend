@@ -156,8 +156,8 @@
         <div v-else class="plaintext-content">{{ truncatedContent }}</div>
       </div>
       
-      <!-- Attachments -->
-      <message-attachments :attachments="message.attachments" />
+      <!-- Files -->
+      <message-attachments :attachments="message.files" />
       
       <!-- Message footer - hidden in list view -->
       <div v-if="!inListView" class="message-footer">
@@ -425,34 +425,6 @@ export default {
     // Add refs for save button state
     const isMessageSaved = ref(false);
     const isSavingMessage = ref(false);
-    // Debug helpers to trace unexpected "[object Promise]" renderings
-    const domObserver = ref(null);
-    const debugLog = (...args) => { try { console.log('[MessageNode][debug]', ...args); } catch (e) {} };
-    const isPromiseValue = (v) => !!v && (typeof v === 'object' || typeof v === 'function') && typeof v.then === 'function';
-    const logRenderState = (contextLabel) => {
-      try {
-        const content = props.message?.content;
-        const contentType = typeof content;
-        const truncated = (typeof truncatedContent !== 'undefined' && truncatedContent && typeof truncatedContent.value !== 'undefined') ? truncatedContent.value : undefined;
-        debugLog('RenderState', {
-          context: contextLabel,
-          messageId: props.message?.id,
-          displayMode: props.displayMode,
-          inListView: props.inListView,
-          contentType,
-          isContentPromise: isPromiseValue(content),
-          contentPreview: typeof content === 'string' ? content.slice(0, 120) : content,
-          truncatedType: typeof truncated,
-          truncatedPreview: typeof truncated === 'string' ? truncated.slice(0, 120) : truncated
-        });
-        const el = messageContentRef?.value;
-        if (el) {
-          const text = el.innerText || '';
-          const tail = text.slice(-160);
-          debugLog('messageContentRef tail', { includesPromiseLiteral: text.includes('[object Promise]'), tail });
-        }
-      } catch (e) { try { console.warn('[MessageNode][debug] logRenderState error', e); } catch (_) {} }
-    };
     
     // Mobile floating action bar state - using global store
     const actionBarTouchStartY = ref(0);
@@ -464,6 +436,10 @@ export default {
     // Whether this message is currently the centered one in the URL
     const isCentered = computed(() => String(route.params.id) === String(props.message.id));
 
+    const refreshReplies = () => {
+      emit('refreshReplies', props.message.id);
+    };
+    
     // Define unified message actions with standardized attributes
     const messageActions = computed(() => [
       {
@@ -524,6 +500,16 @@ export default {
         handler: copyMessageLink,
         condition: () => !props.inListView,
         active: () => isLinkCopied.value
+      },
+      {
+        id: 'refresh-replies',
+        emoji: '🔄',
+        text: 'Refresh replies',
+        desktopVisible: false,
+        mobileVisible: false,
+        adminOnly: false,
+        handler: refreshReplies,
+        condition: () => !props.inListView
       },
       {
         id: 'links',
@@ -1356,10 +1342,6 @@ export default {
       window.addEventListener('resize', checkMobileDevice);
       window.addEventListener('resize', handleViewportChange);
 
-      // Initial debug log and DOM check
-      nextTick(() => {
-        logRenderState('mounted');
-      });
 
       // Observe DOM mutations inside message content to catch late appends
       try {
@@ -1477,12 +1459,19 @@ export default {
           nextIsPromise: isPromiseValue(next)
         });
       } catch (e) {}
-      nextTick(() => logRenderState('content-changed'));
+      console.log('[MessageNode] message.content changed', {
+        messageId: props.message?.id,
+        content: next,
+        prev: prev
+      });
     });
 
     // Debug: watch truncated content as well (preview mode path)
     watch(() => (typeof truncatedContent !== 'undefined' ? truncatedContent.value : undefined), () => {
-      nextTick(() => logRenderState('truncated-changed'));
+      console.log('[MessageNode] truncatedContent changed', {
+        messageId: props.message?.id,
+        truncatedContent: truncatedContent.value
+      });
     });
 
     watch(() => props.inListView, (next, prev) => {

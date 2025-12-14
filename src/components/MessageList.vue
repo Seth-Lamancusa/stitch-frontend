@@ -75,6 +75,9 @@ const deletingLinkId = ref(null);
 const currentRequestId = ref(0);
 const localLoadingState = ref(false);
 
+// Track if we've restored from cache (to prevent immediate watch from clearing it)
+const restoredFromCache = ref(false);
+
 // Mode classification helpers
 const isLocalMode = computed(() => ['saved', 'public', 'history', 'incoming-links', 'outgoing-links', 'custom'].includes(props.mode));
 const isStoreMode = computed(() => ['inbox', 'admin'].includes(props.mode));
@@ -228,6 +231,31 @@ const viewMessage = (messageId) => {
     emit('messageClicked', messageId);
     router.push({ path: `/messages/${messageId}` });
     return;
+  }
+  
+  // Save scroll position before navigation (for restoring when coming back)
+  // Note: The actual scroll container is .main-content (parent), not .message-list
+  const scrollContainer = messageListRef.value?.closest('.main-content');
+  if (scrollContainer) {
+    const scrollPos = scrollContainer.scrollTop;
+    console.log(`[MessageList] Saving scroll position: ${scrollPos} for tab "${props.mode}"`);
+    store.dispatch('navigation/saveListScrollPosition', {
+      tab: props.mode,
+      position: scrollPos
+    });
+  }
+  
+  // Save list cache for local modes (so we don't have to refetch)
+  if (isLocalMode.value && localMessages.value.length > 0) {
+    console.log(`[MessageList] Saving cache for "${props.mode}" - ${localMessages.value.length} messages, skip: ${currentSkip.value}`);
+    store.dispatch('navigation/saveListCache', {
+      tab: props.mode,
+      messages: localMessages.value,
+      currentSkip: currentSkip.value,
+      isAllLoaded: isAllLoaded.value
+    });
+  } else {
+    console.log(`[MessageList] NOT saving cache - isLocalMode: ${isLocalMode.value}, messages: ${localMessages.value.length}`);
   }
   
   // Store current route before navigation (only for non-link modes)
@@ -410,6 +438,44 @@ const loadMessages = async () => {
 
 // Initialize component
 onMounted(async () => {
+  console.log(`[MessageList] onMounted - mode: "${props.mode}", isLocalMode: ${isLocalMode.value}`);
+  
+  // For local modes, try to restore from cache first
+  if (isLocalMode.value) {
+    const cached = store.getters['navigation/getListCache'](props.mode);
+    console.log(`[MessageList] Cache check for "${props.mode}":`, cached ? `${cached.messages?.length} messages` : 'no cache');
+    
+    if (cached && cached.messages && cached.messages.length > 0) {
+      console.log(`[MessageList] Restoring from cache - ${cached.messages.length} messages, skip: ${cached.currentSkip}, allLoaded: ${cached.isAllLoaded}`);
+      // Mark that we're restoring from cache (to prevent watch from clearing)
+      restoredFromCache.value = true;
+      
+      // Restore from cache
+      localMessages.value = cached.messages;
+      currentSkip.value = cached.currentSkip;
+      isAllLoaded.value = cached.isAllLoaded;
+      
+      // Restore scroll position after DOM has fully rendered
+      // Use double nextTick + small delay to ensure layout is complete
+      // Note: The actual scroll container is .main-content (parent), not .message-list
+      nextTick(() => {
+        nextTick(() => {
+          setTimeout(() => {
+            const scrollContainer = messageListRef.value?.closest('.main-content');
+            const savedScrollPosition = store.getters['navigation/getListScrollPosition'](props.mode);
+            console.log(`[MessageList] Restoring scroll position: ${savedScrollPosition}, container scrollHeight: ${scrollContainer?.scrollHeight}`);
+            if (savedScrollPosition > 0 && scrollContainer) {
+              scrollContainer.scrollTop = savedScrollPosition;
+              console.log(`[MessageList] Scroll applied, actual scrollTop: ${scrollContainer.scrollTop}`);
+            }
+          }, 50); // Small delay to ensure layout is complete
+        });
+      });
+      return; // Skip fetching since we restored from cache
+    }
+  }
+  
+  console.log(`[MessageList] No cache found, loading messages...`);
   // Start loading based on mode
   if (props.mode === 'admin') {
     loadMessages();
@@ -431,6 +497,18 @@ onActivated(() => {
         loadMessages();
       });
     }
+    
+    // Restore scroll position when returning to the list
+    // Note: The actual scroll container is .main-content (parent), not .message-list
+    const savedScrollPosition = store.getters['navigation/getListScrollPosition'](props.mode);
+    if (savedScrollPosition > 0 && messageListRef.value) {
+      nextTick(() => {
+        const scrollContainer = messageListRef.value?.closest('.main-content');
+        if (scrollContainer) {
+          scrollContainer.scrollTop = savedScrollPosition;
+        }
+      });
+    }
   } catch (e) {
     // no-op
   }
@@ -442,8 +520,10 @@ watch(user, (newUser, oldUser) => {
     if (newUser && !oldUser) {
       loadMessages();
     } else if (!newUser && oldUser) {
+      // User logged out - clear cache and reset state
       isAllLoaded.value = false;
       currentSkip.value = 0;
+      store.dispatch('navigation/clearListCache');
     }
   }
 });
@@ -461,6 +541,8 @@ watch(activePrincipalUid, async (newUid, oldUid) => {
     if (isLocalMode.value) {
       localMessages.value = [];
     }
+    // Clear navigation cache since we're switching principals
+    store.dispatch('navigation/clearListCache');
     // Trigger fresh load respecting mode/auth
     await nextTick();
     loadMessages();
@@ -562,6 +644,24 @@ watch(() => store.getters['messages/getLoadedMessages'].length, (newLength, oldL
 // Reset local state when mode or sourceMessageId changes
 watch([() => props.mode, () => props.sourceMessageId, () => props.showAllLinks], () => {
   console.log(`[MessageList] Mode/source/showAllLinks changed - mode: "${props.mode}"`);
+  
+  // Check if we have a cache for this mode - if so, don't reset, let onMounted restore it
+  const hasCache = store.getters['navigation/getListCache'](props.mode);
+  console.log(`[MessageList] Cache check in watch for "${props.mode}":`, hasCache ? `found ${hasCache.messages?.length} messages` : 'no cache');
+  if (hasCache && hasCache.messages && hasCache.messages.length > 0) {
+    console.log(`[MessageList] Watch triggered but cache exists for "${props.mode}" - skipping reset`);
+    restoredFromCache.value = true; // Set flag so we don't reset
+    return;
+  }
+  
+  // Skip reset if we just restored from cache (prevents immediate: true from clearing cache)
+  if (restoredFromCache.value) {
+    console.log(`[MessageList] Watch triggered but skipping reset - restored from cache flag set`);
+    restoredFromCache.value = false; // Reset flag so future mode changes still work
+    return;
+  }
+  
+  console.log(`[MessageList] Watch triggered - will reset state for mode: "${props.mode}"`);
   
   // Cancel any pending requests immediately
   currentRequestId.value++;

@@ -831,6 +831,11 @@ defineExpose({
 
 // Debounce function for search
 const searchUsers = (event) => {
+  // Don't search if modal isn't visible
+  if (!props.isVisible) {
+    return;
+  }
+  
   clearTimeout(searchTimeout);
   const query = event.target.value.trim();
   

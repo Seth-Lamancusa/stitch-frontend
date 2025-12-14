@@ -182,9 +182,9 @@ export default {
     async batchMarkAsRead(messageIds) {
       try {
         
-        // Use consolidated endpoint that accepts list directly
-        console.log('[UserService] batchMarkAsRead -> POST /users/messages/mark-read', { ids: messageIds });
-        const response = await apiClient.post('/users/messages/mark-read', messageIds);
+        // Use consolidated endpoint that accepts list in message_ids field
+        console.log('[UserService] batchMarkAsRead -> POST /users/messages/mark-read', { message_ids: messageIds });
+        const response = await apiClient.post('/users/messages/mark-read', { message_ids: messageIds });
         console.log('[UserService] batchMarkAsRead response', { status: response?.status, data: response?.data });
         return response;
       } catch (error) {

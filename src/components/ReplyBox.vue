@@ -1429,11 +1429,11 @@ const sendReply = async () => {
       // Ensure the author is explicitly set to the user's UID (not email)
       content_author: currentUser.uid,
       tags: replyTags.value,
-      attachments: attachments.value
+      files: attachments.value
     });
     
     
-    // Clear the input and attachments
+    // Clear the input and files
     content.value = '';
     attachments.value = [];
     setReplyTagsList([]);

@@ -60,18 +60,17 @@
                 <ul>
                   <li><strong>Every message can spawn new paths</strong> — Reply to any message and your response becomes a new branch in the conversation tree.</li>
                   <li><strong>Multiple perspectives, one place</strong> — Different people can reply to the same message, creating parallel discussions that remain organized and easy to follow.</li>
-                  <li><strong>Navigate with purpose</strong> — Jump between branches, follow specific threads of discussion, or view the entire conversation graph to see how ideas connect.</li>
                 </ul>
                 
-                <p>Whether you're brainstorming, debugging, or exploring a topic from multiple angles, branching conversations keep everything coherent as networks of interconnected thoughts rather than straight lines.</p>
+                <p>Popular messengers and social media apps already hint at this concept with their own "replies" and "threads" but limit the conversation depth and breadth. On Stitch, parallel conversations run parallel, and the only limit on the conversation structure is your own creativity.</p>
 
                 <h3 id="message-organization">Message Organization</h3>
                 <p>With conversations that branch and grow, Stitch provides tools to keep track of what matters to you:</p>
                 
                 <p><strong>Stay on top of what matters</strong></p>
                 <ul>
-                  <li><strong>Inbox</strong> — See all messages where you're a recipient and haven't read yet. Your personal notification center.</li>
-                  <li><strong>History</strong> — Browse all messages you can access, sorted by recency or organized by thread.</li>
+                  <li><strong>Inbox</strong> — See all messages where you're a recipient. Your personal notification center.</li>
+                  <li><strong>History</strong> — Browse all threads you started by creating the root message.</li>
                 </ul>
                 
                 <p><strong>Keep track of important ideas</strong></p>
@@ -86,9 +85,8 @@
                 
                 <h3 id="dynamic-participation">Dynamic Participation</h3>
                 <ul>
-                  <li><strong>Add recipients anytime</strong> — Bring people into a conversation at any point, not just at the start.</li>
-                  <li><strong>Thread-specific membership</strong> — Different branches can have different participants. A conversation might start with your team, branch to include a client, and have technical sub-branches visible only to developers.</li>
-                  <li><strong>Always stay informed</strong> — When you're added as a recipient, you receive a notification and can see the full conversation history leading up to that point.</li>
+                  <li><strong>Add recipients to any message, anytime</strong> — Bring people into a conversation at any point, not just at the start.</li>
+                  <li><strong>Thread-specific membership</strong> — Different messages can have different participants. A conversation might start with your team, branch to include a client, and have technical sub-branches visible only to developers.</li>
                 </ul>
 
                 <h3 id="visibility-control">Visibility Control</h3>
@@ -115,7 +113,7 @@
                   <li>You're listed as a recipient (either directly or added later)</li>
                 </ul>
                 
-                <p><strong>Important:</strong> Visibility is evaluated per message. In a branching conversation, you might see some replies but not others, depending on your access to each individual message. This ensures sensitive information stays contained while keeping related discussions connected.</p>
+                <p>Visibility is evaluated per message. In a branching conversation, you might see some replies but not others, depending on your access to each individual message.</p>
 
                 <h3 id="collaborative-enrichment">Collaborative Enrichment</h3>
                 <p>Some operations on messages are collaborative — if you can see a message, you can enrich it:</p>
@@ -131,10 +129,10 @@
                 
                 <h3 id="how-ai-bots-work">How AI Bots Work</h3>
                 <ul>
-                  <li><strong>Mention to engage</strong> — Simply mention a bot (like <code>@chatgpt</code> or <code>@claude</code>) in your message, and it will automatically respond in the same thread.</li>
-                  <li><strong>Full conversation context</strong> — Bots see the entire thread history, so their responses are informed by everything that came before.</li>
-                  <li><strong>Multiple perspectives</strong> — Prompt several bots at once to compare their responses side-by-side. Ask them to respond to each other for rich AI discussions.</li>
-                  <li><strong>Leading AI models</strong> — Access ChatGPT, Claude, Grok, Gemini, and more, all within the same conversation space.</li>
+                  <li><strong>Mention to engage</strong> — Simply mention a bot (like <code>@chatgpt</code> or <code>@claude</code>) in your message, and it will receive a notification.</li>
+                  <li><strong>Multiple perspectives</strong> — Prompt several bots at once to compare their responses side-by-side. Ask them to respond to each other for automatic AI discussions.</li>
+                  <li><strong>Test your prompts</strong> — Test variations on your prompt as branches under the same context for reliable comparison.</li>
+                  <li><strong>Leading AI models</strong> — Access ChatGPT, Claude, Grok, Gemini, DeepSeek, and more, all within the same conversation space.</li>
                 </ul>
                 
                 <p>This makes Stitch ideal for brainstorming sessions, technical problem-solving, content creation, and any workflow where you want AI assistance without leaving your conversation.</p>
@@ -400,7 +398,7 @@
           <div v-if="activeTab === 'api'" class="content-section api-content">
             <h2>Available for select partners</h2>
             <p>
-              Swagger UI: <a href="https://api.stitch.fyi/api/v1/docs" target="_blank">api.stitch.fyi/api/v1/docs</a>
+              Swagger UI: <a href="https://api.stitch.fyi/v1/docs" target="_blank">api.stitch.fyi/v1/docs</a>
             </p>
           </div>
           </div>
