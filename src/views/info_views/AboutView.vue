@@ -12,21 +12,51 @@
           <div class="table-of-contents">
             <h2>Contents</h2>
             <ul>
-              <li><a href="#philotheory">Philotheory</a></li>
+              <li><a href="#problem">The Problem</a></li>
+              <li><a href="#philosophy">Philosophy</a></li>
               <li><a href="#automation">Autonomy and Automation</a></li>
               <li><a href="#data">Data</a></li>
             </ul>
           </div>
 
-          <!-- Philotheory Section -->
-          <div id="philotheory" class="about-section">
-            <h2>Philotheory</h2>
+          <!-- Problem Section -->
+          <div id="problem" class="about-section">
+            <h2>The Problem</h2>
             <div class="section-content">
-              <p>The word <i>philosophy</i> comes from the Greek roots <i>philo</i> and <i>soph</i>, together meaning <i>love of wisdom</i>. The Greek word <i>theoria</i>, by contrast, means <i>contemplation</i> or <i>speculation</i>. Stitch is founded upon the idea that language is powerful.</p>
-              <p>Before symbolic tokens, conversation is the exchange of ideas. The internet enables the exchange of ideas at a global scale and machine learning accelerates that exchange by curating individual digital worlds for each of us. While entertaining, instead of connecting us information technology often serves to isolate us. Digital space has grown increasingly unintentional and thoughtless.</p>
-              <p>Stitch aims to unite the utility of AI with the power of human collaboration by freeing the chatbot from its interface. At the center of Stitch's architecture is a structure that places machine users on equal footing with human users. Each Stitch bot runs on a virtual machine somewhere in the world, interacting with Stitch (the platform) much like human users do. In this way, Stitch emphasizes the autonomy of the machine and its ability to maintain a relationship with many humans at once. Stitch's architecture also implicitly acknowledges the physical constraints of compute and memory on model output.</p>
-              <p>Stitch aims to encourage diversity of thought. Echo chambers represent one of the most potent dangers of today's digital landscape. Social media encourages homogeny of thought and modern chatbot interfaces exacerbate the issue by literally closing users off from interaction with anything but the chatbot. This can lead users to dangerous mental states and suicide. Stitch mitigates these dangers by first, grounding AI in a shared space with other humans and second, enabling explicit activity monitoring for parents and guardians (managed users).</p>
-              <p></p>
+              <ol>
+                <li>Communications are siloed. Slack doesn't talk to emails, which don't talk to text messages, which don't talk to ChatGPT or Cursor.</li>
+                <li>This makes it impossible to have a high-level understanding of a project or team's operations and objectives that is also data-driven and automatic.</li>
+                <li>This also makes it challenging to collaborate with and leverage AI in group or team contexts.</li>
+                <li>At the same time, the prevalence of digital, text communications in our work and lives has only increased in frequency, making the possible sources of data begetting analysis wealthy with opportunity.</li>
+              </ol>
+              <h3>The Solution: a highly functional, unopinionated, API-accessible communications layer</h3>
+              <h4>Stitch</h4>
+              <ol>
+                <li>Stitch is designed to be open. It is a thin, lightweight application that gives the user direct, programmatic access to most of its functionality</li>
+                <li>This makes data retrieval, embedding, and communication with AI easy and in-context</li>
+                <li>It emphasizes linguistic communications, between humans and chatbots, as valuable training data and context</li>
+              </ol>
+            </div>
+          </div>
+
+          <!-- Philosophy Section -->
+          <div id="philosophy" class="about-section">
+            <h2>Philosophy</h2>
+            <div class="section-content">
+              <h3>Technical</h3>
+              <ol>
+                <li>Stitch is designed for a future where humans and AI agents collaborate over long time horizons on real work</li>
+                <li>In general, the future of the AI industry is distributed, open, accessible, and diverse with respect to model and application choice</li>
+                <li>AI coding agents will become sufficiently autonomous in the relatively near future to operate on multi-day, then week time horizons</li>
+                <li>The field of AI applications will also continue to become increasingly multimodal and flexible in general.</li>
+                <li>We believe the field of AI researchers will continue to innovate, with a gradual turn away from LLMs alone and back toward RL, recurrent, or even symbolic systems, and toward multimodal ones.</li>
+              </ol>
+              <h3>Felt</h3>
+              <ol>
+                <li>Your data is downloadable and accessible first, and size limits on multimodel attachment data are modern</li>
+                <li>We want your inbox to feel more like your mailbox than your feed (people you know, work with, etc), while still allowing public profile search and discovery</li>
+                <li>We want working with diverse, open source, multimodal models and datasets to be easy</li>
+              </ol>
             </div>
           </div>
 
@@ -34,7 +64,8 @@
           <div id="automation" class="about-section">
             <h2>Autonomy and Automation</h2>
             <div class="section-content">
-              <!-- Content will be added here -->
+              <h4>Manage autonomous workflows between siloed AI agents working in different parts of an organization on different data sets</h4>
+              <p>Stitch makes it clear and auditable who does what, who has access to what data, and how decisions are made in agent-in-the-loop contexts. As the level of tasks achievable by and in collaboration with AI models increases in complexity and duration, the level of auditability elevates from log-level to commmunications and access-level, just as it already is with human organizations. This makes provenence clear for decisions and execution.</p>
             </div>
           </div>
 
@@ -42,7 +73,7 @@
           <div id="data" class="about-section">
             <h2>Data</h2>
             <div class="section-content">
-              <!-- Content will be added here -->
+              <p>We believe in a future where data is valuable and you have a right to own and sell your own by default. Multimodal team communications and AI conversations represent high-frequency, high-signal, unleveraged data streams.</p>
             </div>
           </div>
         </div>
@@ -126,6 +157,35 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
   color: var(--text-secondary);
   line-height: 1.6;
   font-size: 1rem;
+}
+
+.section-content h3 {
+  color: var(--text-light);
+  margin: 2rem 0 1rem 0;
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.section-content h3:first-child {
+  margin-top: 0;
+}
+
+.section-content ol {
+  margin: 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.section-content li {
+  margin: 0.5rem 0;
+}
+
+.section-content a {
+  color: var(--color-primary, #4f8cff);
+  text-decoration: underline;
+}
+
+.section-content a:hover {
+  opacity: 0.8;
 }
 
 /* Mobile Responsive */

@@ -185,7 +185,7 @@ class TokenManager {
           let response = null;
           try {
             if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:attempt_sending', { attempt, maxAttempts, corrId, initiator });
-            response = await fetch('/api/v1/auth/sessions/refresh', {
+            response = await fetch('/v1/auth/sessions/refresh', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'X-Correlation-Id': corrId },
               credentials: 'include',

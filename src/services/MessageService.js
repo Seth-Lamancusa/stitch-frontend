@@ -1,7 +1,7 @@
 import apiClient from './apiClient'
 import TokenManager from './TokenManager'
 
-const apiBaseUrl = '/api/v1'
+const apiBaseUrl = '/v1'
 
 // Helper function to get auth headers
 const getAuthHeaders = () => {
@@ -11,14 +11,14 @@ const getAuthHeaders = () => {
 
 export default {
   // Send a message or reply (supports optional tags)
-  async sendReply(parentId, content, isPrivate = false, recipients = [], content_author = null, tags = null, attachments = null) {
+  async sendReply(parentId, content, isPrivate = false, recipients = [], content_author = null, tags = null, files = null) {
     const headers = getAuthHeaders()
 
     const messageData = { content, public: !isPrivate, recipients }
     if (parentId) messageData.parent_id = parentId
     if (content_author) messageData.content_author = content_author
     if (Array.isArray(tags)) messageData.tags = tags
-    if (Array.isArray(attachments)) messageData.attachments = attachments
+    if (Array.isArray(files)) messageData.files = files
 
     try {
       // Debug logging for outgoing payload

@@ -20,6 +20,15 @@
     <div v-else-if="state === 'end'" class="marker-content end-state">
       <div class="end-marker"></div>
       <span class="marker-text">{{ endText }}</span>
+      <button 
+        v-if="showRefreshShortcut && position === 'bottom'"
+        class="refresh-shortcut"
+        :disabled="refreshing"
+        @click="$emit('refresh-last')"
+      >
+        <span v-if="refreshing" class="loading-spinner small"></span>
+        <span v-else>Refresh replies</span>
+      </button>
     </div>
     
     <!-- Error state -->
@@ -59,6 +68,18 @@ export default {
     active: {
       type: Boolean,
       default: true
+    },
+    
+    // Show refresh shortcut button (only used for bottom marker end state)
+    showRefreshShortcut: {
+      type: Boolean,
+      default: false
+    },
+    
+    // Loading state for refresh shortcut
+    refreshing: {
+      type: Boolean,
+      default: false
     },
     
     // Custom text for error state
@@ -278,6 +299,44 @@ export default {
 
 .retry-button:hover {
   background-color: var(--color-primary-dark);
+}
+
+.refresh-shortcut {
+  background-color: var(--color-surface, transparent);
+  color: var(--color-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xxs) var(--space-xs);
+  cursor: pointer;
+  font-size: 0.85em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xxs);
+  min-height: 24px;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.refresh-shortcut > * {
+  line-height: 1;
+  margin: 0;
+}
+
+.refresh-shortcut:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.loading-spinner.small {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+  flex-shrink: 0;
+  display: block;
+  margin: 0;
+  vertical-align: middle;
+  align-self: center;
 }
 
 @keyframes spin {

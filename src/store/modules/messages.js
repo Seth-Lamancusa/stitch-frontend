@@ -709,7 +709,7 @@ export default {
     },
     
     // Send a reply to a message
-    async sendReply({ commit, dispatch, rootState, state }, { parentId, content, isPrivate, recipients, content_author, tags, attachments }) {
+    async sendReply({ commit, dispatch, rootState, state }, { parentId, content, isPrivate, recipients, content_author, tags, files }) {
       try {
         console.log('[Messages Store] Starting sendReply', { 
           parentId, 
@@ -762,7 +762,7 @@ export default {
           processedRecipients, 
           effectiveAuthor,
           tags,
-          attachments
+          files
         );
         
         console.log('[Messages Store] sendReply response:', response?.data?.id ? {

@@ -72,6 +72,7 @@
             @reply="setReplyingTo(message.id)"
             @delete="confirmDeleteMessage"
             @showLinks="handleShowLinks"
+            @refreshReplies="refreshRepliesForMessage"
             @center="handleCenterOnMessage"
             @selectionToggled="handleMessageSelection"
           />
@@ -91,6 +92,9 @@
           class-name="thread-end-marker"
           @load-more="loadMoreChildren"
           @retry="loadMoreChildren"
+          :show-refresh-shortcut="bottomMarkerState === 'end'"
+          :refreshing="isRefreshingLastMessage"
+          @refresh-last="refreshRepliesForLastVisibleMessage"
           ref="bottomMarker"
           :key="`bottom-marker-${displayedMessages.length > 0 ? displayedMessages[displayedMessages.length - 1].id : 'empty'}`"
         />
@@ -513,6 +517,61 @@ const renderThread = async (preserveScroll = false, preserveBranchPath = true) =
     console.error(`[ThreadView] Error in renderThread:`, error);
   }
 };
+
+const refreshingMessageIds = ref({});
+
+const isRefreshingMessage = (messageId) => {
+  if (!messageId) return false;
+  return !!refreshingMessageIds.value[messageId];
+};
+
+const refreshRepliesForMessage = async (messageId) => {
+  if (!messageId || isRefreshingMessage(messageId)) {
+    return;
+  }
+  
+  refreshingMessageIds.value = { ...refreshingMessageIds.value, [messageId]: true };
+  
+  try {
+    await store.dispatch('messages/loadTraversal', {
+      messageId,
+      up_depth: 0,
+      down_depth: 1,
+      get_replies: true,
+      get_children: true,
+    });
+    
+    await renderThread(true, true);
+  } catch (error) {
+    console.error(`[ThreadView] Failed to refresh replies for message ${messageId}:`, error);
+  } finally {
+    const next = { ...refreshingMessageIds.value };
+    delete next[messageId];
+    refreshingMessageIds.value = next;
+  }
+};
+
+const refreshRepliesForLastVisibleMessage = async () => {
+  const lastMessage = displayedMessages.value.length > 0 
+    ? displayedMessages.value[displayedMessages.value.length - 1]
+    : null;
+    
+  if (!lastMessage) {
+    return;
+  }
+  
+  await refreshRepliesForMessage(lastMessage.id);
+};
+
+const isRefreshingLastMessage = computed(() => {
+  const lastMessage = displayedMessages.value.length > 0 
+    ? displayedMessages.value[displayedMessages.value.length - 1]
+    : null;
+    
+  if (!lastMessage) return false;
+  
+  return isRefreshingMessage(lastMessage.id);
+});
 
 const bottomMarkerState = computed(() => {
   // If no messages or loading thread, use end state

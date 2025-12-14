@@ -139,7 +139,7 @@
         <div v-else class="plaintext-content">{{ truncatedContent }}</div>
       </div>
 
-      <message-attachments :attachments="message.attachments" />
+      <message-attachments :attachments="message.files" />
     </div>
 
     <teleport to="body">

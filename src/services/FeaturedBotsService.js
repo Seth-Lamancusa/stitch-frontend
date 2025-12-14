@@ -11,6 +11,10 @@ const FEATURED_BOT_TAGS = ['claude-sonnet-4-5', 'gpt-5-1', 'gemini-2-5-pro', 'gr
 // Which of the featured bots should be considered "advanced" in the UI.
 const ADVANCED_TAGS = new Set(['gpt-5-pro']);
 
+// Cache for featured bots - only fetch once per app session
+let cachedBots = null;
+let fetchPromise = null;
+
 async function resolveBotForTag(tag) {
   try {
     // Search by tag; backend supports searching by @user_tag.
@@ -55,17 +59,34 @@ async function resolveBotForTag(tag) {
 
 const FeaturedBotsService = {
   async listFeaturedBots() {
-    // Resolve each featured bot tag into a user-backed bot card.
-    const bots = [];
-    for (const tag of FEATURED_BOT_TAGS) {
-      // Resolve sequentially to keep behaviour simple/predictable for now;
-      // this list is small (handful of featured bots).
-      // If needed, this can be parallelised with Promise.all.
-      // eslint-disable-next-line no-await-in-loop
-      const bot = await resolveBotForTag(tag);
-      bots.push(bot);
+    // Return cached bots if already fetched
+    if (cachedBots !== null) {
+      return cachedBots;
     }
-    return bots;
+
+    // If a fetch is already in progress, wait for it
+    if (fetchPromise !== null) {
+      return fetchPromise;
+    }
+
+    // Start fetching and cache the promise to prevent duplicate requests
+    fetchPromise = (async () => {
+      // Resolve each featured bot tag into a user-backed bot card.
+      const bots = [];
+      for (const tag of FEATURED_BOT_TAGS) {
+        // Resolve sequentially to keep behaviour simple/predictable for now;
+        // this list is small (handful of featured bots).
+        // If needed, this can be parallelised with Promise.all.
+        // eslint-disable-next-line no-await-in-loop
+        const bot = await resolveBotForTag(tag);
+        bots.push(bot);
+      }
+      cachedBots = bots;
+      fetchPromise = null;
+      return bots;
+    })();
+
+    return fetchPromise;
   }
 };
 

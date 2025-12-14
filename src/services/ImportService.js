@@ -2,7 +2,7 @@ import axios from 'axios';
 import TokenManager from './TokenManager';
 import store from '../store';
 
-const apiBaseUrl = '/api/v1';
+const apiBaseUrl = '/v1';
 
 // Helper function to get auth headers
 const getAuthHeaders = () => {
@@ -68,7 +68,7 @@ class ImportService {
           content_author: msg.authorUid,
           public: isPublic,
           recipients: messageRecipients,
-          attachments: []
+          files: []
         };
       });
     } else {
@@ -108,7 +108,7 @@ class ImportService {
           content_author: contentAuthor,
           public: isPublic,
           recipients: messageRecipients,
-          attachments: []
+          files: []
         };
       });
     }

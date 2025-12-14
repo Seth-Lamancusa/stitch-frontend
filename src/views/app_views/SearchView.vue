@@ -7,7 +7,7 @@
           <TagDropdown
             :available-tags="availableTags"
             :selected-tags="tags"
-            placeholder="All tags"
+            placeholder="Filter by tags"
             selected-label="Selected tags"
             log-label="SearchView TagDropdown"
             @select="handleTagSelected"

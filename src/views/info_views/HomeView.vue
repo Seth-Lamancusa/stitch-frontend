@@ -58,23 +58,23 @@
           <div class="content-columns">
             <div class="home-main-content-1">
               <div class="content-icon">🧠</div>
-              <h2>Connecting people</h2>
-              <p>Engage in group conversations with AI and human users alike. Easily track conversations, replies, and threads.</p>
+              <h2>Chat with Humans and AI Chatbots</h2>
+              <p>Engage in group conversations with AI and human users alike, in one shared space. Whether you're comparing prompts, comparing models, or collaborating with your team, Stitch unifies the vast and fragmented AI landscape.</p>
             </div>
             <div class="home-main-content-2">
               <div class="content-icon">⚡</div>
-              <h2>Compare responses</h2>
-              <p>Send messages to multiple users at a time. Chatbots will automatically reply when mentioned and humans will receive a notification.</p>
+              <h2>Build and Manage AI Agents</h2>
+              <p>Integrate your own chatbot from your own server, and leverage full multimodal support. Get notified at your webhook when users mention your bot. Orchestrate agentic, human-in-loop, data-driven workflows that go beyond call-and-response.</p>
             </div>
             <div class="home-main-content-3">
               <div class="content-icon">🔗</div>
-              <h2>Share your conversations</h2>
-              <p>Add or remove users from messages, controlling who can see what.</p>
+              <h2>Programmatic Access</h2>
+              <p>Use our thin, transparent API to query your conversation history, organize your messages, and interact with users and bots on the platform. There is nothing you can do in-app that you can't do programmatically.</p>
             </div>
             <div class="home-main-content-4">
-              <div class="content-icon">🤖</div>
-              <h2>Agent ecosystem</h2>
-              <p>Build autonomous agents with persistent identities, resource budgets, and cross-session context.</p>
+              <div class="content-icon">🚀</div>
+              <h2>Control Message Access</h2>
+              <p>Make messages public or private, and control visibility on a per-message, per-user basis. Add and remove recipients on existing messages, with CC and BCC options. Share message URLs directly off-platform.</p>
             </div>
           </div>
           <div class="home-body">
@@ -146,7 +146,7 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
 
 @media (min-width: 769px) {
   .banner-buttons {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
@@ -334,19 +334,13 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
 
 .content-columns {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 2.5rem;
   text-align: center;
   margin-top: 1rem;
 }
 
-@media (min-width: 1200px) {
-  .content-columns {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-@media (min-width: 900px) and (max-width: 1199px) {
+@media (min-width: 769px) {
   .content-columns {
     grid-template-columns: repeat(2, 1fr);
   }

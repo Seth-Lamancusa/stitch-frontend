@@ -9,9 +9,7 @@ import HomeView from './views/info_views/HomeView.vue';
 import AboutView from './views/info_views/AboutView.vue';
 import ArchitectureView from './views/info_views/ArchitectureView.vue';
 import TermsView from './views/info_views/TermsView.vue';
-import FeaturesView from './views/info_views/FeaturesView.vue';
 import HowView from './views/info_views/HowView.vue';
-import ChatsView from './views/info_views/ChatsView.vue';
 import MessageListView from './views/app_views/MessageListView.vue';
 import PasswordResetView from './views/app_views/PasswordResetView.vue';
 import store from './store';
@@ -53,17 +51,8 @@ const routes = [
     component: TermsView
   },
   {
-    path: '/features',
-    component: FeaturesView
-  },
-  {
     path: '/how',
     component: HowView
-  },
-  {
-    path: '/chats',
-    name: 'chats',
-    component: ChatsView
   },
   {
     path: '/inbox',
