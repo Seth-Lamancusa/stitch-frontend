@@ -37,6 +37,7 @@ import TabViewLayout from '../../components/layouts/TabViewLayout.vue';
 import MessageList from '../../components/MessageList.vue';
 import RecipientsModal from '../../components/modals/RecipientsModal.vue';
 import DeleteConfirmModal from '../../components/modals/DeleteConfirmModal.vue';
+import MessageService from '../../services/MessageService.js';
 
 // Accept mode prop from router
 const props = defineProps({
@@ -81,14 +82,19 @@ const closeRecipientsModal = () => {
   store.dispatch('navigation/hideRecipientsModal');
 };
 
-const handleAddRecipients = async (recipients, propagateToDescendants = false) => {
+const handleAddRecipients = async (recipients, addToAncestors = true) => {
+  if (!recipients || recipients.length === 0) {
+    recipientsModalRef.value?.onAddRecipientsError(new Error('No recipients provided'));
+    return;
+  }
+
   try {
     const messageId = recipientsModalMessageId.value;
     console.log('[MessageListView] handleAddRecipients called with:', {
       messageId,
       recipients,
       recipientsCount: recipients?.length,
-      propagateToDescendants
+      addToAncestors
     });
     
     if (!messageId) {
@@ -97,15 +103,18 @@ const handleAddRecipients = async (recipients, propagateToDescendants = false) =
       return;
     }
 
-    // Check current recipients before API call
-    const currentRecipients = recipientsModalExistingRecipients.value;
-    console.log('[MessageListView] Current existing recipients BEFORE API call:', {
-      count: currentRecipients?.length || 0,
-      recipients: currentRecipients
-    });
+    // Add recipients to the message
+    const response = await MessageService.addRecipientsToMessage(messageId, recipients, addToAncestors, true);
 
-    // Not supported: show an error
-    throw new Error('Adding recipients is not supported');
+    // Refresh the message to reflect recipient changes
+    await store.dispatch('messages/refreshLoadedAncestors', {
+      messageId: messageId,
+      get_replies: true,
+      get_children: true,
+    });
+    
+    // Signal completion to the modal
+    recipientsModalRef.value?.onAddRecipientsComplete();
     
   } catch (error) {
     console.error('[MessageListView] Error adding recipients:', error);
