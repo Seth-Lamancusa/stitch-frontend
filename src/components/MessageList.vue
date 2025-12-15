@@ -642,6 +642,26 @@ watch(() => store.getters['messages/getLoadedMessages'].length, (newLength, oldL
 });
 
 // Reset local state when mode or sourceMessageId changes
+// Watch for store message updates and sync to localMessages (for tags, recipients, etc.)
+watch(
+  () => store.state.messages.messages,
+  (newMessages) => {
+    // Only sync for local modes (store modes use getLoadedMessages which auto-updates)
+    if (!isLocalMode.value || localMessages.value.length === 0) return;
+    
+    // Update any messages in localMessages that changed in the store
+    localMessages.value = localMessages.value.map(localMsg => {
+      const storeMsg = newMessages[localMsg.id];
+      // If message exists in store and has different data, use store version
+      if (storeMsg && storeMsg.id === localMsg.id) {
+        return storeMsg;
+      }
+      return localMsg;
+    });
+  },
+  { deep: true }
+);
+
 watch([() => props.mode, () => props.sourceMessageId, () => props.showAllLinks], () => {
   console.log(`[MessageList] Mode/source/showAllLinks changed - mode: "${props.mode}"`);
   
