@@ -428,6 +428,63 @@ export default {
       }
     },
 
+    async fetchManagersForUser({ state }, uid) {
+      try {
+        const resp = await apiClient.get(`/managed/users/${uid}/managers`);
+        if (!resp || resp.status < 200 || resp.status >= 300) {
+          const data = (resp && resp.data) || {};
+          throw new Error(data.detail || 'failed_to_fetch_managers');
+        }
+        return resp.data.managers || [];
+      } catch (error) {
+        const status = error?.response?.status;
+        const detail = error?.response?.data?.detail;
+        if (status && detail) {
+          throw new Error(detail);
+        }
+        throw error;
+      }
+    },
+
+    async addManagerToUser({ state }, { uid, managerUid }) {
+      try {
+        const payload = { manager_uid: managerUid };
+        const resp = await apiClient.post(`/managed/users/${uid}/managers`, payload, {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (!resp || resp.status < 200 || resp.status >= 300) {
+          const data = (resp && resp.data) || {};
+          throw new Error(data.detail || 'failed_to_add_manager');
+        }
+        return resp.data;
+      } catch (error) {
+        const status = error?.response?.status;
+        const detail = error?.response?.data?.detail;
+        if (status && detail) {
+          throw new Error(detail);
+        }
+        throw error;
+      }
+    },
+
+    async removeManagerFromUser({ state }, { uid, managerUid }) {
+      try {
+        const resp = await apiClient.delete(`/managed/users/${uid}/managers/${managerUid}`);
+        if (!resp || resp.status < 200 || resp.status >= 300) {
+          const data = (resp && resp.data) || {};
+          throw new Error(data.detail || 'failed_to_remove_manager');
+        }
+        return resp.data;
+      } catch (error) {
+        const status = error?.response?.status;
+        const detail = error?.response?.data?.detail;
+        if (status && detail) {
+          throw new Error(detail);
+        }
+        throw error;
+      }
+    },
+
     async forceLogoutWithMessage({ commit, dispatch }, router = null) {
       try {
         console.warn('[AUTH] Force logout due to unauthorized/refresh-fail', {

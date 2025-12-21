@@ -238,6 +238,24 @@
                 </ul>
                 <p>User accounts are verified through contact verification. Verified accounts typically receive expanded permissions beyond basic read access.</p>
 
+                <h4 id="private-users">Private Users and Visibility</h4>
+                <p>Users can mark their accounts as private to control who can find them in search results. However, private user visibility extends beyond search in important ways:</p>
+                
+                <h5 id="private-search-visibility">Search Visibility</h5>
+                <p>Private users are hidden from general user search unless:</p>
+                <ul>
+                  <li><strong>Manager relationship</strong> — Users who manage the private user (via <code>manages</code> edge) can see them in search</li>
+                </ul>
+
+                <h5 id="private-message-visibility">Message Recipient Visibility</h5>
+                <p>Private users remain visible as recipients on messages they participate in, regardless of their private status:</p>
+                <ul>
+                  <li><strong>Public messages</strong> — If a private user is a CC recipient on a public message, anyone who can see the message can see them as a recipient</li>
+                  <li><strong>Private messages</strong> — If a private user is a CC recipient on a private message, all other recipients who can see the message can see them</li>
+                  <li><strong>BCC recipients</strong> — Private users added as BCC remain hidden from other recipients (standard BCC behavior applies regardless of private status)</li>
+                </ul>
+                <p>This design ensures that private users can participate normally in conversations while maintaining control over their discoverability. The <code>private</code> flag controls search visibility, not message participation visibility.</p>
+
                 <h3 id="managed-users">Managed Users</h3>
                 <p>Managed users are a special type of principal designed for automated systems, service accounts, bots, and other non-human actors that need to be controlled by a parent user (manager).</p>
 
@@ -449,7 +467,7 @@ function buildToc() {
 function buildDocsToc() {
   const content = document.querySelector('.docs-content');
   if (!content) return;
-  const headings = content.querySelectorAll('h2[id], h3[id]');
+  const headings = content.querySelectorAll('h2[id], h3[id], h4[id]');
   docsTableOfContents.value = Array.from(headings).map((h) => ({
     id: h.id,
     text: h.textContent || '',
@@ -586,6 +604,14 @@ function scrollTo(id) {
   scroll-margin-top: 80px;
 }
 
+.doc-content h5 {
+  color: var(--text-light, #e5e7eb);
+  margin: 1rem 0 .4rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  scroll-margin-top: 80px;
+}
+
 .doc-content p { 
   color: var(--text-secondary); 
   line-height: 1.7;
@@ -683,6 +709,8 @@ function scrollTo(id) {
 .toc { 
   position: sticky;
   top: 5.5rem;
+  max-height: calc(100vh - 6.5rem);
+  overflow-y: auto;
   border: 1px solid var(--toc-border, #d1d5db); 
   border-radius: 10px; 
   padding: .7rem .75rem; 
@@ -724,6 +752,14 @@ function scrollTo(id) {
 
 .toc li.h4 a { 
   font-size: .82rem; 
+}
+
+.toc li.h5 { 
+  padding-left: 2.4rem; 
+}
+
+.toc li.h5 a { 
+  font-size: .78rem; 
 }
 
 .toc a { 
