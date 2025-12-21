@@ -14,6 +14,17 @@ const emit = defineEmits(['close']);
 const store = useStore();
 const user = computed(() => store.getters['auth/user']);
 const isManaged = computed(() => !!(user.value && user.value.is_managed));
+const activePrincipalUid = computed(() => store.getters['auth/activePrincipalUid']);
+const managerUid = computed(() => store.getters['auth/managerUid']);
+const isDelegatedToManagedUser = computed(() => {
+  // Check if we're in a delegated session acting as a managed user
+  // This happens when activePrincipalUid !== managerUid and we're viewing that managed user's profile
+  return activePrincipalUid.value && 
+         managerUid.value && 
+         activePrincipalUid.value !== managerUid.value &&
+         user.value &&
+         activePrincipalUid.value === user.value.uid;
+});
 
 const BIO_MAX_LENGTH = 500;
 
@@ -151,6 +162,7 @@ const onOverlayClick = () => {
 watch(() => props.isOpen, (isOpen) => {
   if (isOpen) {
     resetForm();
+    loadManagersAndManagedUsers();
   }
 });
 
@@ -209,6 +221,17 @@ const resetForm = () => {
   convertToManagedError.value = '';
   convertToManagedSuccess.value = '';
   if (managerSearchTimeout) { clearTimeout(managerSearchTimeout); managerSearchTimeout = null; }
+  // Reset add manager state
+  addManagerSearchQuery.value = '';
+  addManagerSearchResults.value = [];
+  showAddManagerSearchResults.value = false;
+  isSearchingAddManager.value = false;
+  hasSearchedAddManager.value = false;
+  isAddManagerValid.value = null;
+  selectedAddManager.value = null;
+  addManagerError.value = '';
+  addManagerSuccess.value = '';
+  if (addManagerSearchTimeout) { clearTimeout(addManagerSearchTimeout); addManagerSearchTimeout = null; }
 };
 
 onMounted(() => {
@@ -220,6 +243,7 @@ onUnmounted(() => {
   if (emailCooldownTimerId) clearInterval(emailCooldownTimerId);
   if (phoneCooldownTimerId) clearInterval(phoneCooldownTimerId);
   if (managerSearchTimeout) clearTimeout(managerSearchTimeout);
+  if (addManagerSearchTimeout) clearTimeout(addManagerSearchTimeout);
   window.removeEventListener('keydown', onGlobalKeydown);
 });
 
@@ -845,7 +869,8 @@ const convertToManaged = async () => {
       managerUid: selectedManager.value.uid
     });
     convertToManagedSuccess.value = 'Successfully converted to managed user';
-    // Reset form to refresh user data
+    // Reload the managers list and reset form
+    await loadManagersAndManagedUsers();
     setTimeout(() => {
       resetForm();
     }, 1500);
@@ -862,6 +887,212 @@ const convertToManaged = async () => {
     }
   } finally {
     convertToManagedBusy.value = false;
+  }
+};
+
+// Management state - lists of managers and managed users
+const managersList = ref([]);
+const managedUsersList = ref([]);
+const loadingManagers = ref(false);
+const loadingManagedUsers = ref(false);
+
+// Add manager state
+const addManagerSearchQuery = ref('');
+const addManagerSearchResults = ref([]);
+const showAddManagerSearchResults = ref(false);
+const isSearchingAddManager = ref(false);
+const hasSearchedAddManager = ref(false);
+const isAddManagerValid = ref(null);
+const selectedAddManager = ref(null);
+const addManagerBusy = ref(false);
+const addManagerError = ref('');
+const addManagerSuccess = ref('');
+let addManagerSearchTimeout = null;
+
+const canAddManager = computed(() => {
+  return selectedAddManager.value && selectedAddManager.value.uid && !addManagerBusy.value;
+});
+
+// Load managers and managed users
+const loadManagersAndManagedUsers = async () => {
+  if (!user.value || !user.value.uid) return;
+  
+  // Load managers for this user
+  try {
+    loadingManagers.value = true;
+    const managers = await store.dispatch('auth/fetchManagersForUser', user.value.uid);
+    managersList.value = managers || [];
+  } catch (error) {
+    console.error('Error loading managers:', error);
+    managersList.value = [];
+  } finally {
+    loadingManagers.value = false;
+  }
+  
+  // Load managed users (users this user manages)
+  // Skip if we're delegated to a managed user (would show manager's managed users, not this user's)
+  if (isDelegatedToManagedUser.value) {
+    managedUsersList.value = [];
+    loadingManagedUsers.value = false;
+    return;
+  }
+  
+  try {
+    loadingManagedUsers.value = true;
+    // fetchManagedUsers uses the current user context
+    await store.dispatch('auth/fetchManagedUsers');
+    managedUsersList.value = store.getters['auth/managedUsers'] || [];
+  } catch (error) {
+    console.error('Error loading managed users:', error);
+    managedUsersList.value = [];
+  } finally {
+    loadingManagedUsers.value = false;
+  }
+};
+
+const removeManager = async (managerUid) => {
+  if (!user.value || !user.value.uid) return;
+  
+  if (!window.confirm('Remove this manager? They will no longer be able to act on your behalf.')) {
+    return;
+  }
+  
+  try {
+    await store.dispatch('auth/removeManagerFromUser', {
+      uid: user.value.uid,
+      managerUid: managerUid
+    });
+    // Reload the managers list
+    await loadManagersAndManagedUsers();
+  } catch (error) {
+    console.error('Error removing manager:', error);
+    addManagerError.value = error.message || 'Failed to remove manager';
+  }
+};
+
+const searchAddManager = (event) => {
+  clearTimeout(addManagerSearchTimeout);
+  const query = event.target.value.trim();
+  
+  isSearchingAddManager.value = query.length >= 1;
+  
+  if (query.length < 1) {
+    isAddManagerValid.value = null;
+    addManagerSearchResults.value = [];
+    showAddManagerSearchResults.value = false;
+    selectedAddManager.value = null;
+    return;
+  }
+  
+  addManagerSearchTimeout = setTimeout(async () => {
+    try {
+      isSearchingAddManager.value = true;
+      hasSearchedAddManager.value = true;
+      
+      const results = await store.dispatch('auth/searchUsers', query);
+      
+      if (!results || !Array.isArray(results)) {
+        addManagerSearchResults.value = [];
+        showAddManagerSearchResults.value = false;
+        isAddManagerValid.value = false;
+        selectedAddManager.value = null;
+      } else {
+        // Filter out current user (can't be own manager)
+        const currentUserUid = user.value?.uid;
+        const filteredResults = results.filter(u => u.uid !== currentUserUid);
+        
+        addManagerSearchResults.value = filteredResults;
+        showAddManagerSearchResults.value = filteredResults.length > 0;
+        
+        if (filteredResults.length > 0) {
+          isAddManagerValid.value = true;
+          // Pre-select if exact match
+          const exactMatch = filteredResults.find(u => 
+            u.user_tag.toLowerCase() === query.toLowerCase() ||
+            u.display_name.toLowerCase() === query.toLowerCase()
+          );
+          if (exactMatch && !selectedAddManager.value) {
+            selectedAddManager.value = exactMatch;
+            addManagerSearchQuery.value = `${exactMatch.display_name} (@${exactMatch.user_tag})`;
+            showAddManagerSearchResults.value = false;
+          }
+        } else {
+          isAddManagerValid.value = false;
+          selectedAddManager.value = null;
+        }
+      }
+      
+      isSearchingAddManager.value = false;
+    } catch (error) {
+      console.error('Error searching add manager:', error);
+      isAddManagerValid.value = false;
+      addManagerSearchResults.value = [];
+      showAddManagerSearchResults.value = false;
+      selectedAddManager.value = null;
+      isSearchingAddManager.value = false;
+    }
+  }, 300);
+};
+
+const selectAddManager = (user) => {
+  selectedAddManager.value = user;
+  addManagerSearchQuery.value = `${user.display_name} (@${user.user_tag})`;
+  showAddManagerSearchResults.value = false;
+  isAddManagerValid.value = true;
+};
+
+const clearAddManagerSearch = () => {
+  addManagerSearchQuery.value = '';
+  isAddManagerValid.value = null;
+  addManagerSearchResults.value = [];
+  isSearchingAddManager.value = false;
+  hasSearchedAddManager.value = false;
+  showAddManagerSearchResults.value = false;
+  selectedAddManager.value = null;
+};
+
+const addManager = async () => {
+  if (!selectedAddManager.value || !selectedAddManager.value.uid) {
+    addManagerError.value = 'Please select a manager';
+    return;
+  }
+  
+  if (selectedAddManager.value.uid === user.value?.uid) {
+    addManagerError.value = 'You cannot be your own manager';
+    return;
+  }
+  
+  addManagerError.value = '';
+  addManagerSuccess.value = '';
+  
+  try {
+    addManagerBusy.value = true;
+    await store.dispatch('auth/addManagerToUser', {
+      uid: user.value.uid,
+      managerUid: selectedAddManager.value.uid
+    });
+    addManagerSuccess.value = `Successfully added ${selectedAddManager.value.display_name} as a manager`;
+    // Clear the search
+    clearAddManagerSearch();
+    // Reload the managers list
+    await loadManagersAndManagedUsers();
+    // Auto-clear success message after a few seconds
+    setTimeout(() => {
+      addManagerSuccess.value = '';
+    }, 3000);
+  } catch (e) {
+    const errorMsg = e.message || 'Failed to add manager';
+    if (errorMsg.includes('already_manager')) {
+      addManagerError.value = 'This user is already a manager';
+    } else if (errorMsg.includes('cannot_be_own_manager')) {
+      addManagerError.value = 'You cannot be your own manager';
+    } else if (errorMsg.includes('manager_not_found')) {
+      addManagerError.value = 'Manager not found';
+    } else {
+      addManagerError.value = errorMsg;
+    }
+  } finally {
+    addManagerBusy.value = false;
   }
 };
 
@@ -958,13 +1189,12 @@ const deleteAccount = async () => {
             </div>
           </section>
 
-          <section class="form-section bot-capabilities-section">
+          <section v-if="isBot" class="form-section bot-capabilities-section">
             <div class="section-header">
               <h4>Bot capabilities</h4>
-              <p v-if="isBot">Help people understand what this bot can handle.</p>
-              <p v-else>Enable the bot toggle to describe capabilities.</p>
+              <p>Help people understand what this bot can handle.</p>
             </div>
-            <div v-if="isBot" class="capabilities-fields">
+            <div class="capabilities-fields">
               <div class="field">
                 <label for="inputModalities">Input modalities</label>
                 <input
@@ -1103,11 +1333,151 @@ const deleteAccount = async () => {
             <div class="verification-message" v-if="verificationMessage">{{ verificationMessage }}</div>
           </section>
 
-          <section class="form-section" v-if="!isManaged">
+          <section class="form-section">
             <div class="section-header">
-              <h4>Convert to managed user</h4>
-              <p>Choose a manager to convert this account. Email and phone access will be removed.</p>
+              <h4>Management</h4>
+              <p>Control who can manage your account and see which users you manage.</p>
             </div>
+
+            <!-- Current Managers List -->
+            <div class="management-lists">
+              <div class="management-list-section">
+                <div class="list-header">
+                  <h5>Your Managers</h5>
+                  <span class="list-count" v-if="!loadingManagers">{{ managersList.length }}</span>
+                </div>
+                <div v-if="loadingManagers" class="loading-state">Loading...</div>
+                <div v-else-if="managersList.length === 0" class="empty-state">
+                  No managers yet. Add a manager below to grant them access to manage your account.
+                </div>
+                <div v-else class="managers-list">
+                  <div 
+                    v-for="manager in managersList" 
+                    :key="manager.uid"
+                    class="manager-item"
+                  >
+                    <UserDisplay
+                      :user="manager"
+                      :display-name="manager.display_name || 'User'"
+                      :user-tag="manager.user_tag"
+                      :show-tag="!!manager.user_tag"
+                      name-class="manager-name"
+                      tag-class="manager-tag"
+                      variant="compact"
+                    />
+                    <button 
+                      class="remove-manager-btn"
+                      @click="removeManager(manager.uid)"
+                      title="Remove manager"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Managed Users List -->
+              <div v-if="!isDelegatedToManagedUser" class="management-list-section">
+                <div class="list-header">
+                  <h5>Users You Manage</h5>
+                  <span class="list-count" v-if="!loadingManagedUsers">{{ managedUsersList.length }}</span>
+                </div>
+                <div v-if="loadingManagedUsers" class="loading-state">Loading...</div>
+                <div v-else-if="managedUsersList.length === 0" class="empty-state">
+                  You don't manage any users yet.
+                </div>
+                <div v-else class="managers-list">
+                  <div 
+                    v-for="managedUser in managedUsersList" 
+                    :key="managedUser.uid"
+                    class="manager-item"
+                  >
+                    <UserDisplay
+                      :user="managedUser"
+                      :display-name="managedUser.display_name || 'User'"
+                      :user-tag="managedUser.user_tag"
+                      :show-tag="!!managedUser.user_tag"
+                      name-class="manager-name"
+                      tag-class="manager-tag"
+                      variant="compact"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Add Manager -->
+            <div class="management-action">
+              <div class="action-header">
+                <h5>Add Manager</h5>
+                <p>Grant another user permission to manage your account and act on your behalf.</p>
+              </div>
+              <div class="field">
+                <label for="addManagerSearch">Find a user</label>
+                <div class="recipient-input-container">
+                  <div class="manager-input-wrapper" :class="{ 'valid': isAddManagerValid === true, 'invalid': isAddManagerValid === false, 'searching': isSearchingAddManager }">
+                    <input
+                      id="addManagerSearch"
+                      v-model="addManagerSearchQuery"
+                      @input="searchAddManager"
+                      @keydown.escape="clearAddManagerSearch"
+                      placeholder="Search by username or tag"
+                      class="manager-input"
+                      autocomplete="off"
+                      data-lpignore="true"
+                      data-form-type="other"
+                    />
+                    <div v-if="isSearchingAddManager" class="input-indicator" title="Searching...">
+                      <div class="spinner"></div>
+                    </div>
+                    <div v-else-if="isAddManagerValid === true" class="input-indicator success" title="Valid user">✓</div>
+                    <div v-else-if="isAddManagerValid === false" class="input-indicator error" title="Invalid user">✗</div>
+                  </div>
+                  <button 
+                    @click="addManager" 
+                    class="add-recipient-btn"
+                    :disabled="!canAddManager || addManagerBusy"
+                  >
+                    <div v-if="addManagerBusy" class="spinner" style="margin-right: 6px;"></div>
+                    {{ addManagerBusy ? 'Adding...' : 'Add Manager' }}
+                  </button>
+                </div>
+              </div>
+              <div class="search-results-container">
+                <div v-if="showAddManagerSearchResults && addManagerSearchResults && addManagerSearchResults.length > 0" class="search-results-list">
+                  <div 
+                    v-for="(user, index) in addManagerSearchResults" 
+                    :key="user.uid" 
+                    class="search-result-item"
+                    @click.stop="selectAddManager(user)"
+                  >
+                    <div class="search-result-content">
+                      <UserDisplay
+                        :user="user"
+                        :display-name="user.display_name || 'User'"
+                        :user-tag="user.user_tag"
+                        :show-tag="!!user.user_tag"
+                        name-class="search-result-name"
+                        tag-class="search-result-tag"
+                        variant="menu"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div v-else-if="addManagerSearchResults.length === 0 && hasSearchedAddManager && !isSearchingAddManager" class="no-search-results">
+                  No users found. Try a different search term.
+                </div>
+              </div>
+              <div class="field-error" v-if="addManagerError">{{ addManagerError }}</div>
+              <div class="field-hint" v-if="addManagerSuccess" style="color: var(--color-success, #10b981);">{{ addManagerSuccess }}</div>
+            </div>
+
+            <!-- Convert to Managed User (only if not already managed) -->
+            <div v-if="!isManaged" class="management-action">
+              <div class="action-header">
+                <h5>Convert to Managed User</h5>
+                <p>Choose a manager to convert this account. Email and phone access will be removed.</p>
+              </div>
             <div class="field">
               <label for="managerSearch">Find a manager</label>
               <div class="recipient-input-container">
@@ -1163,9 +1533,10 @@ const deleteAccount = async () => {
               <div v-else-if="managerSearchResults.length === 0 && hasSearchedManager && !isSearchingManager" class="no-search-results">
                 No users found. Try a different search term.
               </div>
+              </div>
+              <div class="field-error" v-if="convertToManagedError">{{ convertToManagedError }}</div>
+              <div class="field-hint" v-if="convertToManagedSuccess" style="color: var(--color-success, #10b981);">{{ convertToManagedSuccess }}</div>
             </div>
-            <div class="field-error" v-if="convertToManagedError">{{ convertToManagedError }}</div>
-            <div class="field-hint" v-if="convertToManagedSuccess" style="color: var(--color-success, #10b981);">{{ convertToManagedSuccess }}</div>
           </section>
 
           <section class="form-section" v-if="!isManaged">
@@ -1286,7 +1657,7 @@ const deleteAccount = async () => {
   background-color: var(--color-surface);
   border-radius: var(--radius-md);
   width: 92%;
-  max-width: 560px;
+  max-width: 660px;
   max-height: 82vh;
   box-shadow: var(--color-card-shadow);
   overflow: hidden;
@@ -1854,6 +2225,137 @@ const deleteAccount = async () => {
   justify-content: flex-end;
 }
 
+/* Management section styles */
+.management-lists {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.management-lists > .management-list-section:only-child {
+  grid-column: 1 / -1;
+}
+
+.management-list-section {
+  background: var(--color-input-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+}
+
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-sm);
+}
+
+.list-header h5 {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.list-count {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+  min-width: 24px;
+  text-align: center;
+}
+
+.loading-state,
+.empty-state {
+  padding: var(--space-md);
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.managers-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.manager-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  transition: background-color 0.2s ease;
+}
+
+.manager-item:hover {
+  background: var(--color-hover-overlay);
+}
+
+.manager-name {
+  font-weight: 500;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+}
+
+.manager-tag {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.remove-manager-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-error);
+  font-size: 20px;
+  line-height: 1;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  margin-left: var(--space-sm);
+}
+
+.remove-manager-btn:hover {
+  background: var(--color-error);
+  color: var(--color-text-inverse);
+  border-color: var(--color-error);
+}
+
+.management-action {
+  margin-top: var(--space-md);
+}
+
+.action-header {
+  margin-bottom: var(--space-md);
+}
+
+.action-header h5 {
+  margin: 0 0 var(--space-xs) 0;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.action-header p {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
 /* Convert to managed user styles */
 .recipient-input-container {
   display: flex;
@@ -2011,6 +2513,12 @@ const deleteAccount = async () => {
   font-style: italic;
 }
 
+@media (max-width: 900px) {
+  .management-lists {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 600px) {
   .modal-container {
     width: 96%;
@@ -2034,11 +2542,6 @@ const deleteAccount = async () => {
 
   .input-with-icon {
     width: 100%;
-  }
-
-  .field-meta {
-    /* On mobile, keep meta next to label or wrap if needed? */
-    /* If there's no space, it might wrap naturally if we allow it */
   }
 
   .notify-group,
