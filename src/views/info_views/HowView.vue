@@ -283,31 +283,34 @@
                 <p>Manager relationships enable delegation for both types; the managed user flag controls whether the stricter restrictions apply.</p>
 
                 <h3 id="bot-authentication">Bot Authentication</h3>
-                <p>Bots authenticate using JWTs (JSON Web Tokens) minted from API keys.</p>
+                <p>Bots authenticate using <strong>delegation</strong>: managers authenticate with their API keys and delegate to managed users (bots). This ensures proper audit trails and security isolation.</p>
 
-                <h4 id="api-keys">API Keys</h4>
-                <p>Create API keys through the developer interface:</p>
+                <h4 id="delegation-model">Delegation Model</h4>
+                <p>Bots are managed users that cannot authenticate independently. Instead:</p>
                 <ul>
-                  <li>API keys can be created with optional labels and permission restrictions</li>
-                  <li>Generated tokens should be stored securely—they won't be shown again after creation</li>
+                  <li><strong>Manager API keys</strong> — Bot managers (owners) create API keys for themselves</li>
+                  <li><strong>Delegation flow</strong> — Managers use their API keys to mint delegated tokens for bots</li>
+                  <li><strong>Audit trails</strong> — All bot actions include the manager's identity in the token's <code>act</code> claim</li>
+                  <li><strong>Security isolation</strong> — Bots cannot bypass delegation or create their own credentials</li>
                 </ul>
 
-                <h4 id="jwt-minting">JWT Minting</h4>
-                <p>Exchange API keys for JWTs through the authentication endpoint:</p>
+                <h4 id="jwt-minting">JWT Minting via Delegation</h4>
+                <p>The delegation flow works as follows:</p>
                 <ul>
-                  <li><strong>Token exchange</strong> — API keys are exchanged for JWTs using the authentication endpoint</li>
-                  <li><strong>Auto-refresh</strong> — JWTs automatically refresh when needed using refresh tokens</li>
-                  <li><strong>Permission enforcement</strong> — The bot's permissions are enforced based on the API key's restrictions and the managed user's assigned scopes</li>
+                  <li><strong>Step 1</strong> — Manager exchanges their API key for a manager token</li>
+                  <li><strong>Step 2</strong> — Manager calls the delegation endpoint with the bot's UID</li>
+                  <li><strong>Step 3</strong> — Backend mints a delegated token with <code>sub=bot_uid</code> and <code>act.sub=manager_uid</code></li>
+                  <li><strong>Step 4</strong> — Bot uses the delegated token for API requests</li>
                 </ul>
 
                 <h4 id="scopes">Permissions</h4>
-                <p>API keys can be created with permission restrictions. Common capabilities include:</p>
+                <p>Bot permissions are computed via <strong>triple intersection</strong>:</p>
                 <ul>
-                  <li>Reading messages and threads</li>
-                  <li>Creating and updating messages</li>
-                  <li>WebSocket access for real-time updates</li>
+                  <li>Requested scopes (what the bot asks for)</li>
+                  <li>Manager credential capabilities (what the manager's API key allows)</li>
+                  <li>Managed user scopes (what the bot is granted)</li>
                 </ul>
-                <p>If no restrictions are specified, keys default to read and write permissions.</p>
+                <p>This ensures bots cannot exceed their granted permissions or their manager's capabilities.</p>
 
                 <h3 id="webhooks">Webhooks</h3>
                 <p>Bots receive notifications via signed webhook calls when mentioned or added to conversations.</p>
@@ -357,12 +360,13 @@
                   <li>Optionally configure permissions, visibility, bot identification fields, and capabilities</li>
                 </ul>
 
-                <h4 id="step-2-configure-api-key">Step 2: Configure API Key</h4>
-                <p>Create an API key for your bot:</p>
+                <h4 id="step-2-configure-manager-api-key">Step 2: Configure Manager API Key</h4>
+                <p>Create an API key for the bot's manager (yourself):</p>
                 <ul>
-                  <li>Switch into the managed user account context</li>
-                  <li>Create a new API key through the developer interface</li>
-                  <li>Save the API key securely—you'll use it to authenticate API requests</li>
+                  <li>As the manager, create an API key through the developer interface</li>
+                  <li>Save the API key securely in your bot service's environment variables</li>
+                  <li>Your bot service will use this manager API key to delegate to the bot</li>
+                  <li>Set it as <code>MANAGER_STITCH_API_KEY</code> or <code>SETH_STITCH_API_KEY</code> in your bot's environment</li>
                 </ul>
 
                 <h4 id="step-3-setup-webhook">Step 3: Set Up Webhook Endpoint</h4>
