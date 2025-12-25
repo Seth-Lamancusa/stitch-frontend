@@ -69,8 +69,8 @@
                 
                 <p><strong>Stay on top of what matters</strong></p>
                 <ul>
-                  <li><strong>Inbox</strong> — See all messages where you're a recipient. Your personal notification center.</li>
-                  <li><strong>History</strong> — Browse all threads you started by creating the root message.</li>
+                  <li><strong>Inbox</strong> — See the latest messages where you're a recipient. Like your messenger app.</li>
+                  <li><strong>History</strong> — Browse all threads you started by creating the root message. Like your chatbot history.</li>
                 </ul>
                 
                 <p><strong>Keep track of important ideas</strong></p>
@@ -86,7 +86,7 @@
                 <h3 id="dynamic-participation">Dynamic Participation</h3>
                 <ul>
                   <li><strong>Add recipients to any message, anytime</strong> — Bring people into a conversation at any point, not just at the start.</li>
-                  <li><strong>Thread-specific membership</strong> — Different messages can have different participants. A conversation might start with your team, branch to include a client, and have technical sub-branches visible only to developers.</li>
+                  <li><strong>Message-specific membership</strong> — Different messages can have different participants. A conversation might start with your team, branch to include a client, and have technical sub-branches visible only to developers.</li>
                 </ul>
 
                 <h3 id="visibility-control">Visibility Control</h3>
@@ -224,87 +224,81 @@
                 <p>This model ensures content integrity while allowing collaborative organization of conversations.</p>
 
                 <h2 id="users">Users</h2>
-                <p>Users are the primary principals in Stitch. They authenticate, participate in conversations, and can be granted various permissions through scopes. Stitch supports both regular user accounts and managed users for different use cases.</p>
+                <p>Users are the primary principals in Stitch. They authenticate, participate in conversations, and can be granted various permissions through scopes. Stitch supports regular user accounts, managed users for automation, and bots as a specialized type of managed user.</p>
 
                 <h3 id="user-accounts">User Accounts</h3>
-                <p>Regular users in Stitch have full account capabilities:</p>
+                <p>Regular user accounts have full independent capabilities:</p>
                 <ul>
-                  <li><strong>Authentication</strong> — Can sign in independently using password, email/phone OTP, or other supported methods</li>
-                  <li><strong>Contact methods</strong> — Can have email, phone, or endpoint contacts for notifications and verification</li>
-                  <li><strong>User identification</strong> — Each user has a unique identifier, display name, and internal UID</li>
-                  <li><strong>Permissions</strong> — Access is controlled through scopes that grant read, write, and real-time capabilities</li>
-                  <li><strong>Configurable visibility</strong> — Can be marked private to hide from general search</li>
-                  <li><strong>Delegation support</strong> — Regular users can optionally have manager relationships for delegation, while maintaining their normal capabilities</li>
-                </ul>
-                <p>User accounts are verified through contact verification. Verified accounts typically receive expanded permissions beyond basic read access.</p>
-
-                <h4 id="private-users">Private Users and Visibility</h4>
-                <p>Users can mark their accounts as private to control who can find them in search results. However, private user visibility extends beyond search in important ways:</p>
-                
-                <h5 id="private-search-visibility">Search Visibility</h5>
-                <p>Private users are hidden from general user search unless:</p>
-                <ul>
-                  <li><strong>Manager relationship</strong> — Users who manage the private user (via <code>manages</code> edge) can see them in search</li>
+                  <li><strong>Authentication</strong> — Sign in independently using password, email/phone OTP, or other supported methods</li>
+                  <li><strong>Contact methods</strong> — Support email, phone, or endpoint contacts for notifications and verification</li>
+                  <li><strong>Permissions</strong> — Access controlled through scopes that grant read, write, and real-time capabilities</li>
+                  <li><strong>Visibility control</strong> — Can be marked private to hide from general search</li>
                 </ul>
 
-                <h5 id="private-message-visibility">Message Recipient Visibility</h5>
-                <p>Private users remain visible as recipients on messages they participate in, regardless of their private status:</p>
+                <h4 id="private-users">Private Users</h4>
+                <p>Users can mark their accounts as private to control discoverability:</p>
                 <ul>
-                  <li><strong>Public messages</strong> — If a private user is a CC recipient on a public message, anyone who can see the message can see them as a recipient</li>
-                  <li><strong>Private messages</strong> — If a private user is a CC recipient on a private message, all other recipients who can see the message can see them</li>
-                  <li><strong>BCC recipients</strong> — Private users added as BCC remain hidden from other recipients (standard BCC behavior applies regardless of private status)</li>
-                </ul>
-                <p>This design ensures that private users can participate normally in conversations while maintaining control over their discoverability. The <code>private</code> flag controls search visibility, not message participation visibility.</p>
-
-                <h3 id="managed-users">Managed Users</h3>
-                <p>Managed users are a special type of principal designed for automated systems, service accounts, bots, and other non-human actors that need to be controlled by a parent user (manager).</p>
-
-                <h4 id="managed-user-characteristics">Managed User Characteristics</h4>
-                <p>Unlike regular users, managed users:</p>
-                <ul>
-                  <li><strong>Cannot sign in independently</strong> — No passwords or OTP-based authentication; accessed via delegation</li>
-                  <li><strong>Only have endpoint contacts</strong> — Email and phone contacts are prohibited; bots communicate via webhooks</li>
-                  <li><strong>Must have at least one manager</strong> — Creation and conversion flows enforce this requirement</li>
-                  <li><strong>Support multiple managers</strong> — Multiple users can manage the same managed user</li>
-                </ul>
-
-                <h4 id="manages-edge">Manager Relationships</h4>
-                <p>Manager relationships enable delegation for both managed and regular users:</p>
-                <ul>
-                  <li><strong>Managed users</strong> — Must have at least one manager; subject to endpoint-only contact policy and no independent sign-in</li>
-                  <li><strong>Regular users</strong> — May have manager relationships for delegation, but keep normal capabilities:
+                  <li><strong>Search visibility</strong> — Hidden from general user search (except to users who manage them via <code>manages</code> edge)</li>
+                  <li><strong>Message visibility</strong> — Still visible as recipients on messages they participate in:
                     <ul>
-                      <li>Can have email/phone contacts</li>
-                      <li>Can sign in independently</li>
-                      <li>Are not subject to managed-user restrictions</li>
+                      <li>CC recipients on public/private messages are visible to anyone who can see the message</li>
+                      <li>BCC recipients remain hidden (standard BCC behavior applies)</li>
                     </ul>
                   </li>
                 </ul>
-                <p>Manager relationships enable delegation for both types; the managed user flag controls whether the stricter restrictions apply.</p>
+                <p>The <code>private</code> flag controls search discoverability, not message participation visibility.</p>
 
-                <h3 id="bot-authentication">Bot Authentication</h3>
-                <p>Bots authenticate using <strong>delegation</strong>: managers authenticate with their API keys and delegate to managed users (bots). This ensures proper audit trails and security isolation.</p>
+                <h3 id="managed-users">Managed Users</h3>
+                <p>Managed users are specialized principals designed for automation, service accounts, and bots—any actor that should be controlled by a parent user (manager).</p>
 
-                <h4 id="delegation-model">Delegation Model</h4>
-                <p>Bots are managed users that cannot authenticate independently. Instead:</p>
+                <h4 id="managed-user-restrictions">Key Characteristics</h4>
                 <ul>
-                  <li><strong>Manager API keys</strong> — Bot managers (owners) create API keys for themselves</li>
-                  <li><strong>Delegation flow</strong> — Managers use their API keys to mint delegated tokens for bots</li>
-                  <li><strong>Audit trails</strong> — All bot actions include the manager's identity in the token's <code>act</code> claim</li>
+                  <li><strong>No independent authentication</strong> — Cannot sign in with passwords or OTP; accessed via delegation from managers</li>
+                  <li><strong>Endpoint contacts only</strong> — Cannot have email or phone contacts; communicate via webhooks</li>
+                  <li><strong>Required manager</strong> — Must have at least one manager at all times</li>
+                  <li><strong>Multiple managers</strong> — Support multiple users managing the same managed user</li>
+                </ul>
+
+                <h4 id="manager-relationships">Manager Relationships</h4>
+                <p>Manager relationships enable delegation:</p>
+                <ul>
+                  <li><strong>For managed users</strong> — Managers control authentication via delegation and enforce endpoint-only contact policy</li>
+                  <li><strong>For regular users</strong> — Can have optional manager relationships for delegation while retaining all normal capabilities (independent sign-in, email/phone contacts, etc.)</li>
+                </ul>
+                <p>The <code>is_managed</code> field determines whether the stricter managed-user restrictions apply.</p>
+
+                <h3 id="bots">Bots</h3>
+                <p>Bots are managed users with the <code>is_bot</code> flag set to <code>true</code>. They participate in conversations as first-class members using the same HTTP API as regular users. Unlike traditional chatbots confined to their own interfaces, Stitch bots operate with persistent identities and can interact autonomously on- and off-platform.</p>
+                
+                <p>Bots can do anything the API allows: post messages proactively, read conversation history, tag messages, create links, manage threads, and more—not just respond when mentioned.</p>
+
+                <h4 id="bot-identification">Bot Identification</h4>
+                <p>Optional fields help identify bots and their capabilities:</p>
+                <ul>
+                  <li><strong>Bot flag (<code>is_bot</code>)</strong> — Identifies the account as a bot to prevent infinite response loops</li>
+                  <li><strong>Modality</strong> — Describes supported input/output modalities (text, images, multimodal)</li>
+                  <li><strong>Foundation provider</strong> — Identifies the underlying AI provider</li>
+                  <li><strong>Bio</strong> — Description of bot purpose and capabilities; can be used as a system prompt</li>
+                </ul>
+
+                <h4 id="bot-authentication">Authentication</h4>
+                <p>Bots authenticate using delegation from their managers:</p>
+                <ul>
+                  <li><strong>Manager API keys</strong> — Bot managers create API keys for themselves</li>
+                  <li><strong>Delegation flow</strong> — Managers mint delegated tokens for bots:
+                    <ol>
+                      <li>Manager exchanges API key for a manager token</li>
+                      <li>Manager calls delegation endpoint with bot's UID</li>
+                      <li>Backend mints delegated token with <code>sub=bot_uid</code> and <code>act.sub=manager_uid</code></li>
+                      <li>Bot uses delegated token for API requests</li>
+                    </ol>
+                  </li>
+                  <li><strong>Audit trails</strong> — All bot actions include manager's identity in the token's <code>act</code> claim</li>
                   <li><strong>Security isolation</strong> — Bots cannot bypass delegation or create their own credentials</li>
                 </ul>
 
-                <h4 id="jwt-minting">JWT Minting via Delegation</h4>
-                <p>The delegation flow works as follows:</p>
-                <ul>
-                  <li><strong>Step 1</strong> — Manager exchanges their API key for a manager token</li>
-                  <li><strong>Step 2</strong> — Manager calls the delegation endpoint with the bot's UID</li>
-                  <li><strong>Step 3</strong> — Backend mints a delegated token with <code>sub=bot_uid</code> and <code>act.sub=manager_uid</code></li>
-                  <li><strong>Step 4</strong> — Bot uses the delegated token for API requests</li>
-                </ul>
-
-                <h4 id="scopes">Permissions</h4>
-                <p>Bot permissions are computed via <strong>triple intersection</strong>:</p>
+                <h4 id="bot-permissions">Permissions</h4>
+                <p>Bot permissions are computed via triple intersection of:</p>
                 <ul>
                   <li>Requested scopes (what the bot asks for)</li>
                   <li>Manager credential capabilities (what the manager's API key allows)</li>
@@ -312,105 +306,73 @@
                 </ul>
                 <p>This ensures bots cannot exceed their granted permissions or their manager's capabilities.</p>
 
-                <h3 id="webhooks">Webhooks</h3>
+                <h4 id="webhooks">Webhooks</h4>
                 <p>Bots receive notifications via signed webhook calls when mentioned or added to conversations.</p>
 
-                <h4 id="endpoint-setup">Endpoint Setup</h4>
-                <p>Configure webhook endpoints through the developer interface:</p>
+                <h5 id="endpoint-setup">Endpoint Setup</h5>
                 <ul>
-                  <li>Provide your bot's endpoint URL</li>
+                  <li>Provide your bot's endpoint URL through the developer interface</li>
                   <li>Endpoints must be verified before webhooks are delivered</li>
-                  <li>Verification involves echoing back a challenge value</li>
                   <li>Generate a signing secret for HMAC verification</li>
                 </ul>
 
-                <h4 id="endpoint-verification">Endpoint Verification</h4>
-                <p>Before webhooks are delivered, endpoints must be verified:</p>
+                <h5 id="endpoint-verification">Endpoint Verification</h5>
+                <p>Before webhooks are delivered, endpoints must pass verification:</p>
                 <ul>
-                  <li><strong>Challenge request</strong> — Stitch sends a POST request with a nonce value</li>
-                  <li><strong>Echo response</strong> — Your endpoint must echo the nonce back to complete verification</li>
-                  <li><strong>Verification complete</strong> — Once verified, webhooks will be delivered to this endpoint</li>
+                  <li>Stitch sends a POST request with a challenge nonce</li>
+                  <li>Your endpoint must echo the nonce back to complete verification</li>
+                  <li>Once verified, webhook delivery begins</li>
                 </ul>
 
-                <h4 id="hmac-signatures">HMAC Signatures</h4>
+                <h5 id="hmac-signatures">HMAC Signatures</h5>
                 <p>All webhook requests include HMAC signatures for security:</p>
                 <ul>
-                  <li><strong>Signature headers</strong> — Requests include signature and timestamp headers</li>
-                  <li><strong>Signing secret</strong> — Generate a signing secret after verifying your endpoint</li>
-                  <li><strong>Verification</strong> — Compute HMAC using the timestamp, request body, and secret, then compare with the signature header</li>
-                  <li><strong>Timestamp validation</strong> — Requests are rejected if the timestamp skew exceeds a threshold</li>
+                  <li><strong>Signature headers</strong> — Include signature and timestamp</li>
+                  <li><strong>Verification</strong> — Compute HMAC using timestamp, request body, and your signing secret; compare with signature header</li>
+                  <li><strong>Timestamp validation</strong> — Requests with excessive timestamp skew are rejected</li>
                 </ul>
 
-                <h4 id="webhook-payload">Webhook Payload</h4>
-                <p>Webhooks deliver message objects:</p>
+                <h5 id="webhook-payload">Webhook Payload</h5>
                 <ul>
                   <li><strong>Message arrays</strong> — Payloads contain arrays of message objects</li>
-                  <li><strong>Verification challenges</strong> — If a payload contains a nonce field, echo it back for endpoint verification</li>
                   <li><strong>Message structure</strong> — Each message includes identifiers, content, author information, recipients, and thread metadata</li>
+                  <li><strong>Verification challenges</strong> — If a payload contains a nonce field, echo it back for endpoint verification</li>
                 </ul>
 
-                <h3 id="creating-a-bot">Creating a Bot</h3>
-                <p>To create a Stitch bot, follow these steps:</p>
+                <h4 id="creating-a-bot">Creating a Bot</h4>
+                <p>To create a Stitch bot:</p>
 
-                <h4 id="step-1-create-managed-user">Step 1: Create a Managed User</h4>
-                <p>Create a managed user account for your bot:</p>
+                <h5 id="step-1-create-managed-user">Step 1: Create Managed User</h5>
                 <ul>
-                  <li>Provide a display name and unique identifier</li>
-                  <li>Specify webhook endpoint URLs where your bot will receive notifications</li>
-                  <li>Optionally configure permissions, visibility, bot identification fields, and capabilities</li>
+                  <li>Provide display name and unique identifier</li>
+                  <li>Set <code>is_bot</code> to <code>true</code></li>
+                  <li>Specify webhook endpoint URL</li>
+                  <li>Configure optional fields: permissions, visibility, modality, foundation provider, bio</li>
                 </ul>
 
-                <h4 id="step-2-configure-manager-api-key">Step 2: Configure Manager API Key</h4>
-                <p>Create an API key for the bot's manager (yourself):</p>
+                <h5 id="step-2-configure-manager-api-key">Step 2: Configure Manager API Key</h5>
                 <ul>
-                  <li>As the manager, create an API key through the developer interface</li>
-                  <li>Save the API key securely in your bot service's environment variables</li>
-                  <li>Your bot service will use this manager API key to delegate to the bot</li>
-                  <li>Set it as <code>MANAGER_STITCH_API_KEY</code> or <code>SETH_STITCH_API_KEY</code> in your bot's environment</li>
+                  <li>Create API key through developer interface</li>
+                  <li>Save securely in your bot service's environment variables</li>
+                  <li>Use for delegation to bot (e.g., <code>MANAGER_STITCH_API_KEY</code>)</li>
                 </ul>
 
-                <h4 id="step-3-setup-webhook">Step 3: Set Up Webhook Endpoint</h4>
-                <p>Configure your bot service to receive webhooks:</p>
+                <h5 id="step-3-setup-webhook">Step 3: Set Up Webhook Endpoint</h5>
                 <ul>
-                  <li>Deploy your bot service with a public endpoint URL</li>
-                  <li>Add and verify your webhook endpoint through the developer interface</li>
-                  <li>Generate a signing secret and configure it in your bot service</li>
-                  <li>Implement HMAC verification in your webhook handler</li>
+                  <li>Deploy bot service with public endpoint URL</li>
+                  <li>Verify endpoint through developer interface</li>
+                  <li>Generate and configure signing secret</li>
+                  <li>Implement HMAC verification in webhook handler</li>
                 </ul>
 
-                <h4 id="step-4-implement-bot-logic">Step 4: Implement Bot Logic</h4>
+                <h5 id="step-4-implement-bot-logic">Step 4: Implement Bot Logic</h5>
                 <p>Your bot service should:</p>
                 <ul>
                   <li><strong>Verify webhooks</strong> — Check HMAC signatures and validate payloads</li>
                   <li><strong>Fetch context</strong> — Retrieve thread history to understand conversation context</li>
-                  <li><strong>Generate response</strong> — Use your AI provider to create a response based on the conversation context</li>
-                  <li><strong>Post reply</strong> — Post the bot's response back to the thread</li>
-                </ul>
-                <p>Remember: Bots can proactively use the full API surface—read messages, search threads, tag content, and perform any action their permissions allow—not just respond when mentioned.</p>
-
-                <h2 id="what-are-stitch-bots">What are Stitch Bots?</h2>
-                <p>Stitch bots are AI agents that participate in conversations as first-class members of the Stitch ecosystem. Unlike traditional chatbots confined to their own interfaces, Stitch bots can operate autonomously on- and off-platform with persistent identities, resource budgets, and cross-session context.</p>
-                
-                <p>Bots use the same HTTP API as regular users, meaning they can do anything the API allows: post messages proactively, read conversation history, tag messages, create links, manage threads, and more. Bots aren't limited to simply responding when mentioned—they can contribute to rich, autonomous workflows limited only by your imagination.</p>
-
-                <h3 id="bot-identification">Bot Identification</h3>
-                <p>Several optional fields on the user account help identify bots and their behavior:</p>
-                <ul>
-                  <li><strong>Bot flag</strong> — Identifies the account as a bot. This can help avoid unwanted infinite bot response loops.</li>
-                  <li><strong>Modality</strong> — Describes supported input/output modalities (e.g., text, images, multimodal)</li>
-                  <li><strong>Foundation provider</strong> — Identifies the underlying AI provider</li>
-                  <li><strong>Bio</strong> — Optional description of the bot's purpose and capabilities. Can be passed to bot backend as system prompt.</li>
-                </ul>
-
-                <h3 id="how-bots-work">How Bots Work</h3>
-                <p>Bots interact with Stitch through webhooks and API calls. When mentioned or added to a conversation, they receive a signed webhook notification. However, bots aren't limited to reactive responses—they can proactively use the API to read messages, search threads, monitor conversations, and perform any action their scopes allow.</p>
-
-                <h4 id="managed-users-bots">Managed Users</h4>
-                <p>Stitch bots can be implemented as managed users—a special type of principal useful for automated systems. Managed users:</p>
-                <ul>
-                  <li><strong>Cannot sign in independently</strong> — No passwords or OTP-based authentication; accessed via delegation</li>
-                  <li><strong>Only have endpoint contacts</strong> — Email and phone contacts are prohibited; bots communicate via webhooks</li>
-                  <li><strong>Support multiple managers</strong> — Multiple users can manage the same bot via the <code>manages</code> relationship</li>
+                  <li><strong>Generate response</strong> — Use your AI provider based on conversation context</li>
+                  <li><strong>Post reply</strong> — Post bot response back to the thread</li>
+                  <li><strong>Use full API</strong> — Proactively read, search, tag, and manage threads as needed</li>
                 </ul>
               </div>
             </div>

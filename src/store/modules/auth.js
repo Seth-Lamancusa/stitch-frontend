@@ -161,13 +161,9 @@ export default {
         }
 
         // Cleanup local state and tokens
-        console.warn('[AUTH] Account deleted successfully; clearing local auth state and redirecting');
+        console.warn('[AUTH] Account deleted successfully; clearing local auth state');
         await dispatch('_clearLocalAuth');
 
-        // Redirect to history page
-        if (window.location.pathname !== '/history') {
-          window.location.href = '/history';
-        }
         return { success: true };
       } catch (e) {
         console.error('[AUTH] Delete account failed', e);
@@ -485,30 +481,14 @@ export default {
       }
     },
 
-    async forceLogoutWithMessage({ commit, dispatch }, router = null) {
+    async forceLogoutWithMessage({ commit, dispatch }) {
       try {
         console.warn('[AUTH] Force logout due to unauthorized/refresh-fail', {
-          routerAvailable: !!router,
           path: typeof window !== 'undefined' ? window.location.pathname : undefined
         });
         
         // Clear user state
         await dispatch('_clearLocalAuth');
-        
-        // Redirect to the history page
-        if (window.location.pathname !== '/history') {
-          console.warn('[AUTH] Redirecting to /history from', window.location.pathname);
-          // Use Vue router if available, otherwise fall back to hard redirect
-          if (router) {
-            console.info('[AUTH] Using Vue router to navigate');
-            router.push('/history');
-          } else {
-            console.info('[AUTH] Using hard redirect');
-            window.location.href = '/history';
-          }
-        } else {
-          console.info('[AUTH] Already on /history, no redirect needed');
-        }
       } catch (error) {
         console.error('[AUTH] Error during force logout', error);
         // Even if logout fails, clear local state

@@ -65,9 +65,9 @@ export default {
     recipientsModalConfig: null, // Holds { isPublic, isAddMode, existingRecipients, messageId }
     linksModalVisible: false,
     messageForLinks: null,
-    // Global Bot Prompt modal state
-    botPromptModalVisible: false,
-    botPromptTargetMessageId: null,
+    // Global Speed Dial modal state
+    speedDialModalVisible: false,
+    speedDialTargetMessageId: null,
   },
   
   mutations: {
@@ -272,14 +272,14 @@ export default {
     SET_MESSAGE_FOR_LINKS(state, message) {
       state.messageForLinks = message;
     },
-    // Global Bot Prompt modal mutations
-    SHOW_BOT_PROMPT_MODAL(state, { messageId }) {
-      state.botPromptModalVisible = true;
-      state.botPromptTargetMessageId = messageId;
+    // Global Speed Dial modal mutations
+    SHOW_SPEED_DIAL_MODAL(state, { messageId }) {
+      state.speedDialModalVisible = true;
+      state.speedDialTargetMessageId = messageId;
     },
-    HIDE_BOT_PROMPT_MODAL(state) {
-      state.botPromptModalVisible = false;
-      state.botPromptTargetMessageId = null;
+    HIDE_SPEED_DIAL_MODAL(state) {
+      state.speedDialModalVisible = false;
+      state.speedDialTargetMessageId = null;
     },
   },
   
@@ -351,9 +351,9 @@ export default {
     recipientsModalMessageId: state => state.recipientsModal.messageId,
     linksModalVisible: (state) => state.linksModalVisible,
     messageForLinks: (state) => state.messageForLinks,
-    // Bot Prompt modal getters
-    botPromptModalVisible: (state) => state.botPromptModalVisible,
-    botPromptTargetMessageId: (state) => state.botPromptTargetMessageId,
+    // Speed Dial modal getters
+    speedDialModalVisible: (state) => state.speedDialModalVisible,
+    speedDialTargetMessageId: (state) => state.speedDialTargetMessageId,
   },
   
   actions: {
@@ -659,12 +659,12 @@ export default {
       commit('SET_LINKS_MODAL_VISIBLE', false);
       commit('SET_MESSAGE_FOR_LINKS', null);
     },
-    // Bot Prompt modal actions
-    showBotPromptModal({ commit }, { messageId }) {
-      commit('SHOW_BOT_PROMPT_MODAL', { messageId });
+    // Speed Dial modal actions
+    showSpeedDialModal({ commit }, { messageId }) {
+      commit('SHOW_SPEED_DIAL_MODAL', { messageId });
     },
-    hideBotPromptModal({ commit }) {
-      commit('HIDE_BOT_PROMPT_MODAL');
+    hideSpeedDialModal({ commit }) {
+      commit('HIDE_SPEED_DIAL_MODAL');
     },
   }
 };
