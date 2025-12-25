@@ -1,7 +1,15 @@
 # Migration Plan: Featured Bots → User-Based Speed Dial (Frontend)
-
+ 
 ## Overview
 Replace the current featured bots mechanism (hardcoded bot list) with a user-based speed dial system where each user can maintain their own personalized list of frequently contacted users/bots.
+
+## ✅ BACKEND IMPLEMENTATION COMPLETE
+
+The backend API is ready. See `stitch-backend/_docs/_pending/launch/speed_dial_migration.md` for details.
+
+### Default Speed Dial (from config)
+- **Tier 1 (main)**: `gpt-5-1`, `gemini-2-5-pro`
+- **Tier 2 (expanded)**: `grok-4-1-fast-reasoning`
 
 ## Current State Analysis
 
@@ -9,23 +17,21 @@ Replace the current featured bots mechanism (hardcoded bot list) with a user-bas
 1. **`RecipientsModal.vue`** (lines 111-176, 1064-1087)
    - Displays "Featured Bots" section with main/advanced categorization
    - Allows toggling bots as recipients
-   - Uses `FeaturedBotsService.listFeaturedBots()`
+   - Uses `SpeedDialService.listSpeedDialUsers()` (renamed from FeaturedBotsService)
 
-2. **`BotPromptModal.vue`** (lines 14-43, 120-162)
+2. **`QuickPromptModal.vue`** (renamed from BotPromptModal)
    - Shows featured bots for adding to messages
    - Supports main/advanced bot categorization
-   - Uses `FeaturedBotsService.listFeaturedBots()`
+   - Uses `SpeedDialService.listSpeedDialUsers()`
 
 3. **`ImportView.vue`** (lines 457, 537, 1240-1245)
    - Uses featured bots for import functionality
-   - Uses `FeaturedBotsService.listFeaturedBots()`
+   - Uses `SpeedDialService.listSpeedDialUsers()`
 
 ### Current Data Flow
-- **No backend endpoint exists** for `/featured_bots`
-- Frontend falls back to mock data in `FeaturedBotsService.js`
-- Mock data includes: Claude, ChatGPT, Grok, GPT-5, Gemini
-- Featured bots are identified by UIDs (e.g., '39daf2ca', '2ae49e27')
-- Each bot has: `uid`, `display_name`, `user_tag`, `advanced` (boolean)
+- **Backend endpoints now exist** for `/v1/users/me/speed-dial`
+- Frontend should migrate from mock data to real API calls
+- Speed dial entries have: `uid`, `display_name`, `user_tag`, `position`, `tier`, `added_at`
 
 ## Backend API Contract
 
@@ -42,8 +48,7 @@ The backend will provide the following endpoints:
         "display_name": "Claude",
         "user_tag": "claude",
         "position": 0,
-        "added_at": "2024-01-01T00:00:00Z",
-        "last_used_at": "2024-01-15T00:00:00Z"
+        "added_at": "2024-01-01T00:00:00Z"
       }
     ]
   }

@@ -22,7 +22,7 @@ export function useAuthentication() {
 
   /**
    * Signs out the current user
-   * On success, clears store and redirects to public page
+   * On success, clears store
    */
   const logout = async () => {
     try {
@@ -34,7 +34,6 @@ export function useAuthentication() {
       }
       TokenManager.accessToken = null;
       store.commit('auth/SET_USER', null);
-      window.location.href = '/history';
     } catch (e) {
       error.value = e.message;
     }

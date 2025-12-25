@@ -691,7 +691,7 @@ export default {
     const openPromptModal = () => {
       store.dispatch('navigation/clearReplyingTo');
       dismissMobileKeyboard();
-      store.dispatch('navigation/showBotPromptModal', { messageId: props.message.id });
+      store.dispatch('navigation/showSpeedDialModal', { messageId: props.message.id });
     };
     
     const isUserRecipient = computed(() => {

@@ -94,12 +94,25 @@
                 v-for="(user, index) in searchResults" 
                 :key="user.uid" 
                 class="search-result-item"
-                @click.stop="selectSearchResult(user)"
               >
-                <div class="search-result-content">
+                <div class="search-result-content" @click.stop="selectSearchResult(user)">
                   <span class="search-result-name">{{ user.display_name || 'User' }}</span>
                   <span class="search-result-tag">@{{ user.user_tag }}</span>
                 </div>
+                <button 
+                  class="speed-dial-toggle-btn"
+                  :class="{ 
+                    'in-speed-dial': isInSpeedDial(user.uid),
+                    'loading': speedDialLoading.has(user.uid)
+                  }"
+                  @click.stop="isInSpeedDial(user.uid) ? removeFromSpeedDial(user) : addToSpeedDial(user)"
+                  :disabled="speedDialLoading.has(user.uid)"
+                  :title="isInSpeedDial(user.uid) ? 'Remove from Speed Dial' : 'Add to Speed Dial'"
+                >
+                  <span v-if="speedDialLoading.has(user.uid)" class="spinner-tiny"></span>
+                  <span v-else-if="isInSpeedDial(user.uid)">★</span>
+                  <span v-else>☆</span>
+                </button>
               </div>
             </div>
 
@@ -108,64 +121,107 @@
             </div>
           </div>
           
-          <!-- Featured Bots section -->
-          <div v-if="!isGuestUser" class="chatbots-section">
-            <p class="chatbots-header">Featured Bots</p>
+          <!-- Speed Dial section -->
+          <div v-if="!isGuestUser" class="speed-dial-section">
+            <p class="speed-dial-header">Speed Dial</p>
             
-            <!-- Main featured bots -->
-            <div class="chatbots-list">
+            <!-- Main speed dial users (tier 1) -->
+            <div v-if="speedDialUsers.length > 0" class="speed-dial-list">
               <div 
-                v-for="bot in mainFeaturedBots" 
-                :key="bot.uid" 
-                class="chatbot-card"
-                :class="{ 'chatbot-selected': isFeaturedBotSelected(bot) }"
-                @click="toggleFeaturedBot(bot)"
+                v-for="user in mainSpeedDialUsers" 
+                :key="user.uid" 
+                class="speed-dial-card"
+                :class="{ 'speed-dial-selected': isSpeedDialUserSelected(user) }"
               >
-                <div class="chatbot-info">
-                  <span class="chatbot-name">{{ bot.display_name }}</span>
-                  <span class="chatbot-tag">@{{ bot.user_tag }}</span>
+                <div class="speed-dial-info" @click="toggleSpeedDialUser(user)">
+                  <span class="speed-dial-name">{{ user.display_name }}</span>
+                  <span class="speed-dial-tag">@{{ user.user_tag }}</span>
                 </div>
-                <div class="chatbot-toggle">
-                  <input 
-                    type="checkbox" 
-                    :checked="isFeaturedBotSelected(bot)"
-                    @click.stop="toggleFeaturedBot(bot)"
-                  />
+                <div class="speed-dial-controls">
+                  <div class="speed-dial-checkbox" @click="toggleSpeedDialUser(user)">
+                    <input 
+                      type="checkbox" 
+                      :checked="isSpeedDialUserSelected(user)"
+                      @click.stop="toggleSpeedDialUser(user)"
+                    />
+                  </div>
+                  <button 
+                    class="speed-dial-tier-btn"
+                    @click.stop="toggleSpeedDialTier(user)"
+                    :disabled="speedDialLoading.has(user.uid)"
+                    :title="user.tier === 1 ? 'Move to More (tier 2)' : 'Move to Main (tier 1)'"
+                  >
+                    <span v-if="speedDialLoading.has(user.uid)" class="spinner-tiny"></span>
+                    <span v-else>{{ user.tier === 1 ? '↓' : '↑' }}</span>
+                  </button>
+                  <button 
+                    class="speed-dial-remove-btn"
+                    @click.stop="removeFromSpeedDial(user)"
+                    :disabled="speedDialLoading.has(user.uid)"
+                    title="Remove from Speed Dial"
+                  >
+                    <span v-if="speedDialLoading.has(user.uid)" class="spinner-tiny"></span>
+                    <span v-else>×</span>
+                  </button>
                 </div>
               </div>
             </div>
             
-            <!-- Advanced featured bots dropdown -->
-            <div v-if="advancedFeaturedBots.length > 0" class="advanced-chatbots">
-              <span class="advanced-toggle-inline">
+            <div v-else class="no-speed-dial">
+              <p>No speed dial contacts yet.</p>
+              <p class="hint">Search for users above and click ☆ to add them.</p>
+            </div>
+            
+            <!-- Expanded speed dial users (tier 2) dropdown -->
+            <div v-if="expandedSpeedDialUsers.length > 0" class="expanded-speed-dial">
+              <span class="expanded-toggle-inline">
                 <button 
-                  class="advanced-toggle-button"
-                  @click="showAdvancedBots = !showAdvancedBots"
-                  :aria-expanded="showAdvancedBots"
+                  class="expanded-toggle-button"
+                  @click="showExpandedSpeedDial = !showExpandedSpeedDial"
+                  :aria-expanded="showExpandedSpeedDial"
                 >
-                  <span class="advanced-toggle-text">Advanced ({{ advancedFeaturedBots.length }})</span>
-                  <span class="advanced-toggle-icon" :class="{ 'expanded': showAdvancedBots }">▼</span>
+                  <span class="expanded-toggle-text">More ({{ expandedSpeedDialUsers.length }})</span>
+                  <span class="expanded-toggle-icon" :class="{ 'expanded': showExpandedSpeedDial }">▼</span>
                 </button>
               </span>
               
-              <div v-if="showAdvancedBots" class="advanced-chatbots-list">
+              <div v-if="showExpandedSpeedDial" class="expanded-speed-dial-list">
                 <div 
-                  v-for="bot in advancedFeaturedBots" 
-                  :key="bot.uid" 
-                  class="chatbot-card advanced-chatbot-card"
-                  :class="{ 'chatbot-selected': isFeaturedBotSelected(bot) }"
-                  @click="toggleFeaturedBot(bot)"
+                  v-for="user in expandedSpeedDialUsers" 
+                  :key="user.uid" 
+                  class="speed-dial-card expanded-speed-dial-card"
+                  :class="{ 'speed-dial-selected': isSpeedDialUserSelected(user) }"
                 >
-                  <div class="chatbot-info">
-                    <span class="chatbot-name">{{ bot.display_name }}</span>
-                    <span class="chatbot-tag">@{{ bot.user_tag }}</span>
+                  <div class="speed-dial-info" @click="toggleSpeedDialUser(user)">
+                    <span class="speed-dial-name">{{ user.display_name }}</span>
+                    <span class="speed-dial-tag">@{{ user.user_tag }}</span>
                   </div>
-                  <div class="chatbot-toggle">
-                    <input 
-                      type="checkbox" 
-                      :checked="isFeaturedBotSelected(bot)"
-                      @click.stop="toggleFeaturedBot(bot)"
-                    />
+                  <div class="speed-dial-controls">
+                    <div class="speed-dial-checkbox" @click="toggleSpeedDialUser(user)">
+                      <input 
+                        type="checkbox" 
+                        :checked="isSpeedDialUserSelected(user)"
+                        @click.stop="toggleSpeedDialUser(user)"
+                      />
+                    </div>
+                    <button 
+                      class="speed-dial-tier-btn"
+                      @click.stop="toggleSpeedDialTier(user)"
+                      :disabled="speedDialLoading.has(user.uid)"
+                      :title="user.tier === 1 ? 'Move to More (tier 2)' : 'Move to Main (tier 1)'"
+                    >
+                      <span v-if="speedDialLoading.has(user.uid)" class="spinner-tiny"></span>
+                      <span v-else>{{ user.tier === 1 ? '↓' : '↑' }}</span>
+                    </button>
+                    <button 
+                      class="speed-dial-remove-btn"
+                      @click.stop="removeFromSpeedDial(user)"
+                      :disabled="speedDialLoading.has(user.uid)"
+                      title="Remove from Speed Dial"
+                    >
+                      <span v-if="speedDialLoading.has(user.uid)" class="spinner-tiny"></span>
+                      <span v-else>×</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -381,7 +437,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import MessageService from '../../services/MessageService.js';
-import FeaturedBotsService from '../../services/FeaturedBotsService.js';
+import SpeedDialService from '../../services/SpeedDialService.js';
 
 const props = defineProps({
   isVisible: {
@@ -1066,28 +1122,99 @@ const toggleRecipientVisibility = (index) => {
   store.dispatch('navigation/toggleRecipientVisibility', index);
 };
 
-// Featured bots state and methods
-const featuredBots = ref([]);
-const mainFeaturedBots = computed(() => featuredBots.value.filter(bot => !bot?.advanced));
-const advancedFeaturedBots = computed(() => featuredBots.value.filter(bot => bot?.advanced));
-const showAdvancedBots = ref(false);
+// Speed dial state and methods
+const speedDialUsers = ref([]);
+const mainSpeedDialUsers = computed(() => speedDialUsers.value.filter(user => user?.tier === 1));
+const expandedSpeedDialUsers = computed(() => speedDialUsers.value.filter(user => user?.tier === 2));
+const showExpandedSpeedDial = ref(false);
+const speedDialLoading = ref(new Set()); // Track loading state for individual users
 
-const isFeaturedBotSelected = (bot) => {
-  return recipients.value.some(recipient => recipient.uid === bot.uid);
+const isSpeedDialUserSelected = (user) => {
+  return recipients.value.some(recipient => recipient.uid === user.uid);
 };
 
-const toggleFeaturedBot = (bot) => {
-  if (isFeaturedBotSelected(bot)) {
-    const index = recipients.value.findIndex(recipient => recipient.uid === bot.uid);
+const toggleSpeedDialUser = (user) => {
+  if (isSpeedDialUserSelected(user)) {
+    const index = recipients.value.findIndex(recipient => recipient.uid === user.uid);
     if (index !== -1) {
       store.dispatch('navigation/removeRecipient', index);
     }
   } else {
     store.dispatch('navigation/addRecipient', {
-      uid: bot.uid,
-      display_name: bot.display_name,
-      user_tag: bot.user_tag
+      uid: user.uid,
+      display_name: user.display_name,
+      user_tag: user.user_tag
     });
+  }
+};
+
+// Check if a user is in speed dial
+const isInSpeedDial = (uid) => {
+  return speedDialUsers.value.some(u => u.uid === uid);
+};
+
+// Add a user to speed dial
+const addToSpeedDial = async (user) => {
+  if (!user?.uid) return;
+  
+  speedDialLoading.value.add(user.uid);
+  try {
+    speedDialUsers.value = await SpeedDialService.addToSpeedDial(user.uid);
+  } catch (err) {
+    console.error('[RecipientsModal] Failed to add to speed dial:', err);
+    store.commit('ui/SET_ERROR', { 
+      code: 'speed_dial_add_failed', 
+      message: err?.response?.data?.detail || 'Failed to add to speed dial'
+    });
+  } finally {
+    speedDialLoading.value.delete(user.uid);
+  }
+};
+
+// Remove a user from speed dial
+const removeFromSpeedDial = async (user) => {
+  if (!user?.uid) return;
+  
+  speedDialLoading.value.add(user.uid);
+  try {
+    speedDialUsers.value = await SpeedDialService.removeFromSpeedDial(user.uid);
+  } catch (err) {
+    console.error('[RecipientsModal] Failed to remove from speed dial:', err);
+    store.commit('ui/SET_ERROR', { 
+      code: 'speed_dial_remove_failed', 
+      message: err?.response?.data?.detail || 'Failed to remove from speed dial'
+    });
+  } finally {
+    speedDialLoading.value.delete(user.uid);
+  }
+};
+
+// Toggle tier for a speed dial user (1 ↔ 2)
+const toggleSpeedDialTier = async (user) => {
+  if (!user?.uid) return;
+  
+  const newTier = user.tier === 1 ? 2 : 1;
+  speedDialLoading.value.add(user.uid);
+  try {
+    speedDialUsers.value = await SpeedDialService.updateTier(user.uid, newTier);
+  } catch (err) {
+    console.error('[RecipientsModal] Failed to update tier:', err);
+    store.commit('ui/SET_ERROR', { 
+      code: 'speed_dial_tier_failed', 
+      message: err?.response?.data?.detail || 'Failed to update tier'
+    });
+  } finally {
+    speedDialLoading.value.delete(user.uid);
+  }
+};
+
+// Reload speed dial from API
+const loadSpeedDial = async () => {
+  try {
+    SpeedDialService.clearCache();
+    speedDialUsers.value = await SpeedDialService.listSpeedDialUsers();
+  } catch (e) {
+    speedDialUsers.value = [];
   }
 };
 
@@ -1116,12 +1243,8 @@ const handleClickOutside = (event) => {
 // Lifecycle hooks
 onMounted(async () => {
   document.addEventListener('click', handleClickOutside);
-  // Load featured bots (mocked service for now)
-  try {
-    featuredBots.value = await FeaturedBotsService.listFeaturedBots();
-  } catch (e) {
-    featuredBots.value = [];
-  }
+  // Load speed dial users
+  await loadSpeedDial();
 });
 
 onBeforeUnmount(() => {
@@ -1383,6 +1506,10 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   cursor: pointer;
   border-bottom: 1px solid var(--color-border);
   transition: background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .search-result-item:last-child {
@@ -1397,6 +1524,53 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.speed-dial-toggle-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--color-text-secondary);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.speed-dial-toggle-btn:hover:not(:disabled) {
+  background-color: var(--color-hover-overlay);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.speed-dial-toggle-btn.in-speed-dial {
+  color: var(--color-warning, #f59e0b);
+  border-color: var(--color-warning, #f59e0b);
+}
+
+.speed-dial-toggle-btn.in-speed-dial:hover:not(:disabled) {
+  background-color: rgba(245, 158, 11, 0.1);
+}
+
+.speed-dial-toggle-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinner-tiny {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-border);
+  border-top: 2px solid var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
 .search-result-name {
@@ -1921,12 +2095,12 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   }
 }
 
-/* Chatbots section */
-.chatbots-section {
+/* Speed Dial section */
+.speed-dial-section {
   margin-bottom: 16px;
 }
 
-.chatbots-header {
+.speed-dial-header {
   margin: 0 0 8px 0;
   color: var(--color-text-tertiary, #666);
   font-size: var(--font-size-sm);
@@ -1936,63 +2110,87 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   opacity: 0.8;
 }
 
-.chatbots-list {
+.speed-dial-list {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.chatbot-card {
+.no-speed-dial {
+  text-align: center;
+  padding: 16px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.no-speed-dial p {
+  margin: 0 0 4px 0;
+}
+
+.no-speed-dial .hint {
+  font-size: var(--font-size-xs);
+  opacity: 0.7;
+}
+
+.speed-dial-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  cursor: pointer;
   transition: all 0.2s ease;
   background-color: var(--color-surface);
-  min-width: 120px;
+  min-width: 140px;
 }
 
-.chatbot-card:hover {
+.speed-dial-card:hover {
   background-color: var(--color-hover-overlay);
   border-color: var(--color-border-hover);
 }
 
-.chatbot-card.chatbot-selected {
+.speed-dial-card.speed-dial-selected {
   background-color: var(--color-primary-light);
   border-color: var(--color-primary);
 }
 
-.chatbot-info {
+.speed-dial-info {
   display: flex;
   flex-direction: column;
   gap: 2px;
   flex: 1;
+  cursor: pointer;
 }
 
-.chatbot-name {
+.speed-dial-name {
   font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--color-text);
 }
 
-.chatbot-tag {
+.speed-dial-tag {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
 }
 
-.chatbot-toggle {
+.speed-dial-controls {
   display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: 2px;
   margin-left: 8px;
 }
 
-.chatbot-toggle input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
+.speed-dial-checkbox {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.speed-dial-checkbox input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
   cursor: pointer;
   position: relative;
   appearance: none;
@@ -2007,39 +2205,94 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   outline: none;
 }
 
-.chatbot-toggle input[type="checkbox"]:checked {
+.speed-dial-checkbox input[type="checkbox"]:checked {
   background-color: var(--color-primary);
   border-color: var(--color-primary);
 }
 
-.chatbot-toggle input[type="checkbox"]:checked::after {
+.speed-dial-checkbox input[type="checkbox"]:checked::after {
   content: '✓';
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   color: rgb(0, 0, 0);
-  font-size: 12px;
+  font-size: 10px;
   font-weight: bold;
   line-height: 1;
   display: block;
 }
 
-.chatbot-toggle input[type="checkbox"]:focus {
+.speed-dial-checkbox input[type="checkbox"]:focus {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 
-/* Advanced chatbots dropdown styles */
-.advanced-chatbots {
+.speed-dial-tier-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+  opacity: 0.6;
+  padding: 0;
+}
+
+.speed-dial-tier-btn:hover:not(:disabled) {
+  background-color: var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.1));
+  color: var(--color-primary);
+  opacity: 1;
+}
+
+.speed-dial-tier-btn:disabled {
+  cursor: not-allowed;
+}
+
+.speed-dial-remove-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+  opacity: 0.5;
+  padding: 0;
+  line-height: 1;
+}
+
+.speed-dial-remove-btn:hover:not(:disabled) {
+  background-color: var(--color-error-light, rgba(220, 38, 38, 0.1));
+  color: var(--color-error);
+  opacity: 1;
+}
+
+.speed-dial-remove-btn:disabled {
+  cursor: not-allowed;
+}
+
+/* Expanded speed dial dropdown styles */
+.expanded-speed-dial {
   margin-top: 8px;
 }
 
-.advanced-toggle-inline {
+.expanded-toggle-inline {
   display: inline-block;
 }
 
-.advanced-toggle-button {
+.expanded-toggle-button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2053,38 +2306,37 @@ watch(() => props.existingRecipients, (newVal, oldVal) => {
   opacity: 0.7;
 }
 
-.advanced-toggle-button:hover {
+.expanded-toggle-button:hover {
   background-color: var(--color-hover-overlay);
   border-radius: var(--radius-sm);
   opacity: 1;
 }
 
-.advanced-toggle-text {
+.expanded-toggle-text {
   font-weight: 400;
 }
 
-.advanced-toggle-icon {
+.expanded-toggle-icon {
   font-size: 9px;
   transition: transform 0.2s ease;
 }
 
-.advanced-toggle-icon.expanded {
+.expanded-toggle-icon.expanded {
   transform: rotate(180deg);
 }
 
-.advanced-chatbots-list {
+.expanded-speed-dial-list {
   margin-top: 6px;
   padding-left: 0;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.advanced-chatbot-card {
-  margin-bottom: 6px;
-  opacity: 0.8;
+.expanded-speed-dial-card {
+  opacity: 0.85;
   transform: scale(0.95);
-}
-
-.advanced-chatbot-card:last-child {
-  margin-bottom: 0;
 }
 
 /* Remove confirmation dialog */

@@ -395,7 +395,7 @@ const mentionableUserTagSet = computed(() => {
 });
 const replyAddToAncestors = computed(() => store.getters['navigation/replyAddToAncestors']);
 const isReplying = computed(() => store.getters['navigation/isReplying']);
-const botPromptModalVisible = computed(() => store.getters['navigation/botPromptModalVisible']);
+const speedDialModalVisible = computed(() => store.getters['navigation/speedDialModalVisible']);
 const showVerifyCTA = computed(() => !props.canInteract && props.isAuthenticated && !isEmailVerified.value);
 
 // Draft tags sourced from navigation store
@@ -1611,7 +1611,7 @@ const handleClickOutside = (event) => {
     return;
   }
   // Don't close if any modal is open
-  if (showRecipientSelector.value || botPromptModalVisible.value || showTagsModal.value) {
+  if (showRecipientSelector.value || speedDialModalVisible.value || showTagsModal.value) {
     return;
   }
   
@@ -2917,8 +2917,8 @@ defineExpose({
 
 
 
-/* Bot prompt modal styles */
-.bot-prompt-modal {
+/* Speed dial modal styles */
+.quick-prompt-modal {
   position: relative;
   max-width: 450px;
   width: 95%;
@@ -3130,9 +3130,9 @@ defineExpose({
   animation: spin 1s linear infinite;
 }
 
-/* Mobile responsive adjustments for bot modal */
+/* Mobile responsive adjustments for speed dial modal */
 @media (max-width: 768px) {
-  .bot-prompt-modal {
+  .quick-prompt-modal {
     max-width: 95%;
     padding: var(--space-md);
   }
@@ -3149,7 +3149,7 @@ defineExpose({
 }
 
 @media (max-width: 480px) {
-  .bot-prompt-modal {
+  .quick-prompt-modal {
     padding: var(--space-sm);
   }
   

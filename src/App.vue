@@ -2,7 +2,7 @@
 import { onMounted, onBeforeUnmount } from 'vue';
 import RecipientsModal from './components/modals/RecipientsModal.vue';
 import LinksModal from './components/modals/LinksModal.vue';
-import BotPromptModal from './components/modals/BotPromptModal.vue';
+import QuickPromptModal from './components/modals/QuickPromptModal.vue';
 import WebSocketService from '@/services/ws/WebSocketService';
 
 // More robust height calculation for the entire app
@@ -48,7 +48,7 @@ onBeforeUnmount(() => {
     </main>
     <RecipientsModal />
     <LinksModal />
-    <BotPromptModal />
+    <QuickPromptModal />
   </div>
 </template>
 

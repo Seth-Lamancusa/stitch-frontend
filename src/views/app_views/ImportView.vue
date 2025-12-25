@@ -1,3 +1,5 @@
+<!-- THIS FILE IS NOT USED ANYMORE. IT MAY BE REINCORPORATED IN THE FUTURE -->
+
 <template>
   <div class="import-view">
     <div class="import-header">
@@ -25,13 +27,13 @@
               class="bot-selection-dropdown"
               :disabled="isImporting"
             >
-              <option value="">Choose an AI assistant...</option>
+              <option value="">Choose from speed dial...</option>
               <option 
-                v-for="bot in featuredBots" 
-                :key="bot.uid" 
-                :value="bot"
+                v-for="user in speedDialUsers" 
+                :key="user.uid" 
+                :value="user"
               >
-                {{ bot.display_name }}
+                {{ user.display_name }}
               </option>
             </select>
             <p v-if="!selectedBot" class="bot-selection-hint">
@@ -454,7 +456,7 @@ The format will be auto-detected once you paste your conversation."
 import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter } from 'vue-router';
-import FeaturedBotsService from '../../services/FeaturedBotsService.js';
+import SpeedDialService from '../../services/SpeedDialService.js';
 import ImportService from '../../services/ImportService';
 import RecipientsModal from '../../components/modals/RecipientsModal.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
@@ -534,7 +536,7 @@ const formatDetection = ref({ format: 'unknown', confidence: 0, hint: '' });
 
 // Computed properties from store
 const user = computed(() => store.getters['auth/user']);
-const featuredBots = ref([]);
+const speedDialUsers = ref([]);
 
 // Permissions composable
 import { usePermissions } from '../../composables/usePermissions.js';
@@ -1240,9 +1242,9 @@ watch([importText, selectedBot], () => {
 // Load featured bots on mount
 onMounted(async () => {
   try {
-    featuredBots.value = await FeaturedBotsService.listFeaturedBots();
+    speedDialUsers.value = await SpeedDialService.listSpeedDialUsers();
   } catch (e) {
-    featuredBots.value = [];
+    speedDialUsers.value = [];
   }
 });
 
