@@ -229,8 +229,8 @@ header {
 }
 
 .page-hero {
-  height: 40vh;
-  max-height: 400px;
+  height: 45vh;
+  max-height: 500px;
 }
 
 /* Hero background classes that use the new variables */
@@ -744,8 +744,8 @@ footer {
   }
   
   .page-hero {
-    height: 35vh;
-    max-height: 300px;
+    height: 40vh;
+    max-height: 350px;
     padding: 1rem;
   }
   
@@ -885,8 +885,8 @@ footer {
   }
   
   .page-hero {
-    height: 30vh;
-    max-height: 250px;
+    height: 40vh;
+    max-height: 300px;
   }
   
   .hero-content p {

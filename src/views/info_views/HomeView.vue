@@ -7,6 +7,36 @@
     betaBannerIcon=""
     betaBannerTitle=""
   >
+    <template #heroContent>
+      <div class="social-links">
+        <a href="https://x.com/stitchfyi" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="Twitter">
+          <span class="social-icon">𝕏</span>
+          <span class="social-label">Twitter</span>
+        </a>
+        <a href="https://www.youtube.com/@stitchagi" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="YouTube">
+          <span class="social-icon">▶</span>
+          <span class="social-label">YouTube</span>
+        </a>
+        <a href="https://www.tiktok.com/@stitch.agi" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="TikTok">
+          <span class="social-icon">🎵</span>
+          <span class="social-label">TikTok</span>
+        </a>
+        <a href="https://slamancusa.substack.com/" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="Substack">
+          <span class="social-icon">📧</span>
+          <span class="social-label">Substack</span>
+        </a>
+        <!-- Spotify - Coming soon -->
+        <!-- <a href="#" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="Spotify">
+          <span class="social-icon">🎧</span>
+          <span class="social-label">Spotify</span>
+        </a> -->
+        <!-- Reddit - Coming soon -->
+        <!-- <a href="#" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="Reddit">
+          <span class="social-icon">🔴</span>
+          <span class="social-label">Reddit</span>
+        </a> -->
+      </div>
+    </template>
     <template #betaBannerText>
       <div class="banner-group">
         <div class="banner-buttons">
@@ -539,5 +569,77 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
     display: none;
   }
 }
+
+/* Social links styling */
+.social-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 2rem;
+  padding: 0 1rem;
+}
+
+.social-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--text-light);
+  text-decoration: none;
+  transition: all 0.3s ease;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  min-width: 60px;
+  opacity: 0.7;
+}
+
+.social-link:hover,
+.social-link:visited,
+.social-link:active {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-light);
+  opacity: 0.85;
+}
+
+.social-link:hover {
+  transform: translateY(-1px);
+  opacity: 0.9;
+}
+
+.social-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.social-label {
+  font-size: 0.7rem;
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+@media (max-width: 768px) {
+  .social-links {
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+  }
+  
+  .social-link {
+    padding: 0.4rem 0.6rem;
+    min-width: 55px;
+  }
+  
+  .social-icon {
+    font-size: 1rem;
+  }
+  
+  .social-label {
+    font-size: 0.65rem;
+  }
+}
+
 
 </style> 
