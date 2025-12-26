@@ -33,6 +33,7 @@
       <div class="hero-content">
         <h1 v-html="pageTitle"></h1>
         <p>{{ pageSubtitle }}</p>
+        <slot name="heroContent"></slot>
       </div>
     </section>
 
