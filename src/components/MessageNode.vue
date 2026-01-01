@@ -4,7 +4,8 @@
     :class="{ 
       'list-view': inListView,
       'compact': compact,
-      'selected': inListView ? selected : isMessageSelected
+      'selected': inListView ? selected : isMessageSelected,
+      'dropdown-open': showActionBar
     }"
     :data-message-id="message.id"
     :data-has-siblings="!!message.parent_id"
@@ -187,7 +188,7 @@
           </button>
           
           <!-- Menu button for desktop with relative positioning for menu -->
-          <div v-if="shouldShowMenuButton" class="desktop-menu-container">
+          <div v-if="shouldShowMenuButton" ref="desktopMenuContainerRef" class="desktop-menu-container">
             <button 
               @click.stop="toggleActionBar"
               class="action-button menu-button"
@@ -200,7 +201,9 @@
             <!-- Desktop dropdown menu -->
             <div 
               v-if="showActionBar && !isMobile"
+              ref="desktopActionMenuRef"
               class="desktop-action-menu"
+              :class="{ 'menu-below': menuPositionBelow }"
               @click.stop
             >
               <button 
@@ -260,7 +263,7 @@
       />
       
       <!-- Unified mobile action controls -->
-      <div v-if="!inListView && !isSelectionMode" class="mobile-action-controls">
+      <div v-if="!inListView && !isSelectionMode" ref="mobileActionControlsRef" class="mobile-action-controls">
         
         <!-- Mobile visible actions -->
         <button 
@@ -297,8 +300,9 @@
         <!-- Unified floating action menu -->
         <div 
           v-if="shouldShowMenuButton"
+          ref="floatingActionBarRef"
           class="floating-action-bar" 
-          :class="{ 'active': showActionBar }"
+          :class="{ 'active': showActionBar, 'position-below': mobileMenuPositionBelow }"
           @click.stop
           @touchstart.stop="handleActionBarTouchStart"
           @touchmove.stop="handleActionBarTouchMove"
@@ -429,6 +433,17 @@ export default {
     // Mobile floating action bar state - using global store
     const actionBarTouchStartY = ref(0);
     const actionBarTouchMoveY = ref(0);
+    
+    // Desktop menu positioning refs
+    const desktopMenuContainerRef = ref(null);
+    const desktopActionMenuRef = ref(null);
+    const menuPositionBelow = ref(false);
+    let menuPositionRecalcHandler = null;
+    
+    // Mobile floating action bar positioning refs
+    const mobileActionControlsRef = ref(null);
+    const floatingActionBarRef = ref(null);
+    const mobileMenuPositionBelow = ref(false);
     
     // Global action bar state from store
     const showActionBar = computed(() => store.getters['navigation/isActionBarOpen'](props.message.id));
@@ -1290,6 +1305,137 @@ export default {
       store.dispatch('navigation/hideActionBar', props.message.id);
     };
     
+    // Calculate mobile floating action bar position to prevent overflow
+    const calculateMobileMenuPosition = () => {
+      if (!isMobile.value || !showActionBar.value || !mobileActionControlsRef.value) {
+        mobileMenuPositionBelow.value = false;
+        return;
+      }
+      
+      const updatePosition = () => {
+        try {
+          // Measure the container (button area) position, not the floating bar
+          // This way we get the stable position before CSS changes
+          const containerRect = mobileActionControlsRef.value.getBoundingClientRect();
+          const viewportTop = 0;
+          
+          // Get the floating bar height if available, otherwise estimate
+          let barHeight = 313; // Default estimate
+          if (floatingActionBarRef.value) {
+            const barRect = floatingActionBarRef.value.getBoundingClientRect();
+            if (barRect.height > 0) {
+              barHeight = barRect.height;
+            }
+          }
+          
+          // Calculate where the bar WOULD be positioned above the container
+          const barTopIfAbove = containerRect.top - barHeight - 8; // 8px gap
+          const spaceAbove = containerRect.top - viewportTop;
+          const spaceNeeded = barHeight + 8;
+          
+          // If the bar would overflow the top, position it below the button instead
+          const wouldOverflowTop = barTopIfAbove < viewportTop || spaceAbove < spaceNeeded;
+          
+          mobileMenuPositionBelow.value = wouldOverflowTop;
+        } catch (e) {
+          mobileMenuPositionBelow.value = false;
+        }
+      };
+      
+      // Only calculate once after layout is ready
+      requestAnimationFrame(() => {
+        updatePosition();
+      });
+    };
+    
+    // Calculate desktop menu position to prevent overflow
+    const calculateMenuPosition = () => {
+      if (isMobile.value || !showActionBar.value || !desktopMenuContainerRef.value) {
+        menuPositionBelow.value = false;
+        return;
+      }
+      
+      const updatePosition = () => {
+        try {
+          const containerRect = desktopMenuContainerRef.value.getBoundingClientRect();
+          const viewportHeight = window.innerHeight;
+          const viewportTop = 0;
+          
+          // Get actual menu height if available, otherwise estimate
+          let menuHeight = 200; // Default estimate
+          if (desktopActionMenuRef.value) {
+            const menuRect = desktopActionMenuRef.value.getBoundingClientRect();
+            if (menuRect.height > 0) {
+              menuHeight = menuRect.height;
+            }
+          }
+          
+          // Calculate available space above and below
+          const spaceAbove = containerRect.top - viewportTop;
+          const spaceBelow = viewportHeight - containerRect.bottom;
+          const spaceNeeded = menuHeight + 8; // 8px gap
+          
+          // Check if menu would overflow the top of the viewport
+          const wouldOverflowTop = spaceAbove < spaceNeeded;
+          const wouldOverflowBottom = spaceBelow < spaceNeeded;
+          
+          // Position below if not enough space above
+          // If both would overflow, pick the one with MORE space
+          if (wouldOverflowTop && wouldOverflowBottom) {
+             menuPositionBelow.value = spaceBelow > spaceAbove;
+          } else {
+             menuPositionBelow.value = wouldOverflowTop;
+          }
+        } catch (e) {
+          // Fallback to default (above) if calculation fails
+          menuPositionBelow.value = false;
+        }
+      };
+
+      // Use requestAnimationFrame to ensure we measure after layout
+      requestAnimationFrame(() => {
+        updatePosition();
+        // Double check in next frame in case of transitions
+        requestAnimationFrame(() => {
+          updatePosition();
+        });
+      });
+    };
+    
+    // Resize observer for the menu element
+    let menuResizeObserver = null;
+    
+    // Watch for action bar state changes to recalculate position
+    watch(showActionBar, (isOpen) => {
+      if (isOpen && !isMobile.value) {
+        // Desktop menu positioning
+        calculateMenuPosition();
+        
+        // Setup resize observer when menu opens
+        nextTick(() => {
+          if (desktopActionMenuRef.value) {
+            if (menuResizeObserver) menuResizeObserver.disconnect();
+            
+            menuResizeObserver = new ResizeObserver(() => {
+               calculateMenuPosition();
+            });
+            menuResizeObserver.observe(desktopActionMenuRef.value);
+          }
+        });
+      } else if (isOpen && isMobile.value) {
+        // Mobile floating action bar positioning
+        calculateMobileMenuPosition();
+      } else {
+        // Don't reset mobileMenuPositionBelow - keep it during close animation to avoid flash
+        // It will be recalculated when menu opens again
+        menuPositionBelow.value = false; // Desktop can reset since it doesn't have same issue
+        if (menuResizeObserver) {
+          menuResizeObserver.disconnect();
+          menuResizeObserver = null;
+        }
+      }
+    });
+    
     // Handle touch events for swipe down to dismiss
     const handleActionBarTouchStart = (e) => {
       actionBarTouchStartY.value = e.touches[0].clientY;
@@ -1341,6 +1487,15 @@ export default {
       checkMobileDevice();
       window.addEventListener('resize', checkMobileDevice);
       window.addEventListener('resize', handleViewportChange);
+      
+      // Recalculate menu position on scroll/resize when menu is open
+      menuPositionRecalcHandler = () => {
+        if (showActionBar.value && !isMobile.value) {
+          calculateMenuPosition();
+        }
+      };
+      window.addEventListener('scroll', menuPositionRecalcHandler, true);
+      window.addEventListener('resize', menuPositionRecalcHandler);
 
 
       // Observe DOM mutations inside message content to catch late appends
@@ -1375,6 +1530,18 @@ export default {
       document.removeEventListener('click', handleActionBarOutsideClick);
       window.removeEventListener('resize', checkMobileDevice);
       window.removeEventListener('resize', handleViewportChange);
+      
+      // Remove menu position recalculation listeners
+      if (menuPositionRecalcHandler) {
+        window.removeEventListener('scroll', menuPositionRecalcHandler, true);
+        window.removeEventListener('resize', menuPositionRecalcHandler);
+        menuPositionRecalcHandler = null;
+      }
+      
+      if (menuResizeObserver) {
+        menuResizeObserver.disconnect();
+        menuResizeObserver = null;
+      }
       
       // Disconnect observer
       try { if (domObserver.value) { domObserver.value.disconnect(); domObserver.value = null; } } catch (e) {}
@@ -1420,27 +1587,6 @@ export default {
     const showSiblingNavDesktop = computed(() => {
       const val = !props.inListView && !!props.message.parent_id && !isMobile.value;
       return val;
-    });
-
-    // Watchers for diagnostics
-    watch(showSiblingNavMobile, (next, prev) => {
-      try {
-        console.log('[MessageNode] showSiblingNavMobile changed', {
-          messageId: props.message.id,
-          prev,
-          next
-        });
-      } catch (e) {}
-    });
-
-    watch(showSiblingNavDesktop, (next, prev) => {
-      try {
-        console.log('[MessageNode] showSiblingNavDesktop changed', {
-          messageId: props.message.id,
-          prev,
-          next
-        });
-      } catch (e) {}
     });
 
     watch(isSelectionMode, (next, prev) => {
@@ -1578,6 +1724,13 @@ export default {
       shouldShowMenuButton,
       isPlaying,
       isLoading,
+      // Menu positioning
+      desktopMenuContainerRef,
+      desktopActionMenuRef,
+      menuPositionBelow,
+      mobileActionControlsRef,
+      floatingActionBarRef,
+      mobileMenuPositionBelow,
       
     };
   },
@@ -1617,7 +1770,8 @@ export default {
 
 /* Elevate z-index when dropdown is open to ensure it appears above subsequent messages */
 .message-node.dropdown-open {
-  z-index: 10;
+  z-index: 100; /* Increased to match floating action bar z-index */
+  position: relative; /* Ensure stacking context */
 }
 
 /* Add styling for list view mode */
@@ -2387,7 +2541,16 @@ export default {
   backdrop-filter: blur(10px);
   z-index: 20;
   min-width: 120px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(100vh - 20px); /* Prevent overflow beyond viewport */
+}
+
+/* Position menu below button when not enough space above */
+.desktop-action-menu.menu-below {
+  bottom: auto;
+  top: calc(100% + 8px);
+  max-height: calc(100vh - 20px); /* Ensure it doesn't overflow bottom either */
 }
 
 .desktop-menu-button {
@@ -2585,19 +2748,29 @@ export default {
     border-radius: 16px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     backdrop-filter: blur(10px);
-    z-index: 10;
+    z-index: 100; /* High z-index to appear above other message nodes */
+    max-height: calc(100vh - 60px); /* Prevent overflow beyond viewport */
+    overflow-y: auto;
     
     /* Hide by default */
     opacity: 0;
     pointer-events: none;
     transform: translateY(8px) scale(0.95);
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Note: Don't transition top/bottom to avoid flash when position changes */
   }
   
   .floating-action-bar.active {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0) scale(1);
+  }
+  
+  /* Position mobile menu below button when not enough space above */
+  .floating-action-bar.position-below {
+    bottom: auto;
+    top: 52px; /* Position below the menu button */
+    max-height: calc(100vh - 60px); /* Ensure it doesn't overflow bottom either */
   }
   
   /* Floating Action Bar Buttons */

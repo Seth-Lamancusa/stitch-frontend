@@ -1252,17 +1252,6 @@ onBeforeUnmount(() => {
   clearTimeout(searchTimeout);
 });
 
-// Add logging to watch existing recipients
-watch(() => props.existingRecipients, (newVal, oldVal) => {
-  console.log('[RecipientsModal] existingRecipients prop changed:', {
-    old: oldVal?.length || 0,
-    new: newVal?.length || 0,
-    oldRecipients: oldVal,
-    newRecipients: newVal,
-    isAddMode: props.isAddMode,
-    messageId: props.messageId
-  });
-}, { deep: true, immediate: true });
 </script>
 
 <style scoped>

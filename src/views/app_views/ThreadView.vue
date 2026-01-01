@@ -843,12 +843,6 @@ const loadInitialContent = async (targetMessageId) => {
       }
     };
     await ensureRadiusInStore(targetMessageId, 5);
-
-    // Prepare branch path for rendering
-    console.log(`[ThreadView] 🔄 INITIAL LOAD calling prepareBranchPath with message ID: ${targetMessageId}`);
-    await store.dispatch('messages/prepareBranchPath', targetMessageId);
-    
-    console.log(`[ThreadView] 🔄 INITIAL LOAD complete, will render ${store.getters['messages/getVisibleBranchMessages'](targetMessageId).length} messages`);
     
     // Wait for next tick to ensure store updates are processed
     await nextTick();

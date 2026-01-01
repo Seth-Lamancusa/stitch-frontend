@@ -1437,7 +1437,6 @@ export default {
     // Batch mark messages as read for thread view auto-marking
     async batchMarkAsRead({ commit, state, rootState }, messageIds) {
       console.log('[Store] batchMarkAsRead called with:', messageIds.length, 'messages: ids ', messageIds);
-      console.log('[Store] threadViewMode:', state.threadViewMode, 'user present:', !!rootState.auth?.user);
 
       // Only proceed if in thread view mode
       if (!state.threadViewMode) {
@@ -1468,8 +1467,6 @@ export default {
         eligibilityReasons[id] = 'eligible';
         return true;
       });
-
-      console.log('[Store] eligibility map:', eligibilityReasons);
 
       if (eligibleIds.length === 0) {
         console.log('[Store] No eligible messages to mark as read');
