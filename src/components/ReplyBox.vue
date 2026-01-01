@@ -71,10 +71,10 @@
             :disabled="!canInteract"
             :aria-expanded="showTagsModal"
             aria-label="Manage draft tags"
-            title="Draft Tags"
+            title="Tags"
           >
             <span class="meta-pill__icon"><strong>#</strong></span>
-            <span class="meta-pill__text">Draft Tags ({{ replyTags.length }})</span>
+            <span class="meta-pill__text">Tags ({{ replyTags.length }})</span>
           </button>
           
           <!-- Recipients button -->
@@ -86,7 +86,7 @@
             aria-label="Manage recipients"
           >
             <span class="meta-pill__icon">👥</span>
-            <span class="meta-pill__text">Draft Recipients ({{ recipients.length }})</span>
+            <span class="meta-pill__text">Recipients ({{ recipients.length }})</span>
           </button>
           
           <!-- Attachment button -->
@@ -2395,6 +2395,10 @@ defineExpose({
     flex: none; /* Don't expand to fill space on mobile */
     padding: 8px 16px 24px 16px; /* Consistent padding on mobile */
   }
+  
+  .toolbar-left {
+    flex-wrap: wrap;
+  }
 }
 
 @media (max-width: 480px) {
@@ -2406,6 +2410,11 @@ defineExpose({
     padding: 4px 12px 4px;
     gap: 8px;
     flex-wrap: wrap;
+  }
+  
+  .toolbar-left {
+    flex-wrap: wrap;
+    gap: 8px;
   }
   
   .visibility-toggle {
