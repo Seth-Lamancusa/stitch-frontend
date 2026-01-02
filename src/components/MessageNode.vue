@@ -59,7 +59,7 @@
             :user-tag="authorUserTag"
             :show-tag="!!authorUserTag"
             :is-current-user="isCurrentUser"
-            :is-bot="message.author_is_bot || false"
+            :is-bot="isBot"
             name-class="message-author"
             tag-class="author-user-tag"
             variant="message"
@@ -770,12 +770,26 @@ export default {
     
     // Get author display name
     const authorDisplayName = computed(() => {
+      if (props.message.author?.display_name) return props.message.author.display_name;
       return props.message.author_display_name || '';
     });
 
     // Get author user tag
     const authorUserTag = computed(() => {
+      if (props.message.author?.user_tag) return props.message.author.user_tag;
       return props.message.author_user_tag || null;
+    });
+    
+    // Get author UID
+    const authorUid = computed(() => {
+      if (props.message.author?.uid) return props.message.author.uid;
+      return props.message.content_author || null;
+    });
+    
+    // Get bot status
+    const isBot = computed(() => {
+      if (props.message.author?.is_bot !== undefined) return !!props.message.author.is_bot;
+      return !!props.message.author_is_bot;
     });
 
     // Show participants label only for inbox list previews
@@ -808,7 +822,7 @@ export default {
         addParticipant({
           displayName: authorName || authorUserTag.value || '',
           userTag: authorUserTag.value,
-          isBot: props.message.author_is_bot
+          isBot: isBot.value
         });
       }
 
@@ -828,7 +842,14 @@ export default {
     
     const showAuthorCapabilities = computed(() => {
       const msg = props.message || {};
-      if (!msg.author_is_bot) return false;
+      
+      // Check bot status via robust accessor
+      if (!isBot.value) return false;
+      
+      // Check nested modalities
+      if (msg.author?.modalities) return true;
+      
+      // Legacy check
       return !!(msg.author_input_modalities || msg.author_output_modalities || msg.author_foundation_provider);
     });
     
@@ -838,8 +859,9 @@ export default {
         return false;
       }
       
-      // Check the UID
-      if (currentUser.value.uid === props.message.content_author) {
+      // Check the UID using robust accessor
+      if (currentUser.value.uid && authorUid.value && 
+          currentUser.value.uid === authorUid.value) {
         return true;
       }
       
@@ -1023,7 +1045,7 @@ export default {
       }
       
       // Then check content_author for UID matching
-      if (props.message.content_author === currentUser.value.uid) {
+      if (authorUid.value === currentUser.value.uid) {
         return true;
       }
       
@@ -1650,6 +1672,8 @@ export default {
       currentUser,
       isUserRecipient,
       isUserAuthor,
+      isBot,
+      authorUid,
       isPublic,
       isAdmin,
       canDeleteMessage,

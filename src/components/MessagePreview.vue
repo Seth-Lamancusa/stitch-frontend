@@ -47,7 +47,7 @@
               :user-tag="authorUserTag"
               :show-tag="!!authorUserTag"
               :is-current-user="isCurrentUser"
-              :is-bot="message.author_is_bot || false"
+              :is-bot="isBot"
               name-class="message-author"
               tag-class="author-user-tag"
               variant="message"
@@ -218,15 +218,32 @@ const canToggleVisibility = computed(() => {
   return store.getters['auth/canUpdateMessagePublicity'](props.message);
 });
 
-const authorDisplayName = computed(() => props.message.author_display_name || '');
-const authorUserTag = computed(() => props.message.author_user_tag || null);
+const authorDisplayName = computed(() => {
+  if (props.message.author?.display_name) return props.message.author.display_name;
+  return props.message.author_display_name || '';
+});
+
+const authorUserTag = computed(() => {
+  if (props.message.author?.user_tag) return props.message.author.user_tag;
+  return props.message.author_user_tag || null;
+});
+
+const authorUid = computed(() => {
+  if (props.message.author?.uid) return props.message.author.uid;
+  return props.message.content_author || null;
+});
+
+const isBot = computed(() => {
+  if (props.message.author?.is_bot !== undefined) return !!props.message.author.is_bot;
+  return !!props.message.author_is_bot;
+});
 
 const isCurrentUser = computed(() => {
   if (!currentUser.value) return false;
   if (authorUserTag.value && currentUser.value.user_tag === authorUserTag.value) {
     return true;
   }
-  return props.message.content_author === currentUser.value.uid;
+  return authorUid.value === currentUser.value.uid;
 });
 
 const isUserRecipient = computed(() => {
@@ -292,7 +309,7 @@ const participantItems = computed(() => {
     addParticipant({
       displayName: authorName || authorUserTag.value || '',
       userTag: authorUserTag.value,
-      isBot: props.message.author_is_bot
+      isBot: isBot.value
     });
   }
 
@@ -312,7 +329,13 @@ const participantItems = computed(() => {
 
 const showAuthorCapabilities = computed(() => {
   const msg = props.message || {};
-  if (!msg.author_is_bot) return false;
+  
+  if (!isBot.value) return false;
+  
+  // Check nested modalities
+  if (msg.author?.modalities) return true;
+  
+  // Legacy check
   return !!(msg.author_input_modalities || msg.author_output_modalities || msg.author_foundation_provider);
 });
 

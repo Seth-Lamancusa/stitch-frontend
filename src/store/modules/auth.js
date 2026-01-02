@@ -513,7 +513,7 @@ export default {
     isAdmin: (state) => isAdminUtil(state.user, TokenManager.accessToken),
     isApiAllowed: (state) => !!(state.user && state.user.has_api_access),
     // Interaction capability: can the user create/write messages
-    canInteract: (state, getters) => getters.hasAnyScope(['msg.write', 'admin']),
+    canInteract: (state, getters) => getters.hasAnyScope(['msg.write']),
 
     // Capability predicates
     canDeleteMessage: (state, getters) => (message) => {

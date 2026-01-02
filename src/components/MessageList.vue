@@ -4,6 +4,7 @@ import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
 import MessagePreview from './MessagePreview.vue';
 import DeleteConfirmModal from './modals/DeleteConfirmModal.vue';
+import NewThreadModal from './modals/NewThreadModal.vue';
 import { onActivated } from 'vue';
 
 // Props to support different modes and configurations
@@ -191,6 +192,9 @@ const replyCounts = ref({}); // Track reply counts by thread ID
 // Add new ref for info box collapsed state
 const isInfoBoxCollapsed = ref(localStorage.getItem('infoBoxCollapsed') === 'true');
 
+// New Thread Modal State
+const showNewThreadModal = ref(false);
+
 // Link mode detection
 const isLinkMode = computed(() => {
   return props.mode === 'incoming-links' || props.mode === 'outgoing-links';
@@ -204,6 +208,7 @@ const linkType = computed(() => {
 
 // Get display version of author for a message
 function getAuthorDisplay(message) {
+  if (message.author?.display_name) return message.author.display_name;
   return message.author_display_name || '';
 }
 
@@ -287,19 +292,34 @@ const handleNewThreadClick = (event) => {
     return;
   }
 
-  // Check capability: admin or msg.write via centralized auth getter
+  // Check capability: msg.write via centralized auth getter
   if (store.getters['auth/canInteract']) {
-    createNewThread();
+    showNewThreadModal.value = true;
   } else {
     store.commit('ui/SET_ERROR', { code: 'permission_required', message: 'You need write permission to create new messages' });
   }
+};
+
+const handleNewThreadConfirm = () => {
+  showNewThreadModal.value = false;
+  createNewThread();
+};
+
+const handleImportConfirm = () => {
+  showNewThreadModal.value = false;
+  store.dispatch('navigation/setPreviousRoute', route.path);
+  router.push('/import');
 };
 
 // Function to check if the author is the current user
 function isCurrentUserAuthor(message) {
   if (!user.value) return false;
   
-  // First check by author_user_tag if available
+  // First check by nested author object (preferred)
+  if (message.author?.uid && user.value.uid === message.author.uid) return true;
+  if (message.author?.user_tag && user.value.user_tag === message.author.user_tag) return true;
+  
+  // Fallback: check by author_user_tag if available
   if (message.author_user_tag && user.value.user_tag === message.author_user_tag) {
     return true;
   }
@@ -917,6 +937,14 @@ const handleLinkDelete = async (linkData) => {
       :is-deleting="isDeleting"
       @cancel="store.dispatch('ui/hideDeleteConfirm')"
       @confirm="deleteMessage"
+    />
+
+    <!-- New Thread Selection Modal -->
+    <NewThreadModal
+      :show="showNewThreadModal"
+      @close="showNewThreadModal = false"
+      @new-thread="handleNewThreadConfirm"
+      @import="handleImportConfirm"
     />
   </div>
 </template>

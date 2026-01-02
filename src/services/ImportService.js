@@ -26,10 +26,13 @@ class ImportService {
    * @param {Object} selectedBot - Selected bot object with uid, display_name, etc. (not required for admin mode)
    * @param {Array} recipients - Array of recipient objects (optional)
    * @param {boolean} isPublic - Whether messages should be public (optional)
+   * @param {Object} options - Additional options (e.g. sourceType: 'cursor' | 'audio')
    * @returns {Promise} - API response with thread_id
    */
-  async importConversation(messages, selectedBot, recipients = [], isPublic = true) {
+  async importConversation(messages, selectedBot, recipients = [], isPublic = true, options = {}) {
     const headers = getAuthHeaders();
+    const { sourceType = 'cursor' } = options;
+    const endpoint = sourceType === 'audio' ? '/messages/import/audio' : '/messages/import/cursor';
     
     // Detect admin mode: check if messages have authorUid (admin-built messages)
     const isAdminMode = messages.length > 0 && messages[0].authorUid;
@@ -121,20 +124,22 @@ class ImportService {
         messageCount: messages.length,
         uniqueAuthors: [...new Set(messages.map(m => m.authorTag))].join(', '),
         recipientsCount: recipients.length,
-        isPublic
+        isPublic,
+        sourceType
       });
     } else {
       console.log('[ImportService] Importing parsed conversation:', {
         messageCount: messages.length,
         selectedBot: selectedBot.display_name,
         recipientsCount: recipients.length,
-        isPublic
+        isPublic,
+        sourceType
       });
     }
     
     try {
       const response = await axios.post(
-        `${apiBaseUrl}/messages`,
+        `${apiBaseUrl}${endpoint}`,
         payload,
         { headers }
       );

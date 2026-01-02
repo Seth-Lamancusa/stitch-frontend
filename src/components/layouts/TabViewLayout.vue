@@ -144,7 +144,7 @@
                 </div>
               </div>
               <div class="menu-divider"></div>
-              <div class="menu-section">
+              <div class="menu-section managed-users-section">
                 <div v-if="managedLoading" class="menu-loading">
                   <span class="loading-spinner"></span>
                   <span>Loading managed users…</span>
@@ -729,6 +729,35 @@ const onLogoClick = (event) => {
 }
 
 .menu-section { display: flex; flex-direction: column; gap: 2px; }
+.menu-section.managed-users-section {
+  max-height: 300px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Scrollbar styling for managed users section */
+.menu-section.managed-users-section::-webkit-scrollbar {
+  width: 6px;
+}
+
+.menu-section.managed-users-section::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.menu-section.managed-users-section::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.menu-section.managed-users-section::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.35);
+}
+
+/* Firefox scrollbar */
+.menu-section.managed-users-section {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
 .menu-divider { height: 1px; background: var(--color-border, #2a2a2a); margin: 6px 0; }
 
 .menu-item {

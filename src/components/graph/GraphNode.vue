@@ -216,8 +216,10 @@ export default {
     
     // Content calculations
     authorName() {
+      // Robust access to display name
+      if (this.message.author?.display_name) return `${this.message.author.display_name} (@${this.message.author.user_tag})`;
+      
       const display = this.message.author_display_name
-        || this.message.author?.display_name
         || this.message.author?.username
         || this.message.author?.email
         || 'Unknown';
@@ -225,9 +227,11 @@ export default {
       return `${display}${tag}`;
     },
     authorDisplay() {
-      return this.message.author_display_name || this.message.author?.display_name || this.message.author?.username || this.message.author?.email || 'Unknown';
+      if (this.message.author?.display_name) return this.message.author.display_name;
+      return this.message.author_display_name || this.message.author?.username || this.message.author?.email || 'Unknown';
     },
     authorTag() {
+      if (this.message.author?.user_tag) return this.message.author.user_tag;
       return this.message.author_user_tag || null;
     },
     

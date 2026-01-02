@@ -93,7 +93,7 @@
           <input 
             ref="fileInput"
             type="file" 
-            accept="application/pdf,image/*,text/plain,.txt"
+            accept="application/pdf,image/*,text/plain,audio/*,.txt,.pdf,.jpg,.jpeg,.png,.gif,.webp,.mp3,.wav,.ogg,.flac,.aac,.mp4,.m4a"
             multiple
             style="display: none"
             @change="handleFileSelect"
@@ -1541,7 +1541,12 @@ const sendReply = async () => {
 const getAuthorDisplayName = (message) => {
   const currentUser = store.getters['auth/user'];
   
-  // First priority: use database-provided display name
+  // First priority: use nested author object
+  if (message.author?.display_name) {
+    return message.author.display_name;
+  }
+  
+  // Second priority: use database-provided display name
   if (message.author_display_name) {
     return message.author_display_name;
   }
@@ -1553,7 +1558,12 @@ const getAuthorDisplayName = (message) => {
 // Helper function to get author user tag
 const getAuthorUserTag = (message) => {
   
-  // First priority: message's author_user_tag from database
+  // First priority: nested author object
+  if (message.author?.user_tag) {
+    return message.author.user_tag;
+  }
+
+  // Second priority: message's author_user_tag from database
   if (message.author_user_tag) {
     // This will handle all users with proper database records
     return message.author_user_tag;

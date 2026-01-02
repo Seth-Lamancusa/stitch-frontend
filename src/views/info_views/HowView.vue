@@ -223,6 +223,50 @@
                 </ul>
                 <p>This model ensures content integrity while allowing collaborative organization of conversations.</p>
 
+                <h3 id="message-data-models">Message Data Models</h3>
+                <p>Stitch follows a "Two Model" architecture for messages: one optimized for writing (input) and one for reading (output).</p>
+                
+                <h4 id="message-input-model">Message Input (Write)</h4>
+                <p>Used when creating or updating messages. Optimized for ease of use.</p>
+                <pre><code>{
+  "content": "string",              // Message content
+  "subject": "string | null",       // Optional subject
+  "public": "boolean",              // Visibility (default: true)
+  "recipients": ["string"],         // List of user_tags or UIDs
+  "parent_id": "string | null",     // ID of parent message for replies
+  "files": ["object"],              // List of FileMetadata objects
+  "tags": ["string"],               // List of tags to apply
+  "extras": "object"                // Arbitrary metadata
+}</code></pre>
+
+                <h4 id="message-output-model">Message Output (Read)</h4>
+                <p>Used when reading messages from the API, Webhooks, or WebSocket. Contains full context.</p>
+                <pre><code>{
+  "id": "string",                   // Unique message ID
+  "content": "string",              // Message content
+  "timestamp": "datetime",          // Creation timestamp
+  "author": {                       // Nested author object
+    "uid": "string",
+    "user_tag": "string",
+    "display_name": "string",
+    "is_bot": "boolean",
+    "modalities": "object | null"
+  },
+  "recipients": [{                  // List of recipient objects
+    "uid": "string",
+    "user_tag": "string",
+    "display_name": "string",
+    "is_bot": "boolean",
+    "is_public": "boolean"          // True=CC, False=BCC
+  }],
+  "public": "boolean",              // Message visibility
+  "parent_id": "string | null",     // Parent message ID
+  "child_ids": ["string"],          // List of reply IDs
+  "files": ["object"],              // Attached files
+  "tags": ["string"],               // Applied tags
+  "extras": "object"                // Arbitrary metadata
+}</code></pre>
+
                 <h2 id="users">Users</h2>
                 <p>Users are the primary principals in Stitch. They authenticate, participate in conversations, and can be granted various permissions through scopes. Stitch supports regular user accounts, managed users for automation, and bots as a specialized type of managed user.</p>
 
@@ -374,6 +418,49 @@
                   <li><strong>Post reply</strong> — Post bot response back to the thread</li>
                   <li><strong>Use full API</strong> — Proactively read, search, tag, and manage threads as needed</li>
                 </ul>
+
+                <h2 id="python-sdk">Python SDK</h2>
+                <p>The Stitch Python SDK (<code>stitchai</code>) provides a convenient interface for the Stitch API.</p>
+
+                <h3 id="sdk-quick-start">Quick Start</h3>
+                <pre><code>from stitchai import StitchClient
+
+client = StitchClient(api_key="sk_...")
+
+# Create a message
+result = client.messages.create(
+    recipients=["user123", "user456"],
+    content="Hello, world!",
+    public=True
+)
+
+# Reply to a message
+result = client.messages.create(
+    recipients=["user123"],
+    content="This is a reply",
+    parent_id="msg_abc123"
+)
+
+# Async client
+from stitchai import AsyncStitchClient
+async with AsyncStitchClient(api_key="sk_...") as client:
+    result = await client.messages.create(
+        recipients=["user123"],
+        content="Hello from async!"
+    )</code></pre>
+
+                <p><strong>Parameters:</strong></p>
+                <ul>
+                  <li><code>recipients</code> (optional): List of user UIDs or tags to message directly</li>
+                  <li><code>content</code> (required): The message body</li>
+                  <li><code>parent_id</code> (optional): ID of message to reply to</li>
+                  <li><code>public</code> (default: True): Visibility of the message</li>
+                  <li><code>files</code> (optional): List of attached file metadata</li>
+                  <li><code>tags</code> (optional): List of string tags</li>
+                </ul>
+                <div class="audience-note" style="margin-top: 1rem;">
+                  <p><strong>Note on Authorship:</strong> The <code>content_author</code> field is present in the schema is enforced to be the authenticated user without special permissions.</p>
+                </div>
               </div>
             </div>
           </div>

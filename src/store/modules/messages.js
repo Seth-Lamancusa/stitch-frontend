@@ -470,7 +470,12 @@ export default {
         let isFromCurrentUser = false;
         let isToCurrentUser = false;
         if (user) {
-          isFromCurrentUser = messageData.content_author === user.uid || messageData.author_user_tag === user.user_tag;
+          // Handle nested author object (new format) or flat fields (legacy)
+          const authorUid = messageData.author?.uid || messageData.content_author;
+          const authorTag = messageData.author?.user_tag || messageData.author_user_tag;
+          
+          isFromCurrentUser = authorUid === user.uid || authorTag === user.user_tag;
+          
           const recipients = Array.isArray(messageData.recipients) ? messageData.recipients : [];
           isToCurrentUser = recipients.some(r => {
             if (!r) return false;
@@ -504,7 +509,13 @@ export default {
             // Auto-mark as read if user is actively viewing the branch
             dispatch('batchMarkAsRead', [messageData.id]);
           } else {
-            const authorName = messageData.author_display_name || messageData.author_user_tag || 'Someone';
+            // Extract author name from nested object or flat fields
+            const authorName = messageData.author?.display_name || 
+                               messageData.author?.user_tag || 
+                               messageData.author_display_name || 
+                               messageData.author_user_tag || 
+                               'Someone';
+                               
             const contentPreview = messageData.content ? (messageData.content.length > 60 ? messageData.content.substring(0, 60) + '...' : messageData.content) : 'New message';
             const notificationData = {
               id: messageData.id,
@@ -721,27 +732,28 @@ export default {
         // Use the current user if content_author is not provided
         const effectiveAuthor = content_author || rootState.auth?.user?.uid;
         
-        // Process recipients - keep full objects to preserve visibility settings
+        // Process recipients - convert to strings for MessageInput (List[str])
         let processedRecipients = [];
         if (recipients && recipients.length > 0) {
           console.log('[Messages Store] Processing recipients:', recipients);
           
           processedRecipients = recipients.map(recipient => {
-            // If recipient is already an object with a uid - keep the full object
-            if (typeof recipient === 'object' && recipient.uid) {
-              console.log('[Messages Store] Using full recipient object:', recipient);
-              return recipient; // Keep entire object
+            // If recipient is an object, extract tag or uid
+            if (typeof recipient === 'object') {
+              if (recipient.user_tag) return recipient.user_tag;
+              if (recipient.uid) return `uid:${recipient.uid}`;
+              console.log('[Messages Store] Invalid recipient object (no user_tag or uid):', recipient);
+              return null;
             }
-            // If recipient is a string, convert to object (backward compatibility)
+            // If recipient is a string, keep as is (user_tag or uid string)
             else if (typeof recipient === 'string') {
-              console.log('[Messages Store] Converting string recipient to object:', recipient);
-              return { uid: recipient, public: true }; // Default public for string recipients
+              return recipient;
             }
             console.log('[Messages Store] Invalid recipient format:', recipient);
             return null;
           }).filter(recipient => recipient !== null); // Remove any nulls
           
-          console.log('[Messages Store] Final processed recipients:', processedRecipients);
+          console.log('[Messages Store] Final processed recipients (strings):', processedRecipients);
         }
         
         
@@ -790,7 +802,7 @@ export default {
           const recipientsArray = Array.isArray(newMessage?.recipients) ? newMessage.recipients : processedRecipients;
           const isSelfRecipient = Array.isArray(recipientsArray) && !!currentUserId && recipientsArray.some(r => {
             if (!r) return false;
-            if (typeof r === 'string') return r === currentUserId;
+            if (typeof r === 'string') return r === currentUserId || r === `uid:${currentUserId}`;
             if (typeof r === 'object') return r.uid === currentUserId;
             return false;
           });
@@ -1202,7 +1214,10 @@ export default {
         // Check if message is currently unread before making API call
         const message = state.messages[messageId];
         const wasUnread = isMessageUnread(message);
-        const isAuthoredByCurrentUser = !!(message && rootState?.auth?.user && message.content_author === rootState.auth.user.uid);
+        
+        // Check authorship using nested author object (preferred) or legacy content_author
+        const authorUid = message?.author?.uid || message?.content_author;
+        const isAuthoredByCurrentUser = !!(message && rootState?.auth?.user && authorUid === rootState.auth.user.uid);
         
         console.log(`[Store] Message ${messageId} check:`, {
           exists: !!message,
@@ -1436,8 +1451,6 @@ export default {
 
     // Batch mark messages as read for thread view auto-marking
     async batchMarkAsRead({ commit, state, rootState }, messageIds) {
-      console.log('[Store] batchMarkAsRead called with:', messageIds.length, 'messages: ids ', messageIds);
-
       // Only proceed if in thread view mode
       if (!state.threadViewMode) {
         console.log('[Store] Not in thread view mode, skipping auto-mark');
@@ -1469,11 +1482,8 @@ export default {
       });
 
       if (eligibleIds.length === 0) {
-        console.log('[Store] No eligible messages to mark as read');
         return;
       }
-
-      console.log('[Store] Marking', eligibleIds.length, 'eligible messages as read');
 
       // Add to loading state immediately for UI feedback
       eligibleIds.forEach(id => commit('ADD_MARKING_AS_READ', id));

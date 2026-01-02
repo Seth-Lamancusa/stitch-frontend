@@ -9,7 +9,7 @@ export function usePermissions() {
 
   const user = computed(() => store.getters['auth/user'])
   const authReady = computed(() => store.getters['auth/authReady'])
-  const isAdmin = computed(() => store.getters['auth/isAdmin'])
+  const isAdmin = computed(() => store.getters['auth/isAdmin']) // Kept for logic internal to frontend if needed, but not for API authorization
 
   const can = (scopeName) => {
     if (!scopeName) return false
