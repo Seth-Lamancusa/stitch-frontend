@@ -8,7 +8,7 @@
     betaBannerTitle=""
   >
     <template #heroContent>
-      <div class="social-links">
+      <!-- <div class="social-links">
         <a href="https://x.com/stitchfyi" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="Twitter">
           <span class="social-icon">𝕏</span>
           <span class="social-label">Twitter</span>
@@ -34,8 +34,8 @@
         <!-- <a href="#" target="_blank" rel="noopener noreferrer" class="social-link" aria-label="Reddit">
           <span class="social-icon">🔴</span>
           <span class="social-label">Reddit</span>
-        </a> -->
-      </div>
+        </a>
+      </div> -->
     </template>
     <template #betaBannerText>
       <div class="banner-group">
@@ -58,7 +58,7 @@
               <span class="btn-title">My thread history</span>
             </div>
           </router-link>
-          <router-link to="/how?tab=api" class="banner-btn">
+          <router-link to="/how?tab=docs" class="banner-btn">
             <span class="btn-icon">📚</span>
             <div class="btn-text-content">
               <span class="btn-title">API docs</span>

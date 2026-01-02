@@ -10,7 +10,19 @@ const ALLOWED_TYPES = [
   'image/png',
   'image/gif',
   'image/webp',
-  'text/plain'
+  'text/plain',
+  'audio/mpeg',
+  'audio/mp3',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/ogg',
+  'audio/flac',
+  'audio/x-flac',
+  'audio/aac',
+  'audio/mp4',
+  'audio/webm',
+  'audio/m4a',
+  'audio/x-m4a'
 ]
 
 const getAuthHeaders = () => {
@@ -28,10 +40,11 @@ const validateFile = (file) => {
   // Check file type
   const fileType = file.type.toLowerCase()
   const isValidType = ALLOWED_TYPES.some(type => fileType === type) || 
-                      fileType.startsWith('image/')
+                      fileType.startsWith('image/') ||
+                      fileType.startsWith('audio/')
   
   if (!isValidType) {
-    throw new Error(`File type not supported. Please upload a PDF, text file (.txt), or image file (jpg, png, gif, webp)`)
+    throw new Error(`File type not supported. Please upload a PDF, text file (.txt), image, or audio file`)
   }
   
   return true

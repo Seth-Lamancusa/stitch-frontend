@@ -806,9 +806,7 @@ const loadInitialContent = async (targetMessageId) => {
     // Set single loading state
     isLoadingThread.value = true;
     hasInitiallyScrolled.value = false;
-    
-    console.log(`[ThreadView] 🔄 INITIAL LOAD starting for message ID: ${targetMessageId}`);
-    
+      
     // Only load if required messages for radius are not already in store
     const ensureRadiusInStore = async (centerId, radius) => {
       const visited = new Set();
@@ -861,7 +859,6 @@ const loadInitialContent = async (targetMessageId) => {
     
     // Auto-mark visible branch messages as read after initial load
     if (targetMessageId) {
-      console.log('[ThreadView] 🔄 INITIAL LOAD triggering auto-mark for visible branch');
       store.dispatch('messages/markVisibleBranchAsRead', targetMessageId);
     }
   }

@@ -448,8 +448,11 @@ const WebSocketService = {
     
     if (user) {
       // Check if message is from current user
-      isFromCurrentUser = messageData.content_author === user.uid || 
-                         messageData.author_user_tag === user.user_tag;
+      // Use nested author object (preferred) or legacy flat field
+      const authorUid = messageData.author?.uid || messageData.content_author;
+      const authorTag = messageData.author?.user_tag || messageData.author_user_tag;
+      
+      isFromCurrentUser = authorUid === user.uid || authorTag === user.user_tag;
       
       // Check if message is to current user (improved logic)
       isToCurrentUser = messageData.recipients && Array.isArray(messageData.recipients) &&
@@ -483,7 +486,10 @@ const WebSocketService = {
       }
       
       if (shouldNotify) {
-        const authorName = messageData.author_display_name || 
+        // Extract author name from nested object or flat fields
+        const authorName = messageData.author?.display_name || 
+                          messageData.author?.user_tag || 
+                          messageData.author_display_name || 
                           messageData.author_user_tag || 
                           'Someone';
         

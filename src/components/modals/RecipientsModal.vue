@@ -1211,7 +1211,6 @@ const toggleSpeedDialTier = async (user) => {
 // Reload speed dial from API
 const loadSpeedDial = async () => {
   try {
-    SpeedDialService.clearCache();
     speedDialUsers.value = await SpeedDialService.listSpeedDialUsers();
   } catch (e) {
     speedDialUsers.value = [];
