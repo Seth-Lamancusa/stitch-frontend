@@ -1,5 +1,3 @@
-<!-- THIS FILE IS NOT USED ANYMORE. IT MAY BE REINCORPORATED IN THE FUTURE -->
-
 <template>
   <div class="import-view">
     <div class="import-header">
@@ -8,7 +6,18 @@
       </button>
       <h2 class="import-title">Import Conversation</h2>
       
-      
+      <!-- Admin Mode Toggle (only visible to admins) -->
+      <div v-if="isAdmin" class="admin-mode-toggle">
+        <button 
+          @click="toggleAdminMode"
+          class="admin-toggle-button"
+          :class="{ 'active': adminMode }"
+          :disabled="isImporting"
+        >
+          <span class="toggle-icon">⚙️</span>
+          <span class="toggle-text">{{ adminMode ? 'Admin Mode' : 'Admin Mode' }}</span>
+        </button>
+      </div>
     </div>
 
     <!-- Main content area -->
@@ -27,13 +36,13 @@
               class="bot-selection-dropdown"
               :disabled="isImporting"
             >
-              <option value="">Choose from speed dial...</option>
+              <option value="">Choose an AI assistant...</option>
               <option 
-                v-for="user in speedDialUsers" 
-                :key="user.uid" 
-                :value="user"
+                v-for="bot in featuredBots" 
+                :key="bot.uid" 
+                :value="bot"
               >
-                {{ user.display_name }}
+                {{ bot.display_name }}
               </option>
             </select>
             <p v-if="!selectedBot" class="bot-selection-hint">
@@ -58,7 +67,14 @@
               >
                 Upload File
               </button>
-              
+              <button 
+                v-if="isAdmin"
+                @click="inputMethod = 'audio'" 
+                :class="{ active: inputMethod === 'audio' }"
+                class="input-method-tab"
+              >
+                Audio
+              </button>
             </div>
           
             <!-- Text Input -->
@@ -102,7 +118,7 @@ The format will be auto-detected once you paste your conversation."
             </div>
 
             <!-- Audio Upload (Admin only) -->
-            <div v-if="false" class="file-upload-container">
+            <div v-if="inputMethod === 'audio' && isAdmin" class="file-upload-container">
               <input 
                 type="file" 
                 ref="audioInput"
@@ -140,7 +156,9 @@ The format will be auto-detected once you paste your conversation."
                   {{ isImporting ? 'Transcribing...' : 'Transcribe Audio' }}
                 </button>
               </div>
-              
+              <p class="file-upload-hint">
+                Audio transcription is admin-only. After transcription, speakers will be mapped to users.
+              </p>
             </div>
           </div>
           
@@ -456,7 +474,7 @@ The format will be auto-detected once you paste your conversation."
 import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter } from 'vue-router';
-import SpeedDialService from '../../services/SpeedDialService.js';
+import FeaturedBotsService from '../../services/FeaturedBotsService.js';
 import ImportService from '../../services/ImportService';
 import RecipientsModal from '../../components/modals/RecipientsModal.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
@@ -536,14 +554,13 @@ const formatDetection = ref({ format: 'unknown', confidence: 0, hint: '' });
 
 // Computed properties from store
 const user = computed(() => store.getters['auth/user']);
-const speedDialUsers = ref([]);
+const featuredBots = ref([]);
 
-// Permissions composable
-import { usePermissions } from '../../composables/usePermissions.js';
-const { isAdmin, can } = usePermissions();
+// Computed property for admin status (scope-derived)
+const isAdmin = computed(() => store.getters['auth/isAdmin']);
 
 // Permission: require msg.write to enable import (route is admin-only)
-const hasImportPermissions = computed(() => can('msg.write'));
+const hasImportPermissions = computed(() => store.getters['auth/hasScope']('msg.write'));
 
 // Computed property for import button state
 const canImport = computed(() => {
@@ -585,7 +602,7 @@ const canAddBuilderMessage = computed(() => {
 const importPermissionMessage = computed(() => {
   if (!user.value) {
     return 'Log in with write permission to import';
-  } else if (can('msg.write')) {
+  } else if (store.getters['auth/hasScope']('msg.write')) {
     return 'Write permission is already granted';
   } else {
     return 'Write permission required to import';
@@ -1242,9 +1259,9 @@ watch([importText, selectedBot], () => {
 // Load featured bots on mount
 onMounted(async () => {
   try {
-    speedDialUsers.value = await SpeedDialService.listSpeedDialUsers();
+    featuredBots.value = await FeaturedBotsService.listFeaturedBots();
   } catch (e) {
-    speedDialUsers.value = [];
+    featuredBots.value = [];
   }
 });
 
