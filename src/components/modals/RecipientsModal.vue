@@ -2477,5 +2477,44 @@ onBeforeUnmount(() => {
   .add-button, .cancel-button {
     width: 100%;
   }
+
+  /* Speed Dial Grid for Mobile */
+  .speed-dial-list,
+  .expanded-speed-dial-list {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .speed-dial-card {
+    min-width: 0; /* Allow grid items to shrink */
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .speed-dial-info {
+    min-width: 0; /* Enable truncation in flex item */
+  }
+
+  .speed-dial-name {
+    font-size: clamp(11px, 3.5vw, 14px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+
+  .speed-dial-tag {
+    font-size: clamp(10px, 3vw, 12px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+
+  .expanded-speed-dial-card {
+    transform: none;
+    opacity: 1;
+  }
 }
 </style>
