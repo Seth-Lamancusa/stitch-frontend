@@ -92,7 +92,7 @@ export default {
   
   actions: {
     // Internal helper to consistently clear local auth state
-    _clearLocalAuth({ commit }) {
+    _clearLocalAuth({ commit, dispatch }) {
       try { WebSocketService.cleanup(); } catch (e) {}
       try { TokenManager.accessToken = null; } catch (e) {}
       // refresh token is now in httpOnly cookie; nothing to clear in JS
@@ -100,6 +100,8 @@ export default {
       commit('SET_USER', null);
       commit('SET_MANAGER_SNAPSHOT', null);
       commit('SET_AUTH_READY', true);
+      // Clear speed dial
+      try { dispatch('speedDial/clearSpeedDial', null, { root: true }); } catch (_) {}
     },
     async initAuth({ state, commit, dispatch }) {
       try {
@@ -182,6 +184,10 @@ export default {
         const userData = response && response.data ? response.data : {};
         try { console.log('[AUTH][validateExistingToken] /users/me success', { corrId, uid: userData && userData.uid }); } catch (_) {}
         commit('SET_USER', mapApiUserToAuthState(userData));
+        
+        // Fetch speed dial data "with" user data
+        try { dispatch('speedDial/fetchSpeedDial', null, { root: true }); } catch (_) {}
+
         // Derive principal ids from token claims: sub and act.sub
         try {
           const claims = TokenManager.decodeJwt(token) || {};

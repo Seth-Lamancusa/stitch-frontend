@@ -437,7 +437,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import MessageService from '../../services/MessageService.js';
-import SpeedDialService from '../../services/SpeedDialService.js';
+// SpeedDialService removed - using Vuex store
 
 const props = defineProps({
   isVisible: {
@@ -1123,9 +1123,9 @@ const toggleRecipientVisibility = (index) => {
 };
 
 // Speed dial state and methods
-const speedDialUsers = ref([]);
-const mainSpeedDialUsers = computed(() => speedDialUsers.value.filter(user => user?.tier === 1));
-const expandedSpeedDialUsers = computed(() => speedDialUsers.value.filter(user => user?.tier === 2));
+const speedDialUsers = computed(() => store.getters['speedDial/users']);
+const mainSpeedDialUsers = computed(() => store.getters['speedDial/mainUsers']);
+const expandedSpeedDialUsers = computed(() => store.getters['speedDial/expandedUsers']);
 const showExpandedSpeedDial = ref(false);
 const speedDialLoading = ref(new Set()); // Track loading state for individual users
 
@@ -1150,7 +1150,7 @@ const toggleSpeedDialUser = (user) => {
 
 // Check if a user is in speed dial
 const isInSpeedDial = (uid) => {
-  return speedDialUsers.value.some(u => u.uid === uid);
+  return store.getters['speedDial/isInSpeedDial'](uid);
 };
 
 // Add a user to speed dial
@@ -1159,7 +1159,7 @@ const addToSpeedDial = async (user) => {
   
   speedDialLoading.value.add(user.uid);
   try {
-    speedDialUsers.value = await SpeedDialService.addToSpeedDial(user.uid);
+    await store.dispatch('speedDial/addToSpeedDial', { uid: user.uid });
   } catch (err) {
     console.error('[RecipientsModal] Failed to add to speed dial:', err);
     store.commit('ui/SET_ERROR', { 
@@ -1177,7 +1177,7 @@ const removeFromSpeedDial = async (user) => {
   
   speedDialLoading.value.add(user.uid);
   try {
-    speedDialUsers.value = await SpeedDialService.removeFromSpeedDial(user.uid);
+    await store.dispatch('speedDial/removeFromSpeedDial', user.uid);
   } catch (err) {
     console.error('[RecipientsModal] Failed to remove from speed dial:', err);
     store.commit('ui/SET_ERROR', { 
@@ -1196,7 +1196,7 @@ const toggleSpeedDialTier = async (user) => {
   const newTier = user.tier === 1 ? 2 : 1;
   speedDialLoading.value.add(user.uid);
   try {
-    speedDialUsers.value = await SpeedDialService.updateTier(user.uid, newTier);
+    await store.dispatch('speedDial/updateTier', { uid: user.uid, tier: newTier });
   } catch (err) {
     console.error('[RecipientsModal] Failed to update tier:', err);
     store.commit('ui/SET_ERROR', { 
@@ -1205,15 +1205,6 @@ const toggleSpeedDialTier = async (user) => {
     });
   } finally {
     speedDialLoading.value.delete(user.uid);
-  }
-};
-
-// Reload speed dial from API
-const loadSpeedDial = async () => {
-  try {
-    speedDialUsers.value = await SpeedDialService.listSpeedDialUsers();
-  } catch (e) {
-    speedDialUsers.value = [];
   }
 };
 
@@ -1242,8 +1233,6 @@ const handleClickOutside = (event) => {
 // Lifecycle hooks
 onMounted(async () => {
   document.addEventListener('click', handleClickOutside);
-  // Load speed dial users
-  await loadSpeedDial();
 });
 
 onBeforeUnmount(() => {

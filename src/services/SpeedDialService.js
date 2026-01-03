@@ -12,42 +12,19 @@
  */
 import apiClient from './apiClient.js';
 
-// Cache for speed dial - refreshed on mutations
-let cachedSpeedDial = null;
-let fetchPromise = null;
-
 const SpeedDialService = {
   /**
    * Get current user's speed dial list
    * @returns {Promise<Array>} List of speed dial users
    */
   async listSpeedDialUsers() {
-    // Return cached if available
-    if (cachedSpeedDial !== null) {
-      return cachedSpeedDial;
+    try {
+      const resp = await apiClient.get('/users/me/speed-dial');
+      return resp.data?.users || [];
+    } catch (err) {
+      console.warn('[SpeedDialService] Failed to fetch speed dial:', err);
+      return [];
     }
-
-    // If fetch is in progress, wait for it
-    if (fetchPromise !== null) {
-      return fetchPromise;
-    }
-
-    // Fetch from API
-    fetchPromise = (async () => {
-      try {
-        const resp = await apiClient.get('/users/me/speed-dial');
-        cachedSpeedDial = resp.data?.users || [];
-        return cachedSpeedDial;
-      } catch (err) {
-        console.warn('[SpeedDialService] Failed to fetch speed dial:', err);
-        cachedSpeedDial = [];
-        return [];
-      } finally {
-        fetchPromise = null;
-      }
-    })();
-
-    return fetchPromise;
   },
 
   /**
@@ -64,8 +41,7 @@ const SpeedDialService = {
     }
     
     const resp = await apiClient.post('/users/me/speed-dial', payload);
-    cachedSpeedDial = resp.data?.users || [];
-    return cachedSpeedDial;
+    return resp.data?.users || [];
   },
 
   /**
@@ -75,8 +51,7 @@ const SpeedDialService = {
    */
   async removeFromSpeedDial(uid) {
     const resp = await apiClient.delete(`/users/me/speed-dial/${uid}`);
-    cachedSpeedDial = resp.data?.users || [];
-    return cachedSpeedDial;
+    return resp.data?.users || [];
   },
 
   /**
@@ -100,8 +75,7 @@ const SpeedDialService = {
    */
   async reorderSpeedDial(uids) {
     const resp = await apiClient.put('/users/me/speed-dial/reorder', { uids });
-    cachedSpeedDial = resp.data?.users || [];
-    return cachedSpeedDial;
+    return resp.data?.users || [];
   },
 
   /**
@@ -112,16 +86,7 @@ const SpeedDialService = {
    */
   async updateTier(uid, tier) {
     const resp = await apiClient.patch(`/users/me/speed-dial/${uid}/tier`, { tier });
-    cachedSpeedDial = resp.data?.users || [];
-    return cachedSpeedDial;
-  },
-
-  /**
-   * Clear the local cache (forces next call to fetch from API)
-   */
-  clearCache() {
-    cachedSpeedDial = null;
-    fetchPromise = null;
+    return resp.data?.users || [];
   },
 
   /**
@@ -140,22 +105,6 @@ const SpeedDialService = {
   async getExpandedTierUsers() {
     const users = await this.listSpeedDialUsers();
     return users.filter(u => u.tier === 2);
-  },
-
-  // ---- Backward compatibility aliases ----
-  // These provide drop-in replacement for FeaturedBotsService
-
-  /**
-   * @deprecated Use listSpeedDialUsers() instead
-   * Alias for backward compatibility with FeaturedBotsService
-   */
-  async listFeaturedBots() {
-    const users = await this.listSpeedDialUsers();
-    // Map to old format with 'advanced' field
-    return users.map(u => ({
-      ...u,
-      advanced: u.tier === 2
-    }));
   }
 };
 

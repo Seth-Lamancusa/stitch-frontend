@@ -720,13 +720,14 @@ export default {
     },
     
     // Send a reply to a message
-    async sendReply({ commit, dispatch, rootState, state }, { parentId, content, isPrivate, recipients, content_author, tags, files }) {
+    async sendReply({ commit, dispatch, rootState, state }, { parentId, content, isPrivate, recipients, content_author, tags, files, subject }) {
       try {
         console.log('[Messages Store] Starting sendReply', { 
           parentId, 
           isPrivate, 
           recipientsCount: recipients?.length || 0,
-          hasAuthor: !!content_author 
+          hasAuthor: !!content_author,
+          subject
         });
 
         // Use the current user if content_author is not provided
@@ -774,7 +775,8 @@ export default {
           processedRecipients, 
           effectiveAuthor,
           tags,
-          files
+          files,
+          subject
         );
         
         console.log('[Messages Store] sendReply response:', response?.data?.id ? {
@@ -851,7 +853,7 @@ export default {
     },
     
     // Delete a message
-    async deleteMessage({ commit, state, dispatch }, { messageId, deleteDescendants = false }) {
+    async deleteMessage({ commit, state, dispatch, getters }, { messageId, deleteDescendants = false }) {
       try {
         console.log(`Deleting message: ${messageId}, deleteDescendants: ${deleteDescendants}`);
         

@@ -25,16 +25,16 @@
             <div class="section-content">
               <ol>
                 <li>Communications are siloed. Slack doesn't talk to emails, which don't talk to text messages, which don't talk to ChatGPT or Cursor.</li>
-                <li>This makes it impossible to have a high-level understanding of a project or team's operations and objectives that is also data-driven and automatic.</li>
-                <li>This also makes it challenging to collaborate with and leverage AI in group or team contexts.</li>
+                <li>Orgs lose value every time an employee uses a chatbot or AI agent that is not integrated into the organization's workflow and data.</li>
+                <li>It's impossible today to collaborate with and leverage AI in group or team contexts.</li>
                 <li>At the same time, the prevalence of digital, text communications in our work and lives has only increased in frequency, making the possible sources of data begetting analysis wealthy with opportunity.</li>
               </ol>
               <h3>The Solution: a highly functional, unopinionated, API-accessible communications layer</h3>
-              <h4>Stitch</h4>
               <ol>
-                <li>Stitch is designed to be open. It is a thin, lightweight application that gives the user direct, programmatic access to most of its functionality</li>
-                <li>This makes data retrieval, embedding, and communication with AI easy and in-context</li>
-                <li>It emphasizes linguistic communications, between humans and chatbots, as valuable training data and context</li>
+                <li>Stitch is designed to be open. It is a thin, lightweight application that gives the user direct, programmatic access to its functionality</li>
+                <li>This makes it easy to automate data processing and retrieval tasks in an organizational context</li>
+                <li>Stitch bots belong to your organization, not the platform, making behavior auditability and resource access control easy</li>
+                <li>We emphasize communications, between humans and chatbots, as valuable training data and context</li>
               </ol>
             </div>
           </div>
@@ -47,14 +47,14 @@
               <ol>
                 <li>Stitch is designed for a future where humans and AI agents collaborate over long time horizons on real work</li>
                 <li>In general, the future of the AI industry is distributed, open, accessible, and diverse with respect to model and application choice</li>
-                <li>AI coding agents will become sufficiently autonomous in the relatively near future to operate on multi-day, then week time horizons</li>
-                <li>The field of AI applications will also continue to become increasingly multimodal and flexible in general.</li>
-                <li>We believe the field of AI researchers will continue to innovate, with a gradual turn away from LLMs alone and back toward RL, recurrent, or even symbolic systems, and toward multimodal ones.</li>
+                <li>AI coding agents will become sufficiently autonomous in the future to operate on multi-day, then multi-week time horizons</li>
+                <li>The field of AI applications will also continue to become increasingly diverse, multimodal, and flexible</li>
+                <li>We believe the field of AI researchers will continue to innovate, with a gradual turn away from LLMs alone and back toward RL, recurrent, or even symbolic systems, and toward natively multimodal ones.</li>
               </ol>
               <h3>Felt</h3>
               <ol>
                 <li>Your data is downloadable and accessible first, and size limits on multimodel attachment data are modern</li>
-                <li>We want your inbox to feel more like your mailbox than your feed (people you know, work with, etc), while still allowing public profile search and discovery</li>
+                <li>We want your inbox to feel more like your mailbox than your feed (people you know, work with, etc), while still enabling public search, sharing, and discovery</li>
                 <li>We want working with diverse, open source, multimodal models and datasets to be easy</li>
               </ol>
             </div>

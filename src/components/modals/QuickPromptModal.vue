@@ -1,7 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import { useStore } from 'vuex';
-import SpeedDialService from '../../services/SpeedDialService.js';
 import MessageService from '../../services/MessageService.js';
 
 const store = useStore();
@@ -10,10 +9,10 @@ const store = useStore();
 const isOpen = computed(() => store.getters['navigation/speedDialModalVisible']);
 const targetMessageId = computed(() => store.getters['navigation/speedDialTargetMessageId']);
 
-// Speed dial users
-const speedDialUsers = ref([]);
-const mainUsers = computed(() => speedDialUsers.value.filter(user => user.tier === 1));
-const expandedUsers = computed(() => speedDialUsers.value.filter(user => user.tier === 2));
+// Speed dial users from store
+const speedDialUsers = computed(() => store.getters['speedDial/users']);
+const mainUsers = computed(() => store.getters['speedDial/mainUsers']);
+const expandedUsers = computed(() => store.getters['speedDial/expandedUsers']);
 const showExpanded = ref(false);
 
 // Selection
@@ -34,18 +33,9 @@ const resetState = () => {
   addToAncestors.value = true;
 };
 
-const loadSpeedDial = async () => {
-  try {
-    speedDialUsers.value = await SpeedDialService.listSpeedDialUsers();
-  } catch (_e) {
-    speedDialUsers.value = [];
-  }
-};
-
 watch(isOpen, (open) => {
   if (open) {
     resetState();
-    loadSpeedDial();
   } else {
     resetState();
   }
@@ -54,7 +44,6 @@ watch(isOpen, (open) => {
 onMounted(() => {
   if (isOpen.value) {
     resetState();
-    loadSpeedDial();
   }
 });
 

@@ -11,10 +11,11 @@ const getAuthHeaders = () => {
 
 export default {
   // Send a message or reply (supports optional tags)
-  async sendReply(parentId, content, isPrivate = false, recipients = [], content_author = null, tags = null, files = null) {
+  async sendReply(parentId, content, isPrivate = false, recipients = [], content_author = null, tags = null, files = null, subject = null) {
     const headers = getAuthHeaders()
 
     const messageData = { content, public: !isPrivate, recipients }
+    if (subject) messageData.subject = subject
     if (parentId) messageData.parent_id = parentId
     if (content_author) messageData.content_author = content_author
     if (Array.isArray(tags)) messageData.tags = tags
@@ -25,6 +26,7 @@ export default {
       // Note: avoid logging full content to keep logs concise
       console.log('[MessageService] sendReply payload', {
         parent_id: messageData.parent_id || null,
+        subject: subject || null,
         content_length: content ? content.length : 0,
         recipients_count: Array.isArray(recipients) ? recipients.length : 0,
         content_author: content_author || null,
