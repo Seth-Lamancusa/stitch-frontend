@@ -50,7 +50,7 @@ async function processCodeBlocks(content) {
   const highlightJs = await getHighlightJs();
   
   // Find all code blocks: ```language\ncode\n```
-  return content.replace(/```([a-z]*)\n([\s\S]*?)\n```/gm, (match, language, code) => {
+  return content.replace(/```([^\n]*)\n([\s\S]*?)\n```/gm, (match, language, code) => {
     try {
       let highlighted;
       

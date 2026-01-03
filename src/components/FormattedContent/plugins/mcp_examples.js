@@ -7,6 +7,7 @@
  * consecutive blank line runs (>= 2).
  */
 import { createFormatter } from './base';
+import { protectCodeBlocks, restoreProtectedContent } from '../helpers/protection';
 
 function normalizeSmartQuotes(input) {
   if (!input) return input;
@@ -35,14 +36,20 @@ export const mcpExamplesFormatter = createFormatter(
   async (content, context) => {
     if (!content) return '';
 
+    // Protect code blocks to avoid processing their content
+    let processedContent = protectCodeBlocks(content, context);
+
     const { protectedZones } = context;
-    const lines = content.split('\n');
+    const lines = processedContent.split('\n');
     const outputLines = [];
 
     function pushSeparator() {
       const placeholder = `STITCH_PROTECTED_SEPARATOR_${Math.random().toString(36).slice(2)}`;
       protectedZones.set(placeholder, '<div class="fc-separator">…</div>');
+      // Surround with blank lines to ensure it breaks out of lists/blocks
+      outputLines.push('');
       outputLines.push(placeholder);
+      outputLines.push('');
     }
 
     let i = 0;
@@ -111,7 +118,7 @@ export const mcpExamplesFormatter = createFormatter(
       i += 1;
     }
 
-    return outputLines.join('\n');
+    return restoreProtectedContent(outputLines.join('\n'), context);
   }
 );
 

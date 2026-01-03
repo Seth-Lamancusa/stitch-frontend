@@ -135,94 +135,107 @@
       
       <!-- Text area - hidden in add recipients mode -->
       <div v-if="!isAddRecipientsMode" class="reply-sheet__textarea-container">
-        <div v-if="showVerifyCTA" class="verify-cta" role="button" tabindex="0" @click.stop.prevent="handleVerifyClick" aria-label="Verify your email to get started">
-          <span class="verify-cta__text">Verify your email to get started!</span>
-        </div>
-        <div v-else class="textarea-wrapper" ref="textareaWrapper">
-          <div
-            class="reply-overlay"
-            aria-hidden="true"
-            ref="highlightOverlay"
-            v-html="overlayHtml"
-          ></div>
-          <textarea 
-            v-model="content" 
-            :placeholder="placeholderText" 
-            class="reply-sheet__textarea"
-            ref="replyTextarea"
-            @keydown="handleTextareaKeyDown"
-            @keyup="handleTextareaKeyUp"
-            @click="handleTextareaClick"
-            @focus="handleTextareaFocus"
-            @blur="handleTextareaBlur"
-            @input="handleTextareaInput"
-            @scroll="syncOverlayScroll"
-            :disabled="!canInteract"
-            :class="{ 'disabled': !canInteract }"
-            aria-label="Message content"
-            rows="1"
-          ></textarea>
-          <div
-            v-if="mentionDropdown.visible"
-            class="mention-dropdown"
-            :style="mentionDropdownStyle"
-            ref="mentionDropdownElement"
-          >
-            <div v-if="mentionDropdown.loading" class="mention-dropdown__status">
-              Searching…
-            </div>
+        
+        <!-- Subject Input -->
+        <input 
+          v-if="!showVerifyCTA && showSubject"
+          ref="subjectInput"
+          v-model="subject" 
+          placeholder="Subject" 
+          class="reply-sheet__subject-input"
+          aria-label="Message subject"
+        />
+
+        <div class="reply-input-row">
+          <div v-if="showVerifyCTA" class="verify-cta" role="button" tabindex="0" @click.stop.prevent="handleVerifyClick" aria-label="Verify your email to get started">
+            <span class="verify-cta__text">Verify your email to get started!</span>
+          </div>
+          <div v-else class="textarea-wrapper" ref="textareaWrapper">
             <div
-              v-else-if="mentionDropdown.results.length === 0"
-              class="mention-dropdown__status"
+              class="reply-overlay"
+              aria-hidden="true"
+              ref="highlightOverlay"
+              v-html="overlayHtml"
+            ></div>
+            <textarea 
+              v-model="content" 
+              :placeholder="placeholderText" 
+              class="reply-sheet__textarea"
+              ref="replyTextarea"
+              @keydown="handleTextareaKeyDown"
+              @keyup="handleTextareaKeyUp"
+              @click="handleTextareaClick"
+              @focus="handleTextareaFocus"
+              @blur="handleTextareaBlur"
+              @input="handleTextareaInput"
+              @scroll="syncOverlayScroll"
+              :disabled="!canInteract"
+              :class="{ 'disabled': !canInteract }"
+              aria-label="Message content"
+              rows="1"
+            ></textarea>
+            <div
+              v-if="mentionDropdown.visible"
+              class="mention-dropdown"
+              :style="mentionDropdownStyle"
+              ref="mentionDropdownElement"
             >
-              {{ mentionDropdown.query.length > 0 ? 'No matches' : 'Type to search' }}
-            </div>
-            <ul v-else class="mention-dropdown__list">
-              <li
-                v-for="(result, index) in mentionDropdown.results"
-                :key="result.uid"
-                class="mention-dropdown__item"
-                :class="{ 'is-active': index === mentionDropdown.highlightedIndex }"
-                @mousedown.prevent="selectMentionResult(index)"
+              <div v-if="mentionDropdown.loading" class="mention-dropdown__status">
+                Searching…
+              </div>
+              <div
+                v-else-if="mentionDropdown.results.length === 0"
+                class="mention-dropdown__status"
               >
-                <span class="mention-dropdown__name">
-                  {{ result.display_name || result.user_tag }}
-                </span>
-                <span class="mention-dropdown__tag">@{{ result.user_tag }}</span>
-              </li>
-            </ul>
+                {{ mentionDropdown.query.length > 0 ? 'No matches' : 'Type to search' }}
+              </div>
+              <ul v-else class="mention-dropdown__list">
+                <li
+                  v-for="(result, index) in mentionDropdown.results"
+                  :key="result.uid"
+                  class="mention-dropdown__item"
+                  :class="{ 'is-active': index === mentionDropdown.highlightedIndex }"
+                  @mousedown.prevent="selectMentionResult(index)"
+                >
+                  <span class="mention-dropdown__name">
+                    {{ result.display_name || result.user_tag }}
+                  </span>
+                  <span class="mention-dropdown__tag">@{{ result.user_tag }}</span>
+                </li>
+              </ul>
+            </div>
+            
+            <!-- Expand/Collapse toggle arrow -->
+            <button 
+              v-if="hasMultipleLines"
+              class="textarea-expand-toggle"
+              @click.stop="toggleTextareaExpansion"
+              :class="{ 'expanded': isTextareaExpanded }"
+              :aria-label="isTextareaExpanded ? 'Collapse to single line' : 'Expand to full height'"
+              title="Toggle textarea height"
+            >
+              <span class="expand-arrow">↕</span>
+            </button>
           </div>
           
-          <!-- Expand/Collapse toggle arrow -->
+          <!-- Send button -->
           <button 
-            v-if="hasMultipleLines"
-            class="textarea-expand-toggle"
-            @click.stop="toggleTextareaExpansion"
-            :class="{ 'expanded': isTextareaExpanded }"
-            :aria-label="isTextareaExpanded ? 'Collapse to single line' : 'Expand to full height'"
-            title="Toggle textarea height"
+            v-if="!showVerifyCTA"
+            class="textarea-send-button"
+            :class="{ 
+              'textarea-send-button--disabled': !canSendReply,
+              'textarea-send-button--loading': isSending,
+              'textarea-send-button--success': showSendSuccess
+            }"
+            @click.stop="sendReply" 
+            :disabled="!canSendReply"
+            :aria-label="isSending ? 'Sending message' : 'Send message'"
           >
-            <span class="expand-arrow">↕</span>
+            <span v-if="showSendSuccess" class="send-button__icon">✓</span>
+            <span v-else-if="isSending" class="send-button__spinner" aria-hidden="true"></span>
+            <span v-else class="send-button__arrow">→</span>
           </button>
         </div>
-        
-        <!-- Send button -->
-        <button 
-          v-if="!showVerifyCTA"
-          class="textarea-send-button"
-          :class="{ 
-            'textarea-send-button--disabled': !canSendReply,
-            'textarea-send-button--loading': isSending,
-            'textarea-send-button--success': showSendSuccess
-          }"
-          @click.stop="sendReply" 
-          :disabled="!canSendReply"
-          :aria-label="isSending ? 'Sending message' : 'Send message'"
-        >
-          <span v-if="showSendSuccess" class="send-button__icon">✓</span>
-          <span v-else-if="isSending" class="send-button__spinner" aria-hidden="true"></span>
-          <span v-else class="send-button__arrow">→</span>
-        </button>
       </div>
       
       <!-- Add recipients info - shown only in add recipients mode -->
@@ -318,10 +331,13 @@ const MAX_DRAFT_TAGS = 20;
 
 // Refs
 const replyTextarea = ref(null);
+const subjectInput = ref(null);
 const replySheet = ref(null);
 const fileInput = ref(null);
 const textareaWrapper = ref(null);
 const content = ref('');
+const subject = ref('');
+const showSubject = ref(false); // Controls visibility of subject field
 const isSending = ref(false);
 const showSearchResults = ref(false);
 const highlightOverlay = ref(null);
@@ -536,9 +552,11 @@ const ensureReplyingActive = () => {
 
 // Bottom sheet methods
 const focusTextarea = () => {
-  // Focus textarea after animation
+  // Focus subject if available, otherwise textarea
   setTimeout(() => {
-    if (replyTextarea.value) {
+    if (showSubject.value && subjectInput.value) {
+      subjectInput.value.focus();
+    } else if (replyTextarea.value) {
       replyTextarea.value.focus();
     }
   }, 350);
@@ -1424,6 +1442,7 @@ const sendReply = async () => {
     const newMessage = await store.dispatch('messages/sendReply', {
       parentId: props.targetId, // Will be null for new threads
       content: content.value,
+      subject: subject.value,
       isPrivate: !isPublic.value,
       recipients: recipients.value,
       // Ensure the author is explicitly set to the user's UID (not email)
@@ -1435,6 +1454,7 @@ const sendReply = async () => {
     
     // Clear the input and files
     content.value = '';
+    subject.value = '';
     attachments.value = [];
     setReplyTagsList([]);
     suppressedTags.value = new Set();
@@ -1733,6 +1753,8 @@ const handleClickOutsideSearch = (event) => {
 // Watchers
 watch(() => isReplying.value || props.isNewThread, (shouldShow) => {
   if (shouldShow) {
+    // Reset showSubject based on mode
+    showSubject.value = props.isNewThread;
     focusTextarea();
   } else {
     hideBottomSheet();
@@ -1761,12 +1783,15 @@ defineExpose({
   content,
   isSending,
   focus: () => {
-    if (replyTextarea.value) {
+    if (showSubject.value && subjectInput.value) {
+      subjectInput.value.focus();
+    } else if (replyTextarea.value) {
       replyTextarea.value.focus();
     }
   },
   clear: () => {
     content.value = '';
+    subject.value = '';
     isTextareaExpanded.value = false;
     hasMultipleLines.value = false;
     userHasManuallyToggled.value = false;
@@ -2010,8 +2035,36 @@ defineExpose({
   min-height: 0;
   background-color: #2A2A2A;
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.reply-input-row {
+  display: flex;
   align-items: flex-end;
   gap: 8px;
+}
+
+.reply-sheet__subject-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  padding: 8px 4px;
+  color: var(--color-text);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.reply-sheet__subject-input:focus {
+  outline: none;
+  border-bottom-color: var(--color-primary);
+}
+
+.reply-sheet__subject-input::placeholder {
+  color: var(--color-text-secondary);
+  font-weight: 400;
 }
 
 /* Verify CTA (shown when user lacks write perms due to unverified email) */

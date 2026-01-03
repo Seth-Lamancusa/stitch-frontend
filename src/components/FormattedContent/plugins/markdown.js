@@ -4,7 +4,7 @@
  * Formats content with markdown-it.
  */
 import { createFormatter } from './base';
-import { protectCodeBlocks, protectInlineCode, protectLatexBlocks, protectInlineLatex, restoreProtectedContent } from '../helpers/protection';
+import { protectLatexBlocks, protectInlineLatex, restoreProtectedContent } from '../helpers/protection';
 
 // Will need to be installed: npm install markdown-it
 let markdownIt = null;
@@ -56,11 +56,9 @@ export const markdownFormatter = createFormatter(
     if (!content) return '';
     
     try {
-      // First, protect code blocks and LaTeX expressions
-      // so markdown doesn't process them
+      // First, protect LaTeX expressions
+      // so markdown doesn't process them (code blocks are handled natively by markdown-it)
       let processedContent = content;
-      processedContent = protectCodeBlocks(processedContent, context);
-      processedContent = protectInlineCode(processedContent, context);
       processedContent = protectLatexBlocks(processedContent, context);
       processedContent = protectInlineLatex(processedContent, context);
       

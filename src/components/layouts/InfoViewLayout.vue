@@ -10,6 +10,7 @@
         </div>
         <ul class="nav-links" :class="{ active: isMenuOpen }">
           <li><router-link to="/home" :class="{ active: currentRoute === '/home' }">Home</router-link></li>
+          <!-- <li><router-link to="/about" :class="{ active: currentRoute === '/about' }">About</router-link></li> -->
           <!-- <li><router-link to="/architecture" :class="{ active: currentRoute === '/architecture' }">Architecture</router-link></li> -->
           <!-- <li><router-link to="/features" :class="{ active: currentRoute === '/features' }">Features</router-link></li> -->
           <li><router-link to="/how" :class="{ active: currentRoute.startsWith('/how') }">How it works</router-link></li>

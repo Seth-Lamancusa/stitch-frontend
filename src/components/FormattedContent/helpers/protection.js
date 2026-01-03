@@ -27,7 +27,8 @@ export function protectCodeBlocks(content, context) {
   const { protectedZones } = context;
   
   // Match code blocks with language specification: ```language\ncode\n```
-  const codeBlockRegex = /```([a-z]*)\n([\s\S]*?)\n```/gm;
+  // Relaxed regex to allow any characters in language string (except newline)
+  const codeBlockRegex = /```([^\n]*)\n([\s\S]*?)\n```/gm;
   
   // Replace code blocks with placeholders
   return content.replace(codeBlockRegex, (match, language, code) => {

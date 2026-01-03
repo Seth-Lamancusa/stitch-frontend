@@ -249,7 +249,6 @@ import { useStore } from 'vuex';
 import { usePermissions } from '../../composables/usePermissions';
 import ImportService from '../../services/ImportService';
 import TranscriptionService from '../../services/TranscriptionService';
-import SpeedDialService from '../../services/SpeedDialService';
 import RecipientsModal from '../../components/modals/RecipientsModal.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
 
@@ -296,7 +295,7 @@ const importError = ref('');
 const isPublic = ref(false);
 const recipients = ref([]);
 const showRecipients = ref(false);
-const speedDialUsers = ref([]);
+const speedDialUsers = computed(() => store.getters['speedDial/users']);
 const selectedBot = ref(null);
 
 // Cursor Mode State
@@ -313,11 +312,7 @@ const builtMessages = ref([]);
 const speakerRegistry = ref({}); // speakerId -> user object
 
 onMounted(async () => {
-  try {
-    speedDialUsers.value = await SpeedDialService.listSpeedDialUsers();
-  } catch (e) {
-    console.error('Failed to load speed dial', e);
-  }
+  // Speed dial is loaded globally
 });
 
 // Watchers

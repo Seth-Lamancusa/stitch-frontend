@@ -149,12 +149,13 @@
       
       <!-- Message body -->
       <div class="message-body">
+        <div v-if="message.subject" class="message-subject">{{ message.subject }}</div>
         <formatted-content 
           v-if="displayMode === 'full'" 
           :content="message.content" 
           :options="formattedContentOptions"
         />
-        <div v-else class="plaintext-content">{{ truncatedContent }}</div>
+        <div v-else-if="!message.subject" class="plaintext-content">{{ truncatedContent }}</div>
       </div>
       
       <!-- Files -->
@@ -2227,6 +2228,14 @@ export default {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
   white-space: nowrap;
+}
+
+.message-subject {
+  font-weight: 700;
+  font-size: 1.1em;
+  margin-bottom: 8px;
+  color: var(--color-text);
+  line-height: 1.3;
 }
 
 /* Hidden by default; shown on mobile under username/buttons */
