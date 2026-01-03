@@ -2099,9 +2099,8 @@ onBeforeUnmount(() => {
 }
 
 .speed-dial-list {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 8px;
 }
 
@@ -2130,7 +2129,8 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-sm);
   transition: all 0.2s ease;
   background-color: var(--color-surface);
-  min-width: 140px;
+  width: 100%;
+  min-width: 0;
 }
 
 .speed-dial-card:hover {
@@ -2149,17 +2149,26 @@ onBeforeUnmount(() => {
   gap: 2px;
   flex: 1;
   cursor: pointer;
+  min-width: 0;
 }
 
 .speed-dial-name {
   font-size: var(--font-size-sm);
   font-weight: 500;
   color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
 }
 
 .speed-dial-tag {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
 }
 
 .speed-dial-controls {
@@ -2316,9 +2325,8 @@ onBeforeUnmount(() => {
 .expanded-speed-dial-list {
   margin-top: 6px;
   padding-left: 0;
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 8px;
 }
 

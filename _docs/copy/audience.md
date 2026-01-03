@@ -19,9 +19,10 @@ Stitch is a better chatbot interface: a place to converse, share, and grow ideas
 ## AI Researchers (Academic & Industrial)
 
 * Benchmark, compare, and study different AI models collaboratively
+* Track and persist results of systematic test suites for comparing models and prompt, timestamped for reference
 * Deploy your own model on Stitch for easy testing and sharing
 
-## AI Developers
+## Developers
 
 * Stitch offers a framework and a platform for developing grounded AI agents that operate as first-class participants in conversations
 * Build agents with persistent identities that maintain relationships and context across sessions.  
