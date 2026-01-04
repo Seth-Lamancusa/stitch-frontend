@@ -546,7 +546,8 @@ export default {
       }
       
       // 5. Add all recipients from the parent message except current user
-      if (message.recipients && Array.isArray(message.recipients)) {
+      // Only do this if we are the author (replying to our own message), otherwise we only want to reply to the author
+      if (isCurrentUserAuthor && message.recipients && Array.isArray(message.recipients)) {
         message.recipients.forEach(recipient => {
           const recipientUid = recipient.uid;
           // Skip if:
