@@ -15,6 +15,7 @@
         'reply-sheet--visible': isReplying || isNewThread,
         'reply-sheet--closing': isReplyBoxClosing
       }"
+      :style="replySheetStyle"
       ref="replySheet"
       role="dialog"
       aria-labelledby="reply-header"
@@ -351,6 +352,7 @@ const uploading = ref(false);
 
 // Bottom sheet state
 const isKeyboardVisible = ref(false);
+const keyboardHeight = ref(0); // Track actual keyboard height for proper positioning
 const showSendSuccess = ref(false);
 const isReplyBoxClosing = ref(false);
 
@@ -479,6 +481,20 @@ const mentionDropdownStyle = computed(() => {
     style.top = `${mentionDropdown.position.top || 0}px`;
   }
   return style;
+});
+
+// Compute dynamic style for reply sheet to handle keyboard offset
+const replySheetStyle = computed(() => {
+  // When keyboard is visible, translate the sheet up by the keyboard height
+  // This ensures the textarea and send button remain visible and clickable
+  if (isKeyboardVisible.value && keyboardHeight.value > 0) {
+    return {
+      '--keyboard-offset': `${keyboardHeight.value}px`
+    };
+  }
+  return {
+    '--keyboard-offset': '0px'
+  };
 });
 
 // Generate reply header text
@@ -697,15 +713,20 @@ const scheduleMentionSearch = (query) => {
 const handleTextareaFocus = () => {
   ensureReplyingActive();
   
-  // Detect mobile keyboard
-  if (window.innerWidth <= 768) {
-    // Use a timeout to detect keyboard appearance
+  // Detect mobile keyboard on focus
+  // The main detection is handled by the visualViewport resize listener,
+  // but we also check here as a fallback for initial focus
+  if (window.innerWidth <= 768 && window.visualViewport) {
+    // Use a timeout to allow keyboard to fully appear
     setTimeout(() => {
-      const viewportHeight = window.visualViewport?.height || window.innerHeight;
-      const initialHeight = window.screen.height;
+      const currentHeight = window.visualViewport.height;
+      const fullHeight = window.innerHeight;
+      const heightDiff = fullHeight - currentHeight;
       
-      if (initialHeight - viewportHeight > 150) {
+      if (heightDiff > 150) {
         isKeyboardVisible.value = true;
+        // Set keyboard height with a small buffer
+        keyboardHeight.value = Math.max(0, heightDiff + 10);
       }
     }, 300);
   }
@@ -721,9 +742,10 @@ const handleTextareaBlur = () => {
       closeMentionDropdown();
     }
   }, 150);
-  // Reset keyboard state
+  // Reset keyboard state - delay to allow for clicks on send button etc.
   setTimeout(() => {
     isKeyboardVisible.value = false;
+    keyboardHeight.value = 0;
   }, 100);
 };
 
@@ -1763,18 +1785,44 @@ watch(() => isReplying.value || props.isNewThread, (shouldShow) => {
 
 // Handle viewport changes for keyboard detection
 if (typeof window !== 'undefined' && window.visualViewport) {
+  // Store initial viewport height to detect keyboard
+  let initialViewportHeight = window.visualViewport.height;
+  
   const handleViewportChange = () => {
     if (window.innerWidth <= 768) {
-      const heightDiff = window.screen.height - window.visualViewport.height;
-      isKeyboardVisible.value = heightDiff > 150;
+      // Calculate the difference between initial viewport and current visual viewport
+      // This gives us the keyboard height more accurately than using screen.height
+      const currentHeight = window.visualViewport.height;
+      const heightDiff = initialViewportHeight - currentHeight;
+      
+      // Keyboard is visible if the viewport shrunk by more than 150px
+      const keyboardIsVisible = heightDiff > 150;
+      isKeyboardVisible.value = keyboardIsVisible;
+      
+      // Store the actual keyboard height for positioning
+      // Add a small buffer (10px) to ensure content isn't cut off
+      keyboardHeight.value = keyboardIsVisible ? Math.max(0, heightDiff + 10) : 0;
+    } else {
+      isKeyboardVisible.value = false;
+      keyboardHeight.value = 0;
+    }
+  };
+  
+  // Update initial height on orientation change or significant resize
+  const handleOrientationChange = () => {
+    // Only update initial height when keyboard is not visible
+    if (!isKeyboardVisible.value) {
+      initialViewportHeight = window.visualViewport.height;
     }
   };
   
   window.visualViewport.addEventListener('resize', handleViewportChange);
+  window.addEventListener('orientationchange', handleOrientationChange);
   
   // Cleanup
   onBeforeUnmount(() => {
     window.visualViewport.removeEventListener('resize', handleViewportChange);
+    window.removeEventListener('orientationchange', handleOrientationChange);
   });
 }
 
@@ -1846,7 +1894,8 @@ defineExpose({
 }
 
 .reply-sheet--raised {
-  transform: translateY(-8px);
+  /* Use the dynamically calculated keyboard offset to move the sheet above the keyboard */
+  transform: translateY(calc(-1 * var(--keyboard-offset, 0px)));
 }
 
 .reply-sheet--closing {
@@ -2529,7 +2578,8 @@ defineExpose({
   }
   
   .reply-sheet--raised {
-    transform: translateX(-50%) translateY(-8px);
+    /* Use the dynamically calculated keyboard offset on desktop as well */
+    transform: translateX(-50%) translateY(calc(-1 * var(--keyboard-offset, 0px)));
   }
   
   /* Hide mobile touch handle on desktop */
