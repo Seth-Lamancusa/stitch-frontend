@@ -600,6 +600,32 @@ const WebSocketService = {
             this.log(`Connection established for user ${this.userId}`);
             return;
           }
+          
+          // Handle new notification payload structure
+          if (data?.type === 'notification') {
+            try {
+              const payload = data.data || {};
+              const messages = payload.messages || [];
+              
+              if (messages.length > 0) {
+                this.log(`Received notification type=${payload.type} with ${messages.length} messages`);
+                
+                if (this.messageListeners && this.messageListeners.size > 0) {
+                  for (const cb of Array.from(this.messageListeners)) {
+                    // Dispatch each message individually to maintain compatibility
+                    for (const msg of messages) {
+                      try { cb(msg); } catch (e) { this.error('Error in message listener:', e); }
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              this.error('Error handling notification payload:', e);
+            }
+            return;
+          }
+
+          // Legacy format support
           if (data?.type === 'new_message') {
             try {
               if (this.messageListeners && this.messageListeners.size > 0) {

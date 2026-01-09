@@ -1451,7 +1451,7 @@ const sendReply = async () => {
     
     // DRAFT REPLY FLOW: If configured, bulk add draft recipients to ancestors of parent first (notify only for reply later)
     if (props.targetId && recipients.value.length > 0 && replyAddToAncestors.value) {
-      await MessageService.addRecipientsToMessage(props.targetId, recipients.value, true, false);
+      await MessageService.addRecipientsToMessage(props.targetId, recipients.value, replyAddToAncestors.value, false);
       // Refresh origin and loaded ancestors (no notify path)
       await store.dispatch('messages/refreshLoadedAncestors', {
         messageId: props.targetId,
