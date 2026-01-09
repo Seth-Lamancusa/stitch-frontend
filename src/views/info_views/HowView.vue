@@ -249,8 +249,7 @@
     "uid": "string",
     "user_tag": "string",
     "display_name": "string",
-    "is_bot": "boolean",
-    "modalities": "object | null"
+    "is_bot": "boolean"
   },
   "recipients": [{                  // List of recipient objects
     "uid": "string",

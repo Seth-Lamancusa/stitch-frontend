@@ -59,14 +59,7 @@ export function getAuthorUid(message) {
  */
 export function isAuthorBot(message) {
   if (!message) return false;
-  
-  // New nested format
-  if (message.author?.is_bot !== undefined) {
-    return !!message.author.is_bot;
-  }
-  
-  // Fallback to legacy fields
-  return !!message.author_is_bot;
+  return !!message.author?.is_bot;
 }
 
 /**

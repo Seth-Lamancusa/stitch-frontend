@@ -789,8 +789,7 @@ export default {
     
     // Get bot status
     const isBot = computed(() => {
-      if (props.message.author?.is_bot !== undefined) return !!props.message.author.is_bot;
-      return !!props.message.author_is_bot;
+      return !!props.message.author?.is_bot;
     });
 
     // Show participants label only for inbox list previews
@@ -839,19 +838,6 @@ export default {
       }
 
       return items;
-    });
-    
-    const showAuthorCapabilities = computed(() => {
-      const msg = props.message || {};
-      
-      // Check bot status via robust accessor
-      if (!isBot.value) return false;
-      
-      // Check nested modalities
-      if (msg.author?.modalities) return true;
-      
-      // Legacy check
-      return !!(msg.author_input_modalities || msg.author_output_modalities || msg.author_foundation_provider);
     });
     
     // Check if the current user is the author of the message
@@ -1698,7 +1684,6 @@ export default {
       authorUserTag,
       showParticipantsLabel,
       participantItems,
-      showAuthorCapabilities,
       openTagsModal,
       isUserAuthorOfContent,
       handleSiblingNavigation,
