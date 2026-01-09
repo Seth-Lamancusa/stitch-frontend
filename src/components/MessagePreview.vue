@@ -235,8 +235,7 @@ const authorUid = computed(() => {
 });
 
 const isBot = computed(() => {
-  if (props.message.author?.is_bot !== undefined) return !!props.message.author.is_bot;
-  return !!props.message.author_is_bot;
+  return !!props.message.author?.is_bot;
 });
 
 const isCurrentUser = computed(() => {
@@ -326,18 +325,6 @@ const participantItems = computed(() => {
   }
 
   return items;
-});
-
-const showAuthorCapabilities = computed(() => {
-  const msg = props.message || {};
-  
-  if (!isBot.value) return false;
-  
-  // Check nested modalities
-  if (msg.author?.modalities) return true;
-  
-  // Legacy check
-  return !!(msg.author_input_modalities || msg.author_output_modalities || msg.author_foundation_provider);
 });
 
 const stripMarkdown = (text) => {
