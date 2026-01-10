@@ -24,6 +24,32 @@
           </svg>
           Thread view
         </button>
+        
+        <!-- Tree view toggle button -->
+        <button
+          @click="toggleLayoutMode"
+          class="tree-mode-button"
+          :class="{ 'active': isTreeMode }"
+          :title="isTreeMode ? 'Switch to detailed view' : 'Switch to tree view'"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <!-- Tree/hierarchy icon -->
+            <circle cx="8" cy="2" r="1.5"/>
+            <circle cx="4" cy="7" r="1.5"/>
+            <circle cx="12" cy="7" r="1.5"/>
+            <circle cx="2" cy="12" r="1.5"/>
+            <circle cx="6" cy="12" r="1.5"/>
+            <circle cx="10" cy="12" r="1.5"/>
+            <circle cx="14" cy="12" r="1.5"/>
+            <line x1="8" y1="3.5" x2="4" y2="5.5" stroke="currentColor" stroke-width="1"/>
+            <line x1="8" y1="3.5" x2="12" y2="5.5" stroke="currentColor" stroke-width="1"/>
+            <line x1="4" y1="8.5" x2="2" y2="10.5" stroke="currentColor" stroke-width="1"/>
+            <line x1="4" y1="8.5" x2="6" y2="10.5" stroke="currentColor" stroke-width="1"/>
+            <line x1="12" y1="8.5" x2="10" y2="10.5" stroke="currentColor" stroke-width="1"/>
+            <line x1="12" y1="8.5" x2="14" y2="10.5" stroke="currentColor" stroke-width="1"/>
+          </svg>
+          {{ isTreeMode ? 'Detailed' : 'Tree' }}
+        </button>
       </div>
     </div>
     
@@ -87,7 +113,8 @@ export default {
       'selectionCount',
       'selectedMessageForPanel',
       'isLayoutCalculating',
-      'nodePosition'
+      'nodePosition',
+      'isTreeMode'
     ]),
     
     
@@ -138,7 +165,8 @@ export default {
       'initializeGraph',
       'calculateLayout',
       'selectMessage',
-      'clearSelection'
+      'clearSelection',
+      'toggleLayoutMode'
     ]),
     
     async loadGraphData(messageId) {
@@ -364,6 +392,36 @@ export default {
 
 .thread-view-button:hover {
   background-color: var(--color-primary-dark);
+}
+
+/* Tree mode toggle button */
+.tree-mode-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-xs) var(--space-sm);
+  background-color: var(--color-surface-light);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  transition: all 0.2s ease;
+}
+
+.tree-mode-button:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+}
+
+.tree-mode-button.active {
+  background-color: var(--color-secondary);
+  color: white;
+  border-color: var(--color-secondary);
+}
+
+.tree-mode-button.active:hover {
+  background-color: var(--color-secondary-dark);
 }
 
 /* Main content */

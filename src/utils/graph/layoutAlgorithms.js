@@ -4,7 +4,219 @@ import { scaleLinear } from 'd3-scale';
 /**
  * Core layout algorithms for thread graph visualization
  * Implements Sugiyama layered DAG layout with conversation-aware positioning
+ * Also includes matplotlib-inspired tree layout (Buchheim-style)
  */
+
+// ============================================================
+// MATPLOTLIB-INSPIRED TREE LAYOUT (Buchheim-style)
+// ============================================================
+
+/**
+ * Node class for tree layout calculations
+ * Mirrors the Python matplotlib visualizer's Node class
+ */
+class TreeNode {
+  constructor(message) {
+    this.id = message.id;
+    this.message = message;
+    this.content = (message.content || '').slice(0, 30) + (message.content?.length > 30 ? '...' : '');
+    this.author = message.author_user_tag || message.author?.user_tag || 'unknown';
+    this.contentAuthorUid = message.content_author || message.author?.uid;
+    this.children = [];
+    this.x = 0;
+    this.y = 0;
+    this.width = 0;  // Width of the subtree
+    this.offset = 0; // Relative offset for subtree shifting
+  }
+}
+
+/**
+ * Calculate tree layout using matplotlib-inspired Buchheim-style algorithm
+ * Parents are centered over their children, depth determines Y position
+ * 
+ * @param {Array} messages - Array of message objects
+ * @param {Object} options - Layout options
+ * @returns {Map} Map of messageId -> {x, y, layer, message} positions
+ */
+export function calculateTreeLayout(messages, options = {}) {
+  const config = {
+    verticalGap: 180,      // Vertical spacing between layers
+    horizontalGap: 80,     // Horizontal gap between sibling subtrees
+    nodeWidth: 60,         // Base width for leaf nodes (circle diameter)
+    ...options
+  };
+
+  if (!messages || messages.length === 0) {
+    return new Map();
+  }
+
+  // Build message lookup map
+  const messageMap = new Map();
+  messages.forEach(msg => messageMap.set(msg.id, msg));
+
+  // Find root messages (no parent_id or parent not in set)
+  const rootMessages = messages.filter(msg => 
+    !msg.parent_id || !messageMap.has(msg.parent_id)
+  );
+
+  if (rootMessages.length === 0) {
+    return new Map();
+  }
+
+  const positions = new Map();
+  let globalXOffset = 0;
+
+  // Process each root as a separate tree
+  rootMessages.forEach((rootMsg, rootIndex) => {
+    // Build tree structure
+    const root = buildTree(rootMsg, messageMap);
+    if (!root) return;
+
+    // Step 1: Assign Y coordinates (depth-based)
+    assignDepth(root, 0, config.verticalGap);
+
+    // Step 2: Calculate subtree widths (bottom-up)
+    calculateSubtreeWidth(root, config.nodeWidth, config.horizontalGap);
+
+    // Step 3: Assign X coordinates (parents centered over children)
+    assignXCoordinates(root, globalXOffset, config.horizontalGap);
+
+    // Collect positions from this tree
+    collectPositions(root, positions);
+
+    // Update global offset for next tree
+    globalXOffset += root.width + config.horizontalGap * 2;
+  });
+
+  return positions;
+}
+
+/**
+ * Build tree structure from a root message
+ * @param {Object} rootMessage - Root message
+ * @param {Map} messageMap - Map of all messages
+ * @returns {TreeNode} Root tree node
+ */
+function buildTree(rootMessage, messageMap) {
+  const visited = new Set();
+
+  function build(message) {
+    if (!message || visited.has(message.id)) {
+      return null;
+    }
+    visited.add(message.id);
+
+    const node = new TreeNode(message);
+
+    // Find and sort children by timestamp
+    const children = Array.from(messageMap.values())
+      .filter(msg => msg.parent_id === message.id)
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    children.forEach(childMsg => {
+      const childNode = build(childMsg);
+      if (childNode) {
+        node.children.push(childNode);
+      }
+    });
+
+    return node;
+  }
+
+  return build(rootMessage);
+}
+
+/**
+ * Assign Y coordinates based on depth
+ * Negative Y values draw top-down (root at top)
+ * 
+ * @param {TreeNode} node - Current node
+ * @param {number} depth - Current depth level
+ * @param {number} verticalGap - Vertical spacing between layers
+ */
+function assignDepth(node, depth, verticalGap) {
+  node.y = depth * verticalGap; // Positive Y goes down
+  node.layer = depth;
+  
+  node.children.forEach(child => {
+    assignDepth(child, depth + 1, verticalGap);
+  });
+}
+
+/**
+ * Calculate subtree width for each node (bottom-up)
+ * Leaf nodes have width = nodeWidth
+ * Parent width = sum of children widths + gaps
+ * 
+ * @param {TreeNode} node - Current node
+ * @param {number} nodeWidth - Base width for leaf nodes
+ * @param {number} horizontalGap - Gap between siblings
+ * @returns {number} Width of this subtree
+ */
+function calculateSubtreeWidth(node, nodeWidth, horizontalGap) {
+  if (node.children.length === 0) {
+    node.width = nodeWidth;
+    return node.width;
+  }
+
+  const childrenWidth = node.children.reduce(
+    (sum, child) => sum + calculateSubtreeWidth(child, nodeWidth, horizontalGap),
+    0
+  );
+  const totalGap = (node.children.length - 1) * horizontalGap;
+  
+  node.width = Math.max(nodeWidth, childrenWidth + totalGap);
+  return node.width;
+}
+
+/**
+ * Assign X coordinates with parents centered over children
+ * 
+ * @param {TreeNode} node - Current node
+ * @param {number} startX - Starting X position for this subtree
+ * @param {number} horizontalGap - Gap between siblings
+ */
+function assignXCoordinates(node, startX, horizontalGap) {
+  // Place children first within allocated space
+  let currentChildX = startX;
+  const childPositions = [];
+
+  node.children.forEach(child => {
+    assignXCoordinates(child, currentChildX, horizontalGap);
+    childPositions.push(child.x);
+    currentChildX += child.width + horizontalGap;
+  });
+
+  if (childPositions.length > 0) {
+    // Parent is centered over children (midpoint of first and last child)
+    const centerOfChildren = (childPositions[0] + childPositions[childPositions.length - 1]) / 2;
+    node.x = centerOfChildren;
+  } else {
+    // Leaf node: center in its allocated width
+    node.x = startX + node.width / 2;
+  }
+}
+
+/**
+ * Collect positions from tree into a Map
+ * @param {TreeNode} node - Current node
+ * @param {Map} positions - Position map to populate
+ */
+function collectPositions(node, positions) {
+  positions.set(node.id, {
+    x: node.x,
+    y: node.y,
+    layer: node.layer,
+    message: node.message,
+    subtreeWidth: node.width
+  });
+
+  node.children.forEach(child => collectPositions(child, positions));
+}
+
+// ============================================================
+// ORIGINAL SUGIYAMA-STYLE LAYOUT
+// ============================================================
 
 /**
  * Calculate positions for all nodes in a message DAG
