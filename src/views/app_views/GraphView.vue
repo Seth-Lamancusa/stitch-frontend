@@ -24,32 +24,6 @@
           </svg>
           Thread view
         </button>
-        
-        <!-- Tree view toggle button -->
-        <button
-          @click="toggleLayoutMode"
-          class="tree-mode-button"
-          :class="{ 'active': isTreeMode }"
-          :title="isTreeMode ? 'Switch to detailed view' : 'Switch to tree view'"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <!-- Tree/hierarchy icon -->
-            <circle cx="8" cy="2" r="1.5"/>
-            <circle cx="4" cy="7" r="1.5"/>
-            <circle cx="12" cy="7" r="1.5"/>
-            <circle cx="2" cy="12" r="1.5"/>
-            <circle cx="6" cy="12" r="1.5"/>
-            <circle cx="10" cy="12" r="1.5"/>
-            <circle cx="14" cy="12" r="1.5"/>
-            <line x1="8" y1="3.5" x2="4" y2="5.5" stroke="currentColor" stroke-width="1"/>
-            <line x1="8" y1="3.5" x2="12" y2="5.5" stroke="currentColor" stroke-width="1"/>
-            <line x1="4" y1="8.5" x2="2" y2="10.5" stroke="currentColor" stroke-width="1"/>
-            <line x1="4" y1="8.5" x2="6" y2="10.5" stroke="currentColor" stroke-width="1"/>
-            <line x1="12" y1="8.5" x2="10" y2="10.5" stroke="currentColor" stroke-width="1"/>
-            <line x1="12" y1="8.5" x2="14" y2="10.5" stroke="currentColor" stroke-width="1"/>
-          </svg>
-          {{ isTreeMode ? 'Detailed' : 'Tree' }}
-        </button>
       </div>
     </div>
     
@@ -61,6 +35,7 @@
           ref="canvasRef"
           :width="canvasWidth"
           :height="canvasHeight"
+          @messages-loaded="refreshGraphFromStore"
         />
         
         <!-- Status overlay -->
@@ -98,7 +73,9 @@ export default {
   data() {
     return {
       canvasWidth: 800,
-      canvasHeight: 600
+      canvasHeight: 600,
+      refreshTimeout: null,
+      unwatchMessages: null
     };
   },
   
@@ -113,8 +90,7 @@ export default {
       'selectionCount',
       'selectedMessageForPanel',
       'isLayoutCalculating',
-      'nodePosition',
-      'isTreeMode'
+      'nodePosition'
     ]),
     
     
@@ -154,10 +130,30 @@ export default {
   mounted() {
     this.updateCanvasSize();
     window.addEventListener('resize', this.handleResize);
+    
+    // Watch for new messages in store and refresh graph
+    this.unwatchMessages = this.$store.watch(
+      (state) => Object.keys(state.messages.messages || {}).length,
+      () => {
+        // Debounce refresh to avoid excessive updates
+        if (this.refreshTimeout) {
+          clearTimeout(this.refreshTimeout);
+        }
+        this.refreshTimeout = setTimeout(() => {
+          this.refreshGraphFromStore();
+        }, 300);
+      }
+    );
   },
   
   beforeUnmount() {
     window.removeEventListener('resize', this.handleResize);
+    if (this.unwatchMessages) {
+      this.unwatchMessages();
+    }
+    if (this.refreshTimeout) {
+      clearTimeout(this.refreshTimeout);
+    }
   },
   
   methods: {
@@ -165,8 +161,7 @@ export default {
       'initializeGraph',
       'calculateLayout',
       'selectMessage',
-      'clearSelection',
-      'toggleLayoutMode'
+      'clearSelection'
     ]),
     
     async loadGraphData(messageId) {
@@ -223,6 +218,24 @@ export default {
       }
 
       return Array.from(result.values());
+    },
+    
+    // Refresh graph view with current store data
+    async refreshGraphFromStore() {
+      if (!this.currentMessageId) return;
+      
+      try {
+        // Re-collect subgraph from store (includes newly loaded messages)
+        const messages = this.collectStoreSubgraph(this.currentMessageId);
+        
+        // Update graph view with new messages
+        await this.$store.dispatch('graphView/initializeGraph', {
+          messageId: this.currentMessageId,
+          messages
+        });
+      } catch (error) {
+        console.error('[GraphView] Failed to refresh graph from store:', error);
+      }
     },
     
     // Navigation
@@ -375,53 +388,20 @@ export default {
   border-color: var(--color-border-hover);
 }
 
-/* Thread view button styled like ThreadView's graph button */
+/* Thread view button */
 .thread-view-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   padding: var(--space-xs) var(--space-sm);
-  background-color: var(--color-primary);
-  color: rgb(99, 90, 90);
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  transition: background-color 0.2s ease;
-}
-
-.thread-view-button:hover {
-  background-color: var(--color-primary-dark);
-}
-
-/* Tree mode toggle button */
-.tree-mode-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: var(--space-xs) var(--space-sm);
-  background-color: var(--color-surface-light);
-  color: var(--color-text-secondary);
+  background-color: transparent;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
+  color: var(--color-text);
   font-size: var(--font-size-sm);
-  transition: all 0.2s ease;
 }
 
-.tree-mode-button:hover {
+.thread-view-button:hover {
   background-color: var(--color-surface-hover);
   border-color: var(--color-border-hover);
-}
-
-.tree-mode-button.active {
-  background-color: var(--color-secondary);
-  color: white;
-  border-color: var(--color-secondary);
-}
-
-.tree-mode-button.active:hover {
-  background-color: var(--color-secondary-dark);
 }
 
 /* Main content */

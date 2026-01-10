@@ -4,19 +4,15 @@
       &larr; Back
     </button>
 
-    <!-- Graph view toggle (optional, currently not shown) -->
-    <!--
+    <!-- Graph view toggle -->
     <button @click="$emit('openGraph')" class="graph-view-button" title="Switch to graph view">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M1 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h4.5a1 1 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5H1zm7 0a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h4.5a1 1 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5H8zm-7 1h3v6H1V4zm7 0h3v6H8V4z"/>
-        <circle cx="3" cy="6" r="1"/>
-        <circle cx="10" cy="6" r="1"/>
-        <circle cx="6.5" cy="8" r="1"/>
-        <path d="M4 6h2.5M9 6h1.5"/>
-      </svg>
-      Graph View
+      🟢 Graph View
     </button>
-    -->
+
+    <!-- Tree Options button -->
+    <button @click="$emit('openTreeOptions')" class="tree-options-button" title="Tree options">
+      🌳 Tree Options
+    </button>
 
     <!-- Selection mode controls -->
     <div v-if="isSelectionMode" class="selection-controls">
@@ -63,7 +59,7 @@ defineProps({
   isCopied: { type: Boolean, default: false },
 });
 
-defineEmits(['back', 'openGraph', 'copy', 'exitSelection', 'logout', 'openProfile']);
+defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'exitSelection', 'logout', 'openProfile']);
 </script>
 
 <style scoped>
@@ -89,22 +85,21 @@ defineEmits(['back', 'openGraph', 'copy', 'exitSelection', 'logout', 'openProfil
   color: var(--color-text);
 }
 
-.graph-view-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.graph-view-button,
+.tree-options-button {
   padding: var(--space-xs) var(--space-sm);
-  background-color: var(--color-primary);
-  color: rgb(99, 90, 90);
-  border: none;
+  background-color: transparent;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
+  color: var(--color-text);
   font-size: var(--font-size-sm);
-  transition: background-color 0.2s ease;
 }
 
-.graph-view-button:hover {
-  background-color: var(--color-primary-dark);
+.graph-view-button:hover,
+.tree-options-button:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
 }
 
 .selection-controls {
