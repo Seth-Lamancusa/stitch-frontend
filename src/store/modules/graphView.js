@@ -13,8 +13,8 @@ const state = {
     bounds: null,
     isCalculating: false,
     lastCalculated: null,
-    // Layout mode: 'default' (detailed rectangles) or 'tree' (matplotlib-style circles)
-    mode: 'default',
+    // Layout mode: 'tree' (matplotlib-style circles)
+    mode: 'tree',
     options: {
       layerHeight: 240,
       nodeSpacing: 240,
@@ -307,21 +307,9 @@ const actions = {
     
     try {
       const messages = getters.filteredMessages;
-      let positions, bounds;
-      
-      if (state.layout.mode === 'tree') {
-        // Use matplotlib-inspired tree layout
-        positions = calculateTreeLayout(messages, state.layout.treeOptions);
-        bounds = calculateBounds(positions);
-      } else {
-        // Use default Sugiyama-style layout
-        const layoutResult = await GraphLayoutService.calculateLayoutForMessages(
-          messages, 
-          state.layout.options
-        );
-        positions = layoutResult.positions;
-        bounds = layoutResult.bounds;
-      }
+      // Use matplotlib-inspired tree layout
+      const positions = calculateTreeLayout(messages, state.layout.treeOptions);
+      const bounds = calculateBounds(positions);
       
       commit('SET_LAYOUT_RESULT', { positions, bounds });
     } catch (error) {

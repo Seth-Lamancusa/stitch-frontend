@@ -70,15 +70,15 @@ export default {
       };
     },
 
-    // Matplotlib uses 'k-' (black) with alpha=0.5
+    // Brighter lines for better visibility
     strokeColor() {
       if (this.isPartOfSelection) {
         return 'var(--color-secondary)';
       }
       if (this.isHovered) {
-        return '#555555';
+        return '#666666';
       }
-      return '#333333'; // Dark gray/black
+      return '#666666'; // Brighter gray for better visibility
     },
 
     strokeWidth() {
@@ -88,18 +88,18 @@ export default {
       if (this.isHovered) {
         return 1.5;
       }
-      return 1; // Thin lines like matplotlib linewidth=1
+      return 1.5; // Slightly thicker for better visibility
     },
 
-    // Matplotlib uses alpha=0.5 for edges
+    // Higher opacity for better visibility
     opacity() {
       if (this.isPartOfSelection) {
-        return 0.8;
+        return 0.9;
       }
       if (this.isHovered) {
-        return 0.7;
+        return 0.8;
       }
-      return 0.5;
+      return 0.75; // Increased from 0.5 for better visibility
     }
   }
 };

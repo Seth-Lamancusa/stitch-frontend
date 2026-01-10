@@ -84,12 +84,16 @@ export default {
   },
 
   // Add recipients to a message (or multiple messages)
-  async addRecipientsToMessage(messageIdOrIds, recipients, addToAncestors = true, notifyOfLast = true) {
+  async addRecipientsToMessage(messageIdOrIds, recipients, addToAncestors = true, notifyOfLast = true, addToFullTree = false) {
     const headers = getAuthHeaders()
     const body = Array.isArray(messageIdOrIds)
       ? { message_ids: messageIdOrIds, recipients }
       : { message_id: messageIdOrIds, recipients }
-    const params = { add_to_ancestors: addToAncestors, notify_of_last: notifyOfLast }
+    const params = { 
+      add_to_ancestors: addToAncestors, 
+      notify_of_last: notifyOfLast,
+      add_to_full_tree: addToFullTree
+    }
     return apiClient.post(`/recipients/add`, body, { headers, params })
   },
 

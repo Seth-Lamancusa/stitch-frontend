@@ -39,8 +39,8 @@
       {{ authorInitial }}
     </text>
     
-    <!-- Tooltip-style content on hover -->
-    <g v-if="isHovered && zoomLevel >= 0.3" class="node-tooltip">
+    <!-- Tooltip-style content on hover (only if not hovering load button) -->
+    <g v-if="isHovered && !isLoadButtonHovered && zoomLevel >= 0.3" class="node-tooltip">
       <rect
         :x="-tooltipWidth / 2"
         :y="nodeRadius + 8"
@@ -72,6 +72,8 @@
       v-if="canLoadParent"
       class="load-button load-parent"
       @click.stop="emitLoadParent"
+      @mouseenter.stop="handleLoadButtonEnter"
+      @mouseleave.stop="handleLoadButtonLeave"
     >
       <circle
         :cy="-nodeRadius - 12"
@@ -93,6 +95,8 @@
       v-if="canLoadChildren"
       class="load-button load-children"
       @click.stop="emitLoadChildren"
+      @mouseenter.stop="handleLoadButtonEnter"
+      @mouseleave.stop="handleLoadButtonLeave"
     >
       <circle
         :cy="nodeRadius + 12"
@@ -145,7 +149,8 @@ export default {
     return {
       showLabel: true,
       tooltipWidth: 200,
-      tooltipHeight: 80
+      tooltipHeight: 80,
+      isLoadButtonHovered: false
     };
   },
 
@@ -294,6 +299,14 @@ export default {
 
     emitLoadChildren() {
       this.$emit('load-more-down', { message: this.message });
+    },
+    
+    handleLoadButtonEnter() {
+      this.isLoadButtonHovered = true;
+    },
+    
+    handleLoadButtonLeave() {
+      this.isLoadButtonHovered = false;
     }
   }
 };
@@ -302,23 +315,10 @@ export default {
 <style scoped>
 .graph-tree-node {
   cursor: pointer;
-  transition: transform 0.15s ease;
-}
-
-.graph-tree-node:hover {
-  transform: scale(1.05);
-}
-
-.node-circle {
-  transition: all 0.2s ease;
 }
 
 .node-selected .node-circle {
   filter: drop-shadow(0 0 6px var(--color-secondary));
-}
-
-.node-hovered .node-circle {
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
 
 .node-label {
@@ -334,6 +334,8 @@ export default {
 .node-tooltip {
   pointer-events: none;
   opacity: 0.95;
+  /* Ensure tooltip renders on top */
+  z-index: 1000;
 }
 
 .tooltip-content {

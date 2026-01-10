@@ -27,6 +27,7 @@
         :is-copied="isCopied"
         @back="backToList()"
         @openGraph="openGraphView"
+        @openTreeOptions="openTreeOptionsModal"
         @copy="copySelectedMessages"
         @exitSelection="exitSelectionMode"
         @logout="logout"
@@ -125,6 +126,7 @@
         :is-copied="isCopied"
         @back="backToList()"
         @openGraph="openGraphView"
+        @openTreeOptions="openTreeOptionsModal"
         @copy="copySelectedMessages"
         @exitSelection="exitSelectionMode"
         @logout="logout"
@@ -172,6 +174,14 @@
       @recipient-removed="handleRecipientRemoved"
     />
 
+    <!-- Tree Options Modal -->
+    <TreeOptionsModal
+      :is-visible="treeOptionsModalVisible"
+      :centered-message-id="messageId"
+      @close="closeTreeOptionsModal"
+      @recipients-added="handleTreeRecipientsAdded"
+    />
+
     <!-- Profile Edit Modal -->
     <ProfileEditModal 
       :isOpen="isProfileModalOpen" 
@@ -191,6 +201,7 @@ import GlobalNotifications from '../../components/GlobalNotifications.vue';
 import MessageService from '../../services/MessageService.js';
 import LinksModal from '../../components/modals/LinksModal.vue';
 import RecipientsModal from '../../components/modals/RecipientsModal.vue';
+import TreeOptionsModal from '../../components/modals/TreeOptionsModal.vue';
 import DeleteConfirmModal from '../../components/modals/DeleteConfirmModal.vue';
 import ProfileEditModal from '../../components/modals/ProfileEditModal.vue';
 import { useAuthentication } from '../../composables/useAuthentication';
@@ -361,6 +372,9 @@ const recipientsModalIsPublic = computed(() => store.getters['navigation/recipie
 const recipientsModalIsAddMode = computed(() => store.getters['navigation/recipientsModalIsAddMode']);
 const recipientsModalExistingRecipients = computed(() => store.getters['navigation/recipientsModalExistingRecipients']);
 const recipientsModalMessageId = computed(() => store.getters['navigation/recipientsModalMessageId']);
+
+// Tree options modal state
+const treeOptionsModalVisible = ref(false);
 
 // In the script setup section, add refs for the adaptive markers
 const topMarker = ref(null);
@@ -769,6 +783,23 @@ const openGraphView = () => {
   if (!currentMessageId) return;
   // Use named route with correct param name to avoid path mismatches
   router.push({ name: 'graph-view', params: { messageId: currentMessageId } });
+};
+
+const openTreeOptionsModal = () => {
+  dismissMobileKeyboard();
+  treeOptionsModalVisible.value = true;
+};
+
+const closeTreeOptionsModal = () => {
+  treeOptionsModalVisible.value = false;
+};
+
+const handleTreeRecipientsAdded = async ({ recipient, centeredMessageId }) => {
+  console.log('[ThreadView] Tree recipients added:', { recipient, centeredMessageId });
+  
+  // Refresh all messages in the tree to show updated recipients
+  // We already refresh in TreeOptionsModal, but let's ensure UI updates
+  await renderThread(true, true);
 };
 
 // Shallowly center on a different message by updating the URL without reloading content
