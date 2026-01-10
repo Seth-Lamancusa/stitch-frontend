@@ -45,68 +45,33 @@
       >
         <!-- Edges layer -->
         <g class="edges-layer">
-          <!-- Tree mode: simple straight lines -->
-          <template v-if="isTreeMode">
-            <graph-tree-edge
-              v-for="edge in visibleEdges"
-              :key="edge.id"
-              :edge="edge"
-              :source-position="getNodePosition(edge.source)"
-              :target-position="getNodePosition(edge.target)"
-              :is-part-of-selection="isEdgeInSelection(edge)"
-              :zoom-level="scale"
-            />
-          </template>
-          <!-- Default mode: bezier curves -->
-          <template v-else>
-            <graph-edge
-              v-for="edge in visibleEdges"
-              :key="edge.id"
-              :edge="edge"
-              :source-position="getNodePosition(edge.source)"
-              :target-position="getNodePosition(edge.target)"
-              :is-part-of-selection="isEdgeInSelection(edge)"
-              :zoom-level="scale"
-            />
-          </template>
+          <graph-tree-edge
+            v-for="edge in visibleEdges"
+            :key="edge.id"
+            :edge="edge"
+            :source-position="getNodePosition(edge.source)"
+            :target-position="getNodePosition(edge.target)"
+            :is-part-of-selection="isEdgeInSelection(edge)"
+            :zoom-level="scale"
+          />
         </g>
         
         <!-- Nodes layer -->
         <g class="nodes-layer">
-          <!-- Tree mode: circular nodes -->
-          <template v-if="isTreeMode">
-            <graph-tree-node
-              v-for="message in visibleMessages"
-              :key="message.id"
-              :message="message"
-              :position="getNodePosition(message.id)"
-              :is-selected="isMessageSelected(message.id)"
-              :is-hovered="hoveredMessageId === message.id"
-              :zoom-level="scale"
-              @click="handleNodeClick"
-              @mouseenter="handleNodeMouseEnter"
-              @mouseleave="handleNodeMouseLeave"
-              @load-more-up="handleLoadMoreUp"
-              @load-more-down="handleLoadMoreDown"
-            />
-          </template>
-          <!-- Default mode: rectangular nodes -->
-          <template v-else>
-            <graph-node
-              v-for="message in visibleMessages"
-              :key="message.id"
-              :message="message"
-              :position="getNodePosition(message.id)"
-              :is-selected="isMessageSelected(message.id)"
-              :is-hovered="hoveredMessageId === message.id"
-              :zoom-level="scale"
-              @click="handleNodeClick"
-              @mouseenter="handleNodeMouseEnter"
-              @mouseleave="handleNodeMouseLeave"
-              @load-more-up="handleLoadMoreUp"
-              @load-more-down="handleLoadMoreDown"
-            />
-          </template>
+          <graph-tree-node
+            v-for="message in visibleMessages"
+            :key="message.id"
+            :message="message"
+            :position="getNodePosition(message.id)"
+            :is-selected="isMessageSelected(message.id)"
+            :is-hovered="hoveredMessageId === message.id"
+            :zoom-level="scale"
+            @click="handleNodeClick"
+            @mouseenter="handleNodeMouseEnter"
+            @mouseleave="handleNodeMouseLeave"
+            @load-more-up="handleLoadMoreUp"
+            @load-more-down="handleLoadMoreDown"
+          />
         </g>
       </g>
       
@@ -133,16 +98,12 @@
 
 <script>
 import { mapGetters, mapActions, mapState } from 'vuex';
-import GraphNode from './GraphNode.vue';
-import GraphEdge from './GraphEdge.vue';
 import GraphTreeNode from './GraphTreeNode.vue';
 import GraphTreeEdge from './GraphTreeEdge.vue';
 
 export default {
   name: 'GraphCanvas',
   components: {
-    GraphNode,
-    GraphEdge,
     GraphTreeNode,
     GraphTreeEdge
   },
@@ -185,8 +146,7 @@ export default {
       'nodePosition',
       'isMessageSelected',
       'isLayoutCalculating',
-      'viewportTransform',
-      'isTreeMode'
+      'viewportTransform'
     ]),
     
     // Local viewport state

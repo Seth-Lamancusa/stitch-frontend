@@ -24,32 +24,6 @@
           </svg>
           Thread view
         </button>
-        
-        <!-- Tree view toggle button -->
-        <button
-          @click="toggleLayoutMode"
-          class="tree-mode-button"
-          :class="{ 'active': isTreeMode }"
-          :title="isTreeMode ? 'Switch to detailed view' : 'Switch to tree view'"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <!-- Tree/hierarchy icon -->
-            <circle cx="8" cy="2" r="1.5"/>
-            <circle cx="4" cy="7" r="1.5"/>
-            <circle cx="12" cy="7" r="1.5"/>
-            <circle cx="2" cy="12" r="1.5"/>
-            <circle cx="6" cy="12" r="1.5"/>
-            <circle cx="10" cy="12" r="1.5"/>
-            <circle cx="14" cy="12" r="1.5"/>
-            <line x1="8" y1="3.5" x2="4" y2="5.5" stroke="currentColor" stroke-width="1"/>
-            <line x1="8" y1="3.5" x2="12" y2="5.5" stroke="currentColor" stroke-width="1"/>
-            <line x1="4" y1="8.5" x2="2" y2="10.5" stroke="currentColor" stroke-width="1"/>
-            <line x1="4" y1="8.5" x2="6" y2="10.5" stroke="currentColor" stroke-width="1"/>
-            <line x1="12" y1="8.5" x2="10" y2="10.5" stroke="currentColor" stroke-width="1"/>
-            <line x1="12" y1="8.5" x2="14" y2="10.5" stroke="currentColor" stroke-width="1"/>
-          </svg>
-          {{ isTreeMode ? 'Detailed' : 'Tree' }}
-        </button>
       </div>
     </div>
     
@@ -113,8 +87,7 @@ export default {
       'selectionCount',
       'selectedMessageForPanel',
       'isLayoutCalculating',
-      'nodePosition',
-      'isTreeMode'
+      'nodePosition'
     ]),
     
     
@@ -165,8 +138,7 @@ export default {
       'initializeGraph',
       'calculateLayout',
       'selectMessage',
-      'clearSelection',
-      'toggleLayoutMode'
+      'clearSelection'
     ]),
     
     async loadGraphData(messageId) {
@@ -375,32 +347,13 @@ export default {
   border-color: var(--color-border-hover);
 }
 
-/* Thread view button styled like ThreadView's graph button */
+/* Thread view button */
 .thread-view-button {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: var(--space-xs) var(--space-sm);
-  background-color: var(--color-primary);
-  color: rgb(99, 90, 90);
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  transition: background-color 0.2s ease;
-}
-
-.thread-view-button:hover {
-  background-color: var(--color-primary-dark);
-}
-
-/* Tree mode toggle button */
-.tree-mode-button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: var(--space-xs) var(--space-sm);
-  background-color: var(--color-surface-light);
+  background-color: var(--color-surface);
   color: var(--color-text-secondary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -409,19 +362,10 @@ export default {
   transition: all 0.2s ease;
 }
 
-.tree-mode-button:hover {
-  background-color: var(--color-surface-hover);
-  border-color: var(--color-border-hover);
-}
-
-.tree-mode-button.active {
-  background-color: var(--color-secondary);
-  color: white;
-  border-color: var(--color-secondary);
-}
-
-.tree-mode-button.active:hover {
-  background-color: var(--color-secondary-dark);
+.thread-view-button:hover {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  border-color: var(--color-primary);
 }
 
 /* Main content */
@@ -508,23 +452,50 @@ export default {
 /* Responsive design */
 @media (max-width: 768px) {
   .graph-header {
-    flex-direction: column;
-    gap: 12px;
-    align-items: stretch;
+    padding: 8px 12px;
+    gap: var(--space-sm);
   }
   
-  .header-left,
-  .header-right {
-    justify-content: space-between;
+  .header-left {
+    gap: 8px;
+    flex-wrap: wrap;
   }
   
-  .sidebar-open {
-    width: 100%;
-    position: absolute;
-    top: 0;
-    right: 0;
-    height: 100%;
-    z-index: 20;
+  .back-button,
+  .thread-view-button {
+    padding: 4px 8px;
+    font-size: var(--font-size-xs);
+    gap: 4px;
+  }
+  
+  .back-button svg,
+  .thread-view-button svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .graph-header {
+    padding: 6px 8px;
+    gap: var(--space-xs);
+  }
+  
+  .header-left {
+    gap: 4px;
+  }
+  
+  .back-button,
+  .thread-view-button {
+    padding: 4px 6px;
+    font-size: calc(var(--font-size-xs) - 1px);
+    gap: 3px;
+  }
+  
+  .back-button svg,
+  .thread-view-button svg {
+    width: 12px;
+    height: 12px;
   }
 }
 </style> 

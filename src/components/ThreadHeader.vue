@@ -4,19 +4,26 @@
       &larr; Back
     </button>
 
-    <!-- Graph view toggle (optional, currently not shown) -->
-    <!--
-    <button @click="$emit('openGraph')" class="graph-view-button" title="Switch to graph view">
+    <!-- Graph view toggle -->
+    <button @click="$emit('openGraph')" class="graph-view-button" title="View thread as tree graph">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M1 3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h4.5a1 1 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5H1zm7 0a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h4.5a1 1 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5H8zm-7 1h3v6H1V4zm7 0h3v6H8V4z"/>
-        <circle cx="3" cy="6" r="1"/>
-        <circle cx="10" cy="6" r="1"/>
-        <circle cx="6.5" cy="8" r="1"/>
-        <path d="M4 6h2.5M9 6h1.5"/>
+        <!-- Tree/hierarchy icon matching GraphView -->
+        <circle cx="8" cy="2" r="1.5"/>
+        <circle cx="4" cy="7" r="1.5"/>
+        <circle cx="12" cy="7" r="1.5"/>
+        <circle cx="2" cy="12" r="1.5"/>
+        <circle cx="6" cy="12" r="1.5"/>
+        <circle cx="10" cy="12" r="1.5"/>
+        <circle cx="14" cy="12" r="1.5"/>
+        <line x1="8" y1="3.5" x2="4" y2="5.5" stroke="currentColor" stroke-width="1"/>
+        <line x1="8" y1="3.5" x2="12" y2="5.5" stroke="currentColor" stroke-width="1"/>
+        <line x1="4" y1="8.5" x2="2" y2="10.5" stroke="currentColor" stroke-width="1"/>
+        <line x1="4" y1="8.5" x2="6" y2="10.5" stroke="currentColor" stroke-width="1"/>
+        <line x1="12" y1="8.5" x2="10" y2="10.5" stroke="currentColor" stroke-width="1"/>
+        <line x1="12" y1="8.5" x2="14" y2="10.5" stroke="currentColor" stroke-width="1"/>
       </svg>
-      Graph View
+      <span class="graph-button-text">Graph</span>
     </button>
-    -->
 
     <!-- Selection mode controls -->
     <div v-if="isSelectionMode" class="selection-controls">
@@ -94,17 +101,28 @@ defineEmits(['back', 'openGraph', 'copy', 'exitSelection', 'logout', 'openProfil
   align-items: center;
   gap: 6px;
   padding: var(--space-xs) var(--space-sm);
-  background-color: var(--color-primary);
-  color: rgb(99, 90, 90);
-  border: none;
+  background-color: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: var(--font-size-sm);
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
 .graph-view-button:hover {
-  background-color: var(--color-primary-dark);
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  border-color: var(--color-primary);
+}
+
+.graph-view-button svg {
+  flex-shrink: 0;
+}
+
+.graph-button-text {
+  white-space: nowrap;
 }
 
 .selection-controls {
@@ -286,6 +304,20 @@ defineEmits(['back', 'openGraph', 'copy', 'exitSelection', 'logout', 'openProfil
 @media (max-width: 768px) {
   .thread-header {
     padding: var(--space-xs) var(--space-sm);
+    gap: var(--space-sm);
+  }
+  .back-button {
+    padding: 4px 8px;
+    font-size: var(--font-size-xs);
+  }
+  .graph-view-button {
+    padding: 4px 8px;
+    font-size: var(--font-size-xs);
+    gap: 4px;
+  }
+  .graph-view-button svg {
+    width: 14px;
+    height: 14px;
   }
   .user-controls {
     gap: var(--space-xs);
@@ -327,10 +359,26 @@ defineEmits(['back', 'openGraph', 'copy', 'exitSelection', 'logout', 'openProfil
 }
 
 @media (max-width: 480px) {
-  .thread-header { padding: 6px 8px; }
+  .thread-header { 
+    padding: 6px 8px; 
+    gap: var(--space-xs);
+  }
   .back-button {
-    padding: 4px 8px;
-    font-size: calc(var(--font-size-sm) - 1px);
+    padding: 4px 6px;
+    font-size: calc(var(--font-size-xs) - 1px);
+  }
+  .graph-view-button {
+    padding: 4px 6px;
+    font-size: calc(var(--font-size-xs) - 1px);
+    gap: 3px;
+  }
+  .graph-view-button svg {
+    width: 12px;
+    height: 12px;
+  }
+  .graph-button-text {
+    /* Hide text on very small screens, only show icon */
+    display: none;
   }
   .guest-badge {
     width: 12px;

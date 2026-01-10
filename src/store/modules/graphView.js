@@ -1,4 +1,3 @@
-import GraphLayoutService from '../../services/GraphLayoutService.js';
 import { calculateTreeLayout, calculateBounds } from '../../utils/graph/layoutAlgorithms.js';
 
 /**
@@ -13,15 +12,9 @@ const state = {
     bounds: null,
     isCalculating: false,
     lastCalculated: null,
-    // Layout mode: 'default' (detailed rectangles) or 'tree' (matplotlib-style circles)
-    mode: 'default',
-    options: {
-      layerHeight: 240,
-      nodeSpacing: 240,
-      rootSpacing: 240,
-      maxWidth: 1600
-    },
-    // Tree layout specific options (matplotlib-inspired)
+    // Layout mode: always 'tree' (matplotlib-style circles)
+    mode: 'tree',
+    // Tree layout options (matplotlib-inspired)
     treeOptions: {
       verticalGap: 120,     // Vertical spacing between layers
       horizontalGap: 60,    // Horizontal gap between sibling subtrees
@@ -79,14 +72,6 @@ const getters = {
 
   isLayoutCalculating: (state) => {
     return state.layout.isCalculating;
-  },
-
-  layoutMode: (state) => {
-    return state.layout.mode;
-  },
-
-  isTreeMode: (state) => {
-    return state.layout.mode === 'tree';
   },
 
   // Selection getters
@@ -167,14 +152,6 @@ const mutations = {
     state.layout.positions = positions;
     state.layout.bounds = bounds;
     state.layout.lastCalculated = Date.now();
-  },
-
-  SET_LAYOUT_OPTIONS(state, options) {
-    state.layout.options = { ...state.layout.options, ...options };
-  },
-
-  SET_LAYOUT_MODE(state, mode) {
-    state.layout.mode = mode;
   },
 
   SET_TREE_LAYOUT_OPTIONS(state, options) {
@@ -301,27 +278,16 @@ const actions = {
     dispatch('fitToContent');
   },
 
-  // Calculate layout for current messages
+  // Calculate layout for current messages using tree layout
   async calculateLayout({ state, commit, getters }) {
     commit('SET_LAYOUT_CALCULATING', true);
     
     try {
       const messages = getters.filteredMessages;
-      let positions, bounds;
       
-      if (state.layout.mode === 'tree') {
-        // Use matplotlib-inspired tree layout
-        positions = calculateTreeLayout(messages, state.layout.treeOptions);
-        bounds = calculateBounds(positions);
-      } else {
-        // Use default Sugiyama-style layout
-        const layoutResult = await GraphLayoutService.calculateLayoutForMessages(
-          messages, 
-          state.layout.options
-        );
-        positions = layoutResult.positions;
-        bounds = layoutResult.bounds;
-      }
+      // Use matplotlib-inspired tree layout
+      const positions = calculateTreeLayout(messages, state.layout.treeOptions);
+      const bounds = calculateBounds(positions);
       
       commit('SET_LAYOUT_RESULT', { positions, bounds });
     } catch (error) {
@@ -329,21 +295,6 @@ const actions = {
     } finally {
       commit('SET_LAYOUT_CALCULATING', false);
     }
-  },
-
-  // Toggle layout mode between 'default' and 'tree'
-  toggleLayoutMode({ state, commit, dispatch }) {
-    const newMode = state.layout.mode === 'tree' ? 'default' : 'tree';
-    commit('SET_LAYOUT_MODE', newMode);
-    dispatch('calculateLayout');
-    dispatch('fitToContent');
-  },
-
-  // Set layout mode directly
-  setLayoutMode({ commit, dispatch }, mode) {
-    commit('SET_LAYOUT_MODE', mode);
-    dispatch('calculateLayout');
-    dispatch('fitToContent');
   },
 
   // Handle message selection
