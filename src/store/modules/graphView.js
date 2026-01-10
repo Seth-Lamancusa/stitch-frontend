@@ -1,4 +1,5 @@
 import GraphLayoutService from '../../services/GraphLayoutService.js';
+import { calculateTreeLayout, calculateBounds } from '../../utils/graph/layoutAlgorithms.js';
 
 /**
  * Vuex store module for graph view state management
@@ -12,11 +13,19 @@ const state = {
     bounds: null,
     isCalculating: false,
     lastCalculated: null,
+    // Layout mode: 'default' (detailed rectangles) or 'tree' (matplotlib-style circles)
+    mode: 'default',
     options: {
       layerHeight: 240,
       nodeSpacing: 240,
       rootSpacing: 240,
       maxWidth: 1600
+    },
+    // Tree layout specific options (matplotlib-inspired)
+    treeOptions: {
+      verticalGap: 120,     // Vertical spacing between layers
+      horizontalGap: 60,    // Horizontal gap between sibling subtrees
+      nodeWidth: 50         // Base width for leaf nodes
     }
   },
 
@@ -70,6 +79,14 @@ const getters = {
 
   isLayoutCalculating: (state) => {
     return state.layout.isCalculating;
+  },
+
+  layoutMode: (state) => {
+    return state.layout.mode;
+  },
+
+  isTreeMode: (state) => {
+    return state.layout.mode === 'tree';
   },
 
   // Selection getters
@@ -154,6 +171,14 @@ const mutations = {
 
   SET_LAYOUT_OPTIONS(state, options) {
     state.layout.options = { ...state.layout.options, ...options };
+  },
+
+  SET_LAYOUT_MODE(state, mode) {
+    state.layout.mode = mode;
+  },
+
+  SET_TREE_LAYOUT_OPTIONS(state, options) {
+    state.layout.treeOptions = { ...state.layout.treeOptions, ...options };
   },
 
   // Viewport mutations
@@ -282,20 +307,43 @@ const actions = {
     
     try {
       const messages = getters.filteredMessages;
-      const layoutResult = await GraphLayoutService.calculateLayoutForMessages(
-        messages, 
-        state.layout.options
-      );
+      let positions, bounds;
       
-      commit('SET_LAYOUT_RESULT', {
-        positions: layoutResult.positions,
-        bounds: layoutResult.bounds
-      });
+      if (state.layout.mode === 'tree') {
+        // Use matplotlib-inspired tree layout
+        positions = calculateTreeLayout(messages, state.layout.treeOptions);
+        bounds = calculateBounds(positions);
+      } else {
+        // Use default Sugiyama-style layout
+        const layoutResult = await GraphLayoutService.calculateLayoutForMessages(
+          messages, 
+          state.layout.options
+        );
+        positions = layoutResult.positions;
+        bounds = layoutResult.bounds;
+      }
+      
+      commit('SET_LAYOUT_RESULT', { positions, bounds });
     } catch (error) {
       console.error('[GraphView] Layout calculation failed:', error);
     } finally {
       commit('SET_LAYOUT_CALCULATING', false);
     }
+  },
+
+  // Toggle layout mode between 'default' and 'tree'
+  toggleLayoutMode({ state, commit, dispatch }) {
+    const newMode = state.layout.mode === 'tree' ? 'default' : 'tree';
+    commit('SET_LAYOUT_MODE', newMode);
+    dispatch('calculateLayout');
+    dispatch('fitToContent');
+  },
+
+  // Set layout mode directly
+  setLayoutMode({ commit, dispatch }, mode) {
+    commit('SET_LAYOUT_MODE', mode);
+    dispatch('calculateLayout');
+    dispatch('fitToContent');
   },
 
   // Handle message selection
