@@ -1,6 +1,12 @@
 <template>
   <TabViewLayout>
     <div class="search-view">
+      <!-- Search description -->
+      <div class="mode-description">
+        <span class="info-icon">ℹ</span>
+        <p>Search results show messages visible to you that match your search criteria (tags and content). Results include both public messages and private messages you have access to.</p>
+      </div>
+      
       <div class="search-controls">
         <div class="query-row">
           <input v-model="q" class="query-input" type="text" placeholder="Search content" @keydown.enter="runSearch" />
@@ -118,6 +124,48 @@ watch(
 .remove-tag { background: none; border: none; color: var(--color-text-secondary); cursor: pointer; font-size: 14px; padding: 0 4px; }
 .remove-tag:hover { color: var(--color-error); }
 .empty-state { padding: 12px; color: var(--color-text-secondary); font-style: italic; }
+
+.mode-description {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  width: 80%;
+  padding: var(--space-md);
+  margin: 0 auto var(--space-md) auto;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
+}
+
+.mode-description .info-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--color-surface-light);
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-style: normal;
+  margin-top: 2px;
+}
+
+.mode-description p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+@media (max-width: 480px) {
+  .mode-description {
+    width: calc(100% - var(--space-md) * 2);
+    margin: 0 auto var(--space-md) auto;
+    padding: var(--space-sm);
+  }
+}
 </style>
 
 

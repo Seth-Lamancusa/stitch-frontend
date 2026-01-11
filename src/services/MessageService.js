@@ -109,8 +109,10 @@ export default {
 
   // Delete a message and optionally its descendants
   async deleteMessage(id, deleteDescendants = false) {
+    console.log(`[MessageService.deleteMessage] id=${id}, deleteDescendants=${deleteDescendants}, type=${typeof deleteDescendants}`)
     const headers = getAuthHeaders()
     const params = { delete_descendants: deleteDescendants }
+    console.log(`[MessageService.deleteMessage] params=`, params)
     return apiClient.delete(`/messages/${id}`, { headers, params })
   },
 
@@ -180,7 +182,7 @@ export default {
   },
 
   // Get user history root messages (auth required)
-  async getUserHistory(skip = 0, limit = 15) {
+  async getUserHistory(skip = 0, limit = 6) {
     const headers = await getAuthHeaders()
     return apiClient.get(`/messages/history?skip=${skip}&limit=${limit}`, { headers })
   },

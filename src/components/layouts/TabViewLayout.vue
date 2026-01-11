@@ -224,8 +224,18 @@
       </div>
       <div class="feedback-button-container">
         <router-link to="/messages/2HhB" class="feedback-button">
-          💬 Leave Feedback and Questions Here
+          💬 Feedback
         </router-link>
+        <button 
+          @click="handleRefresh"
+          class="refresh-button"
+          :disabled="isRefreshing"
+          title="Refresh message list"
+          aria-label="Refresh message list"
+        >
+          <span v-if="isRefreshing" class="refresh-spinner"></span>
+          <span v-else>🔄 Refresh</span>
+        </button>
       </div>
       <slot></slot>
     </div>
@@ -300,6 +310,7 @@ const usernameContainerRef = ref(null);
 const switchingPrincipalUid = ref(null);
 const isSwitchingPrincipal = computed(() => !!switchingPrincipalUid.value);
 const isCreateManagedModalOpen = ref(false);
+const isRefreshing = ref(false);
 
 // Public SPA: no internal/admin tabs here
 
@@ -481,6 +492,19 @@ const onCreateManagedUser = () => { closePrincipalMenu(); isCreateManagedModalOp
 
 const closeCreateManagedModal = () => {
   isCreateManagedModalOpen.value = false;
+};
+
+const handleRefresh = async () => {
+  if (isRefreshing.value) return;
+  try {
+    isRefreshing.value = true;
+    // Trigger refresh via store action
+    store.dispatch('navigation/triggerRefresh');
+    // Small delay to show the spinner
+    await new Promise(resolve => setTimeout(resolve, 300));
+  } finally {
+    isRefreshing.value = false;
+  }
 };
 
 const onDocumentClick = (e) => {
@@ -1062,14 +1086,23 @@ const onLogoClick = (event) => {
 }
 
 .feedback-button-container {
-  padding: 12px 6px;
+  padding: 8px 6px;
+  padding-bottom: 0px;
   text-align: center;
   background: var(--color-background, #fff);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.feedback-button {
-  display: inline-block;
-  background: linear-gradient(135deg, rgba(16, 163, 127, 0.8) 0%, rgba(31, 197, 157, 0.7) 100%);
+/* Shared base styles for both buttons */
+.feedback-button,
+.refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--color-text-inverse, #fff);
   text-decoration: none;
   padding: 10px 20px;
@@ -1077,10 +1110,29 @@ const onLogoClick = (event) => {
   font-weight: 600;
   font-size: 0.9rem;
   transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(16, 163, 127, 0.3);
-  border: 1px solid rgba(16, 163, 127, 0.3);
   backdrop-filter: blur(10px);
   margin-top: 6px;
+  cursor: pointer;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  box-shadow: none;
+  line-height: 1;
+  white-space: nowrap;
+  font-family: inherit;
+  /* Reset button defaults */
+  margin-left: 0;
+  margin-right: 0;
+  margin-bottom: 0;
+  /* Ensure consistent height */
+  min-height: 0;
+  height: auto;
+}
+
+/* Feedback button - green colors */
+.feedback-button {
+  background: linear-gradient(135deg, rgba(16, 163, 127, 0.8) 0%, rgba(31, 197, 157, 0.7) 100%);
+  box-shadow: 0 2px 8px rgba(16, 163, 127, 0.3);
+  border-color: rgba(16, 163, 127, 0.3);
 }
 
 .feedback-button:hover {
@@ -1089,6 +1141,39 @@ const onLogoClick = (event) => {
   background: linear-gradient(135deg, rgba(16, 163, 127, 0.9) 0%, rgba(31, 197, 157, 0.8) 100%);
   border-color: rgba(16, 163, 127, 0.5);
   color: var(--color-text-inverse, #fff);
+}
+
+/* Refresh button - blue colors */
+.refresh-button {
+  background: linear-gradient(135deg, rgba(79, 140, 255, 0.8) 0%, rgba(100, 160, 255, 0.7) 100%);
+  box-shadow: 0 2px 8px rgba(79, 140, 255, 0.3);
+  border-color: rgba(79, 140, 255, 0.3);
+}
+
+.refresh-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(79, 140, 255, 0.4);
+  background: linear-gradient(135deg, rgba(79, 140, 255, 0.9) 0%, rgba(100, 160, 255, 0.8) 100%);
+  border-color: rgba(79, 140, 255, 0.5);
+}
+
+.refresh-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.refresh-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Banner prompting email verification */
@@ -1178,9 +1263,11 @@ const onLogoClick = (event) => {
   
   .feedback-button-container {
     padding: 8px 4px; /* Reduced padding on mobile */
+    gap: 8px;
   }
   
-  .feedback-button {
+  .feedback-button,
+  .refresh-button {
     font-size: 0.85rem; /* Slightly smaller text */
     padding: 8px 16px; /* Smaller button padding */
   }
@@ -1236,9 +1323,11 @@ const onLogoClick = (event) => {
   
   .feedback-button-container {
     padding: 6px 4px; /* Even more reduced padding on smaller screens */
+    gap: 6px;
   }
   
-  .feedback-button {
+  .feedback-button,
+  .refresh-button {
     font-size: 0.8rem; /* Smaller text for narrow screens */
     padding: 6px 12px; /* More compact padding */
   }
@@ -1274,9 +1363,11 @@ const onLogoClick = (event) => {
   
   .feedback-button-container {
     padding: 8px 6px;
+    gap: 8px;
   }
   
-  .feedback-button {
+  .feedback-button,
+  .refresh-button {
     font-size: 0.85rem;
     padding: 8px 14px;
   }

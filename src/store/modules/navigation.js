@@ -68,6 +68,8 @@ export default {
     // Global Speed Dial modal state
     speedDialModalVisible: false,
     speedDialTargetMessageId: null,
+    // Refresh trigger for message lists
+    refreshTrigger: 0, // Timestamp that increments when refresh is requested
   },
   
   mutations: {
@@ -281,6 +283,9 @@ export default {
       state.speedDialModalVisible = false;
       state.speedDialTargetMessageId = null;
     },
+    TRIGGER_REFRESH(state) {
+      state.refreshTrigger = Date.now();
+    },
   },
   
   getters: {
@@ -354,6 +359,8 @@ export default {
     // Speed Dial modal getters
     speedDialModalVisible: (state) => state.speedDialModalVisible,
     speedDialTargetMessageId: (state) => state.speedDialTargetMessageId,
+    // Refresh trigger getter
+    refreshTrigger: (state) => state.refreshTrigger,
   },
   
   actions: {
@@ -604,6 +611,11 @@ export default {
         // No specific message - clear any active action bar
         commit('CLEAR_ACTIVE_ACTION_BAR');
       }
+    },
+    
+    // Refresh message list action
+    triggerRefresh({ commit }) {
+      commit('TRIGGER_REFRESH');
     },
     
     // Selection mode actions
