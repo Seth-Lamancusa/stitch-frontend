@@ -128,6 +128,24 @@ const shouldShowEmptyState = computed(() => {
   return !isLoading.value && isAllLoaded.value && threads.value.length === 0;
 });
 
+// Get description text for current mode
+const modeDescription = computed(() => {
+  switch (props.mode) {
+    case 'search':
+      return 'Search results show messages visible to you that match your search criteria (tags and content). Results include both public messages and private messages you have access to.';
+    case 'history':
+      return 'History shows the root message of each thread where you have sent at least one message, in any branch. Threads are sorted by your most recent activity, so the threads you\'ve participated in recently appear first.';
+    case 'saved':
+      return 'Saved messages are messages you\'ve bookmarked for easy access later. Use the bookmark button on any message to save it here.';
+    case 'inbox':
+      return 'Your inbox shows the latest message from each conversation thread where you are involved—either as a recipient or as the author. This gives you a quick overview of all your active conversations.';
+    case 'public':
+      return 'Public messages are visible to everyone. This view shows the most recent message (leaf node) from each public thread, giving you a snapshot of public conversations happening across the platform.';
+    default:
+      return null;
+  }
+});
+
 // Contextual empty state message based on mode
 const emptyStateMessage = computed(() => {
   switch (props.mode) {
@@ -571,6 +589,34 @@ watch(activePrincipalUid, async (newUid, oldUid) => {
   }
 });
 
+// Watch for refresh trigger from navigation store
+const refreshTrigger = computed(() => store.getters['navigation/refreshTrigger']);
+watch(refreshTrigger, async (newTrigger) => {
+  if (newTrigger > 0) {
+    console.log('[MessageList] Refresh triggered, reloading messages...');
+    // Cancel any in-flight requests
+    currentRequestId.value++;
+    localLoadingState.value = false;
+    selectedMessageIds.value.clear();
+    isAllLoaded.value = false;
+    currentSkip.value = 0;
+    
+    // Clear cache for current mode
+    store.dispatch('navigation/clearListCache', props.mode);
+    
+    // Clear messages store cache if in store mode
+    if (isStoreMode.value) {
+      await store.dispatch('messages/clearCache');
+    } else if (isLocalMode.value) {
+      localMessages.value = [];
+    }
+    
+    // Trigger fresh load
+    await nextTick();
+    loadMessages();
+  }
+});
+
 // Clean up observers
 onUnmounted(() => {
   // Cancel any pending requests to prevent memory leaks
@@ -852,6 +898,12 @@ const handleLinkDelete = async (linkData) => {
           <span class="btn-icon">+</span>
         </button>
       </div>
+    </div>
+
+    <!-- Mode description -->
+    <div v-if="modeDescription && !hideInfoBox" class="mode-description">
+      <span class="info-icon">ℹ</span>
+      <p>{{ modeDescription }}</p>
     </div>
 
     <!-- Empty state - only shown when logged in but no messages -->
@@ -1149,6 +1201,40 @@ const handleLinkDelete = async (linkData) => {
   gap: 16px;
 }
 
+.mode-description {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  width: 50%;
+  padding: var(--space-md);
+  margin: 0 auto var(--space-md) auto;
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
+}
+
+.mode-description .info-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--color-surface-light);
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-style: normal;
+  margin-top: 2px;
+}
+
+.mode-description p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
 .empty-state {
   display: flex;
   justify-content: center;
@@ -1348,6 +1434,12 @@ const handleLinkDelete = async (linkData) => {
     margin: 0; /* No margins - gap property on parent controls spacing */
     padding-left: 4px;
     padding-right: 4px;
+  }
+  
+  .mode-description {
+    width: calc(100% - var(--space-md) * 2);
+    margin: 0 auto var(--space-md) auto;
+    padding: var(--space-sm);
   }
   
   .empty-state {

@@ -999,7 +999,10 @@ export default {
           case 'history':
             {
               const MessageService = (await import('../../services/MessageService')).default;
-              const histResponse = await MessageService.getUserHistory(skip, limit);
+              // History mode uses limit 6 by default (override general default of 15)
+              // If limit is explicitly set to something other than 15, use that value
+              const historyLimit = limit === 15 ? 6 : limit;
+              const histResponse = await MessageService.getUserHistory(skip, historyLimit);
               response = {
                 messages: histResponse.data.messages || [],
                 has_more: histResponse.data.has_more || false,
