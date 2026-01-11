@@ -24,6 +24,20 @@
           </svg>
           Thread view
         </button>
+        
+        <button
+          @click="loadAllMessages"
+          class="load-all-button"
+          :disabled="isLoadingAll"
+          :title="isLoadingAll ? `Loading... (${loadingProgress})` : 'Load all messages in the thread'"
+        >
+          <div v-if="isLoadingAll" class="button-spinner"></div>
+          <svg v-else width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 2v4m0 4v4M2 8h4m4 0h4"/>
+            <path d="M4 4l2 2m4 4l2 2M12 4l-2 2M6 10l-2 2"/>
+          </svg>
+          {{ isLoadingAll ? loadingProgress : 'Load All' }}
+        </button>
       </div>
     </div>
     
@@ -36,6 +50,7 @@
           :width="canvasWidth"
           :height="canvasHeight"
           @messages-loaded="refreshGraphFromStore"
+          @message-click="handleMessageClick"
         />
         
         <!-- Status overlay -->
@@ -75,7 +90,9 @@ export default {
       canvasWidth: 800,
       canvasHeight: 600,
       refreshTimeout: null,
-      unwatchMessages: null
+      unwatchMessages: null,
+      isLoadingAll: false,
+      loadingProgress: ''
     };
   },
   
@@ -255,6 +272,14 @@ export default {
       }
     },
     
+    handleMessageClick({ message }) {
+      // Navigate to thread view with the clicked message ID
+      // ThreadView will automatically scroll to this message via ensureCorrectScroll
+      if (message && message.id) {
+        this.$router.push(`/messages/${message.id}`);
+      }
+    },
+    
     
     // Canvas management
     updateCanvasSize() {
@@ -340,6 +365,98 @@ export default {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+    },
+    
+    // Load all messages by iteratively loading parents and children
+    async loadAllMessages() {
+      if (this.isLoadingAll) return;
+      
+      this.isLoadingAll = true;
+      let iteration = 0;
+      const maxIterations = 50; // Safety limit to prevent infinite loops
+      
+      try {
+        while (iteration < maxIterations) {
+          iteration++;
+          
+          // Get current messages from store
+          const currentMessages = this.messages;
+          if (currentMessages.length === 0) break;
+          
+          // Find messages with unloaded parents
+          const messagesWithUnloadedParents = currentMessages.filter(msg => {
+            if (!msg.parent_id) return false;
+            const parentLoaded = !!this.$store.getters['messages/getMessage'](msg.parent_id);
+            return !parentLoaded;
+          });
+          
+          // Find messages with unloaded children
+          const messagesWithUnloadedChildren = currentMessages.filter(msg => {
+            const childIds = msg.child_ids || [];
+            if (!childIds.length) return false;
+            return childIds.some(id => !this.$store.getters['messages/getMessage'](id));
+          });
+          
+          const totalToLoad = messagesWithUnloadedParents.length + messagesWithUnloadedChildren.length;
+          
+          // If nothing to load, we're done
+          if (totalToLoad === 0) {
+            this.loadingProgress = 'Complete!';
+            setTimeout(() => {
+              this.isLoadingAll = false;
+              this.loadingProgress = '';
+            }, 1000);
+            break;
+          }
+          
+          this.loadingProgress = `Iteration ${iteration}: ${totalToLoad} branches`;
+          
+          // Load parents in parallel
+          const parentPromises = messagesWithUnloadedParents.map(msg =>
+            this.$store.dispatch('messages/loadMessageBranchUp', {
+              messageId: msg.id,
+              depth: 5
+            }).catch(err => {
+              console.error(`[GraphView] Failed to load parents for ${msg.id}:`, err);
+            })
+          );
+          
+          // Load children in parallel
+          const childPromises = messagesWithUnloadedChildren.map(msg =>
+            this.$store.dispatch('messages/loadMessageBranchDown', {
+              messageId: msg.id,
+              depth: 5
+            }).catch(err => {
+              console.error(`[GraphView] Failed to load children for ${msg.id}:`, err);
+            })
+          );
+          
+          // Wait for all loads to complete
+          await Promise.all([...parentPromises, ...childPromises]);
+          
+          // Refresh graph to include new messages
+          await this.refreshGraphFromStore();
+          
+          // Small delay to prevent overwhelming the API
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        if (iteration >= maxIterations) {
+          this.loadingProgress = 'Max iterations reached';
+          setTimeout(() => {
+            this.isLoadingAll = false;
+            this.loadingProgress = '';
+          }, 2000);
+        }
+        
+      } catch (error) {
+        console.error('[GraphView] Error loading all messages:', error);
+        this.loadingProgress = 'Error occurred';
+        setTimeout(() => {
+          this.isLoadingAll = false;
+          this.loadingProgress = '';
+        }, 2000);
+      }
     }
   }
 };
@@ -390,18 +507,54 @@ export default {
 
 /* Thread view button */
 .thread-view-button {
-  padding: var(--space-xs) var(--space-sm);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
   background-color: transparent;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   cursor: pointer;
   color: var(--color-text);
-  font-size: var(--font-size-sm);
+  font-size: 14px;
 }
 
 .thread-view-button:hover {
   background-color: var(--color-surface-hover);
   border-color: var(--color-border-hover);
+}
+
+/* Load all button */
+.load-all-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background-color: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--color-text);
+  font-size: 14px;
+}
+
+.load-all-button:hover:not(:disabled) {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+}
+
+.load-all-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.button-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-border);
+  border-top: 2px solid var(--color-text);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 /* Main content */

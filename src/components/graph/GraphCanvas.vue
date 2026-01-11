@@ -284,7 +284,8 @@ export default {
     
     // Node interaction handlers
     handleNodeClick({ message, event, multiSelect }) {
-      // No selection state in simplified graph mode
+      // Emit message click event to parent
+      this.$emit('message-click', { message });
     },
     
     handleNodeMouseEnter({ message }) {

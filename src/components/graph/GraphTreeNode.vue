@@ -171,23 +171,24 @@ export default {
       return base;
     },
 
-    // Colors following matplotlib visualizer:
-    // Light blue for others, light green for current user
+    // Get author ID for color mapping
+    authorId() {
+      return this.message.content_author || this.message.author?.uid || this.message.author?.user_tag || this.authorDisplay || 'unknown';
+    },
+
+    // Colors based on author - each sender gets a distinct color
     fillColor() {
-      if (this.isOwnMessage) {
-        return '#90EE90'; // lightgreen
+      if (this.isSelected) {
+        return 'var(--color-secondary)';
       }
-      return '#ADD8E6'; // lightblue
+      return this.getAuthorColor(this.authorId, true);
     },
 
     strokeColor() {
       if (this.isSelected) {
         return 'var(--color-secondary)';
       }
-      if (this.isOwnMessage) {
-        return '#228B22'; // green
-      }
-      return '#4169E1'; // blue
+      return this.getAuthorColor(this.authorId, false);
     },
 
     strokeWidth() {
@@ -271,6 +272,48 @@ export default {
   },
 
   methods: {
+    // Generate a consistent color for an author ID
+    getAuthorColor(authorId, isFill) {
+      // Special color for current user (keep green)
+      if (this.isOwnMessage) {
+        return isFill ? '#90EE90' : '#228B22'; // lightgreen / green
+      }
+
+      // Palette of distinct colors (light pastels for fill, darker for stroke)
+      const colorPalette = [
+        { fill: '#FFB6C1', stroke: '#DC143C' }, // Light Pink / Crimson
+        { fill: '#ADD8E6', stroke: '#4169E1' }, // Light Blue / Royal Blue
+        { fill: '#DDA0DD', stroke: '#9370DB' }, // Plum / Medium Purple
+        { fill: '#F0E68C', stroke: '#DAA520' }, // Khaki / Goldenrod
+        { fill: '#98D8C8', stroke: '#20B2AA' }, // Pale Turquoise / Light Sea Green
+        { fill: '#FFA07A', stroke: '#FF6347' }, // Light Salmon / Tomato
+        { fill: '#87CEEB', stroke: '#4682B4' }, // Sky Blue / Steel Blue
+        { fill: '#D3D3D3', stroke: '#696969' }, // Light Gray / Dim Gray
+        { fill: '#F5DEB3', stroke: '#CD853F' }, // Wheat / Peru
+        { fill: '#B0E0E6', stroke: '#5F9EA0' }, // Powder Blue / Cadet Blue
+        { fill: '#FFDAB9', stroke: '#FF8C00' }, // Peach Puff / Dark Orange
+        { fill: '#E6E6FA', stroke: '#9370DB' }, // Lavender / Medium Purple
+        { fill: '#FFF8DC', stroke: '#DAA520' }, // Cornsilk / Goldenrod
+        { fill: '#F0F8FF', stroke: '#4682B4' }, // Alice Blue / Steel Blue
+        { fill: '#FFE4E1', stroke: '#DC143C' }, // Misty Rose / Crimson
+      ];
+
+      // Simple hash function to consistently map author ID to a color
+      let hash = 0;
+      const str = String(authorId);
+      for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32-bit integer
+      }
+
+      // Use absolute value and modulo to get index
+      const index = Math.abs(hash) % colorPalette.length;
+      const color = colorPalette[index];
+
+      return isFill ? color.fill : color.stroke;
+    },
+
     handleClick(event) {
       this.$emit('click', {
         message: this.message,

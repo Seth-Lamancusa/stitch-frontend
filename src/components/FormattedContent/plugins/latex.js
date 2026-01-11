@@ -45,9 +45,12 @@ async function getKaTeX() {
 async function processLatexBlocks(content) {
   const katex = await getKaTeX();
   
+  // Process LaTeX display math blocks: $$latex$$ and \[latex\]
+  let processedContent = content;
+  
   // Find all LaTeX blocks: $$latex$$
   // Modified regex to make sure we're capturing the entire content between $$...$$ sequences
-  return content.replace(/\$\$([\s\S]*?)\$\$/g, (match, latex) => {
+  processedContent = processedContent.replace(/\$\$([\s\S]*?)\$\$/g, (match, latex) => {
     try {
       // Process the content between the dollar signs
       return katex.renderToString(latex, {
@@ -59,6 +62,22 @@ async function processLatexBlocks(content) {
       return `<div class="katex-error">${latex}</div>`;
     }
   });
+  
+  // Find all LaTeX display math blocks: \[latex\]
+  processedContent = processedContent.replace(/\\\[([\s\S]*?)\\\]/g, (match, latex) => {
+    try {
+      // Process the content between \[ and \]
+      return katex.renderToString(latex, {
+        displayMode: true,
+        throwOnError: false
+      });
+    } catch (error) {
+      console.error('Error rendering LaTeX block:', error);
+      return `<div class="katex-error">${latex}</div>`;
+    }
+  });
+  
+  return processedContent;
 }
 
 /**
@@ -70,8 +89,10 @@ async function processLatexBlocks(content) {
 async function processInlineLatex(content) {
   const katex = await getKaTeX();
   
+  let processedContent = content;
+  
   // Find all inline LaTeX: $latex$
-  return content.replace(/\$([^\$\n]+)\$/g, (match, latex) => {
+  processedContent = processedContent.replace(/\$([^\$\n]+)\$/g, (match, latex) => {
     try {
       return katex.renderToString(latex, {
         displayMode: false,
@@ -82,6 +103,22 @@ async function processInlineLatex(content) {
       return `<span class="katex-error">${latex}</span>`;
     }
   });
+  
+  // Find all inline LaTeX: \(latex\)
+  // Use non-greedy match to capture content between \( and \)
+  processedContent = processedContent.replace(/\\\(([\s\S]*?)\\\)/g, (match, latex) => {
+    try {
+      return katex.renderToString(latex, {
+        displayMode: false,
+        throwOnError: false
+      });
+    } catch (error) {
+      console.error('Error rendering inline LaTeX:', error);
+      return `<span class="katex-error">${latex}</span>`;
+    }
+  });
+  
+  return processedContent;
 }
 
 /**

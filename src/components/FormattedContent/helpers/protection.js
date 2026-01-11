@@ -84,12 +84,14 @@ export function protectInlineCode(content, context) {
 export function protectLatexBlocks(content, context) {
   const { protectedZones } = context;
   
+  let processedContent = content;
+  
   // Match LaTeX blocks: $$latex$$
   // Ensure we're using the global and multiline flags for consistent matching
   const latexBlockRegex = /\$\$([\s\S]*?)\$\$/gm;
   
   // Replace LaTeX blocks with placeholders
-  return content.replace(latexBlockRegex, (match, latex) => {
+  processedContent = processedContent.replace(latexBlockRegex, (match, latex) => {
     const placeholder = generatePlaceholder('latex_block');
     
     // Store the entire original match
@@ -101,6 +103,25 @@ export function protectLatexBlocks(content, context) {
     
     return placeholder;
   });
+  
+  // Match LaTeX display math blocks: \[latex\]
+  const latexDisplayRegex = /\\\[([\s\S]*?)\\\]/gm;
+  
+  // Replace LaTeX display math blocks with placeholders
+  processedContent = processedContent.replace(latexDisplayRegex, (match, latex) => {
+    const placeholder = generatePlaceholder('latex_block');
+    
+    // Store the entire original match
+    protectedZones.set(placeholder, {
+      type: 'latex_block',
+      original: match,
+      content: latex
+    });
+    
+    return placeholder;
+  });
+  
+  return processedContent;
 }
 
 /**
@@ -113,11 +134,13 @@ export function protectLatexBlocks(content, context) {
 export function protectInlineLatex(content, context) {
   const { protectedZones } = context;
   
+  let processedContent = content;
+  
   // Match inline LaTeX: $latex$
   const inlineLatexRegex = /\$([^\$\n]+)\$/g;
   
   // Replace inline LaTeX with placeholders
-  return content.replace(inlineLatexRegex, (match, latex) => {
+  processedContent = processedContent.replace(inlineLatexRegex, (match, latex) => {
     const placeholder = generatePlaceholder('latex_inline');
     
     // Store full match with the placeholder
@@ -129,6 +152,26 @@ export function protectInlineLatex(content, context) {
     
     return placeholder;
   });
+  
+  // Match inline LaTeX: \(latex\)
+  // Use non-greedy match to capture content between \( and \)
+  const inlineLatexParenRegex = /\\\(([\s\S]*?)\\\)/g;
+  
+  // Replace inline LaTeX with placeholders
+  processedContent = processedContent.replace(inlineLatexParenRegex, (match, latex) => {
+    const placeholder = generatePlaceholder('latex_inline');
+    
+    // Store full match with the placeholder
+    protectedZones.set(placeholder, {
+      type: 'latex_inline',
+      original: match,
+      content: latex
+    });
+    
+    return placeholder;
+  });
+  
+  return processedContent;
 }
 
 /**
