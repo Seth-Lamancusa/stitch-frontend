@@ -184,8 +184,13 @@ export default {
       // Check if recipient already exists by UID
       const exists = state.addModeRecipients.some(r => r.uid === recipient.uid);
       if (!exists) {
-        // Mark as new/staged recipient
-        state.addModeRecipients.push({ ...recipient, isNew: true, isExisting: false });
+        // Mark as new/staged recipient with default notify=true
+        state.addModeRecipients.push({ 
+          ...recipient, 
+          isNew: true, 
+          isExisting: false,
+          notify: recipient.notify !== undefined ? recipient.notify : true
+        });
       }
     },
     
@@ -198,6 +203,13 @@ export default {
         const recipient = state.addModeRecipients[index];
         const next = recipient.public !== false ? false : true;
         recipient.public = next;
+      }
+    },
+    
+    TOGGLE_ADD_MODE_RECIPIENT_NOTIFY(state, index) {
+      if (state.addModeRecipients[index]) {
+        const recipient = state.addModeRecipients[index];
+        recipient.notify = !recipient.notify;
       }
     },
     
@@ -442,6 +454,15 @@ export default {
         commit('TOGGLE_ADD_MODE_RECIPIENT_VISIBILITY', index);
       } else {
         commit('TOGGLE_REPLY_RECIPIENT_VISIBILITY', index);
+      }
+    },
+    
+    toggleRecipientNotify({ commit, state }, index) {
+      // Only available in add mode for staged recipients
+      const isAddMode = state.recipientsModal.isAddMode;
+      
+      if (isAddMode) {
+        commit('TOGGLE_ADD_MODE_RECIPIENT_NOTIFY', index);
       }
     },
     

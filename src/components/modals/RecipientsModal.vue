@@ -258,6 +258,16 @@
                     <div class="visibility-slider" :class="{ 'is-visible': recipient.public !== false }"></div>
                   </button>
                   <button 
+                    @click.stop="() => toggleRecipientNotify(index)"
+                    class="notify-toggle-btn"
+                    :class="{ 'notify': recipient.notify !== false, 'silent': recipient.notify === false }"
+                    :title="recipient.notify !== false ? 'Will notify recipient' : 'Silent add (no notification)'"
+                  >
+                    <span class="notify-emoji notify-emoji-on">🔔</span>
+                    <span class="notify-emoji notify-emoji-off">🔕</span>
+                    <div class="notify-slider" :class="{ 'is-notify': recipient.notify !== false }"></div>
+                  </button>
+                  <button 
                     @click.stop="() => removeRecipient(index, recipient)" 
                     class="remove-recipient-btn"
                   >×</button>
@@ -1122,6 +1132,11 @@ const toggleRecipientVisibility = (index) => {
   store.dispatch('navigation/toggleRecipientVisibility', index);
 };
 
+const toggleRecipientNotify = (index) => {
+  // Toggle notify preference for staged recipient in add mode
+  store.dispatch('navigation/toggleRecipientNotify', index);
+};
+
 // Speed dial state and methods
 const speedDialUsers = computed(() => store.getters['speedDial/users']);
 const mainSpeedDialUsers = computed(() => store.getters['speedDial/mainUsers']);
@@ -1731,6 +1746,71 @@ onBeforeUnmount(() => {
 }
 
 .visibility-toggle-btn.invisible .hidden-emoji {
+  opacity: 1;
+}
+
+.notify-toggle-btn {
+  position: relative;
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  padding: 0;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  width: 56px;
+  height: 24px;
+  overflow: hidden;
+  margin-left: 6px;
+}
+
+.notify-toggle-btn:hover {
+  border-color: var(--color-border-hover);
+  background-color: var(--color-hover-overlay);
+}
+
+.notify-emoji {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 14px;
+  transition: opacity 0.2s ease;
+}
+
+.notify-emoji-on {
+  left: 2px;
+  opacity: 0.4;
+}
+
+.notify-emoji-off {
+  right: 2px;
+  opacity: 0.1;
+}
+
+.notify-slider {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background-color: var(--color-primary-rgb);
+  border-radius: 10px;
+  transition: transform 0.2s ease;
+  left: 2px;
+  transform: translateX(0);
+}
+
+.notify-slider.is-notify {
+  transform: translateX(32px);
+}
+
+.notify-toggle-btn.notify .notify-emoji-on {
+  opacity: 1;
+}
+
+.notify-toggle-btn.silent .notify-emoji-off {
   opacity: 1;
 }
 

@@ -2,6 +2,8 @@ class TokenManager {
   static debug = true;
   static inFlightRefreshPromise = null;
   static lastSuccessfulRefreshAt = 0;
+  static lastRefreshFailedAt = 0;  // Track when refresh last failed to prevent cascade retries
+  static refreshFailureCooldownMs = 5000;  // 5 second cooldown after a failure before allowing another refresh
   static deviceKey = 'device_id';
   static backupManagerRefreshKey = 'manager_refresh_backup';
 
@@ -130,6 +132,19 @@ class TokenManager {
     })();
     const reason = options.reason || undefined;
     if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:start', { initiator, corrId, reason });
+
+    // Check if we recently failed a refresh - don't spam the backend with doomed requests
+    const now = Date.now();
+    if (this.lastRefreshFailedAt && (now - this.lastRefreshFailedAt) < this.refreshFailureCooldownMs) {
+      if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:cooldown_active', { 
+        initiator, 
+        corrId, 
+        timeSinceFailure: now - this.lastRefreshFailedAt,
+        cooldownMs: this.refreshFailureCooldownMs
+      });
+      return null;
+    }
+
     // Deduplicate concurrent refresh attempts within-tab
     if (this.inFlightRefreshPromise) {
       if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:reuse_inflight', { initiator, corrId });
@@ -210,6 +225,7 @@ class TokenManager {
                 return null;
               }
               this.lastSuccessfulRefreshAt = Date.now();
+              this.lastRefreshFailedAt = 0;  // Clear failure timestamp on success
               if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:success', { corrId, initiator });
               return data.access_token;
             }
@@ -249,6 +265,9 @@ class TokenManager {
 
     try {
       const res = await this.inFlightRefreshPromise;
+      if (!res) {
+        this.lastRefreshFailedAt = Date.now();  // Track failure to enable cooldown
+      }
       if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:done', { corrId, initiator, ok: !!res });
       return res;
     } finally {

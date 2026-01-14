@@ -1124,7 +1124,19 @@ const handleAddRecipients = async (recipients, addToAncestors = true) => {
       return;
     }
 
-    const response = await MessageService.addRecipientsToMessage(messageId, recipients, addToAncestors, true);
+    // Group recipients by notify preference (default to true if not specified)
+    const recipientsToNotify = recipients.filter(r => r.notify !== false);
+    const recipientsSilent = recipients.filter(r => r.notify === false);
+
+    // Add recipients that should be notified
+    if (recipientsToNotify.length > 0) {
+      await MessageService.addRecipientsToMessage(messageId, recipientsToNotify, addToAncestors, true);
+    }
+
+    // Add recipients silently (no notifications)
+    if (recipientsSilent.length > 0) {
+      await MessageService.addRecipientsToMessage(messageId, recipientsSilent, addToAncestors, false);
+    }
 
     // Refresh origin and all loaded ancestors to reflect recipient changes
     await store.dispatch('messages/refreshLoadedAncestors', {
