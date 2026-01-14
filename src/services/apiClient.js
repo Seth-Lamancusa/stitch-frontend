@@ -11,6 +11,9 @@ function generateCorrelationId() {
 // Guard symbol to avoid duplicate interceptor installation during HMR
 const AUTH_INTERCEPTOR_INSTALLED = Symbol.for('stitch.authInterceptorInstalled')
 
+// Track if a logout is in progress to prevent multiple simultaneous logout calls
+let logoutInProgress = false
+
 // Install a 401 -> refresh token -> retry once interceptor on an axios instance.
 export function installAxiosAuthInterceptor(axiosInstance) {
   if (!axiosInstance || !axiosInstance.interceptors) return;
@@ -83,6 +86,15 @@ export function installAxiosAuthInterceptor(axiosInstance) {
         return Promise.reject(error);
       }
 
+      // If user is already logged out or logout is in progress, don't try to refresh
+      try {
+        const isAuthenticated = store?.getters?.['auth/isAuthenticated'];
+        if (!isAuthenticated || logoutInProgress) {
+          try { logger.warn('[AUTH][axios] 401 but already logged out or logout in progress; skipping refresh', { url: originalRequest?.url, isAuthenticated, logoutInProgress }); } catch (_) {}
+          return Promise.reject(error);
+        }
+      } catch (_) {}
+
       // Mark to avoid infinite loops
       originalRequest._retry = true;
 
@@ -101,8 +113,19 @@ export function installAxiosAuthInterceptor(axiosInstance) {
             try { logger.info('[AUTH][axios] retrying after peer refresh', { url: originalRequest?.url, corrId }); } catch (_) {}
             return axiosInstance.request(originalRequest);
           }
-          try { logger.error('[AUTH][axios] refresh failed; forcing logout', { url: originalRequest?.url, corrId }); } catch (_) {}
-          await store.dispatch('auth/forceLogoutWithMessage');
+          // Coordinate logout to prevent multiple simultaneous logout calls
+          if (!logoutInProgress) {
+            logoutInProgress = true;
+            try {
+              try { logger.error('[AUTH][axios] refresh failed; forcing logout', { url: originalRequest?.url, corrId }); } catch (_) {}
+              await store.dispatch('auth/forceLogoutWithMessage');
+            } finally {
+              // Reset after a delay to allow re-login flow
+              setTimeout(() => { logoutInProgress = false; }, 2000);
+            }
+          } else {
+            try { logger.warn('[AUTH][axios] logout already in progress; skipping duplicate', { url: originalRequest?.url, corrId }); } catch (_) {}
+          }
           return Promise.reject(error);
         }
 
@@ -114,8 +137,19 @@ export function installAxiosAuthInterceptor(axiosInstance) {
         try { logger.info('[AUTH][axios] retrying request with new token', { url: originalRequest?.url, corrId }); } catch (_) {}
         return axiosInstance.request(originalRequest);
       } catch (e) {
-        try { logger.error('[AUTH][axios] error during refresh or retry; forcing logout', { url: originalRequest?.url, message: e?.message }); } catch (_) {}
-        try { await store.dispatch('auth/forceLogoutWithMessage'); } catch {}
+        // Coordinate logout to prevent multiple simultaneous logout calls
+        if (!logoutInProgress) {
+          logoutInProgress = true;
+          try {
+            try { logger.error('[AUTH][axios] error during refresh or retry; forcing logout', { url: originalRequest?.url, message: e?.message }); } catch (_) {}
+            await store.dispatch('auth/forceLogoutWithMessage');
+          } catch (_) {
+          } finally {
+            setTimeout(() => { logoutInProgress = false; }, 2000);
+          }
+        } else {
+          try { logger.warn('[AUTH][axios] logout already in progress; skipping duplicate (catch)', { url: originalRequest?.url }); } catch (_) {}
+        }
         return Promise.reject(error);
       }
     }
