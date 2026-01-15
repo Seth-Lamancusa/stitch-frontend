@@ -120,155 +120,83 @@ class TokenManager {
   }
 
   static async refreshAccessToken(arg1 = undefined, arg2 = undefined) {
-    // Accept optional initiator/options for richer logging without breaking callers
     let initiator = 'unknown';
     let options = {};
     try {
       if (typeof arg1 === 'string') { initiator = arg1 || 'unknown'; options = (arg2 && typeof arg2 === 'object') ? arg2 : {}; }
       else if (arg1 && typeof arg1 === 'object') { options = arg1; initiator = options.initiator || 'unknown'; }
     } catch (_) {}
-    const corrId = (() => {
-      try { return options.corrId || (`rf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`); } catch (_) { return 'rf_unknown'; }
-    })();
-    const reason = options.reason || undefined;
-    if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:start', { initiator, corrId, reason });
+    const device_id = this._ensureDeviceId();
 
-    // Check if we recently failed a refresh - don't spam the backend with doomed requests
+    // Cooldown after recent failure
     const now = Date.now();
     if (this.lastRefreshFailedAt && (now - this.lastRefreshFailedAt) < this.refreshFailureCooldownMs) {
-      if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:cooldown_active', { 
-        initiator, 
-        corrId, 
-        timeSinceFailure: now - this.lastRefreshFailedAt,
-        cooldownMs: this.refreshFailureCooldownMs
-      });
+      if (this.debug) console.log('[TokenManager] refresh blocked by cooldown');
       return null;
     }
 
-    // Deduplicate concurrent refresh attempts within-tab
+    // Deduplicate concurrent refresh attempts
     if (this.inFlightRefreshPromise) {
-      if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:reuse_inflight', { initiator, corrId });
+      if (this.debug) console.log('[TokenManager] reusing in-flight refresh');
       try { return await this.inFlightRefreshPromise; } catch { return null; }
     }
 
     this.inFlightRefreshPromise = (async () => {
       try {
-        if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:started', { initiator, corrId });
-        // Cookie-based refresh flow: no client-side refresh_token required
+        if (this.debug) console.log('[TokenManager] refresh started', { initiator, device: device_id.slice(0,8) });
 
-        // Debug simulation knobs (set via localStorage for easy toggling from DevTools):
-        // - tm_sim_latency_ms: number of ms to delay the refresh (default 0)
-        // - tm_sim_network_error: '1' to throw before network call
-        // - tm_sim_http_error: '1' to simulate non-OK HTTP result
-        // - tm_sim_fail_rate: '0.0-1.0' probability to fail (return null)
-        try {
-          const latencyMs = parseInt(localStorage.getItem('tm_sim_latency_ms') || '0', 10);
-          if (!isNaN(latencyMs) && latencyMs > 0) {
-            if (this.debug) console.log('[TokenManager] Simulating refresh latency', latencyMs, 'ms');
-            await new Promise(r => setTimeout(r, latencyMs));
-          }
-          if (localStorage.getItem('tm_sim_network_error') === '1') {
-            if (this.debug) console.warn('[TokenManager] Simulating network error during refresh');
-            throw new Error('Simulated network error');
-          }
-          if (localStorage.getItem('tm_sim_http_error') === '1') {
-            if (this.debug) console.warn('[TokenManager] Simulating HTTP error during refresh');
-            return null;
-          }
-          const failRateStr = localStorage.getItem('tm_sim_fail_rate');
-          const failRate = failRateStr ? Math.max(0, Math.min(1, parseFloat(failRateStr))) : 0;
-          if (failRate > 0 && Math.random() < failRate) {
-            if (this.debug) console.warn('[TokenManager] Simulating probabilistic refresh failure', `(p=${failRate})`);
-            return null;
-          }
-        } catch (_) {}
-
-        // Retry policy for transient errors
-        const maxAttempts = parseInt(localStorage.getItem('tm_retry_max_attempts') || '3', 10);
-        const baseDelayMs = parseInt(localStorage.getItem('tm_retry_base_delay_ms') || '500', 10);
-        const maxDelayMs = parseInt(localStorage.getItem('tm_retry_max_delay_ms') || '4000', 10);
-
+        const maxAttempts = 3;
         const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-        const isTransientStatus = (s) => s === 429 || (s >= 500 && s <= 599);
+        const isTransient = (s) => s === 429 || (s >= 500 && s <= 599);
 
-        let attempt = 0;
-        while (attempt < Math.max(1, maxAttempts)) {
-          attempt += 1;
-
-          // Cookie-based: nothing to re-read here
-
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
           let response = null;
           try {
-            if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:attempt_sending', { attempt, maxAttempts, corrId, initiator });
             response = await fetch('/v1/auth/sessions/refresh', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Correlation-Id': corrId },
+              headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
-              body: JSON.stringify({ aud: 'public-v1', device_id: this._ensureDeviceId() }),
-              _skipAuth: true
+              body: JSON.stringify({ aud: 'public-v1', device_id }),
             });
-            if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:attempt_response', { attempt, status: response && response.status, corrId, initiator });
           } catch (e) {
-            if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:network_error', { attempt, corrId, initiator, message: (e && e.message) || String(e) });
+            if (this.debug) console.warn('[TokenManager] network error', e.message);
           }
 
-          if (response && response.ok) {
-            const data = await response.json().catch((err) => {
-              if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:json_parse_failed', { corrId, initiator, message: err && err.message });
-              return null;
-            });
-            if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:response_keys', { keys: (data && Object.keys(data || {})) || [], corrId, initiator });
-            if (data && data.access_token) {
-              const ok = await this._applyTokensSafely(data.access_token, undefined);
-              if (!ok) {
-                if (this.debug) console.error('[TokenManager] Failed to persist tokens; aborting');
-                return null;
-              }
+          if (response?.ok) {
+            const data = await response.json().catch(() => null);
+            if (data?.access_token) {
+              await this._applyTokensSafely(data.access_token, undefined);
               this.lastSuccessfulRefreshAt = Date.now();
-              this.lastRefreshFailedAt = 0;  // Clear failure timestamp on success
-              if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:success', { corrId, initiator });
+              this.lastRefreshFailedAt = 0;
+              if (this.debug) console.log('[TokenManager] refresh success');
               return data.access_token;
             }
-            if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:missing_access_token', { corrId, initiator });
             return null;
           }
 
-          const status = response ? response.status : 'NETERR';
-          if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:non_ok_status', { status, attempt, corrId, initiator });
-          const shouldRetry = status === 'NETERR' || isTransientStatus(status);
-          if (!shouldRetry) {
-            if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:non_transient_failure', { status, corrId, initiator });
+          const status = response?.status || 'NETERR';
+          if (!isTransient(status) && status !== 'NETERR') {
+            if (this.debug) console.warn('[TokenManager] refresh failed', { status, attempt });
             return null;
           }
 
-          if (attempt >= maxAttempts) {
-            if (this.debug) console.warn('[TokenManager] Exhausted refresh retries');
-            this._announceRefreshResult(false);
-            return null;
+          if (attempt < maxAttempts) {
+            const delay = Math.min(4000, 500 * Math.pow(2, attempt - 1));
+            await sleep(delay);
           }
-
-          // Exponential backoff with jitter
-          const backoff = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt - 1));
-          const jitter = Math.floor(Math.random() * Math.max(1, Math.floor(backoff * 0.2)));
-          const delay = backoff + jitter;
-          if (this.debug) console.log('[TokenManager]', 'refreshAccessToken:retry_scheduled', { nextInMs: delay, nextAttempt: attempt + 1, maxAttempts, corrId, initiator });
-          await sleep(delay);
         }
+        if (this.debug) console.warn('[TokenManager] refresh exhausted retries');
+        this._announceRefreshResult(false);
         return null;
       } catch (e) {
-        if (this.debug) console.error('[TokenManager]', 'refreshAccessToken:error', { corrId, initiator, message: e && e.message });
+        if (this.debug) console.error('[TokenManager] refresh error', e.message);
         return null;
-      } finally {
-        try { if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:finished', { corrId, initiator }); } catch (_) {}
       }
     })();
 
     try {
       const res = await this.inFlightRefreshPromise;
-      if (!res) {
-        this.lastRefreshFailedAt = Date.now();  // Track failure to enable cooldown
-      }
-      if (this.debug) console.warn('[TokenManager]', 'refreshAccessToken:done', { corrId, initiator, ok: !!res });
+      if (!res) this.lastRefreshFailedAt = Date.now();
       return res;
     } finally {
       this.inFlightRefreshPromise = null;
