@@ -194,8 +194,16 @@
           <div v-if="activeTab === 'api'" class="content-section api-content">
             <h2>Available for select partners</h2>
             <p>
-              Swagger UI: <a href="https://api.stitch.fyi/v1/docs" target="_blank">api.stitch.fyi/v1/docs</a>
+              The Stitch API is documented using OpenAPI/Swagger. Two documentation interfaces are available:
             </p>
+            <ul>
+              <li>
+                <a href="https://api.stitch.fyi/v1/docs" target="_blank">Swagger UI</a> — Interactive API explorer where you can test endpoints directly in your browser. Best for exploring endpoints and trying out requests.
+              </li>
+              <li>
+                <a href="https://api.stitch.fyi/v1/redoc" target="_blank">ReDoc</a> — Read-only API reference with a clean, readable format. Best for understanding the full API structure and response schemas.
+              </li>
+            </ul>
           </div>
           </div>
         </div>
