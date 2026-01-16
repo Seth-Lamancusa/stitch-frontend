@@ -95,7 +95,7 @@ export default {
     _clearLocalAuth({ commit, dispatch }) {
       try { WebSocketService.cleanup(); } catch (e) {}
       try { TokenManager.accessToken = null; } catch (e) {}
-      // refresh token is now in httpOnly cookie; nothing to clear in JS
+      // Refresh token is in httpOnly cookie only; will be cleared by logout endpoint
       try { sessionStorage.removeItem('active_principal_uid'); sessionStorage.removeItem('manager_uid'); } catch (_) {}
       commit('SET_USER', null);
       commit('SET_MANAGER_SNAPSHOT', null);
@@ -235,7 +235,7 @@ export default {
         const data = resp && resp.data ? resp.data : {};
         if (!data.access_token) throw new Error('switch_failed');
         TokenManager.accessToken = data.access_token;
-        // Manager backup refresh is stored in httpOnly cookie by server
+        // Refresh token is stored in httpOnly cookie by server (not accessible to JS)
         try {
           const claims = TokenManager.decodeJwt(data.access_token) || {};
           const activeUid = claims && claims.sub ? claims.sub : null;
@@ -261,7 +261,7 @@ export default {
         const data = resp && resp.data ? resp.data : {};
         if (!data.access_token) throw new Error('return_to_self_failed');
         TokenManager.accessToken = data.access_token;
-        // Manager backup cookie cleared by server
+        // Refresh token is stored in httpOnly cookie by server (not accessible to JS)
         try {
           const claims = TokenManager.decodeJwt(data.access_token) || {};
           const activeUid = claims && claims.sub ? claims.sub : null;

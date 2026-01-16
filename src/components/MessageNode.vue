@@ -105,6 +105,15 @@
             Tags ({{ existingTags.length }})
           </button>
           
+          <!-- Channels badge -->
+          <button 
+            @click.stop="openChannelsModal"
+            class="channels-toggle"
+            title="Manage channels for this message"
+          >
+            Channels ({{ existingChannels.length }})
+          </button>
+          
           <!-- Visibility indicator - always shown; toggles only when allowed -->
           <span 
             @click.stop="canToggleVisibility && toggleVisibility()"
@@ -239,6 +248,16 @@
           @update="handleTagsUpdate"
           @done="closeTagsModal"
         />
+        
+        <ChannelsModal
+          :is-visible="showChannelsModal"
+          :is-add-mode="true"
+          :existing-channels="existingChannels"
+          :message-id="message?.id"
+          @close="closeChannelsModal"
+          @update="handleChannelsUpdate"
+          @done="closeChannelsModal"
+        />
       </teleport>
       
       <!-- Reply Order Modal -->
@@ -337,6 +356,7 @@ import SiblingNavigator from './SiblingNavigator.vue';
 import FormattedContent from './FormattedContent/index.vue';
 import { initFormatters } from './FormattedContent/init';
 import TagsModal from './modals/TagsModal.vue';
+import ChannelsModal from './modals/ChannelsModal.vue';
 import ReplyOrderModal from './modals/ReplyOrderModal.vue';
 import MessageAttachments from './MessageAttachments.vue';
 import UserDisplay from './common/UserDisplay.vue';
@@ -356,6 +376,7 @@ export default {
     SiblingNavigator,
     FormattedContent,
     TagsModal,
+    ChannelsModal,
     ReplyOrderModal,
     MessageAttachments,
     UserDisplay
@@ -960,6 +981,44 @@ export default {
       // In the new flow, updates happen immediately on Add/Remove
       // Done just closes the modal
       closeTagsModal();
+    };
+
+    // Channels support
+    const showChannelsModal = ref(false);
+    const existingChannels = computed(() => {
+      const channels = props.message && Array.isArray(props.message.channels) ? props.message.channels : [];
+      // Return channels as-is (they should already be objects with id, display_name, etc.)
+      return channels.filter(ch => ch && ch.id);
+    });
+    const hasChannels = computed(() => {
+      return existingChannels.value.length > 0;
+    });
+    const openChannelsModal = () => {
+      // Do NOT clear replying/close reply UI; just open the modal
+      dismissMobileKeyboard();
+      showChannelsModal.value = true;
+    };
+    const closeChannelsModal = () => { showChannelsModal.value = false; };
+    
+    const handleChannelsUpdate = async ({ messageId, channel_ids }) => {
+      try {
+        if (!messageId) return;
+        const channelIdsArray = Array.isArray(channel_ids) ? channel_ids : [];
+        // TODO: Call API to update message channels
+        // await MessageService.updateMessageChannels(messageId, channelIdsArray);
+        console.log('[MessageNode] Would update channels:', { messageId, channel_ids: channelIdsArray });
+        // For now, just close the modal
+        closeChannelsModal();
+      } catch (e) {
+        console.error('[MessageNode] Failed to update channels', e);
+        store.commit('ui/SET_ERROR', 'Failed to update channels');
+      }
+    };
+    
+    const handleChannelsDone = async (channelIds) => {
+      // In the new flow, updates happen immediately on Add/Remove
+      // Done just closes the modal
+      closeChannelsModal();
     };
 
     // Reply order support
@@ -1675,6 +1734,13 @@ export default {
       handleTagsUpdate,
       handleTagsDone,
       closeTagsModal,
+      existingChannels,
+      hasChannels,
+      showChannelsModal,
+      handleChannelsUpdate,
+      handleChannelsDone,
+      closeChannelsModal,
+      openChannelsModal,
       showReplyOrderModal,
       openReplyOrderModal,
       closeReplyOrderModal,
@@ -2040,6 +2106,28 @@ export default {
 .tags-toggle:hover {
   background-color: rgba(79, 140, 255, 0.18);
   border-color: rgba(79, 140, 255, 0.75);
+}
+
+/* Channels toggle (similar to tags but with different color) */
+.channels-toggle {
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+  cursor: pointer;
+  border-radius: var(--radius-pill);
+  transition: all var(--transition-fast);
+  margin-left: 0;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 165, 0, 0.12);
+  border: 1px solid rgba(255, 165, 0, 0.45);
+  color: #FFA500;
+}
+
+.channels-toggle:hover {
+  background-color: rgba(255, 165, 0, 0.18);
+  border-color: rgba(255, 165, 0, 0.75);
 }
 
 .recipients-toggle:not(.to-you):not(.author-toggle) {

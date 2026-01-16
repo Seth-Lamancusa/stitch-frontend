@@ -40,6 +40,16 @@
             <span class="tab-label">Saved</span>
           </router-link>
           <router-link 
+            to="/channels" 
+            class="nav-tab"
+            :class="{ 'active': activeTab === 'channels' }"
+            role="tab"
+            :aria-selected="activeTab === 'channels'"
+          >
+            <span class="tab-emoji" aria-hidden="true">📢</span>
+            <span class="tab-label">Channels</span>
+          </router-link>
+          <router-link 
             to="/inbox" 
             class="nav-tab"
             :class="{ 'active': activeTab === 'inbox' }"
@@ -52,16 +62,6 @@
               <span class="loading-spinner"></span>
             </span>
             <span v-else-if="unreadCount > 0" class="unread-inline-badge">{{ unreadCount }}</span>
-          </router-link>
-          <router-link 
-            to="/public" 
-            class="nav-tab"
-            :class="{ 'active': activeTab === 'public' }"
-            role="tab"
-            :aria-selected="activeTab === 'public'"
-          >
-            <span class="tab-emoji" aria-hidden="true">🌐</span>
-            <span class="tab-label">Public</span>
           </router-link>
         </div>
       
@@ -254,6 +254,33 @@
     />
     <GlobalNotifications />
     
+    <!-- Global Create Button (floating, appears on all tabs) -->
+    <button
+      v-if="user && canInteract"
+      class="global-create-btn"
+      @click="handleGlobalCreateClick"
+      title="Create new"
+      aria-label="Create new"
+    >
+      <span class="btn-icon">+</span>
+    </button>
+
+    <!-- Global Create Options Modal -->
+    <NewThreadModal
+      :show="showCreateModal"
+      @close="showCreateModal = false"
+      @new-thread="handleNewThread"
+      @import="handleImport"
+      @create-channel="handleCreateChannel"
+    />
+
+    <!-- Create Channel Modal -->
+    <CreateChannelModal
+      :show="showCreateChannelModal"
+      @close="showCreateChannelModal = false"
+      @created="handleChannelCreated"
+    />
+    
     <!-- Mobile tab bar - only visible on mobile -->
     <MobileTabBar />
     <div
@@ -277,6 +304,8 @@ import ManagedUserCreateModal from '../modals/ManagedUserCreateModal.vue';
 import GlobalNotifications from '../GlobalNotifications.vue';
 import MobileTabBar from './MobileTabBar.vue';
 import UserDisplay from '../common/UserDisplay.vue';
+import NewThreadModal from '../modals/NewThreadModal.vue';
+import CreateChannelModal from '../modals/CreateChannelModal.vue';
 import { ADMIN_ORIGIN } from '@/config/appConfig.js';
 
 const router = useRouter();
@@ -293,9 +322,9 @@ const authReady = computed(() => store.getters['auth/authReady']);
 const activeTab = computed(() => {
   const p = route.path || '';
   if (p.startsWith('/search')) return 'search';
-  if (p.startsWith('/public')) return 'public';
   if (p.startsWith('/history')) return 'history';
   if (p.startsWith('/saved')) return 'saved';
+  if (p.startsWith('/channels')) return 'channels';
   if (p.startsWith('/inbox')) return 'inbox';
   return 'history';
 });
@@ -311,6 +340,23 @@ const switchingPrincipalUid = ref(null);
 const isSwitchingPrincipal = computed(() => !!switchingPrincipalUid.value);
 const isCreateManagedModalOpen = ref(false);
 const isRefreshing = ref(false);
+const showCreateModal = ref(false);
+const showCreateChannelModal = ref(false);
+
+// Check scopes for create modal
+const hasImportScope = computed(() => {
+  return store.getters['auth/hasAnyScope'](['msg.import.cursor', 'msg.import.audio']);
+});
+
+const hasChannelCreateScope = computed(() => {
+  return store.getters['auth/hasScope']('channel.create');
+});
+
+const shouldShowCreateModal = computed(() => {
+  return hasImportScope.value || hasChannelCreateScope.value;
+});
+
+const canInteract = computed(() => store.getters['auth/canInteract']);
 
 // Public SPA: no internal/admin tabs here
 
@@ -559,6 +605,56 @@ const onLogoClick = (event) => {
   } catch (e) {
     console.warn('[TabViewLayout] router.push to /home failed, falling back to replace', e);
     router.replace('/home');
+  }
+};
+
+// Global create button handlers
+const handleGlobalCreateClick = () => {
+  if (!user.value) {
+    store.commit('ui/SET_ERROR', { code: 'auth_required', message: 'Please log in to create new content' });
+    return;
+  }
+
+  if (!canInteract.value) {
+    store.commit('ui/SET_ERROR', { code: 'permission_required', message: 'You need write permission to create new content' });
+    return;
+  }
+
+  // If user has import or channel.create scopes, show modal
+  // Otherwise go straight to new thread
+  if (shouldShowCreateModal.value) {
+    showCreateModal.value = true;
+  } else {
+    router.push('/new-thread');
+  }
+};
+
+const handleNewThread = () => {
+  showCreateModal.value = false;
+  router.push('/new-thread');
+};
+
+const handleImport = () => {
+  showCreateModal.value = false;
+  store.dispatch('navigation/setPreviousRoute', route.path);
+  router.push('/import');
+};
+
+const handleCreateChannel = () => {
+  showCreateModal.value = false;
+  showCreateChannelModal.value = true;
+};
+
+const handleChannelCreated = async (newChannel) => {
+  console.log('[TabViewLayout] Channel created:', newChannel);
+  showCreateChannelModal.value = false;
+  
+  // Trigger refresh so ChannelsView can reload its list
+  store.dispatch('navigation/triggerRefresh');
+  
+  // Navigate to channels tab if not already there to show the new channel
+  if (route.path !== '/channels') {
+    router.push('/channels');
   }
 };
 </script>
@@ -1270,6 +1366,55 @@ const onLogoClick = (event) => {
   .refresh-button {
     font-size: 0.85rem; /* Slightly smaller text */
     padding: 8px 16px; /* Smaller button padding */
+  }
+}
+
+/* Global Create Button */
+.global-create-btn {
+  position: fixed;
+  bottom: var(--space-xl);
+  right: var(--space-xl);
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  border: none;
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: background-color var(--transition-normal);
+  z-index: 10;
+  font-size: 52px;
+  line-height: 1;
+}
+
+.global-create-btn .btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
+.global-create-btn:hover {
+  background-color: var(--color-primary-dark);
+}
+
+/* Mobile responsive for global create button */
+@media (max-width: 768px) {
+  .global-create-btn {
+    width: 52px;
+    height: 52px;
+    font-size: 44px;
+    bottom: 80px; /* Move up to avoid mobile tab bar */
+    right: var(--space-md);
+  }
+
+  .global-create-btn .btn-icon {
+    transform: translateY(-0.5px);
   }
 }
 

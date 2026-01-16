@@ -315,6 +315,16 @@
                 <div class="visibility-slider" :class="{ 'is-visible': recipient.public !== false }"></div>
               </button>
               <button 
+                @click.stop="() => toggleRecipientNotify(index)"
+                class="notify-toggle-btn"
+                :class="{ 'notify': recipient.notify !== false, 'silent': recipient.notify === false }"
+                :title="recipient.notify !== false ? 'Will notify recipient' : 'Silent send (no notification)'"
+              >
+                <span class="notify-emoji notify-emoji-on">🔔</span>
+                <span class="notify-emoji notify-emoji-off">🔕</span>
+                <div class="notify-slider" :class="{ 'is-notify': recipient.notify !== false }"></div>
+              </button>
+              <button 
                 v-if="canRemoveRecipient(recipient)"
                 @click.stop="() => removeRecipient(index, recipient)" 
                 class="remove-recipient-btn"

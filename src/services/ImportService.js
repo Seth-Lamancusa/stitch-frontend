@@ -59,10 +59,10 @@ class ImportService {
         // Start with base recipients
         const messageRecipients = [...recipients];
 
-        // Add every other unique author as a recipient
+        // Add every other unique author as a recipient (silent - no notifications)
         for (const uid of uniqueAuthorUids) {
           if (uid && uid !== msg.authorUid && !messageRecipients.some(r => r && r.uid === uid)) {
-            messageRecipients.push({ uid, public: true });
+            messageRecipients.push({ uid, public: true, notify: false });
           }
         }
 
@@ -99,10 +99,10 @@ class ImportService {
         // Start with base recipients
         const messageRecipients = [...recipients];
 
-        // Add all other participants as recipients, excluding the author
+        // Add all other participants as recipients, excluding the author (silent - no notifications)
         for (const uid of participantUids) {
           if (uid !== contentAuthor && !messageRecipients.some(r => r && r.uid === uid)) {
-            messageRecipients.push({ uid, public: true });
+            messageRecipients.push({ uid, public: true, notify: false });
           }
         }
 

@@ -5,6 +5,7 @@ import ThreadView from './views/app_views/ThreadView.vue';
 import NewThreadView from './views/app_views/NewThreadView.vue';
 import GraphView from './views/app_views/GraphView.vue';
 import SearchView from './views/app_views/SearchView.vue';
+import ChannelsView from './views/app_views/ChannelsView.vue';
 import HomeView from './views/info_views/HomeView.vue';
 import AboutView from './views/info_views/AboutView.vue';
 import ArchitectureView from './views/info_views/ArchitectureView.vue';
@@ -85,6 +86,11 @@ const routes = [
     name: 'saved', 
     component: MessageListView,
     props: { mode: 'saved' }
+  },
+  {
+    path: '/channels',
+    name: 'channels',
+    component: ChannelsView
   },
   {
     path: '/new-thread',

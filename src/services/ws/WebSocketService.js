@@ -803,7 +803,7 @@ const WebSocketService = {
       connectionAttempts: this.connectionAttempts,
       lastPingTime: this.lastPingTime,
       hasAuthToken: !!this.authToken,
-      hasRefreshToken: (() => { try { return !!TokenManager.refreshToken; } catch (_) { return undefined; } })(),
+      hasRefreshToken: undefined,  // Refresh token is in httpOnly cookie only (not accessible to JS)
       authTokenPrefix: this.authToken ? this.authToken.slice(0, 10) : null,
     };
     

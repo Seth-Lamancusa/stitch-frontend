@@ -90,6 +90,19 @@
             <span class="meta-pill__text">Recipients ({{ recipients.length }})</span>
           </button>
           
+          <!-- Channels button -->
+          <button 
+            class="toolbar-control meta-pill" 
+            @click="toggleChannelsModal"
+            :disabled="!canInteract"
+            :aria-expanded="showChannelsModal"
+            aria-label="Manage channels"
+            title="Channels"
+          >
+            <span class="meta-pill__icon">📢</span>
+            <span class="meta-pill__text">Channels ({{ replyChannels.length }})</span>
+          </button>
+          
           <!-- Attachment button -->
           <input 
             ref="fileInput"
@@ -280,6 +293,16 @@
       @done="handleTagsDone"
     />
     
+    <!-- Channels modal -->
+    <ChannelsModal
+      :is-visible="showChannelsModal"
+      :is-add-mode="false"
+      :existing-channels="[]"
+      @close="closeChannelsModal"
+      @change="handleChannelsChange"
+      @done="handleChannelsDone"
+    />
+    
     <!-- Bot Prompt Modal moved to global component -->
   </div>
 </template>
@@ -289,6 +312,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, reactive } 
 import { useStore } from 'vuex';
 import RecipientsModal from './modals/RecipientsModal.vue';
 import TagsModal from './modals/TagsModal.vue';
+import ChannelsModal from './modals/ChannelsModal.vue';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 import MessageService from '../services/MessageService.js';
 import AttachmentService from '../services/AttachmentService.js';
@@ -365,6 +389,18 @@ const dragDistance = ref(0);
 const showRecipientSelector = ref(false);
 const showBotModal = ref(false);
 const showTagsModal = ref(false);
+const showChannelsModal = ref(false);
+
+// Channels state (hardcoded sample data for UI sketch)
+const replyChannels = ref([
+  {
+    id: 'e5b8b22a',
+    display_name: 'Physics Monastery',
+    description: 'The one and only.',
+    member_count: 12,
+    is_admin: true
+  }
+]);
 
 // Textarea expansion state
 const isTextareaExpanded = ref(false);
@@ -418,6 +454,7 @@ const showVerifyCTA = computed(() => !props.canInteract && props.isAuthenticated
 
 // Draft tags sourced from navigation store
 const replyTags = computed(() => store.getters['navigation/replyTags'] || []);
+const replyChannelIds = computed(() => store.getters['navigation/replyChannelIds'] || []);
 
 const mentionDropdown = reactive({
   visible: false,
@@ -1451,7 +1488,19 @@ const sendReply = async () => {
     
     // DRAFT REPLY FLOW: If configured, bulk add draft recipients to ancestors of parent first (notify only for reply later)
     if (props.targetId && recipients.value.length > 0 && replyAddToAncestors.value) {
-      await MessageService.addRecipientsToMessage(props.targetId, recipients.value, replyAddToAncestors.value, false);
+      // When notifyOfLast=false, we need to set notify: false on each recipient
+      // because the backend ignores notifyOfLast and uses per-recipient notify flags
+      const recipientsWithoutNotification = recipients.value.map(recipient => {
+        if (typeof recipient === 'string') {
+          // String format: convert to object with notify: false
+          return { user_tag: recipient, notify: false };
+        } else if (typeof recipient === 'object') {
+          // Object format: ensure notify: false is set
+          return { ...recipient, notify: false };
+        }
+        return recipient;
+      });
+      await MessageService.addRecipientsToMessage(props.targetId, recipientsWithoutNotification, replyAddToAncestors.value, false);
       // Refresh origin and loaded ancestors (no notify path)
       await store.dispatch('messages/refreshLoadedAncestors', {
         messageId: props.targetId,
@@ -1461,6 +1510,7 @@ const sendReply = async () => {
     }
     
     // Create a new message using the store action (normal notification for new reply)
+    // Inherit channel_ids from parent (matching bot service logic)
     const newMessage = await store.dispatch('messages/sendReply', {
       parentId: props.targetId, // Will be null for new threads
       content: content.value,
@@ -1470,7 +1520,8 @@ const sendReply = async () => {
       // Ensure the author is explicitly set to the user's UID (not email)
       content_author: currentUser.uid,
       tags: replyTags.value,
-      files: attachments.value
+      files: attachments.value,
+      ...(replyChannelIds.value.length > 0 && { channel_ids: replyChannelIds.value })
     });
     
     
@@ -1653,6 +1704,59 @@ const handleTagsChange = (newTags) => {
   applyModalTags(newTags, false);
 };
 
+// Channels modal handlers
+const toggleChannelsModal = () => {
+  if (!showChannelsModal.value) {
+    dismissMobileKeyboard();
+  }
+  showChannelsModal.value = !showChannelsModal.value;
+};
+
+const closeChannelsModal = () => {
+  showChannelsModal.value = false;
+};
+
+const handleChannelsChange = (channelIds) => {
+  // Hardcoded: convert IDs to channel objects for display
+  const SAMPLE_CHANNELS_MAP = {
+    'e5b8b22a': {
+      id: 'e5b8b22a',
+      display_name: 'Physics Monastery',
+      description: 'The one and only.',
+      member_count: 12,
+      is_admin: true
+    },
+    'f83377b7': {
+      id: 'f83377b7',
+      display_name: 'Engineering',
+      description: 'Engineering team discussions',
+      member_count: 8,
+      is_admin: false
+    },
+    'a1b2c3d4': {
+      id: 'a1b2c3d4',
+      display_name: 'Design',
+      description: 'Design team collaboration',
+      member_count: 5,
+      is_admin: false
+    },
+    'x9y8z7w6': {
+      id: 'x9y8z7w6',
+      display_name: 'Marketing',
+      description: 'Marketing campaigns and announcements',
+      member_count: 15,
+      is_admin: true
+    }
+  };
+  
+  replyChannels.value = channelIds.map(id => SAMPLE_CHANNELS_MAP[id]).filter(Boolean);
+};
+
+const handleChannelsDone = (channelIds) => {
+  handleChannelsChange(channelIds);
+  closeChannelsModal();
+};
+
 // Bot prompt methods removed (handled by global modal)
 
 // Handle clicks outside reply box
@@ -1663,7 +1767,7 @@ const handleClickOutside = (event) => {
     return;
   }
   // Don't close if any modal is open
-  if (showRecipientSelector.value || speedDialModalVisible.value || showTagsModal.value) {
+  if (showRecipientSelector.value || speedDialModalVisible.value || showTagsModal.value || showChannelsModal.value) {
     return;
   }
   
@@ -1685,9 +1789,17 @@ const handleClickOutside = (event) => {
       clickedInsideTagsModal = tagsModalEl.contains(event.target) || (path && path.includes(tagsModalEl));
     }
   } catch (e) {}
+  // If a Channels modal is open anywhere (teleported), don't close when clicking inside it
+  let clickedInsideChannelsModal = false;
+  try {
+    const channelsModalEl = document.querySelector('.channels-modal');
+    if (channelsModalEl) {
+      clickedInsideChannelsModal = channelsModalEl.contains(event.target) || (path && path.includes(channelsModalEl));
+    }
+  } catch (e) {}
   const clickedReplyButton = Array.from(replyButtons).some(btn => btn.contains(event.target));
   
-  if (clickedInsideSheet || clickedReplyButton || clickedInsideTagsModal) {
+  if (clickedInsideSheet || clickedReplyButton || clickedInsideTagsModal || clickedInsideChannelsModal) {
     return;
   }
   

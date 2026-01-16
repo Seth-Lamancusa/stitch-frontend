@@ -16,11 +16,27 @@
             </div>
           </button>
           
-          <button class="action-btn secondary" @click="handleImport">
+          <button 
+            v-if="canImport" 
+            class="action-btn secondary" 
+            @click="handleImport"
+          >
             <span class="btn-icon">📥</span>
             <div class="btn-text">
               <span class="btn-title">Import Conversation</span>
               <span class="btn-desc">Import from Cursor text or Audio</span>
+            </div>
+          </button>
+          
+          <button 
+            v-if="canCreateChannel" 
+            class="action-btn secondary" 
+            @click="handleCreateChannel"
+          >
+            <span class="btn-icon">📢</span>
+            <div class="btn-text">
+              <span class="btn-title">Create Channel</span>
+              <span class="btn-desc">Create a new channel for group discussions</span>
             </div>
           </button>
         </div>
@@ -30,6 +46,9 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
+import { useStore } from 'vuex';
+
 const props = defineProps({
   show: {
     type: Boolean,
@@ -37,7 +56,18 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['close', 'new-thread', 'import']);
+const emit = defineEmits(['close', 'new-thread', 'import', 'create-channel']);
+
+const store = useStore();
+
+// Check scopes
+const canImport = computed(() => {
+  return store.getters['auth/hasAnyScope'](['msg.import.cursor', 'msg.import.audio']);
+});
+
+const canCreateChannel = computed(() => {
+  return store.getters['auth/hasScope']('channel.create');
+});
 
 const handleCancel = () => {
   emit('close');
@@ -49,6 +79,10 @@ const handleNewThread = () => {
 
 const handleImport = () => {
   emit('import');
+};
+
+const handleCreateChannel = () => {
+  emit('create-channel');
 };
 </script>
 

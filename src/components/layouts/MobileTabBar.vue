@@ -37,6 +37,18 @@
     </router-link>
     
     <router-link 
+      to="/channels" 
+      class="mobile-tab"
+      :class="{ 'active': activeTab === 'channels' }"
+      role="tab"
+      :aria-selected="activeTab === 'channels'"
+      aria-label="Channels"
+    >
+      <span class="tab-emoji" aria-hidden="true">📢</span>
+      <span class="tab-label">Channels</span>
+    </router-link>
+    
+    <router-link 
       to="/inbox" 
       class="mobile-tab"
       :class="{ 'active': activeTab === 'inbox' }"
@@ -50,18 +62,6 @@
         <span class="loading-spinner"></span>
       </span>
       <span v-else-if="unreadCount > 0" class="unread-badge">{{ unreadCount }}</span>
-    </router-link>
-    
-    <router-link 
-      to="/public" 
-      class="mobile-tab"
-      :class="{ 'active': activeTab === 'public' }"
-      role="tab"
-      :aria-selected="activeTab === 'public'"
-      aria-label="Public"
-    >
-      <span class="tab-emoji" aria-hidden="true">🌐</span>
-      <span class="tab-label">Public</span>
     </router-link>
   </nav>
 </template>
@@ -77,9 +77,9 @@ const route = useRoute();
 const activeTab = computed(() => {
   const p = route.path || '';
   if (p.startsWith('/search')) return 'search';
-  if (p.startsWith('/public')) return 'public';
   if (p.startsWith('/history')) return 'history';
   if (p.startsWith('/saved')) return 'saved';
+  if (p.startsWith('/channels')) return 'channels';
   if (p.startsWith('/inbox')) return 'inbox';
   return 'history';
 });

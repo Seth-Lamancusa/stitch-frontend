@@ -57,7 +57,7 @@ const router = useRouter();
 const route = useRoute();
 
 // Define emits
-const emit = defineEmits(['messageClicked', 'selectionChanged']);
+const emit = defineEmits(['messageClicked', 'selectionChanged', 'createChannel']);
 
 const isAllLoaded = ref(false);
 const currentSkip = ref(0);
@@ -98,7 +98,7 @@ const messageListRef = ref(null);
 const loadingIndicatorRef = ref(null);
 
 // Read active tab from centralized navigation store (synced from TabViewLayout via route)
-const activeTab = computed(() => store.getters['navigation/activeTab'] || 'public');
+const activeTab = computed(() => store.getters['navigation/activeTab'] || 'history');
 
 const threads = computed(() => {
   // Use custom messages if provided
@@ -302,8 +302,21 @@ const createNewThread = () => {
   router.push('/new-thread');
 };
 
-// Handle the new message button click
-const handleNewThreadClick = (event) => {
+// Check if user has any special scopes that require modal
+const hasImportScope = computed(() => {
+  return store.getters['auth/hasAnyScope'](['msg.import.cursor', 'msg.import.audio']);
+});
+
+const hasChannelCreateScope = computed(() => {
+  return store.getters['auth/hasScope']('channel.create');
+});
+
+const shouldShowModal = computed(() => {
+  return hasImportScope.value || hasChannelCreateScope.value;
+});
+
+// Handle the create button click
+const handleCreateClick = (event) => {
   // First check if user is logged in
   if (!user.value) {
     store.commit('ui/SET_ERROR', { code: 'auth_required', message: 'Please log in to create new messages' });
@@ -311,10 +324,17 @@ const handleNewThreadClick = (event) => {
   }
 
   // Check capability: msg.write via centralized auth getter
-  if (store.getters['auth/canInteract']) {
+  if (!store.getters['auth/canInteract']) {
+    store.commit('ui/SET_ERROR', { code: 'permission_required', message: 'You need write permission to create new messages' });
+    return;
+  }
+
+  // If user has import or channel.create scopes, show modal
+  // Otherwise go straight to new thread
+  if (shouldShowModal.value) {
     showNewThreadModal.value = true;
   } else {
-    store.commit('ui/SET_ERROR', { code: 'permission_required', message: 'You need write permission to create new messages' });
+    createNewThread();
   }
 };
 
@@ -327,6 +347,12 @@ const handleImportConfirm = () => {
   showNewThreadModal.value = false;
   store.dispatch('navigation/setPreviousRoute', route.path);
   router.push('/import');
+};
+
+const handleCreateChannelConfirm = () => {
+  showNewThreadModal.value = false;
+  // Emit event to parent (ChannelsView will handle this)
+  emit('createChannel');
 };
 
 // Function to check if the author is the current user
@@ -890,13 +916,7 @@ const handleLinkDelete = async (linkData) => {
     <!-- Message list header -->
     <div v-if="!hideHeader" class="message-list-header">
       <div class="header-controls">
-        <button 
-          class="new-message-btn"
-          :class="{ 'disabled': !canInteract }"
-          @click="handleNewThreadClick"
-        >
-          <span class="btn-icon">+</span>
-        </button>
+        <!-- Create button is now global in TabViewLayout -->
       </div>
     </div>
 
@@ -991,12 +1011,13 @@ const handleLinkDelete = async (linkData) => {
       @confirm="deleteMessage"
     />
 
-    <!-- New Thread Selection Modal -->
+    <!-- Create Options Modal -->
     <NewThreadModal
       :show="showNewThreadModal"
       @close="showNewThreadModal = false"
       @new-thread="handleNewThreadConfirm"
       @import="handleImportConfirm"
+      @create-channel="handleCreateChannelConfirm"
     />
   </div>
 </template>
@@ -1272,44 +1293,6 @@ const handleLinkDelete = async (linkData) => {
   100% { transform: rotate(360deg); }
 }
 
-.new-message-btn {
-  position: fixed;
-  bottom: var(--space-xl);
-  right: var(--space-xl);
-  background-color: var(--color-primary);
-  color: var(--color-text-inverse);
-  border: none;
-  border-radius: 50%;
-  width: 60px;
-  height: 60px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-  cursor: pointer;
-  transition: background-color var(--transition-normal);
-  z-index: 10;
-  font-size: 52px;
-  line-height: 1;
-}
-
-.new-message-btn .btn-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  transform: translateY(-1px); /* Fine-tune vertical centering */
-}
-
-.new-message-btn:hover {
-  background-color: var(--color-primary-dark);
-}
-
-.new-message-btn.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  pointer-events: all;
-}
 
 .unread-indicator {
   display: inline-block;
@@ -1456,17 +1439,6 @@ const handleLinkDelete = async (linkData) => {
     box-sizing: border-box;
   }
   
-  .new-message-btn {
-    width: 52px;
-    height: 52px;
-    font-size: 44px;
-    bottom: 80px; /* Move up to avoid mobile tab bar */
-    right: var(--space-md);
-  }
-  
-  .new-message-btn .btn-icon {
-    transform: translateY(-0.5px); /* Adjust for smaller mobile button */
-  }
   
   .delete-confirm-content {
     width: 96%;

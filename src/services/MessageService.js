@@ -11,7 +11,10 @@ const getAuthHeaders = () => {
 
 export default {
   // Send a message or reply (supports optional tags)
-  async sendReply(parentId, content, isPrivate = false, recipients = [], content_author = null, tags = null, files = null, subject = null) {
+  // recipients can be:
+  //   - String: "alice" or "@alice" or "uid:abc123" (defaults to notify=true, public=true)
+  //   - Object: {user_tag: "alice", public: true, notify: false} for per-recipient control
+  async sendReply(parentId, content, isPrivate = false, recipients = [], content_author = null, tags = null, files = null, subject = null, channel_ids = null) {
     const headers = getAuthHeaders()
 
     const messageData = { content, public: !isPrivate, recipients }
@@ -20,6 +23,7 @@ export default {
     if (content_author) messageData.content_author = content_author
     if (Array.isArray(tags)) messageData.tags = tags
     if (Array.isArray(files)) messageData.files = files
+    if (Array.isArray(channel_ids)) messageData.channel_ids = channel_ids
 
     try {
       // Debug logging for outgoing payload
@@ -84,6 +88,9 @@ export default {
   },
 
   // Add recipients to a message (or multiple messages)
+  // recipients can be:
+  //   - String: "alice" or "@alice" or "uid:abc123" (defaults to notify=true, public=true)
+  //   - Object: {user_tag: "alice", public: true, notify: false} for per-recipient control
   async addRecipientsToMessage(messageIdOrIds, recipients, addToAncestors = true, notifyOfLast = true, addToFullTree = false) {
     const headers = getAuthHeaders()
     const body = Array.isArray(messageIdOrIds)

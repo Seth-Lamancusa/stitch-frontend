@@ -720,7 +720,7 @@ export default {
     },
     
     // Send a reply to a message
-    async sendReply({ commit, dispatch, rootState, state }, { parentId, content, isPrivate, recipients, content_author, tags, files, subject }) {
+    async sendReply({ commit, dispatch, rootState, state }, { parentId, content, isPrivate, recipients, content_author, tags, files, subject, channel_ids }) {
       try {
         console.log('[Messages Store] Starting sendReply', { 
           parentId, 
@@ -733,20 +733,30 @@ export default {
         // Use the current user if content_author is not provided
         const effectiveAuthor = content_author || rootState.auth?.user?.uid;
         
-        // Process recipients - convert to strings for MessageInput (List[str])
+        // Process recipients - support both string and object formats
+        // String format: "alice" or "@alice" or "uid:abc123" (defaults to notify=true)
+        // Object format: {user_tag: "alice", public: true, notify: false}
         let processedRecipients = [];
         if (recipients && recipients.length > 0) {
           console.log('[Messages Store] Processing recipients:', recipients);
           
           processedRecipients = recipients.map(recipient => {
-            // If recipient is an object, extract tag or uid
-            if (typeof recipient === 'object') {
-              if (recipient.user_tag) return recipient.user_tag;
-              if (recipient.uid) return `uid:${recipient.uid}`;
-              console.log('[Messages Store] Invalid recipient object (no user_tag or uid):', recipient);
-              return null;
+            // If recipient is an object, preserve it with notify flag
+            if (typeof recipient === 'object' && recipient !== null) {
+              // Ensure it has user_tag or uid
+              if (!recipient.user_tag && !recipient.uid) {
+                console.log('[Messages Store] Invalid recipient object (no user_tag or uid):', recipient);
+                return null;
+              }
+              // Preserve the object format for per-recipient options (public, notify)
+              return {
+                user_tag: recipient.user_tag,
+                uid: recipient.uid,
+                public: recipient.public !== undefined ? recipient.public : true,
+                notify: recipient.notify !== undefined ? recipient.notify : true,
+              };
             }
-            // If recipient is a string, keep as is (user_tag or uid string)
+            // If recipient is a string, keep as is (defaults to notify=true on backend)
             else if (typeof recipient === 'string') {
               return recipient;
             }
@@ -754,7 +764,7 @@ export default {
             return null;
           }).filter(recipient => recipient !== null); // Remove any nulls
           
-          console.log('[Messages Store] Final processed recipients (strings):', processedRecipients);
+          console.log('[Messages Store] Final processed recipients:', processedRecipients);
         }
         
         
@@ -776,7 +786,8 @@ export default {
           effectiveAuthor,
           tags,
           files,
-          subject
+          subject,
+          channel_ids
         );
         
         console.log('[Messages Store] sendReply response:', response?.data?.id ? {
@@ -1810,7 +1821,7 @@ export default {
     },
     
     getPinnedMessages: (state, getters, rootState) => {
-      const activeTab = rootState.ui?.activeTab || 'public';
+      const activeTab = rootState.ui?.activeTab || 'history';
       const currentUser = rootState.auth?.user;
       const userEmail = currentUser?.email;
       const userUid = currentUser?.uid;
