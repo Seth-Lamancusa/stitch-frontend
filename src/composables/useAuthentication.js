@@ -47,7 +47,7 @@ export function useAuthentication() {
       const token = data.access_token;
       if (!token) throw new Error('Missing access token');
       TokenManager.accessToken = token;
-      // refresh token is set via httpOnly cookie
+      // Refresh token is stored in httpOnly cookie by server (not accessible to JS)
       await store.dispatch('auth/validateExistingToken');
     } catch (e) {
       const status = e?.response?.status;
@@ -77,7 +77,7 @@ export function useAuthentication() {
       const token = data.access_token;
       if (!token) throw new Error('Missing access token');
       TokenManager.accessToken = token;
-      // refresh token is set via httpOnly cookie
+      // Refresh token is stored in httpOnly cookie by server (not accessible to JS)
       await store.dispatch('auth/validateExistingToken');
     } catch (e) {
       const status = e?.response?.status;
@@ -105,7 +105,7 @@ export function useAuthentication() {
       const token = data.access_token;
       if (!token) throw new Error('Missing access token');
       TokenManager.accessToken = token;
-      // refresh token may be rotated via cookie by backend
+      // Refresh token is stored in httpOnly cookie by server (not accessible to JS)
       await store.dispatch('auth/validateExistingToken');
     } catch (e) {
       const status = e?.response?.status;
@@ -153,7 +153,7 @@ export function useAuthentication() {
     const token = data.access_token;
     if (!token) throw new Error('Missing access token');
     TokenManager.accessToken = token;
-    // refresh token set via cookie
+    // Refresh token is stored in httpOnly cookie by server (not accessible to JS)
     await store.dispatch('auth/validateExistingToken');
   };
 

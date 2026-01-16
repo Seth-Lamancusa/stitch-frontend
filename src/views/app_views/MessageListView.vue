@@ -103,19 +103,9 @@ const handleAddRecipients = async (recipients, addToAncestors = true) => {
       return;
     }
 
-    // Group recipients by notify preference (default to true if not specified)
-    const recipientsToNotify = recipients.filter(r => r.notify !== false);
-    const recipientsSilent = recipients.filter(r => r.notify === false);
-
-    // Add recipients that should be notified
-    if (recipientsToNotify.length > 0) {
-      await MessageService.addRecipientsToMessage(messageId, recipientsToNotify, addToAncestors, true);
-    }
-
-    // Add recipients silently (no notifications)
-    if (recipientsSilent.length > 0) {
-      await MessageService.addRecipientsToMessage(messageId, recipientsSilent, addToAncestors, false);
-    }
+    // Backend now supports per-recipient notify flag, send all recipients in one call
+    // Recipients can include notify field: {user_tag: "alice", notify: false}
+    await MessageService.addRecipientsToMessage(messageId, recipients, addToAncestors, true);
 
     // Refresh the message to reflect recipient changes
     await store.dispatch('messages/refreshLoadedAncestors', {

@@ -38,8 +38,8 @@ class TokenManager {
     } catch (_) {}
   }
 
-  static get refreshToken() { return null; }
-  static set refreshToken(token) { /* noop: httpOnly cookie */ }
+  // Refresh token is stored in httpOnly cookie only (no JS access needed)
+  // Removed backup token storage to eliminate cross-tab token drift bugs
 
   static _readBundle() { return {}; }
   static _writeBundle(obj) { }
@@ -82,9 +82,10 @@ class TokenManager {
 
   
 
-  static async _applyTokensSafely(access, refresh) {
+  static async _applyTokensSafely(access) {
     try {
-      // Refresh token is in httpOnly cookie; ignore provided value
+      // Store access token only
+      // Refresh token is managed by httpOnly cookie (set by server, not accessible to JS)
       if (typeof access !== 'undefined') this.accessToken = access;
       return true;
     } catch (e) {
@@ -152,11 +153,15 @@ class TokenManager {
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
           let response = null;
           try {
+            // Cookie-only refresh: httpOnly cookie is sent automatically via credentials: 'include'
+            // No refresh_token in body to avoid stale token bugs from cross-tab sessionStorage drift
+            const payload = { aud: 'public-v1', device_id };
+            
             response = await fetch('/v1/auth/sessions/refresh', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({ aud: 'public-v1', device_id }),
+              credentials: 'include',  // Sends httpOnly cookie automatically
+              body: JSON.stringify(payload),
             });
           } catch (e) {
             if (this.debug) console.warn('[TokenManager] network error', e.message);
@@ -165,7 +170,8 @@ class TokenManager {
           if (response?.ok) {
             const data = await response.json().catch(() => null);
             if (data?.access_token) {
-              await this._applyTokensSafely(data.access_token, undefined);
+              // Store access token only (refresh token updated in cookie by server)
+              await this._applyTokensSafely(data.access_token);
               this.lastSuccessfulRefreshAt = Date.now();
               this.lastRefreshFailedAt = 0;
               if (this.debug) console.log('[TokenManager] refresh success');

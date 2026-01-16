@@ -32,7 +32,7 @@ export default {
     isLoadingReplyMessage: false,
     isReplying: false,
     previousRoute: '/history', // Default to history as fallback
-    activeTab: 'public', // Track which navigation tab is active
+    activeTab: 'history', // Track which navigation tab is active
     // List scroll position per tab (for restoring when navigating back)
     listScrollPositions: {}, // { 'inbox': 150, 'public': 0, ... }
     // Cached list state per tab (messages, pagination) for preserving across navigation
@@ -42,6 +42,7 @@ export default {
       recipients: [],  // Recipients for new message drafts
       addToAncestors: true, // Default: add staged recipients to all ancestors when sending
       tags: [], // Draft tags staged for the pending reply
+      channel_ids: [], // Channel IDs inherited from parent message (matching bot service logic)
     },
     // Separate state for add mode recipients
     addModeRecipients: [], // Recipients being staged for adding to existing message
@@ -150,12 +151,25 @@ export default {
       state.replySettings.tags = [];
     },
     
+    SET_REPLY_CHANNEL_IDS(state, channelIds) {
+      state.replySettings.channel_ids = Array.isArray(channelIds) ? channelIds : [];
+    },
+    
+    CLEAR_REPLY_CHANNEL_IDS(state) {
+      state.replySettings.channel_ids = [];
+    },
+    
     ADD_REPLY_RECIPIENT(state, recipient) {
       // Check if recipient already exists by UID
       const exists = state.replySettings.recipients.some(r => r.uid === recipient.uid);
       if (!exists) {
-        // Mark as new/staged recipient
-        state.replySettings.recipients.push({ ...recipient, isNew: true, isExisting: false });
+        // Mark as new/staged recipient with default notify=true
+        state.replySettings.recipients.push({ 
+          ...recipient, 
+          isNew: true, 
+          isExisting: false,
+          notify: recipient.notify !== undefined ? recipient.notify : true
+        });
       }
     },
     
@@ -168,6 +182,14 @@ export default {
         const recipient = state.replySettings.recipients[index];
         const next = recipient.public !== false ? false : true;
         recipient.public = next;
+      }
+    },
+    
+    TOGGLE_REPLY_RECIPIENT_NOTIFY(state, index) {
+      if (state.replySettings.recipients[index]) {
+        const recipient = state.replySettings.recipients[index];
+        // Toggle notify flag (default to true if not set)
+        recipient.notify = recipient.notify !== undefined ? !recipient.notify : false;
       }
     },
     
@@ -310,6 +332,7 @@ export default {
     replyIsPublic: state => state.replySettings.isPublic,
     replyRecipients: state => state.replySettings.recipients,
     replyTags: state => state.replySettings.tags,
+    replyChannelIds: state => state.replySettings.channel_ids || [],
     replyAddToAncestors: state => state.replySettings.addToAncestors,
     
     // Add mode recipients getters
@@ -458,11 +481,13 @@ export default {
     },
     
     toggleRecipientNotify({ commit, state }, index) {
-      // Only available in add mode for staged recipients
+      // Available in both add mode (staged recipients) and new message mode (draft recipients)
       const isAddMode = state.recipientsModal.isAddMode;
       
       if (isAddMode) {
         commit('TOGGLE_ADD_MODE_RECIPIENT_NOTIFY', index);
+      } else {
+        commit('TOGGLE_REPLY_RECIPIENT_NOTIFY', index);
       }
     },
     
@@ -545,63 +570,119 @@ export default {
       
       const currentUser = rootGetters['auth/user'];
       
-      // 1. Set visibility to match parent message
+      // Clear existing reply settings (will be repopulated from parent)
+      commit('CLEAR_REPLY_RECIPIENTS');
+      commit('CLEAR_REPLY_TAGS');
+      commit('CLEAR_REPLY_CHANNEL_IDS');
+      
+      // 1. Set visibility to match parent message (inherited from parent)
       const isPublic = message.public === 1 || message.public === true;
       commit('SET_REPLY_PUBLIC', isPublic);
       
-      // 2. Start with empty recipients and tags
-      commit('CLEAR_REPLY_RECIPIENTS');
-      commit('CLEAR_REPLY_TAGS');
+      // 2. Inherit tags from parent message (matching bot service logic)
+      const parentTags = message.tags || [];
+      const normalizedTags = parentTags.map(tag => {
+        if (typeof tag === 'string') return tag;
+        if (typeof tag === 'object' && tag?.name) return tag.name;
+        return null;
+      }).filter(tag => tag !== null);
+      commit('SET_REPLY_TAGS', normalizedTags);
       
-      // 3. Build recipients list for new message based on parent
+      // 3. Inherit channel_ids from parent message (matching bot service logic)
+      const parentChannelIds = message.channel_ids || [];
+      const normalizedChannelIds = parentChannelIds.map(ch => {
+        if (typeof ch === 'string') return ch;
+        if (typeof ch === 'number') return String(ch);
+        return null;
+      }).filter(ch => ch !== null);
+      commit('SET_REPLY_CHANNEL_IDS', normalizedChannelIds);
+      
+      // 4. Build recipients list for new message based on parent
+      // Matching bot service logic: original sender (including bots) + all recipients (bots included with notify: false, excluding current user)
       const newRecipients = [];
       const addedUids = new Set();
+      const addedTags = new Set();
       
-      // Check if current user is the author of the message being replied to
-      const isCurrentUserAuthor = currentUser && (
-        message.content_author === currentUser.uid
-      );
-      
-      // 4. Add the author of the message being replied to (if not current user)
-      if (!isCurrentUserAuthor) {
-        const authorRecipient = {
-          uid: message.content_author,
-          display_name: message.author_display_name,
-          user_tag: message.author_user_tag
-        };
-        newRecipients.push(authorRecipient);
-        addedUids.add(message.content_author);
+      // Track current user to exclude
+      if (currentUser?.uid) {
+        addedUids.add(currentUser.uid);
+      }
+      if (currentUser?.user_tag) {
+        addedTags.add(currentUser.user_tag.toLowerCase());
       }
       
-      // 5. Add all recipients from the parent message except current user
-      // Only do this if we are the author (replying to our own message), otherwise we only want to reply to the author
-      if (isCurrentUserAuthor && message.recipients && Array.isArray(message.recipients)) {
+      // 5. Add the original sender (if not current user)
+      // Include bots if they are the sender (don't filter them out)
+      // This matches bot service: include_original_sender = True
+      const authorUid = message.content_author || message.author?.uid;
+      const authorTag = message.author_user_tag || message.author?.user_tag;
+      const authorIsBot = message.author?.is_bot === true;
+      
+      if (authorUid) {
+        // Check if not current user
+        const isCurrentUser = currentUser && (
+          authorUid === currentUser.uid ||
+          (authorTag && currentUser.user_tag && authorTag.toLowerCase() === currentUser.user_tag.toLowerCase())
+        );
+        
+        if (!isCurrentUser && !addedUids.has(authorUid)) {
+          const authorRecipient = {
+            uid: authorUid,
+            display_name: message.author_display_name || message.author?.display_name,
+            user_tag: authorTag,
+            public: true,
+            notify: true
+          };
+          newRecipients.push(authorRecipient);
+          addedUids.add(authorUid);
+          if (authorTag) {
+            addedTags.add(authorTag.toLowerCase());
+          }
+        }
+      }
+      
+      // 6. Add all recipients from the parent message (including bots with notify: false)
+      // Bots that are recipients should be included but with notify: false
+      // This matches bot service: include_original_recipients = True
+      if (message.recipients && Array.isArray(message.recipients)) {
         message.recipients.forEach(recipient => {
           const recipientUid = recipient.uid;
+          const recipientTag = recipient.user_tag;
+          const recipientIsBot = recipient.is_bot === true;
+          
           // Skip if:
           // - recipient is invalid
           // - recipient is already added
           // - recipient is current user
-          if (recipientUid && 
-              !addedUids.has(recipientUid) && 
-              (!currentUser || recipientUid !== currentUser.uid)) {
-            // Strip metadata when copying for new message staging
-            // Only keep essential fields needed for staging
-            const stagedRecipient = {
-              uid: recipient.uid,
-              display_name: recipient.display_name,
-              user_tag: recipient.user_tag,
-              // keep whatever backend provides; email may be absent
-              email: recipient.email,
-              public: (recipient.public !== false)
-            };
-            newRecipients.push(stagedRecipient);
-            addedUids.add(recipientUid);
+          // Note: Bots are NOT skipped - they are included with notify: false
+          if (!recipientUid) return;
+          if (addedUids.has(recipientUid)) return;
+          if (currentUser && recipientUid === currentUser.uid) return;
+          if (recipientTag && currentUser?.user_tag && 
+              recipientTag.toLowerCase() === currentUser.user_tag.toLowerCase()) return;
+          
+          // Strip metadata when copying for new message staging
+          // Only keep essential fields needed for staging
+          // Bots that are recipients get notify: false
+          const stagedRecipient = {
+            uid: recipient.uid,
+            display_name: recipient.display_name,
+            user_tag: recipient.user_tag,
+            // keep whatever backend provides; email may be absent
+            email: recipient.email,
+            public: (recipient.public !== false),
+            // Bots that are recipients should not be notified
+            notify: recipientIsBot ? false : (recipient.notify !== false)
+          };
+          newRecipients.push(stagedRecipient);
+          addedUids.add(recipientUid);
+          if (recipientTag) {
+            addedTags.add(recipientTag.toLowerCase());
           }
         });
       }
       
-      // 6. Set the final recipients list
+      // 7. Set the final recipients list
       commit('SET_REPLY_RECIPIENTS', newRecipients);
     },
     
