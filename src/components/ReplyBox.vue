@@ -391,16 +391,9 @@ const showBotModal = ref(false);
 const showTagsModal = ref(false);
 const showChannelsModal = ref(false);
 
-// Channels state (hardcoded sample data for UI sketch)
-const replyChannels = ref([
-  {
-    id: 'e5b8b22a',
-    display_name: 'Physics Monastery',
-    description: 'The one and only.',
-    member_count: 12,
-    is_admin: true
-  }
-]);
+// Channels state
+const replyChannels = ref([]);
+const replyChannelIds = computed(() => replyChannels.value.map(ch => ch.id).filter(Boolean));
 
 // Textarea expansion state
 const isTextareaExpanded = ref(false);
@@ -454,7 +447,6 @@ const showVerifyCTA = computed(() => !props.canInteract && props.isAuthenticated
 
 // Draft tags sourced from navigation store
 const replyTags = computed(() => store.getters['navigation/replyTags'] || []);
-const replyChannelIds = computed(() => store.getters['navigation/replyChannelIds'] || []);
 
 const mentionDropdown = reactive({
   visible: false,
@@ -1529,6 +1521,7 @@ const sendReply = async () => {
     content.value = '';
     subject.value = '';
     attachments.value = [];
+    replyChannels.value = [];
     setReplyTagsList([]);
     suppressedTags.value = new Set();
     inlineTrackedTags.value = new Set();
@@ -1717,39 +1710,8 @@ const closeChannelsModal = () => {
 };
 
 const handleChannelsChange = (channelIds) => {
-  // Hardcoded: convert IDs to channel objects for display
-  const SAMPLE_CHANNELS_MAP = {
-    'e5b8b22a': {
-      id: 'e5b8b22a',
-      display_name: 'Physics Monastery',
-      description: 'The one and only.',
-      member_count: 12,
-      is_admin: true
-    },
-    'f83377b7': {
-      id: 'f83377b7',
-      display_name: 'Engineering',
-      description: 'Engineering team discussions',
-      member_count: 8,
-      is_admin: false
-    },
-    'a1b2c3d4': {
-      id: 'a1b2c3d4',
-      display_name: 'Design',
-      description: 'Design team collaboration',
-      member_count: 5,
-      is_admin: false
-    },
-    'x9y8z7w6': {
-      id: 'x9y8z7w6',
-      display_name: 'Marketing',
-      description: 'Marketing campaigns and announcements',
-      member_count: 15,
-      is_admin: true
-    }
-  };
-  
-  replyChannels.value = channelIds.map(id => SAMPLE_CHANNELS_MAP[id]).filter(Boolean);
+  // Store channel IDs for sending with the message
+  replyChannels.value = channelIds.map(id => ({ id }));
 };
 
 const handleChannelsDone = (channelIds) => {

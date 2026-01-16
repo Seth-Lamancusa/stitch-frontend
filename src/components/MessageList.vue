@@ -282,7 +282,11 @@ const viewMessage = (messageId) => {
   }
   
   // Store current route before navigation (only for non-link modes)
-  store.dispatch('navigation/setPreviousRoute', route.path);
+  // Use fullPath to include query params (e.g., channelId for channels tab)
+  const previousRoute = route.query && Object.keys(route.query).length > 0 
+    ? `${route.path}?${new URLSearchParams(route.query).toString()}`
+    : route.path;
+  store.dispatch('navigation/setPreviousRoute', previousRoute);
   router.push({ path: `/messages/${messageId}` });
 };
 

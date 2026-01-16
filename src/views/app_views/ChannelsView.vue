@@ -43,7 +43,9 @@
               title="Delete channel"
               aria-label="Delete channel"
             >
-              🗑️ Delete
+              <svg class="delete-icon" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+                <path d="M2.5 1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1H3v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4h.5a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1H2.5zm3 4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 .5-.5zM8 5a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7A.5.5 0 0 1 8 5zm3 .5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 1 0z"/>
+              </svg>
             </button>
           </div>
         </div>
@@ -121,15 +123,17 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import { useStore } from 'vuex';
+import { useRoute, useRouter } from 'vue-router';
 import TabViewLayout from '../../components/layouts/TabViewLayout.vue';
 import MessageList from '../../components/MessageList.vue';
 import ChannelsService from '../../services/ChannelsService.js';
 
 const store = useStore();
+const route = useRoute();
+const router = useRouter();
 
 // State
 const userChannels = ref([]);
-const selectedChannelId = ref('');
 const channelMessages = ref([]);
 const channelsLoading = ref(false);
 const isLoadingMessages = ref(false);
@@ -139,8 +143,14 @@ const pageSize = 15;
 const showDeleteConfirm = ref(false);
 const isDeletingChannel = ref(false);
 
-// Computed
+// Computed - use store for selectedChannelId
 const user = computed(() => store.getters['auth/user']);
+const selectedChannelId = computed({
+  get: () => store.getters['navigation/selectedChannelId'],
+  set: (value) => {
+    store.dispatch('navigation/setSelectedChannelId', value);
+  }
+});
 const selectedChannel = computed(() => {
   if (!selectedChannelId.value) return null;
   return userChannels.value.find(
@@ -215,7 +225,18 @@ const fetchChannelMessages = async (reset = false) => {
 };
 
 const handleChannelSelect = () => {
-  console.log('[ChannelsView] Channel selected:', selectedChannelId.value);
+  const channelId = selectedChannelId.value;
+  console.log('[ChannelsView] Channel selected:', channelId);
+  
+  // Persist to store (already done via computed setter, but ensure it's saved)
+  store.dispatch('navigation/setSelectedChannelId', channelId);
+  
+  // Update URL with channel ID for proper back navigation
+  if (channelId) {
+    router.replace({ path: '/channels', query: { channelId } });
+  } else {
+    router.replace({ path: '/channels' });
+  }
   
   // Reset message state
   channelMessages.value = [];
@@ -223,7 +244,7 @@ const handleChannelSelect = () => {
   hasMoreMessages.value = false;
 
   // Fetch messages for selected channel
-  if (selectedChannelId.value) {
+  if (channelId) {
     fetchChannelMessages(true);
   }
 };
@@ -286,9 +307,32 @@ watch(() => store.getters['navigation/refreshTrigger'], async (newTrigger) => {
   }
 });
 
+// Watch route query for channelId changes (e.g., when navigating back)
+watch(() => route.query.channelId, (channelId) => {
+  if (channelId && channelId !== selectedChannelId.value) {
+    store.dispatch('navigation/setSelectedChannelId', channelId);
+  } else if (!channelId && selectedChannelId.value) {
+    // URL doesn't have channelId but store does - update URL
+    router.replace({ path: '/channels', query: { channelId: selectedChannelId.value } });
+  }
+}, { immediate: true });
+
 // Lifecycle
 onMounted(() => {
   console.log('[ChannelsView] Component mounted');
+  
+  // Restore selected channel from URL query (takes precedence over store)
+  const urlChannelId = route.query.channelId;
+  const storedChannelId = store.getters['navigation/selectedChannelId'];
+  
+  if (urlChannelId) {
+    // URL takes precedence - restore from URL
+    store.dispatch('navigation/setSelectedChannelId', urlChannelId);
+  } else if (storedChannelId) {
+    // Restore from store - update URL to match
+    router.replace({ path: '/channels', query: { channelId: storedChannelId } });
+  }
+  
   fetchUserChannels();
 });
 
@@ -300,10 +344,57 @@ watch(user, (newUser, oldUser) => {
   } else if (!newUser && oldUser) {
     // User logged out
     userChannels.value = [];
-    selectedChannelId.value = '';
+    store.dispatch('navigation/setSelectedChannelId', null);
     channelMessages.value = [];
   }
 });
+
+// Watch for channel selection changes and fetch messages
+watch(selectedChannelId, (newChannelId, oldChannelId) => {
+  if (newChannelId && newChannelId !== oldChannelId) {
+    // Reset message state
+    channelMessages.value = [];
+    currentSkip.value = 0;
+    hasMoreMessages.value = false;
+    
+    // Fetch messages for selected channel
+    fetchChannelMessages(true);
+  } else if (!newChannelId) {
+    // Clear messages when no channel selected
+    channelMessages.value = [];
+    currentSkip.value = 0;
+    hasMoreMessages.value = false;
+  }
+});
+
+// Watch for channels loaded and restore selection
+watch(userChannels, (channels) => {
+  if (channels.length > 0 && selectedChannelId.value) {
+    // Verify selected channel still exists
+    const channelExists = channels.some(
+      ch => (ch.id || ch._key) === selectedChannelId.value
+    );
+    
+    if (!channelExists) {
+      // Selected channel no longer exists, clear selection
+      store.dispatch('navigation/setSelectedChannelId', null);
+    } else if (!channelMessages.value.length && selectedChannelId.value) {
+      // Channel exists but messages not loaded yet, fetch them
+      fetchChannelMessages(true);
+    }
+  } else if (channels.length > 0 && !selectedChannelId.value) {
+    // No channel selected but channels available - check URL
+    const urlChannelId = route.query.channelId;
+    if (urlChannelId) {
+      const channelExists = channels.some(
+        ch => (ch.id || ch._key) === urlChannelId
+      );
+      if (channelExists) {
+        store.dispatch('navigation/setSelectedChannelId', urlChannelId);
+      }
+    }
+  }
+}, { immediate: true });
 </script>
 
 <style scoped>
@@ -386,7 +477,7 @@ watch(user, (newUser, oldUser) => {
 .channel-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   padding: var(--space-md);
   background-color: var(--color-surface);
   border-radius: var(--radius-md);
@@ -408,27 +499,38 @@ watch(user, (newUser, oldUser) => {
 }
 
 .delete-channel-btn {
-  padding: 8px 16px;
-  background-color: var(--color-error, #ef4444);
-  color: var(--color-text-inverse, #ffffff);
+  background: none;
   border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
+  padding: 4px;
   cursor: pointer;
-  transition: background-color 0.2s ease;
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  border-radius: var(--radius-xs);
+  width: 24px;
+  height: 24px;
 }
 
 .delete-channel-btn:hover {
-  background-color: var(--color-error-dark, #dc2626);
+  background-color: #fff0f0;
+  transform: scale(1.1);
 }
 
 .delete-channel-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.delete-channel-btn .delete-icon {
+  width: 16px;
+  height: 16px;
+  fill: var(--color-error);
+  transition: all var(--transition-fast);
+}
+
+.delete-channel-btn:hover .delete-icon {
+  fill: #d32f2f;
 }
 
 .channel-name {

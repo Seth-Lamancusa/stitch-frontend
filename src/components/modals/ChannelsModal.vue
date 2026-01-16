@@ -1,6 +1,6 @@
 <template>
-  <div v-if="isVisible" class="modal-overlay" :class="{ 'closing': isClosing }" @click.self="closeModal" @mousedown.stop @click.stop>
-    <div class="channels-modal" @mousedown.stop @click.stop>
+  <div v-if="isVisible" class="modal-overlay" :class="{ 'closing': isClosing }" @click.self="handleOverlayClick">
+    <div class="channels-modal" @click.stop="handleModalContentClick">
       <div class="modal-header">
         <h3>{{ isAddMode ? 'Channels' : 'Channels (new message)' }}</h3>
         <button class="close-button" @click.stop="closeModal">×</button>
@@ -16,42 +16,15 @@
           </p>
 
           <!-- Channel Selection Dropdown -->
-          <div class="channel-input-container">
+          <div class="channel-input-container" ref="dropdownContainerRef">
             <ChannelDropdown
+              ref="channelDropdownRef"
               :available-channels="availableChannels"
               :selected-channel-ids="channelsLocal.map(ch => ch.id)"
-              placeholder="Select a channel..."
-              :disabled="isUpdating"
+              :placeholder="isLoadingChannels ? 'Loading channels...' : 'Select a channel...'"
+              :disabled="isUpdating || isLoadingChannels"
               @select="handleChannelSelect"
             />
-          </div>
-
-          <!-- Existing Channels Section (only in add mode) -->
-          <div v-if="isAddMode && existingChannels.length > 0" class="existing-channels-section">
-            <p class="section-header">Current channels</p>
-            <div class="channels-list">
-              <div 
-                v-for="(channel, index) in existingChannels" 
-                :key="channel.id" 
-                class="channel-row existing-channel"
-              >
-                <div class="channel-info">
-                  <span class="channel-name">📢 {{ channel.display_name }}</span>
-                  <span class="channel-meta">
-                    <span class="channel-description-text">{{ channel.description }}</span>
-                    <span v-if="channel.member_count" class="channel-members">{{ channel.member_count }} members</span>
-                  </span>
-                </div>
-                <button 
-                  class="remove-channel-btn" 
-                  @click.stop="removeChannel(index)" 
-                  aria-label="Remove channel" 
-                  :disabled="isUpdating"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
           </div>
 
           <!-- Selected Channels List -->
@@ -101,52 +74,9 @@
 <script setup>
 import { ref, watch, computed, onMounted, nextTick } from 'vue';
 import ChannelDropdown from '../ChannelDropdown.vue';
+import ChannelsService from '../../services/ChannelsService.js';
 
-// Sample hardcoded data
-const SAMPLE_CHANNELS = [
-  {
-    id: 'e5b8b22a',
-    display_name: 'Physics Monastery',
-    description: 'The one and only.',
-    member_count: 12,
-    is_admin: true,
-    created_at: '2026-01-15T16:05:56.794615Z'
-  },
-  {
-    id: 'f83377b7',
-    display_name: 'Engineering',
-    description: 'Engineering team discussions',
-    member_count: 8,
-    is_admin: false,
-    created_at: '2026-01-15T14:48:46.786641Z'
-  },
-  {
-    id: 'a1b2c3d4',
-    display_name: 'Design',
-    description: 'Design team collaboration',
-    member_count: 5,
-    is_admin: false,
-    created_at: '2026-01-10T10:00:00.000000Z'
-  },
-  {
-    id: 'x9y8z7w6',
-    display_name: 'Marketing',
-    description: 'Marketing campaigns and announcements',
-    member_count: 15,
-    is_admin: true,
-    created_at: '2026-01-08T09:30:00.000000Z'
-  }
-];
-
-const SAMPLE_EXISTING_CHANNELS = [
-  {
-    id: 'e5b8b22a',
-    display_name: 'Physics Monastery',
-    description: 'The one and only.',
-    member_count: 12,
-    is_admin: true
-  }
-];
+// No hardcoded data - will fetch from API
 
 const props = defineProps({
   isVisible: { type: Boolean, default: false },
@@ -159,31 +89,38 @@ const emit = defineEmits(['close', 'done', 'change', 'update']);
 
 const isClosing = ref(false);
 const isUpdating = ref(false);
+const isLoadingChannels = ref(false);
+const channelDropdownRef = ref(null);
+const dropdownContainerRef = ref(null);
 
-// Available channels (user's channels) - hardcoded for now
-const availableChannels = ref(SAMPLE_CHANNELS);
+// Available channels (user's channels) - fetched from API
+const availableChannels = ref([]);
 
 // Local working copy of selected channels
 const channelsLocal = ref([]);
 
-// Initialize from props or use sample data
+// Fetch user's channels from API
+const fetchUserChannels = async () => {
+  try {
+    isLoadingChannels.value = true;
+    const channels = await ChannelsService.getUserChannels();
+    availableChannels.value = Array.isArray(channels) ? channels : [];
+  } catch (error) {
+    console.error('[ChannelsModal] Error fetching user channels:', error);
+    availableChannels.value = [];
+  } finally {
+    isLoadingChannels.value = false;
+  }
+};
+
+// Initialize from props
 const initializeChannels = () => {
   if (props.isAddMode) {
     // In add mode, start with existing channels
-    channelsLocal.value = (props.existingChannels.length > 0 
-      ? props.existingChannels 
-      : SAMPLE_EXISTING_CHANNELS).slice();
+    channelsLocal.value = (props.existingChannels || []).slice();
   } else {
-    // In draft mode, start with sample selected channels
-    channelsLocal.value = [
-      {
-        id: 'e5b8b22a',
-        display_name: 'Physics Monastery',
-        description: 'The one and only.',
-        member_count: 12,
-        is_admin: true
-      }
-    ];
+    // In draft mode, start with empty selection
+    channelsLocal.value = [];
   }
 };
 
@@ -206,7 +143,9 @@ const getChannelKey = (channel, index) => {
 };
 
 const handleChannelSelect = (channel) => {
-  if (!channel || isUpdating.value || isChannelSelected(channel.id)) return;
+  if (!channel || isUpdating.value || isChannelSelected(channel.id)) {
+    return;
+  }
 
   // Add to local list
   channelsLocal.value.push({
@@ -231,24 +170,51 @@ const emitChannelUpdates = async () => {
   const channelIds = channelsLocal.value.map(ch => ch.id);
   
   if (props.isAddMode && props.messageId) {
-    // Add mode: emit update event (would call API)
+    // Add mode: emit update event (parent will call API)
     isUpdating.value = true;
     try {
       emit('update', { messageId: props.messageId, channel_ids: channelIds });
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Small delay for UI feedback
+      await new Promise(resolve => setTimeout(resolve, 200));
     } catch (e) {
       console.error('Failed to update channels:', e);
     } finally {
       isUpdating.value = false;
     }
   } else {
-    // Draft mode: emit change event (would update store)
+    // Draft mode: emit change event (updates local state)
     emit('change', channelIds);
   }
 };
 
-const closeModal = () => {
+const handleOverlayClick = (event) => {
+  // Check if click is on dropdown item or dropdown menu
+  const isDropdownItem = event.target?.closest('.channel-dropdown-item');
+  const isDropdownMenu = event.target?.closest('.channel-dropdown-menu');
+  const isDropdownTrigger = event.target?.closest('.channel-dropdown-trigger');
+  
+  // Check if dropdown menu is open
+  const dropdownMenu = document.querySelector('.channel-dropdown-menu');
+  const isDropdownOpen = dropdownMenu && dropdownMenu.offsetParent !== null;
+  
+  // Don't close if clicking on dropdown elements
+  if (isDropdownItem || isDropdownMenu || isDropdownTrigger || isDropdownOpen) {
+    return;
+  }
+  
+  // Check if click is actually on overlay (not on modal content)
+  const clickedOnOverlay = event.target === event.currentTarget;
+  
+  if (clickedOnOverlay) {
+    closeModal('overlay-click');
+  }
+};
+
+const handleModalContentClick = (event) => {
+  // Don't close modal when clicking inside content
+};
+
+const closeModal = (reason = 'unknown') => {
   isClosing.value = true;
   setTimeout(() => {
     isClosing.value = false;
@@ -265,6 +231,7 @@ const handleDone = () => {
 watch(() => props.isVisible, (visible) => {
   if (visible) {
     initializeChannels();
+    fetchUserChannels();
   }
 });
 
@@ -278,6 +245,7 @@ watch(() => props.existingChannels, (newChannels) => {
 onMounted(() => {
   if (props.isVisible) {
     initializeChannels();
+    fetchUserChannels();
   }
 });
 </script>
@@ -346,12 +314,6 @@ onMounted(() => {
 
 .channel-input-container { 
   margin-bottom: 16px; 
-}
-
-.existing-channels-section {
-  margin-bottom: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--color-border);
 }
 
 .channels-list { 

@@ -4,7 +4,6 @@
       class="channel-dropdown-trigger"
       type="button"
       @click.stop="toggleMenu"
-      @mousedown.stop
       :aria-expanded="showMenu.toString()"
       :disabled="disabled"
     >
@@ -16,8 +15,6 @@
       class="channel-dropdown-menu"
       ref="menuRef"
       role="listbox"
-      @mousedown.stop
-      @click.stop
     >
       <div
         v-for="channel in availableChannels"
@@ -26,7 +23,7 @@
         :class="{ disabled: isChannelSelected(channel.id) }"
         role="option"
         :aria-disabled="isChannelSelected(channel.id).toString()"
-        @click.stop="handleSelect(channel)"
+        @click="handleSelect(channel, $event)"
       >
         <span class="channel-item-name">📢 {{ channel.display_name }}</span>
         <span v-if="channel.is_admin" class="channel-item-admin">Admin</span>
@@ -72,28 +69,120 @@ const isChannelSelected = (channelId) => {
   return props.selectedChannelIds.includes(channelId);
 };
 
-const handleSelect = (channel) => {
-  if (isChannelSelected(channel.id)) return;
+const handleSelect = (channel, event) => {
+  console.log('[ChannelDropdown] handleSelect called', {
+    channelId: channel.id,
+    channelName: channel.display_name,
+    event: event ? {
+      type: event.type,
+      target: event.target?.tagName,
+      currentTarget: event.currentTarget?.tagName,
+      bubbles: event.bubbles,
+      cancelable: event.cancelable,
+      defaultPrevented: event.defaultPrevented,
+      propagationStopped: event.cancelBubble
+    } : null,
+    showMenu: showMenu.value,
+    timestamp: Date.now()
+  });
+  
+  if (isChannelSelected(channel.id)) {
+    console.log('[ChannelDropdown] Channel already selected, returning');
+    return;
+  }
+  
+  // Stop event propagation immediately to prevent it from reaching modal overlay
+  if (event) {
+    console.log('[ChannelDropdown] Stopping event propagation', {
+      before: {
+        bubbles: event.bubbles,
+        cancelBubble: event.cancelBubble
+      }
+    });
+    event.stopPropagation();
+    event.preventDefault();
+    console.log('[ChannelDropdown] After stopPropagation', {
+      after: {
+        bubbles: event.bubbles,
+        cancelBubble: event.cancelBubble,
+        defaultPrevented: event.defaultPrevented
+      }
+    });
+  }
+  
+  console.log('[ChannelDropdown] Emitting select event');
   emit('select', channel);
+  
+  // Close menu after selection (user can reopen to select more)
+  console.log('[ChannelDropdown] Closing menu after selection');
   closeMenu();
 };
 
 const closeMenu = () => {
+  console.log('[ChannelDropdown] closeMenu called', {
+    showMenuBefore: showMenu.value,
+    timestamp: Date.now()
+  });
   showMenu.value = false;
+  console.log('[ChannelDropdown] Menu closed, showMenu now:', showMenu.value);
 };
 
 const toggleMenu = () => {
+  console.log('[ChannelDropdown] toggleMenu called', {
+    showMenuBefore: showMenu.value,
+    timestamp: Date.now()
+  });
   if (showMenu.value) {
     closeMenu();
   } else {
     showMenu.value = true;
+    console.log('[ChannelDropdown] Menu opened');
   }
 };
 
 const handleClickOutside = (event) => {
-  if (!dropdownRef.value) return;
-  if (!dropdownRef.value.contains(event.target)) {
+  if (!dropdownRef.value) {
+    console.log('[ChannelDropdown] handleClickOutside: no dropdownRef');
+    return;
+  }
+  
+  // Don't process if menu is not open
+  if (!showMenu.value) {
+    console.log('[ChannelDropdown] handleClickOutside: menu not open, ignoring');
+    return;
+  }
+  
+  // Check if click is on a dropdown item (these should not close the menu)
+  const isDropdownItem = event.target?.closest('.channel-dropdown-item');
+  if (isDropdownItem) {
+    console.log('[ChannelDropdown] handleClickOutside: click is on dropdown item, ignoring');
+    return;
+  }
+  
+  // Check if click is inside dropdown (including menu)
+  const dropdownElement = dropdownRef.value;
+  const menuElement = menuRef.value;
+  const clickedInsideDropdown = dropdownElement.contains(event.target);
+  const clickedInsideMenu = menuElement && menuElement.contains(event.target);
+  
+  console.log('[ChannelDropdown] handleClickOutside', {
+    clickedInsideDropdown,
+    clickedInsideMenu,
+    isDropdownItem: !!isDropdownItem,
+    target: event.target?.tagName,
+    targetClass: event.target?.className,
+    targetId: event.target?.id,
+    showMenu: showMenu.value,
+    menuElementExists: !!menuElement,
+    timestamp: Date.now()
+  });
+  
+  // Only close if click is truly outside both dropdown trigger and menu
+  if (!clickedInsideDropdown && !clickedInsideMenu) {
+    console.log('[ChannelDropdown] Click outside dropdown, closing menu');
     closeMenu();
+  } else {
+    console.log('[ChannelDropdown] Click inside dropdown/menu, keeping menu open');
   }
 };
 
@@ -158,9 +247,8 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-md);
   max-height: 300px;
   overflow-y: auto;
-  z-index: 1002;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
-  margin-bottom: 8px;
+  z-index: 10;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
 }
 
 .channel-dropdown-item {

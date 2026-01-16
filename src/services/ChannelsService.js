@@ -185,6 +185,25 @@ export default {
       console.error('[ChannelsService] Error removing channel member:', error)
       throw error
     }
+  },
+
+  /**
+   * Update message channel associations
+   * @param {string} messageId - The message ID
+   * @param {Array<string>} channelIds - Channel IDs to associate with the message
+   * @returns {Promise} - Promise resolving to updated message
+   */
+  async updateMessageChannels(messageId, channelIds) {
+    const headers = getAuthHeaders()
+    const url = `/messages/${messageId}/channels`
+    
+    try {
+      const response = await apiClient.patch(url, { channel_ids: channelIds }, { headers })
+      return response.data
+    } catch (error) {
+      console.error('[ChannelsService] Error updating message channels:', error)
+      throw error
+    }
   }
 }
 

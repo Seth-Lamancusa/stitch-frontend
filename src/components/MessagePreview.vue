@@ -105,6 +105,15 @@
             Tags ({{ existingTags.length }})
           </button>
 
+          <button
+            v-if="hasChannels"
+            @click.stop="openChannelsModal"
+            class="channels-toggle"
+            title="Manage channels for this message"
+          >
+            Channels ({{ existingChannels.length }})
+          </button>
+
           <span
             @click.stop="canToggleVisibility && toggleVisibility()"
             class="globe-emoji"
@@ -153,6 +162,15 @@
         @update="handleTagsUpdate"
         @done="closeTagsModal"
       />
+      <ChannelsModal
+        :is-visible="showChannelsModal"
+        :is-add-mode="true"
+        :existing-channels="existingChannels"
+        :message-id="message?.id"
+        @close="closeChannelsModal"
+        @update="handleChannelsUpdate"
+        @done="closeChannelsModal"
+      />
     </teleport>
   </div>
 </template>
@@ -162,10 +180,12 @@ import { computed, ref } from 'vue';
 import { useStore } from 'vuex';
 import FormattedContent from './FormattedContent/index.vue';
 import TagsModal from './modals/TagsModal.vue';
+import ChannelsModal from './modals/ChannelsModal.vue';
 import MessageAttachments from './MessageAttachments.vue';
 import UserDisplay from './common/UserDisplay.vue';
 import { memoize } from 'lodash-es';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
+import ChannelsService from '../services/ChannelsService.js';
 
 const props = defineProps({
   message: {
@@ -199,6 +219,7 @@ const emit = defineEmits(['navigate', 'selectionToggled', 'delete']);
 
 const store = useStore();
 const showTagsModal = ref(false);
+const showChannelsModal = ref(false);
 const isTogglingReadStatus = ref(false);
 
 const currentUser = computed(() => store.getters['auth/user']);
@@ -405,6 +426,22 @@ const existingTags = computed(() => {
   return deduplicated;
 });
 
+const existingChannels = computed(() => {
+  // Messages now always have channels as array of full channel objects
+  const msg = props.message;
+  if (!msg) return [];
+  
+  if (Array.isArray(msg.channels) && msg.channels.length > 0) {
+    return msg.channels.filter(ch => ch && ch.id);
+  }
+  
+  return [];
+});
+
+const hasChannels = computed(() => {
+  return existingChannels.value.length > 0;
+});
+
 const openTagsModal = () => {
   dismissMobileKeyboard();
   showTagsModal.value = true;
@@ -412,6 +449,15 @@ const openTagsModal = () => {
 
 const closeTagsModal = () => {
   showTagsModal.value = false;
+};
+
+const openChannelsModal = () => {
+  dismissMobileKeyboard();
+  showChannelsModal.value = true;
+};
+
+const closeChannelsModal = () => {
+  showChannelsModal.value = false;
 };
 
 const handleTagsUpdate = async ({ messageId, tags }) => {
@@ -422,6 +468,37 @@ const handleTagsUpdate = async ({ messageId, tags }) => {
   } catch (error) {
     console.error('[MessagePreview] Failed to update tags', error);
     store.commit('ui/SET_ERROR', 'Failed to update tags');
+  }
+};
+
+const handleChannelsUpdate = async ({ messageId, channel_ids }) => {
+  try {
+    if (!messageId) return;
+    const channelIdsArray = Array.isArray(channel_ids) ? channel_ids : [];
+    
+    // Call API to update message channels
+    const response = await ChannelsService.updateMessageChannels(messageId, channelIdsArray);
+    
+    // Update the message in the store with the new channels data
+    if (response && response.success && response.channels) {
+      const existing = store.getters['messages/getMessage'](messageId) || {};
+      const updated = {
+        ...existing,
+        channels: response.channels || []
+      };
+      store.commit('messages/SET_MESSAGE', updated);
+    }
+    
+    console.log('[MessagePreview] Updated channels:', { messageId, channel_ids: channelIdsArray });
+  } catch (error) {
+    console.error('[MessagePreview] Failed to update channels', error);
+    let errorMessage = 'Failed to update channels';
+    if (error.response && error.response.data && error.response.data.detail) {
+      errorMessage = error.response.data.detail;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    store.commit('ui/SET_ERROR', errorMessage);
   }
 };
 
@@ -650,7 +727,8 @@ const formatTimestamp = (timestamp) => {
 }
 
 .recipients-toggle,
-.tags-toggle {
+.tags-toggle,
+.channels-toggle {
   font-size: var(--font-size-xs);
   padding: 2px 6px;
   border-radius: var(--radius-pill);
@@ -683,6 +761,17 @@ const formatTimestamp = (timestamp) => {
 .tags-toggle:hover {
   background-color: rgba(79, 140, 255, 0.18);
   border-color: rgba(79, 140, 255, 0.75);
+}
+
+.channels-toggle {
+  background-color: rgba(255, 165, 0, 0.12);
+  border: 1px solid rgba(255, 165, 0, 0.45);
+  color: #FFA500;
+}
+
+.channels-toggle:hover {
+  background-color: rgba(255, 165, 0, 0.18);
+  border-color: rgba(255, 165, 0, 0.75);
 }
 
 .globe-emoji {
@@ -787,7 +876,8 @@ const formatTimestamp = (timestamp) => {
 }
 
 .message-preview.compact .recipients-toggle,
-.message-preview.compact .tags-toggle {
+.message-preview.compact .tags-toggle,
+.message-preview.compact .channels-toggle {
   font-size: calc(var(--font-size-xs) - 1px);
   padding: 1px 5px;
   height: 20px;
