@@ -1503,12 +1503,49 @@ const sendReply = async () => {
     
     // Create a new message using the store action (normal notification for new reply)
     // Inherit channel_ids from parent (matching bot service logic)
+    
+    // Process recipients: only notify the parent message author, not other recipients
+    let processedRecipientsForReply = recipients.value;
+    if (props.targetId) {
+      const parentMessage = store.getters['messages/getMessage'](props.targetId);
+      // Get the parent author's UID from nested author object or legacy content_author field
+      const parentAuthorUid = parentMessage?.author?.uid || parentMessage?.content_author;
+      
+      if (parentAuthorUid && recipients.value.length > 0) {
+        processedRecipientsForReply = recipients.value.map(recipient => {
+          // Determine the recipient's UID
+          let recipientUid = null;
+          if (typeof recipient === 'object' && recipient !== null) {
+            recipientUid = recipient.uid;
+          }
+          
+          // Set notify: true only for the parent message author, false for everyone else
+          const shouldNotify = recipientUid === parentAuthorUid;
+          
+          if (typeof recipient === 'object' && recipient !== null) {
+            return {
+              ...recipient,
+              notify: shouldNotify
+            };
+          } else if (typeof recipient === 'string') {
+            // Convert string recipient to object format to control notify flag
+            // String recipients can't specify notify, so we convert to object
+            return {
+              user_tag: recipient.startsWith('@') ? recipient.substring(1) : recipient,
+              notify: false // String recipients are not the parent author (we can't match by UID)
+            };
+          }
+          return recipient;
+        });
+      }
+    }
+    
     const newMessage = await store.dispatch('messages/sendReply', {
       parentId: props.targetId, // Will be null for new threads
       content: content.value,
       subject: subject.value,
       isPrivate: !isPublic.value,
-      recipients: recipients.value,
+      recipients: processedRecipientsForReply,
       // Ensure the author is explicitly set to the user's UID (not email)
       content_author: currentUser.uid,
       tags: replyTags.value,
