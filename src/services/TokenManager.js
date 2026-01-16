@@ -7,6 +7,14 @@ class TokenManager {
   static deviceKey = 'device_id';
   static backupManagerRefreshKey = 'manager_refresh_backup';
 
+  // Cross-tab synchronization via BroadcastChannel
+  static _syncChannel = null;
+  static _tabId = null;
+  static _crossTabRefreshPromise = null;  // Promise that resolves when another tab completes refresh
+  static _crossTabRefreshResolver = null; // Resolver for the above promise
+  static _crossTabTimeoutMs = 8000;  // Max time to wait for another tab's refresh
+  static _syncInitialized = false;
+
   static _ss() {
     try { return window.sessionStorage; } catch (_) { return null; }
   }
@@ -80,7 +88,188 @@ class TokenManager {
 
   static _now() { return Date.now(); }
 
+  // ==================== Cross-Tab Sync ====================
   
+  /**
+   * Initialize BroadcastChannel for cross-tab token synchronization.
+   * Called once when module loads. Gracefully degrades if BroadcastChannel unavailable.
+   */
+  static _initCrossTabSync() {
+    if (this._syncInitialized) return;
+    this._syncInitialized = true;
+    
+    // Generate unique tab ID
+    this._tabId = this._genId();
+    
+    // Check if BroadcastChannel is available
+    if (typeof BroadcastChannel === 'undefined') {
+      if (this.debug) console.log('[TokenManager] BroadcastChannel not available, cross-tab sync disabled');
+      return;
+    }
+    
+    try {
+      this._syncChannel = new BroadcastChannel('stitch_token_sync');
+      this._syncChannel.onmessage = (event) => this._handleSyncMessage(event.data);
+      this._syncChannel.onmessageerror = () => {
+        if (this.debug) console.warn('[TokenManager] BroadcastChannel message error');
+      };
+      
+      if (this.debug) console.log('[TokenManager] Cross-tab sync initialized', { tabId: this._tabId.slice(0, 8) });
+      
+      // Clean up on page unload
+      window.addEventListener('beforeunload', () => {
+        this._broadcastMessage({ type: 'tab_closing', tabId: this._tabId });
+      });
+      
+      // When tab becomes visible, sync access token from other tabs
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          this._onTabVisible();
+        }
+      });
+    } catch (e) {
+      if (this.debug) console.warn('[TokenManager] Failed to initialize BroadcastChannel', e);
+      this._syncChannel = null;
+    }
+  }
+  
+  /**
+   * Handle incoming cross-tab messages.
+   */
+  static _handleSyncMessage(data) {
+    if (!data || data.tabId === this._tabId) return; // Ignore own messages
+    
+    switch (data.type) {
+      case 'refresh_started':
+        // Another tab started refreshing - set up a promise to wait for result
+        if (!this._crossTabRefreshPromise) {
+          if (this.debug) console.log('[TokenManager] Another tab started refresh', { fromTab: data.tabId?.slice(0, 8) });
+          this._setupCrossTabWait(data.tabId);
+        }
+        break;
+        
+      case 'refresh_completed':
+        // Another tab completed refresh - apply the token and resolve any waiting promise
+        if (this.debug) console.log('[TokenManager] Received token from another tab', { fromTab: data.tabId?.slice(0, 8) });
+        if (data.accessToken) {
+          this._applySyncedToken(data.accessToken, data.timestamp);
+        }
+        this._resolveCrossTabWait(data.accessToken);
+        break;
+        
+      case 'refresh_failed':
+        // Another tab's refresh failed - resolve with null so we can try ourselves
+        if (this.debug) console.log('[TokenManager] Another tab refresh failed', { fromTab: data.tabId?.slice(0, 8) });
+        this._resolveCrossTabWait(null);
+        break;
+        
+      case 'tab_closing':
+        // Tab that was refreshing is closing - resolve with null so we can continue
+        if (this._crossTabRefreshPromise) {
+          if (this.debug) console.log('[TokenManager] Refreshing tab closed', { fromTab: data.tabId?.slice(0, 8) });
+          this._resolveCrossTabWait(null);
+        }
+        break;
+        
+      case 'token_request':
+        // Another tab is asking for the current token (e.g., when becoming visible)
+        if (this.accessToken && this.lastSuccessfulRefreshAt > 0) {
+          this._broadcastMessage({
+            type: 'token_response',
+            accessToken: this.accessToken,
+            timestamp: this.lastSuccessfulRefreshAt,
+            tabId: this._tabId,
+            requestId: data.requestId
+          });
+        }
+        break;
+        
+      case 'token_response':
+        // Response to our token request - apply if newer
+        if (data.accessToken && data.requestId === this._pendingTokenRequestId) {
+          this._applySyncedToken(data.accessToken, data.timestamp);
+        }
+        break;
+    }
+  }
+  
+  /**
+   * Set up a promise that waits for another tab's refresh to complete.
+   */
+  static _setupCrossTabWait(sourceTabId) {
+    if (this._crossTabRefreshPromise) return; // Already waiting
+    
+    this._crossTabRefreshPromise = new Promise((resolve) => {
+      this._crossTabRefreshResolver = resolve;
+      
+      // Timeout: don't wait forever in case the other tab dies
+      setTimeout(() => {
+        if (this._crossTabRefreshResolver === resolve) {
+          if (this.debug) console.log('[TokenManager] Cross-tab wait timeout');
+          this._resolveCrossTabWait(null);
+        }
+      }, this._crossTabTimeoutMs);
+    });
+  }
+  
+  /**
+   * Resolve the cross-tab wait promise.
+   */
+  static _resolveCrossTabWait(token) {
+    if (this._crossTabRefreshResolver) {
+      this._crossTabRefreshResolver(token);
+      this._crossTabRefreshResolver = null;
+      this._crossTabRefreshPromise = null;
+    }
+  }
+  
+  /**
+   * Apply a token received from another tab.
+   */
+  static _applySyncedToken(accessToken, timestamp) {
+    // Only apply if it's newer than what we have
+    if (timestamp && timestamp > this.lastSuccessfulRefreshAt) {
+      this.accessToken = accessToken;
+      this.lastSuccessfulRefreshAt = timestamp;
+      this.lastRefreshFailedAt = 0; // Clear failure state since we got a good token
+      if (this.debug) console.log('[TokenManager] Applied synced token', { age: Date.now() - timestamp });
+    }
+  }
+  
+  /**
+   * Broadcast a message to other tabs.
+   */
+  static _broadcastMessage(data) {
+    if (!this._syncChannel) return;
+    try {
+      this._syncChannel.postMessage({ ...data, tabId: this._tabId, timestamp: Date.now() });
+    } catch (e) {
+      if (this.debug) console.warn('[TokenManager] Failed to broadcast message', e);
+    }
+  }
+  
+  /**
+   * Called when tab becomes visible. Request current token from other tabs.
+   */
+  static _pendingTokenRequestId = null;
+  static _onTabVisible() {
+    if (!this._syncChannel) return;
+    
+    // Request current token from other tabs
+    this._pendingTokenRequestId = this._genId();
+    this._broadcastMessage({
+      type: 'token_request',
+      requestId: this._pendingTokenRequestId,
+      tabId: this._tabId
+    });
+    
+    // Clear the request ID after a short window
+    setTimeout(() => {
+      this._pendingTokenRequestId = null;
+    }, 500);
+  }
+  
+  // ==================== Token Management ====================
 
   static async _applyTokensSafely(access) {
     try {
@@ -136,15 +325,34 @@ class TokenManager {
       return null;
     }
 
-    // Deduplicate concurrent refresh attempts
+    // Deduplicate concurrent refresh attempts within this tab
     if (this.inFlightRefreshPromise) {
       if (this.debug) console.log('[TokenManager] reusing in-flight refresh');
       try { return await this.inFlightRefreshPromise; } catch { return null; }
     }
+    
+    // Check if another tab is already refreshing - wait for their result
+    if (this._crossTabRefreshPromise) {
+      if (this.debug) console.log('[TokenManager] waiting for cross-tab refresh');
+      try {
+        const crossTabResult = await this._crossTabRefreshPromise;
+        if (crossTabResult) {
+          if (this.debug) console.log('[TokenManager] using cross-tab refresh result');
+          return crossTabResult;
+        }
+        // Cross-tab refresh failed or timed out - continue with our own refresh
+        if (this.debug) console.log('[TokenManager] cross-tab refresh failed, proceeding with own refresh');
+      } catch {
+        // Ignore errors, proceed with our own refresh
+      }
+    }
+
+    // Broadcast that we're starting a refresh (so other tabs can wait)
+    this._broadcastMessage({ type: 'refresh_started', tabId: this._tabId });
 
     this.inFlightRefreshPromise = (async () => {
       try {
-        if (this.debug) console.log('[TokenManager] refresh started', { initiator, device: device_id.slice(0,8) });
+        if (this.debug) console.log('[TokenManager] refresh started', { initiator, device: device_id.slice(0,8), tabId: this._tabId?.slice(0,8) });
 
         const maxAttempts = 3;
         const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -175,6 +383,14 @@ class TokenManager {
               this.lastSuccessfulRefreshAt = Date.now();
               this.lastRefreshFailedAt = 0;
               if (this.debug) console.log('[TokenManager] refresh success');
+              
+              // Broadcast new token to other tabs
+              this._broadcastMessage({
+                type: 'refresh_completed',
+                accessToken: data.access_token,
+                tabId: this._tabId
+              });
+              
               return data.access_token;
             }
             return null;
@@ -183,6 +399,8 @@ class TokenManager {
           const status = response?.status || 'NETERR';
           if (!isTransient(status) && status !== 'NETERR') {
             if (this.debug) console.warn('[TokenManager] refresh failed', { status, attempt });
+            // Broadcast failure so other tabs can try
+            this._broadcastMessage({ type: 'refresh_failed', tabId: this._tabId });
             return null;
           }
 
@@ -192,10 +410,13 @@ class TokenManager {
           }
         }
         if (this.debug) console.warn('[TokenManager] refresh exhausted retries');
-        this._announceRefreshResult(false);
+        // Broadcast failure so other tabs can try
+        this._broadcastMessage({ type: 'refresh_failed', tabId: this._tabId });
         return null;
       } catch (e) {
         if (this.debug) console.error('[TokenManager] refresh error', e.message);
+        // Broadcast failure so other tabs can try
+        this._broadcastMessage({ type: 'refresh_failed', tabId: this._tabId });
         return null;
       }
     })();
@@ -210,11 +431,12 @@ class TokenManager {
   }
 }
 
-export default TokenManager;
-
-// Optional: expose for console debugging in dev
+// Initialize cross-tab sync when module loads
 if (typeof window !== 'undefined') {
+  TokenManager._initCrossTabSync();
+  
+  // Expose for console debugging
   try { window.TokenManager = TokenManager; } catch (e) {}
 }
 
-
+export default TokenManager;
