@@ -249,26 +249,162 @@ class TokenManager {
   }
   
   /**
-   * Called when tab becomes visible. Request current token from other tabs.
+   * Called when tab becomes visible. Proactively validate token and sync with other tabs.
+   * This is the key fix for stale tokens after tab suspension/restoration.
    */
   static _pendingTokenRequestId = null;
-  static _onTabVisible() {
-    if (!this._syncChannel) return;
+  static _visibilityValidationInProgress = false;
+  static _lastVisibilityValidation = 0;
+  static _visibilityValidationCooldownMs = 2000; // Don't validate more than once per 2 seconds
+  
+  static async _onTabVisible() {
+    // Skip if validation is already in progress
+    if (this._visibilityValidationInProgress) {
+      if (this.debug) console.log('[TokenManager] Visibility validation already in progress, skipping');
+      return;
+    }
     
-    // Request current token from other tabs
-    this._pendingTokenRequestId = this._genId();
-    this._broadcastMessage({
-      type: 'token_request',
-      requestId: this._pendingTokenRequestId,
-      tabId: this._tabId
-    });
+    // Skip if we just validated recently (prevent rapid re-validation)
+    const now = Date.now();
+    if ((now - this._lastVisibilityValidation) < this._visibilityValidationCooldownMs) {
+      if (this.debug) console.log('[TokenManager] Visibility validation cooldown, skipping');
+      return;
+    }
     
-    // Clear the request ID after a short window
-    setTimeout(() => {
-      this._pendingTokenRequestId = null;
-    }, 500);
+    this._visibilityValidationInProgress = true;
+    this._lastVisibilityValidation = now;
+    
+    try {
+      if (this.debug) console.log('[TokenManager] Tab became visible, proactively validating token');
+      
+      // First, request token from other tabs (they may have refreshed while we were hidden)
+      if (this._syncChannel) {
+        this._pendingTokenRequestId = this._genId();
+        this._broadcastMessage({
+          type: 'token_request',
+          requestId: this._pendingTokenRequestId,
+          tabId: this._tabId
+        });
+        
+        // Wait briefly for responses from other tabs
+        await new Promise(resolve => setTimeout(resolve, 200));
+        this._pendingTokenRequestId = null;
+      }
+      
+      // Now validate/refresh our token if needed
+      // This uses the coordinated refresh mechanism to prevent races
+      const token = this.accessToken;
+      
+      // Check if we have a token and if it's expired or near expiry
+      if (!token || this.isTokenExpiredOrNearExpiry(token, 60)) {
+        // Use a longer buffer (60s) on visibility change since we don't know
+        // how long the tab was hidden and want to be proactive
+        if (this.debug) {
+          const remaining = token ? this.getTokenExpirySeconds(token) : 0;
+          console.log('[TokenManager] Token needs refresh on visibility change', { remaining });
+        }
+        
+        const newToken = await this.getValidToken({ 
+          initiator: 'visibility_change',
+          bufferSeconds: 60 
+        });
+        
+        if (newToken) {
+          if (this.debug) console.log('[TokenManager] Token refreshed successfully on visibility change');
+        } else {
+          if (this.debug) console.warn('[TokenManager] Token refresh failed on visibility change');
+        }
+      } else {
+        if (this.debug) {
+          const remaining = this.getTokenExpirySeconds(token);
+          console.log('[TokenManager] Token still valid on visibility change', { remaining });
+        }
+      }
+    } catch (e) {
+      if (this.debug) console.error('[TokenManager] Error during visibility validation', e);
+    } finally {
+      this._visibilityValidationInProgress = false;
+    }
   }
   
+  // ==================== Token Validation ====================
+  
+  /**
+   * Check if a token is expired or near expiry.
+   * @param {string} token - JWT token to check
+   * @param {number} bufferSeconds - Seconds before actual expiry to consider it "near expiry"
+   * @returns {boolean} true if token is missing, invalid, expired, or within buffer of expiry
+   */
+  static isTokenExpiredOrNearExpiry(token, bufferSeconds = 30) {
+    if (!token) return true;
+    
+    try {
+      const decoded = this.decodeJwt(token);
+      if (!decoded || !decoded.exp) return true;
+      
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      const expiresAt = decoded.exp;
+      
+      // Token is expired or will expire within buffer
+      return expiresAt <= (nowSeconds + bufferSeconds);
+    } catch (e) {
+      if (this.debug) console.warn('[TokenManager] Error decoding token for expiry check', e);
+      return true; // Treat invalid tokens as expired
+    }
+  }
+  
+  /**
+   * Get remaining seconds until token expires.
+   * @param {string} token - JWT token to check
+   * @returns {number} Seconds until expiry, or 0 if expired/invalid
+   */
+  static getTokenExpirySeconds(token) {
+    if (!token) return 0;
+    
+    try {
+      const decoded = this.decodeJwt(token);
+      if (!decoded || !decoded.exp) return 0;
+      
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      const remaining = decoded.exp - nowSeconds;
+      return Math.max(0, remaining);
+    } catch (e) {
+      return 0;
+    }
+  }
+  
+  /**
+   * Get a valid (non-expired) access token, refreshing if necessary.
+   * This method is race-condition-proof and coordinates with other tabs.
+   * 
+   * @param {Object} options - Options for the refresh
+   * @param {string} options.initiator - Who is requesting the token
+   * @param {number} options.bufferSeconds - Seconds buffer before expiry to trigger refresh (default: 30)
+   * @returns {Promise<string|null>} Valid access token or null if refresh fails
+   */
+  static async getValidToken({ initiator = 'getValidToken', bufferSeconds = 30 } = {}) {
+    const token = this.accessToken;
+    
+    // If token is valid and not near expiry, return it immediately
+    if (token && !this.isTokenExpiredOrNearExpiry(token, bufferSeconds)) {
+      if (this.debug) {
+        const remaining = this.getTokenExpirySeconds(token);
+        console.log('[TokenManager] Token is valid', { remaining, initiator });
+      }
+      return token;
+    }
+    
+    // Token is missing, expired, or near expiry - need to refresh
+    if (this.debug) {
+      const remaining = token ? this.getTokenExpirySeconds(token) : 0;
+      console.log('[TokenManager] Token needs refresh', { remaining, initiator });
+    }
+    
+    // Use the coordinated refresh mechanism
+    const newToken = await this.refreshAccessToken({ initiator, reason: 'token_expired_or_near_expiry' });
+    return newToken;
+  }
+
   // ==================== Token Management ====================
 
   static async _applyTokensSafely(access) {

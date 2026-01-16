@@ -30,8 +30,8 @@ export function installAxiosAuthInterceptor(axiosInstance) {
     });
   } catch (_) {}
 
-  // Stamp start time for duration metrics
-  axiosInstance.interceptors.request.use((config) => {
+  // Stamp start time for duration metrics and proactively validate token
+  axiosInstance.interceptors.request.use(async (config) => {
     try { config.metadata = { start: Date.now() }; } catch (_) {}
     // Attach per-request correlation id header if not provided
     try {
@@ -43,17 +43,68 @@ export function installAxiosAuthInterceptor(axiosInstance) {
       }
     } catch (_) {}
     // Attach Authorization header just-in-time from TokenManager unless explicitly skipped
+    // PROACTIVE EXPIRY CHECK: If token is expired or near expiry, refresh before sending
     try {
       if (!config._skipAuth) {
-        const token = TokenManager.accessToken;
-        if (token) {
+        const currentToken = TokenManager.accessToken;
+        
+        // Check if we have a token and if it's expired or close to expiry (within 10 seconds)
+        // This prevents sending requests we know will fail with 401
+        if (currentToken && TokenManager.isTokenExpiredOrNearExpiry(currentToken, 10)) {
+          const corrId = config.corrId || 'unknown';
+          try { 
+            logger.info('[AUTH][axios] Token expired or near expiry, proactively refreshing', { 
+              url: config.url, 
+              corrId,
+              remaining: TokenManager.getTokenExpirySeconds(currentToken)
+            }); 
+          } catch (_) {}
+          
+          // Force refresh before sending the request
+          const newToken = await TokenManager.getValidToken({ 
+            initiator: 'axios_proactive',
+            bufferSeconds: 10 
+          });
+          
+          if (newToken) {
+            config.headers = config.headers || {};
+            config.headers['Authorization'] = `Bearer ${newToken}`;
+            try { logger.info('[AUTH][axios] Proactive refresh succeeded', { url: config.url, corrId }); } catch (_) {}
+          } else {
+            // Refresh failed - attach current token anyway and let 401 handler deal with it
+            // This maintains backward compatibility
+            if (currentToken) {
+              config.headers = config.headers || {};
+              if (!config.headers['Authorization']) {
+                config.headers['Authorization'] = `Bearer ${currentToken}`;
+              }
+            }
+            try { logger.warn('[AUTH][axios] Proactive refresh failed, using existing token', { url: config.url, corrId }); } catch (_) {}
+          }
+        } else if (currentToken) {
+          // Token is valid - attach it normally
           config.headers = config.headers || {};
           if (!config.headers['Authorization']) {
-            config.headers['Authorization'] = `Bearer ${token}`;
+            config.headers['Authorization'] = `Bearer ${currentToken}`;
           }
         }
+        // If no token at all, don't attach anything (unauthenticated request)
       }
-    } catch (_) {}
+    } catch (e) {
+      // If anything fails during proactive check, fall back to attaching whatever token we have
+      try {
+        if (!config._skipAuth) {
+          const token = TokenManager.accessToken;
+          if (token) {
+            config.headers = config.headers || {};
+            if (!config.headers['Authorization']) {
+              config.headers['Authorization'] = `Bearer ${token}`;
+            }
+          }
+        }
+      } catch (_) {}
+      try { logger.warn('[AUTH][axios] Error in proactive token check, falling back', { error: e?.message }); } catch (_) {}
+    }
     return config;
   });
 
