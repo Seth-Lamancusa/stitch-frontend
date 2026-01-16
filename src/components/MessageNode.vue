@@ -360,6 +360,7 @@ import ChannelsModal from './modals/ChannelsModal.vue';
 import ReplyOrderModal from './modals/ReplyOrderModal.vue';
 import MessageAttachments from './MessageAttachments.vue';
 import UserDisplay from './common/UserDisplay.vue';
+import ChannelsService from '../services/ChannelsService.js';
 import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch, toRef } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute } from 'vue-router';
@@ -986,12 +987,20 @@ export default {
     // Channels support
     const showChannelsModal = ref(false);
     const existingChannels = computed(() => {
-      const channels = props.message && Array.isArray(props.message.channels) ? props.message.channels : [];
-      // Return channels as-is (they should already be objects with id, display_name, etc.)
-      return channels.filter(ch => ch && ch.id);
+      // Messages now always have channels as array of full channel objects
+      const msg = props.message;
+      if (!msg) return [];
+      
+      if (Array.isArray(msg.channels) && msg.channels.length > 0) {
+        return msg.channels.filter(ch => ch && ch.id);
+      }
+      
+      return [];
     });
     const hasChannels = computed(() => {
-      return existingChannels.value.length > 0;
+      const msg = props.message;
+      if (!msg) return false;
+      return Array.isArray(msg.channels) && msg.channels.length > 0;
     });
     const openChannelsModal = () => {
       // Do NOT clear replying/close reply UI; just open the modal
@@ -1004,14 +1013,33 @@ export default {
       try {
         if (!messageId) return;
         const channelIdsArray = Array.isArray(channel_ids) ? channel_ids : [];
-        // TODO: Call API to update message channels
-        // await MessageService.updateMessageChannels(messageId, channelIdsArray);
-        console.log('[MessageNode] Would update channels:', { messageId, channel_ids: channelIdsArray });
-        // For now, just close the modal
-        closeChannelsModal();
+        console.log('[MessageNode] handleChannelsUpdate called', { messageId, channel_ids: channelIdsArray });
+        
+        // Call API to update message channels
+        const response = await ChannelsService.updateMessageChannels(messageId, channelIdsArray);
+        
+        // Update the message in the store with the new channels data
+        if (response && response.success && response.channels) {
+          const existing = store.getters['messages/getMessage'](messageId) || {};
+          const updated = {
+            ...existing,
+            channels: response.channels || []
+          };
+          store.commit('messages/SET_MESSAGE', updated);
+        }
+        
+        console.log('[MessageNode] Updated channels:', { messageId, channel_ids: channelIdsArray });
+        // Don't close modal - let user continue selecting channels
+        // Modal will close when user clicks Done or clicks outside
       } catch (e) {
         console.error('[MessageNode] Failed to update channels', e);
-        store.commit('ui/SET_ERROR', 'Failed to update channels');
+        let errorMessage = 'Failed to update channels';
+        if (e.response && e.response.data && e.response.data.detail) {
+          errorMessage = e.response.data.detail;
+        } else if (e.message) {
+          errorMessage = e.message;
+        }
+        store.commit('ui/SET_ERROR', errorMessage);
       }
     };
     

@@ -71,6 +71,8 @@ export default {
     speedDialTargetMessageId: null,
     // Refresh trigger for message lists
     refreshTrigger: 0, // Timestamp that increments when refresh is requested
+    // Selected channel ID for channels tab
+    selectedChannelId: null, // Channel ID selected in channels view
   },
   
   mutations: {
@@ -320,6 +322,10 @@ export default {
     TRIGGER_REFRESH(state) {
       state.refreshTrigger = Date.now();
     },
+    
+    SET_SELECTED_CHANNEL_ID(state, channelId) {
+      state.selectedChannelId = channelId || null;
+    },
   },
   
   getters: {
@@ -365,6 +371,9 @@ export default {
     // Global action bar getters
     activeActionBarMessageId: state => state.activeActionBarMessageId,
     isActionBarOpen: state => messageId => state.activeActionBarMessageId === messageId,
+    
+    // Channel selection getter
+    selectedChannelId: state => state.selectedChannelId,
     
     // Selection mode getters
     isSelectionMode: state => state.selectionMode,
@@ -780,6 +789,10 @@ export default {
     },
     hideSpeedDialModal({ commit }) {
       commit('HIDE_SPEED_DIAL_MODAL');
+    },
+    
+    setSelectedChannelId({ commit }, channelId) {
+      commit('SET_SELECTED_CHANNEL_ID', channelId);
     },
   }
 };
