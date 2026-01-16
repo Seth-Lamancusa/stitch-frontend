@@ -458,38 +458,40 @@ const ensureCorrectScroll = async () => {
     return;
   }
   
+  // Verify target message is in visible branch before scrolling
+  const visibleBranch = displayedMessages.value;
+  const isTargetInBranch = visibleBranch.some(msg => String(msg.id) === String(targetId));
+  
+  if (!isTargetInBranch) {
+    console.warn(`[ThreadView] Target message ${targetId} not in visible branch. Branch has ${visibleBranch.length} messages.`);
+    // Show container even if target isn't in branch (user can still see the thread)
+    isContainerVisible.value = true;
+    shouldShowMarkers.value = true;
+    return;
+  }
+  
   // Find the target message element
   const messageElement = document.querySelector(`[data-message-id="${targetId}"]`);
   if (!messageElement) {
-    
+    console.warn(`[ThreadView] Target message element ${targetId} not found in DOM`);
     // Show container even if we can't find the target message
     isContainerVisible.value = true;
     shouldShowMarkers.value = true;
     return;
   }
   
-  // Log detailed information about the elements and their positions
+  // Calculate scroll position relative to container
   const containerRect = messageList.value.getBoundingClientRect();
   const messageRect = messageElement.getBoundingClientRect();
   
   // Calculate the relative top position of the message within the container
   const relativeTop = messageRect.top - containerRect.top + messageList.value.scrollTop;
   
-  // Try an alternative calculation that might scroll further down
-  const alternateTop = messageElement.offsetTop;
+  // Adjust 70px up to show a bit more context above the message
+  const adjustedPosition = relativeTop - 70;
   
-  // Try scrolling to max first to force container to update its scrollHeight
-  const maxScroll = messageList.value.scrollHeight - messageList.value.clientHeight;
-  messageList.value.scrollTop = maxScroll;
-  
-  // Force browser to recalculate layout
-  void messageList.value.offsetHeight;
-  
-  // Now try scrolling to our target
-  const adjustedPosition = alternateTop - 70; // Adjust 70px up to show a bit more context
+  // Scroll to the target message
   messageList.value.scrollTop = adjustedPosition;
-  
-  
   
   // Show the container and attach markers after scroll is complete
   isContainerVisible.value = true;
@@ -641,13 +643,9 @@ onMounted(async () => {
   }
   
   // Use loadInitialContent for initial thread loading
+  // loadInitialContent handles branch path preparation and scroll positioning internally
   if (messageId.value) {
-    
     await loadInitialContent(messageId.value);
-    
-    // After initial content is loaded and rendered, ensure correct scroll position
-    
-    ensureCorrectScroll();
   }
   
   // Add scroll event listener for reply box management
@@ -876,6 +874,10 @@ const loadInitialContent = async (targetMessageId) => {
     // Wait for next tick to ensure store updates are processed
     await nextTick();
     
+    // CRITICAL: Prepare branch path so target message is in visible branch
+    // This must happen before ensureCorrectScroll to ensure correct branch selection
+    await store.dispatch('messages/prepareBranchPath', targetMessageId);
+    
   } catch (error) {
     console.error('[ThreadView] Error loading initial content:', error);
     store.commit('ui/SET_ERROR', 'Failed to load thread.');
@@ -886,6 +888,7 @@ const loadInitialContent = async (targetMessageId) => {
     isLoadingThread.value = false;
     
     // Handle scroll positioning after content is rendered
+    // ensureCorrectScroll will verify target is in visible branch before scrolling
     await ensureCorrectScroll();
     
     // Auto-mark visible branch messages as read after initial load
