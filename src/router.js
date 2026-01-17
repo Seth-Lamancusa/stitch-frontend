@@ -88,6 +88,12 @@ const routes = [
     props: { mode: 'saved' }
   },
   {
+    path: '/timeline',
+    name: 'timeline',
+    component: MessageListView,
+    props: { mode: 'timeline' }
+  },
+  {
     path: '/channels',
     name: 'channels',
     component: ChannelsView
