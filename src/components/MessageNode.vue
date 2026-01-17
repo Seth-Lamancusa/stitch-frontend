@@ -5,17 +5,30 @@
       'list-view': inListView,
       'compact': compact,
       'selected': inListView ? selected : isMessageSelected,
-      'dropdown-open': showActionBar
+      'dropdown-open': showActionBar,
+      'collapsed': isCollapsed
     }"
     :data-message-id="message.id"
     :data-has-siblings="!!message.parent_id"
+    ref="messageNodeRef"
   >
-      <div 
-    class="message-content" 
-    ref="messageContentRef" 
-    @click="handleMessageClick"
-    :class="{ 'selectable': selectable }"
-  >
+    <!-- Top collapse button -->
+    <button 
+      v-if="!inListView && canCollapse"
+      class="collapse-button collapse-button--top"
+      @click.stop="toggleCollapse('top')"
+      :aria-label="isCollapsed ? 'Expand message' : 'Collapse message'"
+      :title="isCollapsed ? 'Expand' : 'Collapse'"
+    >
+      <span class="collapse-icon">{{ isCollapsed ? '▼' : '▲' }}</span>
+    </button>
+    
+    <div 
+      class="message-content" 
+      ref="messageContentRef" 
+      @click="handleMessageClick"
+      :class="{ 'selectable': selectable }"
+    >
     <div class="message-header">
       <div class="author-section">
         <!-- Sibling navigator - positioned left of display name on mobile only -->
@@ -346,6 +359,17 @@
         </div>
       </div>
     </div>
+    
+    <!-- Bottom collapse button -->
+    <button 
+      v-if="!inListView && canCollapse"
+      class="collapse-button collapse-button--bottom"
+      @click.stop="toggleCollapse('bottom')"
+      :aria-label="isCollapsed ? 'Expand message' : 'Collapse message'"
+      :title="isCollapsed ? 'Expand' : 'Collapse'"
+    >
+      <span class="collapse-icon">{{ isCollapsed ? '▼' : '▲' }}</span>
+    </button>
   </div>
 
 </template>
@@ -667,7 +691,50 @@ export default {
     }, { immediate: true });
     
     const messageContentRef = ref(null);
+    const messageNodeRef = ref(null);
     const isMobile = ref(false);
+    
+    // Collapse state
+    const isCollapsed = ref(false);
+    const canCollapse = computed(() => {
+      // Enable collapse for messages with content longer than a threshold
+      const contentLength = props.message?.content?.length || 0;
+      return contentLength > 200 || (props.message?.content?.includes('\n'));
+    });
+    
+    // Toggle collapse with scroll-follow animation
+    const toggleCollapse = async (position) => {
+      const nodeEl = messageNodeRef.value;
+      if (!nodeEl) return;
+      
+      // Get the current position of the collapse button relative to viewport
+      const buttonSelector = position === 'top' ? '.collapse-button--top' : '.collapse-button--bottom';
+      const buttonEl = nodeEl.querySelector(buttonSelector);
+      const buttonRect = buttonEl?.getBoundingClientRect();
+      const buttonViewportY = buttonRect ? buttonRect.top + buttonRect.height / 2 : null;
+      
+      // Toggle collapse state
+      isCollapsed.value = !isCollapsed.value;
+      
+      // Wait for DOM to update
+      await nextTick();
+      
+      // After animation, adjust scroll to keep the button at same viewport position
+      if (buttonViewportY !== null && buttonEl) {
+        requestAnimationFrame(() => {
+          const newButtonRect = buttonEl.getBoundingClientRect();
+          const newButtonViewportY = newButtonRect.top + newButtonRect.height / 2;
+          const scrollDelta = newButtonViewportY - buttonViewportY;
+          
+          if (Math.abs(scrollDelta) > 1) {
+            window.scrollBy({
+              top: scrollDelta,
+              behavior: 'smooth'
+            });
+          }
+        });
+      }
+    };
     
     const openLinksModal = () => {
       // Close the ReplyBox if it's open
@@ -1793,6 +1860,10 @@ export default {
       // isReformatting,
       // handleReformat,
       messageContentRef,
+      messageNodeRef,
+      isCollapsed,
+      canCollapse,
+      toggleCollapse,
       hasSiblings,
       showSiblingNavMobile,
       showSiblingNavDesktop,
@@ -1858,7 +1929,85 @@ export default {
   position: relative;
   contain: layout style;
   display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Collapse buttons */
+.collapse-button {
+  width: 100%;
+  max-width: 600px;
+  height: 16px;
+  background: linear-gradient(to bottom, var(--color-surface), var(--color-surface-hover));
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
   justify-content: center;
+  opacity: 0.5;
+  transition: all 0.2s ease;
+  padding: 0;
+  margin: 0;
+}
+
+.collapse-button:hover {
+  opacity: 1;
+  background: var(--color-hover-overlay);
+  border-color: var(--color-border-hover);
+}
+
+.collapse-button--top {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  margin-bottom: -1px;
+  z-index: 2;
+}
+
+.collapse-button--bottom {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  margin-top: -1px;
+  z-index: 2;
+}
+
+.collapse-icon {
+  font-size: 8px;
+  color: var(--color-text-secondary);
+  transition: transform 0.2s ease;
+}
+
+.message-node.collapsed .collapse-icon {
+  transform: rotate(180deg);
+}
+
+/* Collapsed state */
+.message-node.collapsed .message-content {
+  max-height: 60px;
+  overflow: hidden;
+  position: relative;
+}
+
+.message-node.collapsed .message-content::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 30px;
+  background: linear-gradient(to bottom, transparent, var(--color-surface));
+  pointer-events: none;
+}
+
+.message-node.collapsed .message-body {
+  max-height: 30px;
+  overflow: hidden;
+}
+
+.message-node.collapsed .message-footer,
+.message-node.collapsed .mobile-action-controls,
+.message-node.collapsed .message-attachments {
+  display: none;
 }
 
 /* Root messages (without siblings) should expand to fill container */
@@ -1950,12 +2099,12 @@ export default {
 .message-content {
   background-color: var(--color-surface);
   border-radius: var(--radius-md);
-  padding: var(--space-lg) var(--space-xl);
+  padding: var(--space-md) var(--space-lg);
   border: 1px solid var(--color-border);
   width: 100%;
   position: relative;
   z-index: 1;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), max-height 0.3s ease-out, padding 0.2s ease;
 }
 
 /* Add space and adjust positioning for sibling navigation on desktop */
@@ -1980,7 +2129,7 @@ export default {
 .message-header {
   display: flex;
   justify-content: space-between;
-  margin-bottom: var(--space-xs);
+  margin-bottom: var(--space-xxs, 4px);
 }
 
 .header-right {
@@ -2345,16 +2494,17 @@ export default {
 }
 
 .message-body {
-  margin-bottom: var(--space-xs);
+  margin-bottom: var(--space-xxs, 4px);
   white-space: normal;
   word-wrap: break-word;
   width: 100%;
   color: #ffffff; /* Force white text color */
+  transition: max-height 0.3s ease-out, opacity 0.2s ease;
 }
 
 .message-content p {
   color: #ffffff; /* Force white text color */
-  margin-bottom: .6rem;
+  margin-bottom: .5rem;
 }
 
 /* Add larger font size when not in list view */
@@ -2365,7 +2515,7 @@ export default {
 
 /* Compact mode - smaller font sizes and spacing */
 .message-node.compact .message-content {
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-sm) var(--space-md);
 }
 
 .message-node.compact .plaintext-content {
@@ -2406,6 +2556,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-top: var(--space-xxs, 4px);
 }
 
 .reply-count {
