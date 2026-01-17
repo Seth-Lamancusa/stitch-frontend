@@ -91,27 +91,40 @@ export default {
   // recipients can be:
   //   - String: "alice" or "@alice" or "uid:abc123" (defaults to notify=true, public=true)
   //   - Object: {user_tag: "alice", public: true, notify: false} for per-recipient control
-  async addRecipientsToMessage(messageIdOrIds, recipients, addToAncestors = true, notifyOfLast = true, addToFullTree = false) {
+  // propagationStrategy: "NONE" (default), "ANCESTORS", or "TREE"
+  async addRecipientsToMessage(messageIdOrIds, recipients, addToAncestors = true, addToFullTree = false) {
     const headers = getAuthHeaders()
-    const body = Array.isArray(messageIdOrIds)
-      ? { message_ids: messageIdOrIds, recipients }
-      : { message_id: messageIdOrIds, recipients }
-    const params = { 
-      add_to_ancestors: addToAncestors, 
-      notify_of_last: notifyOfLast,
-      add_to_full_tree: addToFullTree
+    
+    // Determine propagation strategy from parameters
+    let propagationStrategy = "NONE"
+    if (addToFullTree) {
+      propagationStrategy = "TREE"
+    } else if (addToAncestors) {
+      propagationStrategy = "ANCESTORS"
     }
-    return apiClient.post(`/recipients/add`, body, { headers, params })
+    
+    const body = Array.isArray(messageIdOrIds)
+      ? { 
+          message_ids: messageIdOrIds, 
+          recipients,
+          ...(propagationStrategy !== "NONE" && { propagation: { strategy: propagationStrategy } })
+        }
+      : { 
+          message_id: messageIdOrIds, 
+          recipients,
+          ...(propagationStrategy !== "NONE" && { propagation: { strategy: propagationStrategy } })
+        }
+    
+    return apiClient.post(`/recipients/add`, body, { headers })
   },
 
   // Remove a recipient from a message (or multiple messages)
   async removeRecipientFromMessage(messageIdOrIds, recipientUid, propagateToDescendants = false) {
     const headers = getAuthHeaders()
     const body = Array.isArray(messageIdOrIds)
-      ? { message_ids: messageIdOrIds, recipient_uid: recipientUid }
-      : { message_id: messageIdOrIds, recipient_uid: recipientUid }
-    const params = { propagate_to_descendants: propagateToDescendants }
-    return apiClient.delete(`/recipients/remove`, { headers, params, data: body })
+      ? { message_ids: messageIdOrIds, recipient_uid: recipientUid, propagate_to_descendants: propagateToDescendants }
+      : { message_id: messageIdOrIds, recipient_uid: recipientUid, propagate_to_descendants: propagateToDescendants }
+    return apiClient.delete(`/recipients/remove`, { headers, data: body })
   },
 
   // Delete a message and optionally its descendants

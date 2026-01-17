@@ -297,7 +297,7 @@
     <ChannelsModal
       :is-visible="showChannelsModal"
       :is-add-mode="false"
-      :existing-channels="[]"
+      :existing-channels="replyChannels"
       @close="closeChannelsModal"
       @change="handleChannelsChange"
       @done="handleChannelsDone"
@@ -1459,7 +1459,7 @@ const sendReply = async () => {
       if (!addRecipientsMessageId.value || recipients.value.length === 0) {
         throw new Error('No message or recipients to add');
       }
-      await MessageService.addRecipientsToMessage(addRecipientsMessageId.value, recipients.value, true, true);
+      await MessageService.addRecipientsToMessage(addRecipientsMessageId.value, recipients.value, true);
       // Refresh origin and loaded ancestors
       await store.dispatch('messages/refreshLoadedAncestors', {
         messageId: addRecipientsMessageId.value,
@@ -1480,8 +1480,7 @@ const sendReply = async () => {
     
     // DRAFT REPLY FLOW: If configured, bulk add draft recipients to ancestors of parent first (notify only for reply later)
     if (props.targetId && recipients.value.length > 0 && replyAddToAncestors.value) {
-      // When notifyOfLast=false, we need to set notify: false on each recipient
-      // because the backend ignores notifyOfLast and uses per-recipient notify flags
+      // Set notify: false on each recipient for bulk ancestor add (notify only when reply is sent)
       const recipientsWithoutNotification = recipients.value.map(recipient => {
         if (typeof recipient === 'string') {
           // String format: convert to object with notify: false
@@ -1492,7 +1491,7 @@ const sendReply = async () => {
         }
         return recipient;
       });
-      await MessageService.addRecipientsToMessage(props.targetId, recipientsWithoutNotification, replyAddToAncestors.value, false);
+      await MessageService.addRecipientsToMessage(props.targetId, recipientsWithoutNotification, replyAddToAncestors.value);
       // Refresh origin and loaded ancestors (no notify path)
       await store.dispatch('messages/refreshLoadedAncestors', {
         messageId: props.targetId,
@@ -1504,41 +1503,21 @@ const sendReply = async () => {
     // Create a new message using the store action (normal notification for new reply)
     // Inherit channel_ids from parent (matching bot service logic)
     
-    // Process recipients: only notify the parent message author, not other recipients
-    let processedRecipientsForReply = recipients.value;
-    if (props.targetId) {
-      const parentMessage = store.getters['messages/getMessage'](props.targetId);
-      // Get the parent author's UID from nested author object or legacy content_author field
-      const parentAuthorUid = parentMessage?.author?.uid || parentMessage?.content_author;
-      
-      if (parentAuthorUid && recipients.value.length > 0) {
-        processedRecipientsForReply = recipients.value.map(recipient => {
-          // Determine the recipient's UID
-          let recipientUid = null;
-          if (typeof recipient === 'object' && recipient !== null) {
-            recipientUid = recipient.uid;
-          }
-          
-          // Set notify: true only for the parent message author, false for everyone else
-          const shouldNotify = recipientUid === parentAuthorUid;
-          
-          if (typeof recipient === 'object' && recipient !== null) {
-            return {
-              ...recipient,
-              notify: shouldNotify
-            };
-          } else if (typeof recipient === 'string') {
-            // Convert string recipient to object format to control notify flag
-            // String recipients can't specify notify, so we convert to object
-            return {
-              user_tag: recipient.startsWith('@') ? recipient.substring(1) : recipient,
-              notify: false // String recipients are not the parent author (we can't match by UID)
-            };
-          }
-          return recipient;
-        });
+    // Process recipients: Preserve user's notify toggle settings
+    // Users can toggle notify on/off for any recipient (parent author defaults to true, others default to false)
+    // Convert string recipients to objects to ensure notify flag is explicit
+    let processedRecipientsForReply = recipients.value.map(recipient => {
+      if (typeof recipient === 'string') {
+        // Convert string recipient to object format
+        // Default to notify: false for string recipients (they're likely not the parent author)
+        return {
+          user_tag: recipient.startsWith('@') ? recipient.substring(1) : recipient,
+          notify: false
+        };
       }
-    }
+      // Preserve object recipients as-is (including their notify flag from user toggles)
+      return recipient;
+    });
     
     const newMessage = await store.dispatch('messages/sendReply', {
       parentId: props.targetId, // Will be null for new threads
@@ -1858,6 +1837,60 @@ watch(recipients, (newRecipients) => {
     updateOverlayHtml();
   });
 }, { deep: true });
+
+// Inherit channels from parent message when replying (matching recipients behavior)
+watch(() => props.targetId, (targetId) => {
+  console.log('[ReplyBox] Channel inheritance watch fired, targetId:', targetId);
+  if (targetId) {
+    try {
+      const parentMessage = store.getters['messages/getMessage'](targetId);
+      console.log('[ReplyBox] Parent message:', parentMessage ? {
+        id: parentMessage.id,
+        channel_ids: parentMessage.channel_ids,
+        channels: parentMessage.channels,
+        hasChannelIds: !!parentMessage.channel_ids,
+        hasChannels: !!parentMessage.channels,
+        channelIdsType: typeof parentMessage.channel_ids,
+        channelsType: typeof parentMessage.channels,
+        isChannelIdsArray: Array.isArray(parentMessage.channel_ids),
+        isChannelsArray: Array.isArray(parentMessage.channels)
+      } : 'null');
+      
+      let channelsToInherit = [];
+      
+      // Check for full channel objects first (preferred format)
+      if (parentMessage && Array.isArray(parentMessage.channels) && parentMessage.channels.length > 0) {
+        channelsToInherit = parentMessage.channels
+          .filter(ch => ch && ch.id)
+          .map(ch => ({ id: typeof ch.id === 'string' ? ch.id : String(ch.id) }));
+        console.log('[ReplyBox] Inheriting channels (full objects) from parent:', channelsToInherit);
+      }
+      // Fallback to channel_ids array (IDs only)
+      else if (parentMessage && Array.isArray(parentMessage.channel_ids) && parentMessage.channel_ids.length > 0) {
+        channelsToInherit = parentMessage.channel_ids
+          .filter(id => id !== null && id !== undefined)
+          .map(id => ({ id: typeof id === 'string' ? id : String(id) }));
+        console.log('[ReplyBox] Inheriting channel_ids (IDs only) from parent:', channelsToInherit);
+      }
+      
+      if (channelsToInherit.length > 0) {
+        replyChannels.value = channelsToInherit;
+        console.log('[ReplyBox] Set replyChannels to:', replyChannels.value);
+      } else {
+        console.log('[ReplyBox] No channels to inherit, clearing replyChannels');
+        replyChannels.value = [];
+      }
+    } catch (e) {
+      // Parent message might not be loaded yet, clear channels
+      console.error('[ReplyBox] Error inheriting channels:', e);
+      replyChannels.value = [];
+    }
+  } else {
+    // Clear channels when not replying
+    console.log('[ReplyBox] No targetId, clearing replyChannels');
+    replyChannels.value = [];
+  }
+}, { immediate: true });
 
 
 

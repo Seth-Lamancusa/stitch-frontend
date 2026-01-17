@@ -229,7 +229,6 @@ const confirmAddRecipient = async () => {
       props.centeredMessageId,  // Single message ID (the centered one)
       [recipient],
       false, // Don't use ancestor propagation (add_to_full_tree overrides this)
-      true,  // Notify of last
       true   // add_to_full_tree = true
     );
     

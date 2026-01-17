@@ -105,7 +105,7 @@ const handleAddRecipients = async (recipients, addToAncestors = true) => {
 
     // Backend now supports per-recipient notify flag, send all recipients in one call
     // Recipients can include notify field: {user_tag: "alice", notify: false}
-    await MessageService.addRecipientsToMessage(messageId, recipients, addToAncestors, true);
+    await MessageService.addRecipientsToMessage(messageId, recipients, addToAncestors);
 
     // Refresh the message to reflect recipient changes
     await store.dispatch('messages/refreshLoadedAncestors', {
