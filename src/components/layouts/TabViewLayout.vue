@@ -30,6 +30,16 @@
             <span class="tab-label">History</span>
           </router-link>
           <router-link 
+            to="/timeline" 
+            class="nav-tab"
+            :class="{ 'active': activeTab === 'timeline' }"
+            role="tab"
+            :aria-selected="activeTab === 'timeline'"
+          >
+            <span class="tab-emoji" aria-hidden="true">📜</span>
+            <span class="tab-label">Timeline</span>
+          </router-link>
+          <router-link 
             to="/saved" 
             class="nav-tab"
             :class="{ 'active': activeTab === 'saved' }"
@@ -323,6 +333,7 @@ const activeTab = computed(() => {
   const p = route.path || '';
   if (p.startsWith('/search')) return 'search';
   if (p.startsWith('/history')) return 'history';
+  if (p.startsWith('/timeline')) return 'timeline';
   if (p.startsWith('/saved')) return 'saved';
   if (p.startsWith('/channels')) return 'channels';
   if (p.startsWith('/inbox')) return 'inbox';

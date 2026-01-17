@@ -1021,6 +1021,17 @@ export default {
               };
             }
             break;
+          case 'timeline':
+            {
+              const MessageService = (await import('../../services/MessageService')).default;
+              const timelineResponse = await MessageService.getTimeline(skip, limit);
+              response = {
+                messages: timelineResponse.data.messages || [],
+                has_more: timelineResponse.data.has_more || false,
+                total: timelineResponse.data.total || 0
+              };
+            }
+            break;
           case 'incoming-links':
             if (!sourceMessageId) throw new Error('sourceMessageId required for incoming-links mode');
             response = await UserService.getUserIncomingLinks(sourceMessageId, skip, limit, showAllLinks);
