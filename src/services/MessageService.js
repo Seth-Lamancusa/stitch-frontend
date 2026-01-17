@@ -213,5 +213,9 @@ export default {
     return apiClient.get(`/messages/tags`, { headers })
   },
 
-  
+  // Get timeline messages (chronological order) for the current user
+  async getTimeline(skip = 0, limit = 15) {
+    const headers = getAuthHeaders()
+    return apiClient.get(`/messages/timeline?skip=${skip}&limit=${limit}`, { headers })
+  },
 }

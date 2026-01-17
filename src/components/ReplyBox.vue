@@ -224,17 +224,42 @@
                 </li>
               </ul>
             </div>
-            
-            <!-- Expand/Collapse toggle arrow -->
+          </div>
+          
+          <!-- Stacked action buttons (expand toggle + attachment) -->
+          <div v-if="!showVerifyCTA" class="stacked-buttons">
+            <!-- Expand/Collapse toggle -->
             <button 
               v-if="hasMultipleLines"
-              class="textarea-expand-toggle"
+              class="stacked-button expand-btn"
               @click.stop="toggleTextareaExpansion"
-              :class="{ 'expanded': isTextareaExpanded }"
+              :class="{ 'active': isTextareaExpanded }"
               :aria-label="isTextareaExpanded ? 'Collapse to single line' : 'Expand to full height'"
               title="Toggle textarea height"
             >
-              <span class="expand-arrow">↕</span>
+              <span class="stacked-btn-icon">↕</span>
+            </button>
+            <button 
+              v-else
+              class="stacked-button expand-btn placeholder"
+              disabled
+              aria-hidden="true"
+            >
+              <span class="stacked-btn-icon">&nbsp;</span>
+            </button>
+            
+            <!-- Attachment button -->
+            <button 
+              class="stacked-button attach-btn"
+              @click.stop="fileInput?.click()"
+              :disabled="!canInteract || uploading"
+              :class="{ 'has-attachments': attachments.length > 0 }"
+              :aria-label="uploading ? 'Uploading...' : 'Attach file'"
+              :title="uploading ? 'Uploading...' : 'Attach file'"
+            >
+              <span v-if="uploading" class="stacked-btn-spinner"></span>
+              <span v-else class="stacked-btn-icon">📎</span>
+              <span v-if="attachments.length > 0" class="attachment-count">{{ attachments.length }}</span>
             </button>
           </div>
           
@@ -860,7 +885,7 @@ const autoResizeTextarea = () => {
     hasMultipleLines.value = false;
     isTextareaExpanded.value = false;
     userHasManuallyToggled.value = false;
-    textarea.style.height = '36px';
+    textarea.style.height = '32px';
     textarea.style.overflowY = 'hidden';
     return;
   }
@@ -868,14 +893,14 @@ const autoResizeTextarea = () => {
   // Reset height to get natural content height (no need for padding manipulation)
   textarea.style.height = 'auto';
   
-  const minHeight = 36; // Single line (increased from 24px)
+  const minHeight = 32; // Compact single line
   const maxHeight = window.innerHeight * 0.4; // 40vh
   const naturalHeight = textarea.scrollHeight;
   
   // More precise multi-line detection - now with accurate measurements
   const hasNewlines = content.value.includes('\n');
-  // With padding (4px top, 8px bottom), single line should be around 44px (4+32+8)
-  const singleLineThreshold = 49; // Allow some buffer for line-height
+  // With compact padding (6px top + 6px bottom = 12px), single line should be around 32-38px
+  const singleLineThreshold = 42; // Allow some buffer for line-height
   const heightExceedsMinimum = naturalHeight > singleLineThreshold;
   
   // Only consider it multi-line if there are actual newlines OR significant height difference
@@ -2234,23 +2259,23 @@ defineExpose({
   }
 }
 
-/* Textarea container */
+/* Textarea container - compact design */
 .reply-sheet__textarea-container {
   flex: none; /* Don't expand to fill space */
-  padding: 8px 16px 24px 16px;
+  padding: 6px 12px 16px 12px;
   position: relative;
   min-height: 0;
   background-color: #2A2A2A;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 8px;
+  gap: 6px;
 }
 
 .reply-input-row {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
+  gap: 6px;
 }
 
 .subject-input-wrapper {
@@ -2338,14 +2363,15 @@ defineExpose({
 
 .verify-link-inline:hover { text-decoration: underline; }
 
-/* Textarea wrapper with toggle button */
+/* Textarea wrapper - compact design */
 .textarea-wrapper {
   flex: 1;
   position: relative;
   display: flex;
   align-items: flex-end;
-  margin-bottom: 10px; /* Add space at bottom without affecting textarea height */
+  margin-bottom: 6px; /* Reduced space at bottom */
   overflow: visible;
+  min-width: 0; /* Allow shrinking */
 }
 
 .reply-overlay {
@@ -2354,15 +2380,14 @@ defineExpose({
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 4px 12px 8px 12px;
-  padding-right: 36px;
+  padding: 6px 10px;
   white-space: pre-wrap;
   overflow-wrap: break-word;
   pointer-events: none;
   color: transparent;
   font-family: inherit;
-  font-size: var(--font-size-md);
-  line-height: 1.5;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
   letter-spacing: inherit;
   font-weight: inherit;
   font-style: inherit;
@@ -2371,10 +2396,9 @@ defineExpose({
   tab-size: inherit;
   box-sizing: border-box;
   z-index: 3;
-  border-radius: 12px;
-  min-height: 36px;
+  border-radius: 10px;
+  min-height: 32px;
   border: 1px solid transparent;
-  box-sizing: border-box;
 }
 
 :deep(.reply-overlay-token) {
@@ -2474,20 +2498,19 @@ defineExpose({
 
 .reply-sheet__textarea {
   flex: 1;
-  min-height: 36px; /* Single line height (increased from 24px) */
+  min-height: 32px; /* Compact single line height */
   max-height: 40vh;
-  padding: 4px 12px 8px 12px; /* Reduced top padding, kept bottom padding */
-  padding-right: 36px; /* Space for toggle button on right */
+  padding: 6px 10px; /* Compact padding */
   margin: 0;
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: 10px;
   background-color: transparent;
   color: var(--color-text);
   font-family: inherit;
-  font-size: var(--font-size-md);
-  line-height: 1.5;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
   resize: none;
-  transition: border-color 0.2s ease, height 0.2s ease;
+  transition: border-color 0.15s ease, height 0.15s ease;
   box-sizing: border-box;
   overflow-y: hidden; /* Will be controlled by autoResizeTextarea */
   position: relative;
@@ -2507,13 +2530,20 @@ defineExpose({
   cursor: not-allowed;
 }
 
-/* Textarea expand toggle button */
-.textarea-expand-toggle {
-  position: absolute;
-  bottom: 6px;
-  right: 6px;
-  width: 20px;
-  height: 20px;
+/* Stacked buttons container - sits between textarea and send button */
+.stacked-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-self: flex-end;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+/* Stacked button base style */
+.stacked-button {
+  width: 28px;
+  height: 14px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 4px;
@@ -2523,56 +2553,88 @@ defineExpose({
   cursor: pointer;
   font-size: 10px;
   color: var(--color-text-secondary);
-  transition: all 0.2s ease;
-  z-index: 10;
-  opacity: 0.7;
+  transition: all 0.15s ease;
+  padding: 0;
+  position: relative;
 }
 
-.textarea-expand-toggle:hover {
+.stacked-button:hover:not(:disabled) {
   background: var(--color-hover-overlay);
   border-color: var(--color-border-hover);
-  opacity: 1;
-  transform: scale(1.05);
+  color: var(--color-text);
 }
 
-.textarea-expand-toggle.expanded {
+.stacked-button:disabled {
+  cursor: default;
+  opacity: 0.3;
+}
+
+.stacked-button.placeholder {
+  visibility: hidden;
+}
+
+.stacked-button.active {
   background: var(--color-primary);
   border-color: var(--color-primary);
   color: var(--color-text-inverse);
-  opacity: 1;
 }
 
-.textarea-expand-toggle.expanded:hover {
-  background: var(--color-primary-hover);
-  border-color: var(--color-primary-hover);
+.stacked-button.has-attachments {
+  background: var(--color-primary-light);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
-.expand-arrow {
+.stacked-btn-icon {
+  font-size: 10px;
   line-height: 1;
-  transition: transform 0.2s ease;
 }
 
-.textarea-expand-toggle.expanded .expand-arrow {
-  transform: rotate(90deg);
+.stacked-btn-spinner {
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-top: 1px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
-/* Textarea send button */
+.attachment-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  font-size: 8px;
+  font-weight: 600;
+  min-width: 12px;
+  height: 12px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* Textarea send button - compact design */
 .textarea-send-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
-  height: 40px;
+  min-width: 32px;
+  height: 32px;
   background: var(--color-primary);
   color: var(--color-text-inverse);
   border: none;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 500;
   transition: all var(--transition-fast);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
   flex-shrink: 0;
+  align-self: flex-end;
+  margin-bottom: 6px;
 }
 
 .textarea-send-button:focus { outline: none; }
@@ -2728,9 +2790,19 @@ defineExpose({
   }
   
   .textarea-send-button {
-    min-width: 36px;
-    height: 36px;
-    font-size: 16px;
+    min-width: 30px;
+    height: 30px;
+    font-size: 14px;
+  }
+  
+  .stacked-buttons {
+    gap: 1px;
+  }
+  
+  .stacked-button {
+    width: 24px;
+    height: 12px;
+    font-size: 9px;
   }
   
   .reply-sheet__close-button {

@@ -12,7 +12,7 @@ const props = defineProps({
   mode: {
     type: String,
     required: true,
-    validator: (val) => ['inbox', 'public', 'history', 'saved', 'incoming-links', 'outgoing-links', 'custom'].includes(val)
+    validator: (val) => ['inbox', 'public', 'history', 'saved', 'timeline', 'incoming-links', 'outgoing-links', 'custom'].includes(val)
   },
   // Custom messages to display instead of fetching from store
   customMessages: {
@@ -80,9 +80,9 @@ const localLoadingState = ref(false);
 const restoredFromCache = ref(false);
 
 // Mode classification helpers
-const isLocalMode = computed(() => ['saved', 'public', 'history', 'incoming-links', 'outgoing-links', 'custom'].includes(props.mode));
+const isLocalMode = computed(() => ['saved', 'public', 'history', 'timeline', 'incoming-links', 'outgoing-links', 'custom'].includes(props.mode));
 const isStoreMode = computed(() => ['inbox', 'admin'].includes(props.mode));
-const requiresAuth = computed(() => ['inbox', 'saved', 'history'].includes(props.mode));
+const requiresAuth = computed(() => ['inbox', 'saved', 'history', 'timeline'].includes(props.mode));
 
 // Store loading state - single source of truth for store-based modes only
 const isLoading = computed(() => {
@@ -141,6 +141,8 @@ const modeDescription = computed(() => {
       return 'Your inbox shows the latest message from each conversation thread where you are involved—either as a recipient or as the author. This gives you a quick overview of all your active conversations.';
     case 'public':
       return 'Public messages are visible to everyone. This view shows the most recent message (leaf node) from each public thread, giving you a snapshot of public conversations happening across the platform.';
+    case 'timeline':
+      return 'Timeline shows all messages you have access to in reverse chronological order. This includes public messages, messages you authored, messages you received, and messages in channels you\'re a member of.';
     default:
       return null;
   }
@@ -169,6 +171,12 @@ const emptyStateMessage = computed(() => {
       } else {
         return 'You must be logged in to view your saved messages.';
       }
+    case 'timeline':
+      if (user.value) {
+        return 'No messages in your timeline yet.';
+      } else {
+        return 'You must be logged in to view your timeline.';
+      }
     case 'incoming-links':
       return 'No incoming links found.';
     case 'outgoing-links':
@@ -194,6 +202,9 @@ const loginPromptMessage = computed(() => {
     }
     if (props.mode === 'history') {
       return 'Login or register to view your message history.';
+    }
+    if (props.mode === 'timeline') {
+      return 'Login or register to view your timeline.';
     }
   }
   return '';
