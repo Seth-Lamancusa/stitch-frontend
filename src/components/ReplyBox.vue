@@ -151,14 +151,20 @@
       <div v-if="!isAddRecipientsMode" class="reply-sheet__textarea-container">
         
         <!-- Subject Input -->
-        <input 
-          v-if="!showVerifyCTA && showSubject"
-          ref="subjectInput"
-          v-model="subject" 
-          placeholder="Subject" 
-          class="reply-sheet__subject-input"
-          aria-label="Message subject"
-        />
+        <div v-if="!showVerifyCTA && showSubject" class="subject-input-wrapper">
+          <input 
+            ref="subjectInput"
+            v-model="subject" 
+            placeholder="Subject" 
+            class="reply-sheet__subject-input"
+            :class="{ 'subject-input--error': subject.length > 72 }"
+            maxlength="72"
+            aria-label="Message subject"
+          />
+          <span class="subject-char-count" :class="{ 'subject-char-count--error': subject.length > 72 }">
+            {{ subject.length }}/72
+          </span>
+        </div>
 
         <div class="reply-input-row">
           <div v-if="showVerifyCTA" class="verify-cta" role="button" tabindex="0" @click.stop.prevent="handleVerifyClick" aria-label="Verify your email to get started">
@@ -470,7 +476,8 @@ let suppressNextMentionDetection = false;
 
 // Centralized validation logic
 const canSendReply = computed(() => {
-  return props.canInteract && content.value.trim() !== '' && !isSending.value;
+  const subjectValid = !subject.value || subject.value.length <= 72;
+  return props.canInteract && content.value.trim() !== '' && subjectValid && !isSending.value;
 });
 
 // Generate placeholder text
@@ -1442,6 +1449,13 @@ const autoStageTagsFromContent = (allowTerminalBoundary = false) => {
 
 const sendReply = async () => {
   if (!canSendReply.value) return;
+  
+  // Validate subject length before sending
+  if (subject.value && subject.value.length > 72) {
+    store.commit('ui/SET_ERROR', 'Subject line must be 72 characters or less.');
+    return;
+  }
+  
   autoStageTagsFromContent(true);
   
   // Make sure we have a user (and email for non-managed users)
@@ -2239,15 +2253,23 @@ defineExpose({
   gap: 8px;
 }
 
+.subject-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
 .reply-sheet__subject-input {
+  flex: 1;
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--color-border);
   padding: 8px 4px;
+  padding-right: 50px;
   color: var(--color-text);
   font-size: var(--font-size-md);
   font-weight: 600;
-  margin-bottom: 4px;
 }
 
 .reply-sheet__subject-input:focus {
@@ -2255,9 +2277,26 @@ defineExpose({
   border-bottom-color: var(--color-primary);
 }
 
+.reply-sheet__subject-input.subject-input--error {
+  border-bottom-color: var(--color-error);
+}
+
 .reply-sheet__subject-input::placeholder {
   color: var(--color-text-secondary);
   font-weight: 400;
+}
+
+.subject-char-count {
+  position: absolute;
+  right: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  font-weight: 400;
+  pointer-events: none;
+}
+
+.subject-char-count--error {
+  color: var(--color-error);
 }
 
 /* Verify CTA (shown when user lacks write perms due to unverified email) */
