@@ -1,11 +1,13 @@
 <template>
   <div 
+    ref="messageNodeRef"
     class="message-node" 
     :class="{ 
       'list-view': inListView,
       'compact': compact,
       'selected': inListView ? selected : isMessageSelected,
-      'dropdown-open': showActionBar
+      'dropdown-open': showActionBar,
+      'collapsed': isCollapsed
     }"
     :data-message-id="message.id"
     :data-has-siblings="!!message.parent_id"
@@ -156,19 +158,46 @@
         </div>
       </div>
       
+      <!-- Top collapse button -->
+      <button 
+        v-if="!inListView"
+        @click.stop="toggleCollapse('top')"
+        class="collapse-button collapse-button-top"
+        :class="{ 'collapsed': isCollapsed }"
+        :title="isCollapsed ? 'Expand message' : 'Collapse message'"
+      >
+        <span class="collapse-icon">{{ isCollapsed ? '▼' : '▲' }}</span>
+      </button>
+      
       <!-- Message body -->
-      <div class="message-body">
+      <div class="message-body" :class="{ 'collapsed-body': isCollapsed }">
         <div v-if="message.subject" class="message-subject">{{ message.subject }}</div>
-        <formatted-content 
-          v-if="displayMode === 'full'" 
-          :content="message.content" 
-          :options="formattedContentOptions"
-        />
-        <div v-else-if="!message.subject" class="plaintext-content">{{ truncatedContent }}</div>
+        <template v-if="!isCollapsed">
+          <formatted-content 
+            v-if="displayMode === 'full'" 
+            :content="message.content" 
+            :options="formattedContentOptions"
+          />
+          <div v-else-if="!message.subject" class="plaintext-content">{{ truncatedContent }}</div>
+        </template>
+        <div v-else class="collapsed-preview">
+          {{ message.content ? message.content.slice(0, 80) + (message.content.length > 80 ? '...' : '') : '' }}
+        </div>
       </div>
       
       <!-- Files -->
-      <message-attachments :attachments="message.files" />
+      <message-attachments v-if="!isCollapsed" :attachments="message.files" />
+      
+      <!-- Bottom collapse button -->
+      <button 
+        v-if="!inListView"
+        @click.stop="toggleCollapse('bottom')"
+        class="collapse-button collapse-button-bottom"
+        :class="{ 'collapsed': isCollapsed }"
+        :title="isCollapsed ? 'Expand message' : 'Collapse message'"
+      >
+        <span class="collapse-icon">{{ isCollapsed ? '▼' : '▲' }}</span>
+      </button>
       
       <!-- Message footer - hidden in list view -->
       <div v-if="!inListView" class="message-footer">
@@ -457,6 +486,11 @@ export default {
     const actionBarTouchStartY = ref(0);
     const actionBarTouchMoveY = ref(0);
     
+    // Collapse state
+    const isCollapsed = ref(false);
+    const collapseAnchor = ref(null); // 'top' or 'bottom' - which button was clicked
+    const messageNodeRef = ref(null);
+    
     // Desktop menu positioning refs
     const desktopMenuContainerRef = ref(null);
     const desktopActionMenuRef = ref(null);
@@ -476,6 +510,42 @@ export default {
 
     const refreshReplies = () => {
       emit('refreshReplies', props.message.id);
+    };
+    
+    // Collapse/expand functionality with scroll anchoring
+    const toggleCollapse = (anchor) => {
+      if (!messageNodeRef.value) return;
+      
+      const wasCollapsed = isCollapsed.value;
+      collapseAnchor.value = anchor;
+      
+      // Get the position of the anchor point before toggling
+      const nodeRect = messageNodeRef.value.getBoundingClientRect();
+      const anchorY = anchor === 'top' ? nodeRect.top : nodeRect.bottom;
+      const viewportCenter = window.innerHeight / 2;
+      const scrollBefore = window.scrollY;
+      
+      // Toggle collapsed state
+      isCollapsed.value = !wasCollapsed;
+      
+      // After the DOM updates, adjust scroll to keep anchor in place
+      nextTick(() => {
+        requestAnimationFrame(() => {
+          if (!messageNodeRef.value) return;
+          
+          const newNodeRect = messageNodeRef.value.getBoundingClientRect();
+          const newAnchorY = anchor === 'top' ? newNodeRect.top : newNodeRect.bottom;
+          
+          // Calculate how much the anchor moved and compensate
+          const deltaY = newAnchorY - anchorY;
+          
+          // Smoothly scroll to compensate for the height change
+          window.scrollTo({
+            top: scrollBefore + deltaY,
+            behavior: 'instant' // Use instant to prevent visual jump, the collapse animation provides smoothness
+          });
+        });
+      });
     };
     
     // Define unified message actions with standardized attributes
@@ -1835,7 +1905,11 @@ export default {
       mobileActionControlsRef,
       floatingActionBarRef,
       mobileMenuPositionBelow,
-      
+      // Collapse functionality
+      isCollapsed,
+      collapseAnchor,
+      messageNodeRef,
+      toggleCollapse,
     };
   },
   
@@ -1950,12 +2024,12 @@ export default {
 .message-content {
   background-color: var(--color-surface);
   border-radius: var(--radius-md);
-  padding: var(--space-lg) var(--space-xl);
+  padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--color-border);
   width: 100%;
   position: relative;
   z-index: 1;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), padding var(--transition-fast);
 }
 
 /* Add space and adjust positioning for sibling navigation on desktop */
@@ -1980,7 +2054,7 @@ export default {
 .message-header {
   display: flex;
   justify-content: space-between;
-  margin-bottom: var(--space-xs);
+  margin-bottom: var(--space-xxs);
 }
 
 .header-right {
@@ -3061,129 +3135,103 @@ export default {
 
 }
 
-
-
-/* message-id removed */
-
-.edit-icon-button {
-  background: none;
-  border: none;
-  padding: 4px;
-  cursor: pointer;
+/* Collapse button styling */
+.collapse-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--transition-fast);
-  border-radius: var(--radius-xs);
-  width: 24px;
-  height: 24px;
-  margin-left: 4px; /* Space between delete and edit */
-}
-
-.edit-icon-button:hover {
-  background-color: #f0f5ff; /* Light blue on hover */
-  transform: scale(1.1);
-}
-
-.edit-icon {
-  width: 15px;
-  height: 15px;
-  fill: var(--color-primary);
-  transition: all var(--transition-fast);
-}
-
-.edit-icon-button:hover .edit-icon {
-  fill: #2962ff; /* Darker blue on hover */
-}
-
-.message-timestamp {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-}
-
-.message-body {
-  margin-bottom: var(--space-xs);
-  white-space: normal;
-  word-wrap: break-word;
   width: 100%;
-  color: #ffffff; /* Force white text color */
-}
-
-.message-content p {
-  color: #ffffff; /* Force white text color */
-  margin-bottom: .6rem;
-}
-
-/* Add larger font size when not in list view */
-.message-node .plaintext-content {
-  font-size: .9rem;
-  color: #ffffff; /* Force white text color in list view */
-}
-
-/* Compact mode - smaller font sizes and spacing */
-.message-node.compact .message-content {
-  padding: var(--space-md) var(--space-lg);
-}
-
-.message-node.compact .plaintext-content {
-  font-size: 0.9rem;
-}
-
-.message-node.compact .message-author {
-  font-size: var(--font-size-sm);
-}
-
-.message-node.compact .author-user-tag {
-  font-size: calc(var(--font-size-xs) - 1px);
-}
-
-.message-node.compact .message-timestamp {
-  font-size: calc(var(--font-size-xs) - 1px);
-}
-
-.message-node.compact .visibility-indicator,
-.message-node.compact .recipients-toggle {
-  font-size: calc(var(--font-size-xs) - 1px);
-  padding: 1px 5px;
-  height: 20px;
-}
-
-.message-node.compact .message-actions {
-  gap: 12px;
-}
-
-  .message-node.compact .action-button,
-  .message-node.compact .mobile-action-button,
-  .message-node.compact .desktop-menu-button {
-    font-size: calc(var(--font-size-xs) - 1px);
-    padding: 4px 6px;
-  }
-
-.message-footer {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-
-.reply-count {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-  padding: 2px 6px;
-  background-color: var(--color-surface-hover);
+  padding: 2px 0;
+  background: transparent;
+  border: none;
   border-radius: var(--radius-xs);
-  cursor: help;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  color: var(--color-text-secondary);
+  font-size: 10px;
+  opacity: 0.4;
+  margin: 0;
 }
 
-/* Header sibling navigation slot styling */
-.header-sibling-nav-slot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-right: var(--space-sm);
+.collapse-button:hover {
+  opacity: 1;
+  background-color: var(--color-hover-overlay);
+}
+
+.collapse-button-top {
+  margin-bottom: var(--space-xs);
+}
+
+.collapse-button-bottom {
+  margin-top: var(--space-xs);
+}
+
+.collapse-icon {
+  font-size: 8px;
+  line-height: 1;
+  transition: transform var(--transition-fast);
+}
+
+.collapse-button.collapsed .collapse-icon {
+  color: var(--color-primary);
+}
+
+/* Collapsed state styles */
+.message-node.collapsed .message-content {
+  padding: var(--space-xs) var(--space-md);
+}
+
+.message-node.collapsed .message-body {
+  margin-bottom: 0;
+}
+
+.message-body.collapsed-body {
+  max-height: none;
+  overflow: visible;
+}
+
+.collapsed-preview {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+.message-node.collapsed .message-footer {
+  display: none;
+}
+
+.message-node.collapsed .mobile-action-controls {
+  display: none !important;
+}
+
+.message-node.collapsed .sibling-navigator {
+  display: none;
+}
+
+
+/* Mobile collapse button adjustments */
+@media (max-width: 768px) {
+  .collapse-button {
+    padding: 4px 0;
+    opacity: 0.5;
+  }
+  
+  .collapse-button:active {
+    opacity: 1;
+    background-color: var(--color-hover-overlay);
+  }
+  
+  .collapse-icon {
+    font-size: 10px;
+  }
+  
+  .message-node.collapsed .message-content {
+    padding: var(--space-xxs) var(--space-sm);
+  }
 }
 
 </style>
