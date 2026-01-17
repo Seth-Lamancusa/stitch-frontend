@@ -385,11 +385,7 @@ watch(
   { immediate: true }
 );
 
-onMounted(() => {
-  if (user.value) {
-    store.dispatch('messages/fetchUnreadMessageCount');
-  }
-});
+// Note: Removed duplicate onMounted call - the watch with immediate: true already handles initial mount
 
 // Principal dropdown data (wired)
 const managedUsersFromStore = computed(() => (store.getters['auth/managedUsers'] || []));

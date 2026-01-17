@@ -650,8 +650,8 @@ export default {
         }
       }
       
-      // 6. Add all recipients from the parent message (including bots with notify: false)
-      // Bots that are recipients should be included but with notify: false
+      // 6. Add all recipients from the parent message (all with notify: false)
+      // Default behavior: parent recipients get notify: false, only parent author gets notify: true
       // This matches bot service: include_original_recipients = True
       if (message.recipients && Array.isArray(message.recipients)) {
         message.recipients.forEach(recipient => {
@@ -672,7 +672,7 @@ export default {
           
           // Strip metadata when copying for new message staging
           // Only keep essential fields needed for staging
-          // Bots that are recipients get notify: false
+          // All parent recipients get notify: false (parent author already added with notify: true above)
           const stagedRecipient = {
             uid: recipient.uid,
             display_name: recipient.display_name,
@@ -680,8 +680,9 @@ export default {
             // keep whatever backend provides; email may be absent
             email: recipient.email,
             public: (recipient.public !== false),
-            // Bots that are recipients should not be notified
-            notify: recipientIsBot ? false : (recipient.notify !== false)
+            // Default behavior: all parent recipients get notify: false
+            // (parent author already added with notify: true in step 5)
+            notify: false
           };
           newRecipients.push(stagedRecipient);
           addedUids.add(recipientUid);

@@ -1434,7 +1434,12 @@ export default {
     },
 
     // New action to fetch unread message count
-    async fetchUnreadMessageCount({ commit, rootState }) {
+    async fetchUnreadMessageCount({ commit, state, rootState }) {
+      // Prevent concurrent calls - if already fetching, return early
+      if (state.loadingStates['fetchingUnreadCount'] === true) {
+        return state.unreadMessageCount;
+      }
+      
       try {
         // Set loading state
         commit('SET_LOADING', { key: 'fetchingUnreadCount', isLoading: true });

@@ -69,7 +69,7 @@ const addSelectedUsers = async () => {
       public: true,
       visible: true
     }));
-    await MessageService.addRecipientsToMessage(targetMessageId.value, recipientsToAdd, addToAncestors.value, true);
+    await MessageService.addRecipientsToMessage(targetMessageId.value, recipientsToAdd, addToAncestors.value);
     await store.dispatch('messages/refreshLoadedAncestors', {
       messageId: targetMessageId.value,
       get_replies: true,

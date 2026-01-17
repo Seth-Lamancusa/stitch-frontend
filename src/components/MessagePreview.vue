@@ -106,7 +106,6 @@
           </button>
 
           <button
-            v-if="hasChannels"
             @click.stop="openChannelsModal"
             class="channels-toggle"
             title="Manage channels for this message"
