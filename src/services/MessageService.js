@@ -67,6 +67,12 @@ export default {
     return apiClient.patch(`/messages/${id}/tags`, { tags: Array.isArray(tags) ? tags : [] }, { headers })
   },
 
+  // Add subject to message (only if it doesn't have one)
+  async addSubject(id, subject) {
+    const headers = getAuthHeaders()
+    return apiClient.patch(`/messages/${id}/subject`, { subject }, { headers })
+  },
+
   // Update message reply_order (custom ordering of replies)
   async updateReplyOrder(id, replyOrder) {
     const headers = getAuthHeaders()

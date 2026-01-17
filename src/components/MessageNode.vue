@@ -172,6 +172,37 @@
       <!-- Message body -->
       <div class="message-body">
         <div v-if="message.subject" class="message-subject">{{ message.subject }}</div>
+        <div v-else-if="!isAddingSubject && canAddSubject" class="add-subject-container">
+          <button 
+            @click.stop="startAddingSubject"
+            class="add-subject-button"
+            title="Add subject to this message"
+          >
+            + Add Subject
+          </button>
+        </div>
+        <div v-if="isAddingSubject" class="add-subject-input-container">
+          <input
+            ref="subjectInputRef"
+            v-model="newSubject"
+            @keydown.enter.prevent="saveSubject"
+            @keydown.escape="cancelAddingSubject"
+            @blur="cancelAddingSubject"
+            class="add-subject-input"
+            placeholder="Subject (max 72 characters)"
+            maxlength="72"
+            :class="{ 'subject-input--error': newSubject.length > 72 }"
+          />
+          <span class="subject-char-count" :class="{ 'subject-char-count--error': newSubject.length > 72 }">
+            {{ newSubject.length }}/72
+          </span>
+          <button @click.stop="saveSubject" class="save-subject-button" :disabled="newSubject.length > 72 || !newSubject.trim()">
+            Save
+          </button>
+          <button @click.stop="cancelAddingSubject" class="cancel-subject-button">
+            Cancel
+          </button>
+        </div>
         <formatted-content 
           v-if="displayMode === 'full'" 
           :content="message.content" 
@@ -477,6 +508,17 @@ export default {
     const isMessageSaved = ref(false);
     const isSavingMessage = ref(false);
     
+    // Subject addition state
+    const isAddingSubject = ref(false);
+    const newSubject = ref('');
+    const subjectInputRef = ref(null);
+    const isSavingSubject = ref(false);
+    
+    // Check if user can add subject (same permission as tags - enrichment, requires msg.write scope)
+    const canAddSubject = computed(() => {
+      return currentUser.value && store.getters['auth/canInteract'];
+    });
+    
     // Mobile floating action bar state - using global store
     const actionBarTouchStartY = ref(0);
     const actionBarTouchMoveY = ref(0);
@@ -777,6 +819,49 @@ export default {
         }, 100);
       } catch (error) {
         console.error('[MessageNode] Error dispatching showRecipientsModal:', error);
+      }
+    };
+    
+    const startAddingSubject = () => {
+      isAddingSubject.value = true;
+      newSubject.value = '';
+      nextTick(() => {
+        if (subjectInputRef.value) {
+          subjectInputRef.value.focus();
+        }
+      });
+    };
+    
+    const cancelAddingSubject = () => {
+      isAddingSubject.value = false;
+      newSubject.value = '';
+    };
+    
+    const saveSubject = async () => {
+      const subject = newSubject.value.trim();
+      if (!subject || subject.length > 72) {
+        return;
+      }
+      
+      if (isSavingSubject.value) return;
+      
+      try {
+        isSavingSubject.value = true;
+        const response = await MessageService.addSubject(props.message.id, subject);
+        
+        // Update the message in the store
+        if (response.data) {
+          store.commit('messages/SET_MESSAGE', response.data);
+        }
+        
+        isAddingSubject.value = false;
+        newSubject.value = '';
+      } catch (error) {
+        console.error('[MessageNode] Error adding subject:', error);
+        const errorMessage = error.response?.data?.detail || error.message || 'Failed to add subject';
+        store.commit('ui/SET_ERROR', errorMessage);
+      } finally {
+        isSavingSubject.value = false;
       }
     };
     
@@ -3259,6 +3344,114 @@ export default {
   word-wrap: break-word;
   width: 100%;
   color: #ffffff; /* Force white text color */
+}
+
+.message-subject {
+  font-weight: 600;
+  font-size: var(--font-size-md);
+  margin-bottom: var(--space-xs);
+  color: var(--color-text);
+}
+
+.add-subject-container {
+  margin-bottom: var(--space-xs);
+}
+
+.add-subject-button {
+  background: transparent;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.add-subject-button:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background-color: var(--color-hover-overlay);
+}
+
+.add-subject-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--space-xs);
+  padding: 4px 0;
+}
+
+.add-subject-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  padding: 4px 50px 4px 4px;
+  color: var(--color-text);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+
+.add-subject-input:focus {
+  outline: none;
+  border-bottom-color: var(--color-primary);
+}
+
+.add-subject-input.subject-input--error {
+  border-bottom-color: var(--color-error);
+}
+
+.add-subject-input::placeholder {
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+.subject-char-count {
+  position: absolute;
+  right: 100px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  font-weight: 400;
+  pointer-events: none;
+}
+
+.subject-char-count--error {
+  color: var(--color-error);
+}
+
+.save-subject-button,
+.cancel-subject-button {
+  padding: 4px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.save-subject-button {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  border-color: var(--color-primary);
+}
+
+.save-subject-button:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+}
+
+.save-subject-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cancel-subject-button:hover {
+  background: var(--color-hover-overlay);
+  border-color: var(--color-border-hover);
 }
 
 .message-content p {

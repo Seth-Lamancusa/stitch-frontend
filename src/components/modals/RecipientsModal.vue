@@ -39,6 +39,22 @@
                   <span v-if="recipient.has_hidden" class="visibility-indicator hidden">🙈</span>
                 </div>
                 <button 
+                  @click.stop="() => pingRecipient(recipient)" 
+                  class="ping-recipient-btn"
+                  :class="{ 
+                    'pinging': pingingRecipientIds.has(recipient.uid),
+                    'success': pingedSuccessfully.has(recipient.uid),
+                    'error': pingedWithError.has(recipient.uid)
+                  }"
+                  :disabled="pingingRecipientIds.has(recipient.uid) || !props.messageId"
+                  title="Ping recipient (re-add with notification)"
+                >
+                  <div v-if="pingingRecipientIds.has(recipient.uid)" class="spinner-small"></div>
+                  <span v-else-if="pingedSuccessfully.has(recipient.uid)" class="success-indicator">✓</span>
+                  <span v-else-if="pingedWithError.has(recipient.uid)" class="error-indicator">✗</span>
+                  <span v-else>🔔</span>
+                </button>
+                <button 
                   v-if="canRemoveExistingRecipient(recipient)"
                   @click.stop="() => removeExistingRecipient(index, recipient)" 
                   class="remove-recipient-btn"
@@ -496,6 +512,9 @@ const hasSearched = ref(false);
 const showSearchResults = ref(false);
 const isTagValid = ref(null);
 const removingRecipientIds = ref(new Set()); // Track which recipients are being removed
+const pingingRecipientIds = ref(new Set()); // Track which recipients are being pinged
+const pingedSuccessfully = ref(new Set()); // Track which recipients were pinged successfully
+const pingedWithError = ref(new Set()); // Track which recipients failed to ping
 const isAddingRecipients = ref(false); // Track if we're adding recipients
 const addToAncestors = ref(true); // Default ON per requirement
 const showRemoveConfirm = ref(false); // Track remove confirmation dialog
@@ -1127,6 +1146,71 @@ const cancelRemoveRecipient = () => {
   isRemovingFromDescendants.value = false;
   showRemoveConfirm.value = false;
   recipientToRemove.value = null;
+};
+
+const pingRecipient = async (recipient) => {
+  if (!props.messageId || !recipient.uid) {
+    console.error('Cannot ping recipient: missing messageId or recipient uid');
+    return;
+  }
+  
+  // Clear any previous success/error states
+  pingedSuccessfully.value.delete(recipient.uid);
+  pingedWithError.value.delete(recipient.uid);
+  
+  // Add to pinging set
+  pingingRecipientIds.value.add(recipient.uid);
+  
+  try {
+    console.log('[RecipientsModal] Pinging recipient:', recipient);
+    
+    // Construct recipient object with notify: true
+    // Use user_tag if available, otherwise use uid
+    const recipientToAdd = recipient.user_tag 
+      ? { user_tag: recipient.user_tag, notify: true }
+      : { uid: recipient.uid, notify: true };
+    
+    // Call API to re-add recipient with notify: true
+    // Since the API is idempotent, this won't create duplicates but will send a notification
+    await MessageService.addRecipientsToMessage(
+      props.messageId, 
+      [recipientToAdd], 
+      false, // Don't add to ancestors for ping
+      false  // Don't add to full tree for ping
+    );
+    
+    // Refresh the message data to reflect any changes
+    await store.dispatch('messages/loadMessageRadius', { 
+      messageId: props.messageId, 
+      radius: 1 
+    });
+    
+    // Emit update event to parent to refresh existing recipients display
+    emit('recipient-removed', recipient.uid); // Reuse this event to trigger refresh
+    
+    // Show success indicator
+    pingedSuccessfully.value.add(recipient.uid);
+    setTimeout(() => {
+      pingedSuccessfully.value.delete(recipient.uid);
+    }, 2000); // Clear success indicator after 2 seconds
+    
+  } catch (error) {
+    console.error('Error pinging recipient:', error);
+    
+    // Show user-friendly error message
+    const errorMessage = error.response?.data?.detail || 'Failed to ping recipient';
+    store.commit('ui/SET_ERROR', { code: 'recipient_ping_failed', message: errorMessage });
+    
+    // Show error indicator
+    pingedWithError.value.add(recipient.uid);
+    setTimeout(() => {
+      pingedWithError.value.delete(recipient.uid);
+    }, 2000); // Clear error indicator after 2 seconds
+    
+  } finally {
+    // Remove from pinging set
+    pingingRecipientIds.value.delete(recipient.uid);
+  }
 };
 
 const handleOverlayClick = () => {
@@ -1847,6 +1931,66 @@ onBeforeUnmount(() => {
 
 .visibility-indicator.hidden {
   opacity: 0.6;
+}
+
+.ping-recipient-btn {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  line-height: 1;
+}
+
+.ping-recipient-btn:hover:not(:disabled) {
+  background-color: var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.1));
+}
+
+.ping-recipient-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.ping-recipient-btn.pinging {
+  background-color: var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.1));
+}
+
+.ping-recipient-btn.success {
+  background-color: var(--color-success-light, rgba(34, 197, 94, 0.1));
+  color: var(--color-success, #22c55e);
+}
+
+.ping-recipient-btn.success:hover:not(:disabled) {
+  background-color: var(--color-success-light, rgba(34, 197, 94, 0.15));
+}
+
+.ping-recipient-btn.error {
+  background-color: var(--color-error-light, rgba(220, 38, 38, 0.1));
+  color: var(--color-error, #dc2626);
+}
+
+.ping-recipient-btn.error:hover:not(:disabled) {
+  background-color: var(--color-error-light, rgba(220, 38, 38, 0.15));
+}
+
+.success-indicator {
+  color: var(--color-success, #22c55e);
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.error-indicator {
+  color: var(--color-error, #dc2626);
+  font-weight: bold;
+  font-size: 14px;
 }
 
 .remove-recipient-btn {
