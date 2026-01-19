@@ -226,7 +226,7 @@
             </div>
           </div>
           
-          <!-- Stacked action buttons (expand toggle + attachment) -->
+          <!-- Stacked action buttons (expand toggle) -->
           <div v-if="!showVerifyCTA" class="stacked-buttons">
             <!-- Expand/Collapse toggle -->
             <button 
@@ -246,20 +246,6 @@
               aria-hidden="true"
             >
               <span class="stacked-btn-icon">&nbsp;</span>
-            </button>
-            
-            <!-- Attachment button -->
-            <button 
-              class="stacked-button attach-btn"
-              @click.stop="fileInput?.click()"
-              :disabled="!canInteract || uploading"
-              :class="{ 'has-attachments': attachments.length > 0 }"
-              :aria-label="uploading ? 'Uploading...' : 'Attach file'"
-              :title="uploading ? 'Uploading...' : 'Attach file'"
-            >
-              <span v-if="uploading" class="stacked-btn-spinner"></span>
-              <span v-else class="stacked-btn-icon">📎</span>
-              <span v-if="attachments.length > 0" class="attachment-count">{{ attachments.length }}</span>
             </button>
           </div>
           
@@ -629,12 +615,12 @@ const ensureReplyingActive = () => {
 
 // Bottom sheet methods
 const focusTextarea = () => {
-  // Focus subject if available, otherwise textarea
+  // Always focus the message textarea when opening
   setTimeout(() => {
-    if (showSubject.value && subjectInput.value) {
-      subjectInput.value.focus();
-    } else if (replyTextarea.value) {
+    if (replyTextarea.value) {
       replyTextarea.value.focus();
+    } else if (showSubject.value && subjectInput.value) {
+      subjectInput.value.focus();
     }
   }, 350);
 };
@@ -2014,10 +2000,10 @@ defineExpose({
   content,
   isSending,
   focus: () => {
-    if (showSubject.value && subjectInput.value) {
-      subjectInput.value.focus();
-    } else if (replyTextarea.value) {
+    if (replyTextarea.value) {
       replyTextarea.value.focus();
+    } else if (showSubject.value && subjectInput.value) {
+      subjectInput.value.focus();
     }
   },
   clear: () => {
@@ -2262,7 +2248,7 @@ defineExpose({
 /* Textarea container - compact design */
 .reply-sheet__textarea-container {
   flex: none; /* Don't expand to fill space */
-  padding: 6px 12px 16px 12px;
+  padding: 6px 12px 24px 12px;
   position: relative;
   min-height: 0;
   background-color: #2A2A2A;
@@ -2542,8 +2528,8 @@ defineExpose({
 
 /* Stacked button base style */
 .stacked-button {
-  width: 28px;
-  height: 14px;
+  width: 24px;
+  height: 12px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 4px;
@@ -2551,7 +2537,7 @@ defineExpose({
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 9px;
   color: var(--color-text-secondary);
   transition: all 0.15s ease;
   padding: 0;
@@ -2621,14 +2607,14 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 32px;
-  height: 32px;
+  min-width: 28px;
+  height: 28px;
   background: var(--color-primary);
   color: var(--color-text-inverse);
   border: none;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
   transition: all var(--transition-fast);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
@@ -2750,7 +2736,7 @@ defineExpose({
   
   .reply-sheet__textarea-container {
     flex: none; /* Don't expand to fill space on mobile */
-    padding: 8px 16px 24px 16px; /* Consistent padding on mobile */
+    padding: 8px 16px 32px 16px; /* Consistent padding on mobile with extra bottom padding */
   }
   
   .toolbar-left {
@@ -2790,9 +2776,9 @@ defineExpose({
   }
   
   .textarea-send-button {
-    min-width: 30px;
-    height: 30px;
-    font-size: 14px;
+    min-width: 26px;
+    height: 26px;
+    font-size: 12px;
   }
   
   .stacked-buttons {

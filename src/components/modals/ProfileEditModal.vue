@@ -1260,7 +1260,7 @@ const deleteAccount = async () => {
                 <div class="verification-actions">
                   <button class="verify-btn" @click="sendEmailCode" :disabled="requestingEmailCode || emailCooldown > 0">{{ requestingEmailCode ? 'Sending…' : (emailCooldown > 0 ? `Resend in ${emailCooldown}s` : 'Send Code') }}</button>
                   <input class="code-input" v-model="emailCode" placeholder="Enter code" />
-                  <button class="verify-btn" v-if="emailCodeSent" @click="confirmEmailCode" :disabled="verifyingEmail || !emailCode.trim()">{{ verifyingEmail ? 'Verifying…' : 'Verify' }}</button>
+                  <button class="verify-btn" @click="confirmEmailCode" :disabled="verifyingEmail || !emailCode.trim()">{{ verifyingEmail ? 'Verifying…' : 'Verify' }}</button>
                 </div>
               </div>
             </div>
