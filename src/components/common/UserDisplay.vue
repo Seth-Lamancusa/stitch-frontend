@@ -234,6 +234,9 @@ const tagClasses = computed(() => [
 
 .user-display--variant-message .user-display__name {
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .user-display--variant-recipient .user-display__name {

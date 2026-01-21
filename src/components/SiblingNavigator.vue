@@ -196,15 +196,15 @@ const navigate = async (direction) => {
   background: transparent;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xs);
-  padding: 8px;
+  padding: 6px;
   font-size: var(--font-size-xs);
   cursor: pointer;
   transition: all var(--transition-fast);
   color: var(--color-text-secondary);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
   opacity: 1; /* Make clickable buttons fully visible */
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 28px;
+  min-height: 28px;
 }
 
 /* Make active/clickable buttons more prominent - bright arrows, subtle border */
@@ -238,7 +238,7 @@ const navigate = async (direction) => {
 }
 
 .arrow-icon {
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1;
   font-weight: bold;
 }
@@ -246,13 +246,13 @@ const navigate = async (direction) => {
 /* Smaller buttons for very small screens */
 @media (max-width: 480px) {
   .mobile-nav-btn {
-    padding: 6px;
-    min-width: 32px;
-    min-height: 32px;
+    padding: 4px;
+    min-width: 24px;
+    min-height: 24px;
   }
   
   .arrow-icon {
-    font-size: 14px;
+    font-size: 12px;
   }
 }
 
@@ -276,7 +276,7 @@ const navigate = async (direction) => {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  width: 38px;
+  width: 32px;
   background-color: transparent;
   border: none;
   cursor: pointer;
@@ -292,7 +292,7 @@ const navigate = async (direction) => {
   content: '';
   position: absolute;
   top: 0;
-  width: 38px; /* Match button width */
+  width: 32px; /* Match button width */
   bottom: 0;
   background-color: transparent;
   transition: background-color var(--transition-fast);
@@ -315,15 +315,15 @@ const navigate = async (direction) => {
 .nav-button::after {
   content: '';
   position: absolute;
-  top: 12px;
+  top: 10px;
   left: 50%;
   transform: translateX(-50%);
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
   transition: all var(--transition-fast);
   z-index: -1;
 }
@@ -362,17 +362,17 @@ const navigate = async (direction) => {
   height: 0;
   border-style: solid;
   position: relative;
-  top: 20px; /* Position at the top where the visual button is */
+  top: 16px; /* Position at the top where the visual button is */
   z-index: 1;
 }
 
 .left-triangle {
-  border-width: 8px 12px 8px 0;
+  border-width: 6px 9px 6px 0;
   border-color: transparent var(--color-text-secondary) transparent transparent;
 }
 
 .right-triangle {
-  border-width: 8px 0 8px 12px;
+  border-width: 6px 0 6px 9px;
   border-color: transparent transparent transparent var(--color-text-secondary);
 }
 
@@ -421,13 +421,13 @@ const navigate = async (direction) => {
 }
 
 .loading-dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background-color: var(--color-primary);
   animation: pulse 1.5s infinite;
   position: relative;
-  top: 20px; /* Position at the top where the visual button is */
+  top: 16px; /* Position at the top where the visual button is */
   z-index: 1;
 }
 

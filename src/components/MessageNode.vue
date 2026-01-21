@@ -12,17 +12,6 @@
     :data-has-siblings="!!message.parent_id"
     ref="messageNodeRef"
   >
-    <!-- Top collapse button -->
-    <button 
-      v-if="!inListView && canCollapse"
-      class="collapse-button collapse-button--top"
-      @click.stop="toggleCollapse('top')"
-      :aria-label="isCollapsed ? 'Expand message' : 'Collapse message'"
-      :title="isCollapsed ? 'Expand' : 'Collapse'"
-    >
-      <span class="collapse-icon">{{ isCollapsed ? '▼' : '▲' }}</span>
-    </button>
-    
     <div 
       class="message-content" 
       ref="messageContentRef" 
@@ -30,75 +19,70 @@
       :class="{ 'selectable': selectable }"
     >
     <div class="message-header">
-      <div class="author-section">
-        <!-- Sibling navigator - positioned left of display name on mobile only -->
-        <div v-if="showSiblingNavMobile" class="header-sibling-nav-slot">
-          <sibling-navigator
-            :message-id="message.id"
-            :parent-id="message.parent_id"
-            :mobile-mode="isMobile"
-            @navigate="handleSiblingNavigation"
-            :data-debug-has-siblings="hasSiblings"
-          />
-        </div>
-        
-        <!-- Unread thread count badge - only shown in inbox/list view -->
-        <span v-if="inListView && message.unread_count_in_thread && message.unread_count_in_thread > 0" class="unread-thread-badge">
-          {{ message.unread_count_in_thread }}
-        </span>
-        
-        <div class="author-info">
-          <template v-if="showParticipantsLabel">
-            <template v-for="(participant, index) in participantItems" :key="participant.key">
-              <UserDisplay
-                :display-name="participant.displayName"
-                :user-tag="participant.userTag"
-                :show-tag="false"
-                :is-bot="participant.isBot"
-                name-class="message-author"
-                variant="message"
-              />
-              <span
-                v-if="index < participantItems.length - 1"
-                class="participants-separator"
-              >
-                ,&nbsp;
-              </span>
+      <!-- Row 1: Author info + datetime -->
+      <div class="header-row header-row--author">
+        <div class="author-row-left">
+          <!-- Sibling navigator - positioned left of display name on mobile only -->
+          <div v-if="showSiblingNavMobile" class="header-sibling-nav-slot">
+            <sibling-navigator
+              :message-id="message.id"
+              :parent-id="message.parent_id"
+              :mobile-mode="isMobile"
+              @navigate="handleSiblingNavigation"
+              :data-debug-has-siblings="hasSiblings"
+            />
+          </div>
+          
+          <!-- Unread thread count badge - only shown in inbox/list view -->
+          <span v-if="inListView && message.unread_count_in_thread && message.unread_count_in_thread > 0" class="unread-thread-badge">
+            {{ message.unread_count_in_thread }}
+          </span>
+          
+          <div class="author-info">
+            <template v-if="showParticipantsLabel">
+              <template v-for="(participant, index) in participantItems" :key="participant.key">
+                <UserDisplay
+                  :display-name="participant.displayName"
+                  :user-tag="participant.userTag"
+                  :show-tag="false"
+                  :is-bot="participant.isBot"
+                  name-class="message-author"
+                  variant="message"
+                />
+                <span
+                  v-if="index < participantItems.length - 1"
+                  class="participants-separator"
+                >
+                  ,&nbsp;
+                </span>
+              </template>
             </template>
-          </template>
-          <UserDisplay
-            v-else
-            :display-name="authorDisplayName"
-            :user-tag="authorUserTag"
-            :show-tag="!!authorUserTag"
-            :is-current-user="isCurrentUser"
-            :is-bot="isBot"
-            name-class="message-author"
-            tag-class="author-user-tag"
-            variant="message"
-          />
+            <UserDisplay
+              v-else
+              :display-name="authorDisplayName"
+              :user-tag="authorUserTag"
+              :show-tag="!!authorUserTag"
+              :is-current-user="isCurrentUser"
+              :is-bot="isBot"
+              name-class="message-author"
+              tag-class="author-user-tag"
+              variant="message"
+            />
+          </div>
         </div>
         
-        <!-- Envelope icon for recipients - unread (closed) / read (open) -->
-        <button 
-          v-if="isUserRecipient"
-          @click.stop="toggleReadStatus" 
-          class="envelope-icon-button"
-          :title="isAutoMarkingAsRead ? 'Auto-marking as read...' : (isMessageUnread ? 'Click to mark as read' : 'Click to mark as unread')"
-          :disabled="isTogglingReadStatus || isAutoMarkingAsRead"
-          :class="{ 'loading': isTogglingReadStatus || isAutoMarkingAsRead }"
-        >
-          <span v-if="isTogglingReadStatus || isAutoMarkingAsRead" class="loading-indicator"></span>
-          <svg v-else-if="isMessageUnread" class="envelope-icon unread" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            <path d="m84.965 16.363h-69.93c-6.5664 0-11.91 5.3438-11.91 11.91v43.453c0 6.5664 5.3438 11.91 11.91 11.91h69.93c6.5664 0 11.91-5.3438 11.91-11.91v-43.453c0-6.5664-5.3438-11.91-11.91-11.91zm5.6602 11.91v43.453c0 0.55078-0.10547 1.0742-0.25 1.5781l-26.02-23.309 26.02-23.305c0.14844 0.50391 0.25391 1.0273 0.25391 1.5781zm-5.6602-5.6602c0.18359 0 0.35547 0.039063 0.53125 0.054688l-28.926 25.91c-3.75 3.3516-9.3984 3.3516-13.148-0.003906l-28.922-25.906c0.17969-0.015625 0.35156-0.054688 0.53125-0.054688zm-75.34 50.691c-0.14844-0.50391-0.25-1.0273-0.25-1.5781v-43.453c0-0.55078 0.10547-1.0742 0.25-1.5781l26.016 23.309-26.016 23.305zm5.4102 4.082c-0.18359 0-0.35547-0.039063-0.53516-0.054688l25.879-23.184c2.8516 2.1289 6.2344 3.1992 9.6211 3.1992s6.7656-1.0703 9.6172-3.1992l25.879 23.184c-0.17969 0.015625-0.35156 0.054688-0.53516 0.054688z"/>
-          </svg>
-          <svg v-else class="envelope-icon read" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            <path d="m91.656 35.066c-0.089844-0.085937-31.234-27.965-31.234-27.965-5.9414-5.3164-14.898-5.3203-20.832-0.003906 0 0-31.391 28.109-31.441 28.164-2.1875 2.1875-3.3906 5.0977-3.3906 8.1914v41.836c0 6.3867 5.1953 11.582 11.582 11.582h67.332c6.3867 0 11.582-5.1953 11.582-11.582v-41.836c0-3.1562-1.3086-6.2109-3.5938-8.3867zm-2.6562 8.3867v41.836c0 0.45703-0.074219 0.89063-0.18359 1.3125l-24.82-22.234 24.82-22.234c0.10938 0.42578 0.18359 0.86328 0.18359 1.3164zm-46.23-30.816 0.98047-0.875c3.5625-3.1914 8.9375-3.1875 12.504 0.003906l28.555 25.574-25.551 22.891c-5.5-4.0586-13.016-4.0586-18.516 0l-25.551-22.891 27.574-24.703zm-31.582 73.969c-0.10938-0.42188-0.18359-0.85938-0.18359-1.3125v-41.836c0-0.45312 0.074219-0.88672 0.18359-1.3164l24.82 22.234zm5.1484 4.0195c-0.082032 0-0.16016-0.019531-0.24219-0.023438l26.676-23.895 0.98047-0.875c3.5625-3.1914 8.9375-3.1875 12.504 0.003907l27.652 24.77c-0.082031 0.003906-0.15625 0.023437-0.24219 0.023437z"/>
-          </svg>
-        </button>
-          
-          
-          
+        <!-- Datetime on the right -->
+        <div v-if="!inListView" class="header-row-right">
+          <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
+        </div>
+        
+        <!-- Mobile-only timestamp below username/buttons -->
+        <span v-if="inListView" class="message-timestamp mobile-inline-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
+      </div>
+      
+      <!-- Row 2: Badges + collapse/checkbox -->
+      <div class="header-row header-row--badges">
+        <div class="badges-row-left">
           <!-- Recipients badge -->
           <button 
             v-if="hasRecipients"
@@ -127,6 +111,24 @@
             Channels ({{ existingChannels.length }})
           </button>
           
+          <!-- Envelope icon for recipients - unread (closed) / read (open) -->
+          <button 
+            v-if="isUserRecipient"
+            @click.stop="toggleReadStatus" 
+            class="envelope-icon-button"
+            :title="isAutoMarkingAsRead ? 'Auto-marking as read...' : (isMessageUnread ? 'Click to mark as read' : 'Click to mark as unread')"
+            :disabled="isTogglingReadStatus || isAutoMarkingAsRead"
+            :class="{ 'loading': isTogglingReadStatus || isAutoMarkingAsRead }"
+          >
+            <span v-if="isTogglingReadStatus || isAutoMarkingAsRead" class="loading-indicator"></span>
+            <svg v-else-if="isMessageUnread" class="envelope-icon unread" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+              <path d="m84.965 16.363h-69.93c-6.5664 0-11.91 5.3438-11.91 11.91v43.453c0 6.5664 5.3438 11.91 11.91 11.91h69.93c6.5664 0 11.91-5.3438 11.91-11.91v-43.453c0-6.5664-5.3438-11.91-11.91-11.91zm5.6602 11.91v43.453c0 0.55078-0.10547 1.0742-0.25 1.5781l-26.02-23.309 26.02-23.305c0.14844 0.50391 0.25391 1.0273 0.25391 1.5781zm-5.6602-5.6602c0.18359 0 0.35547 0.039063 0.53125 0.054688l-28.926 25.91c-3.75 3.3516-9.3984 3.3516-13.148-0.003906l-28.922-25.906c0.17969-0.015625 0.35156-0.054688 0.53125-0.054688zm-75.34 50.691c-0.14844-0.50391-0.25-1.0273-0.25-1.5781v-43.453c0-0.55078 0.10547-1.0742 0.25-1.5781l26.016 23.309-26.016 23.305zm5.4102 4.082c-0.18359 0-0.35547-0.039063-0.53516-0.054688l25.879-23.184c2.8516 2.1289 6.2344 3.1992 9.6211 3.1992s6.7656-1.0703 9.6172-3.1992l25.879 23.184c-0.17969 0.015625-0.35156 0.054688-0.53516 0.054688z"/>
+            </svg>
+            <svg v-else class="envelope-icon read" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+              <path d="m91.656 35.066c-0.089844-0.085937-31.234-27.965-31.234-27.965-5.9414-5.3164-14.898-5.3203-20.832-0.003906 0 0-31.391 28.109-31.441 28.164-2.1875 2.1875-3.3906 5.0977-3.3906 8.1914v41.836c0 6.3867 5.1953 11.582 11.582 11.582h67.332c6.3867 0 11.582-5.1953 11.582-11.582v-41.836c0-3.1562-1.3086-6.2109-3.5938-8.3867zm-2.6562 8.3867v41.836c0 0.45703-0.074219 0.89063-0.18359 1.3125l-24.82-22.234 24.82-22.234c0.10938 0.42578 0.18359 0.86328 0.18359 1.3164zm-46.23-30.816 0.98047-0.875c3.5625-3.1914 8.9375-3.1875 12.504 0.003906l28.555 25.574-25.551 22.891c-5.5-4.0586-13.016-4.0586-18.516 0l-25.551-22.891 27.574-24.703zm-31.582 73.969c-0.10938-0.42188-0.18359-0.85938-0.18359-1.3125v-41.836c0-0.45312 0.074219-0.88672 0.18359-1.3164l24.82 22.234zm5.1484 4.0195c-0.082032 0-0.16016-0.019531-0.24219-0.023438l26.676-23.895 0.98047-0.875c3.5625-3.1914 8.9375-3.1875 12.504 0.003907l27.652 24.77c-0.082031 0.003906-0.15625 0.023437-0.24219 0.023437z"/>
+            </svg>
+          </button>
+          
           <!-- Visibility indicator - always shown; toggles only when allowed -->
           <span 
             @click.stop="canToggleVisibility && toggleVisibility()"
@@ -150,14 +152,20 @@
               <path d="M2.5 1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1H3v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4h.5a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1H2.5zm3 4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 .5-.5zM8 5a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7A.5.5 0 0 1 8 5zm3 .5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 1 0z"/>
             </svg>
           </button>
-
-        <!-- Mobile-only timestamp below username/buttons -->
-        <span class="message-timestamp mobile-inline-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
         </div>
         
-        <!-- Right section: timestamp + checkbox -->
-        <div class="header-right">
-          <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
+        <!-- Right section: collapse button + checkbox -->
+        <div v-if="!inListView" class="header-row-right">
+          <!-- Top collapse button -->
+          <button 
+            v-if="canCollapse"
+            class="collapse-button collapse-button--top"
+            @click.stop="toggleCollapse('top')"
+            :aria-label="isCollapsed ? 'Expand message' : 'Collapse message'"
+            :title="isCollapsed ? 'Expand' : 'Collapse'"
+          >
+            <span class="collapse-icon">{{ isCollapsed ? '▼' : '▲' }}</span>
+          </button>
           <input 
             v-if="selectable || !inListView"
             type="checkbox"
@@ -169,18 +177,21 @@
         </div>
       </div>
       
+      <!-- Row 3: Add subject (if applicable) -->
+      <div v-if="!inListView && !message.subject && !isAddingSubject && canAddSubject" class="header-row header-row--subject">
+        <button 
+          @click.stop="startAddingSubject"
+          class="add-subject-button"
+          title="Add subject to this message"
+        >
+          + Add Subject
+        </button>
+      </div>
+    </div>
+      
       <!-- Message body -->
       <div class="message-body">
         <div v-if="message.subject" class="message-subject">{{ message.subject }}</div>
-        <div v-else-if="!isAddingSubject && canAddSubject" class="add-subject-container">
-          <button 
-            @click.stop="startAddingSubject"
-            class="add-subject-button"
-            title="Add subject to this message"
-          >
-            + Add Subject
-          </button>
-        </div>
         <div v-if="isAddingSubject" class="add-subject-input-container">
           <input
             ref="subjectInputRef"
@@ -218,8 +229,21 @@
       <div v-if="!inListView" class="message-footer">
         <div class="reply-count">{{ message.child_ids?.length || 0 }} 💬</div>
         
-        <!-- Unified message actions - desktop layout -->
-        <div v-if="!isSelectionMode" class="message-actions desktop-actions">
+        <!-- Right side: collapse button + actions -->
+        <div v-if="!isSelectionMode" class="footer-right-actions">
+          <!-- Bottom collapse button for desktop -->
+          <button 
+            v-if="canCollapse"
+            class="collapse-button collapse-button--bottom collapse-button--desktop"
+            @click.stop="toggleCollapse('bottom')"
+            :aria-label="isCollapsed ? 'Expand message' : 'Collapse message'"
+            :title="isCollapsed ? 'Expand' : 'Collapse'"
+          >
+            <span class="collapse-icon">{{ isCollapsed ? '▼' : '▲' }}</span>
+          </button>
+          
+          <!-- Unified message actions - desktop layout -->
+          <div class="message-actions desktop-actions">
           <!-- Desktop visible actions -->
           <button 
             v-for="action in desktopVisibleActions"
@@ -278,6 +302,7 @@
               </button>
             </div>
           </div>
+          </div>
         </div>
       </div>
       
@@ -328,6 +353,17 @@
       
       <!-- Unified mobile action controls -->
       <div v-if="!inListView && !isSelectionMode" ref="mobileActionControlsRef" class="mobile-action-controls">
+        
+        <!-- Bottom collapse button for mobile -->
+        <button 
+          v-if="canCollapse"
+          class="collapse-button collapse-button--bottom collapse-button--mobile"
+          @click.stop="toggleCollapse('bottom')"
+          :aria-label="isCollapsed ? 'Expand message' : 'Collapse message'"
+          :title="isCollapsed ? 'Expand' : 'Collapse'"
+        >
+          <span class="collapse-icon">{{ isCollapsed ? '▼' : '▲' }}</span>
+        </button>
         
         <!-- Mobile visible actions -->
         <button 
@@ -390,17 +426,6 @@
         </div>
       </div>
     </div>
-    
-    <!-- Bottom collapse button -->
-    <button 
-      v-if="!inListView && canCollapse"
-      class="collapse-button collapse-button--bottom"
-      @click.stop="toggleCollapse('bottom')"
-      :aria-label="isCollapsed ? 'Expand message' : 'Collapse message'"
-      :title="isCollapsed ? 'Expand' : 'Collapse'"
-    >
-      <span class="collapse-icon">{{ isCollapsed ? '▼' : '▲' }}</span>
-    </button>
   </div>
 
 </template>
@@ -514,9 +539,9 @@ export default {
     const subjectInputRef = ref(null);
     const isSavingSubject = ref(false);
     
-    // Check if user can add subject (same permission as tags - enrichment, requires msg.write scope)
+    // Check if user can add subject - only message author can add subject
     const canAddSubject = computed(() => {
-      return currentUser.value && store.getters['auth/canInteract'];
+      return currentUser.value && isUserAuthor.value && store.getters['auth/canInteract'];
     });
     
     // Mobile floating action bar state - using global store
@@ -1991,13 +2016,37 @@ export default {
       mobileActionControlsRef,
       floatingActionBarRef,
       mobileMenuPositionBelow,
+      // Subject addition
+      isAddingSubject,
+      canAddSubject,
+      newSubject,
+      subjectInputRef,
+      startAddingSubject,
+      cancelAddingSubject,
+      saveSubject,
       
     };
   },
   
   methods: {
     formatTimestamp(timestamp) {
-      return new Date(timestamp).toLocaleString();
+      const date = new Date(timestamp);
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const daysDiff = Math.floor((today - messageDate) / (1000 * 60 * 60 * 24));
+      
+      // Format: "Jan 17, 2:30 PM" or "Jan 17, 2024, 2:30 PM" if not this year
+      const month = date.toLocaleString('en-US', { month: 'short' });
+      const day = date.getDate();
+      const year = date.getFullYear() !== now.getFullYear() ? `, ${date.getFullYear()}` : '';
+      const time = date.toLocaleString('en-US', { 
+        hour: 'numeric', 
+        minute: '2-digit',
+        hour12: true 
+      });
+      
+      return `${month} ${day}${year}, ${time}`;
     }
   }
 }
@@ -2005,11 +2054,11 @@ export default {
 
 <style scoped>
 .message-node {
-  margin-bottom: 0; /* Further reduced vertical gap */
+  margin-bottom: 0;
   margin-left: auto;
   margin-right: auto;
   max-width: 100%;
-  padding: 0 8px; /* Add horizontal padding from screen edges */
+  padding: 0 4px; /* Reduced horizontal padding */
   transition: all var(--transition-fast);
   position: relative;
   contain: layout style;
@@ -2020,20 +2069,22 @@ export default {
 
 /* Collapse buttons */
 .collapse-button {
-  width: 100%;
-  max-width: 600px;
-  height: 16px;
-  background: linear-gradient(to bottom, var(--color-surface), var(--color-surface-hover));
+  width: auto;
+  min-width: 24px;
+  height: 24px;
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.5;
+  opacity: 0.6;
   transition: all 0.2s ease;
   padding: 0;
   margin: 0;
+  flex-shrink: 0;
+  z-index: 2;
 }
 
 .collapse-button:hover {
@@ -2043,23 +2094,22 @@ export default {
 }
 
 .collapse-button--top {
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-  margin-bottom: -1px;
-  z-index: 2;
+  margin-left: var(--space-xs, 8px);
 }
 
 .collapse-button--bottom {
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
-  margin-top: -1px;
-  z-index: 2;
+  /* Bottom button styling handled by desktop/mobile variants */
+}
+
+.collapse-button--desktop {
+  margin-left: var(--space-xs, 8px);
 }
 
 .collapse-icon {
-  font-size: 8px;
+  font-size: 10px;
   color: var(--color-text-secondary);
   transition: transform 0.2s ease;
+  line-height: 1;
 }
 
 .message-node.collapsed .collapse-icon {
@@ -2184,7 +2234,7 @@ export default {
 .message-content {
   background-color: var(--color-surface);
   border-radius: var(--radius-md);
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-sm) var(--space-md); /* Reduced padding: sm/md instead of md/lg */
   border: 1px solid var(--color-border);
   width: 100%;
   position: relative;
@@ -2195,14 +2245,14 @@ export default {
 /* Add space and adjust positioning for sibling navigation on desktop */
 @media (min-width: 769px) {
   .message-node[data-has-siblings="true"] {
-    width: calc(100% - 76px); /* Subtract space for both nav buttons (38px * 2) */
+    width: calc(100% - 64px); /* Subtract space for both nav buttons (32px * 2) */
     margin-left: auto;
     margin-right: auto;
   }
 
   .message-node[data-has-siblings="true"] .sibling-navigator {
-    width: calc(100% + 76px); /* Add back the space for nav buttons */
-    left: -38px; /* Move navigator back to align with full width */
+    width: calc(100% + 64px); /* Add back the space for nav buttons */
+    left: -32px; /* Move navigator back to align with full width */
   }
 }
 
@@ -2213,14 +2263,41 @@ export default {
 
 .message-header {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: var(--space-xxs, 4px);
   margin-bottom: var(--space-xxs, 4px);
 }
 
-.header-right {
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: var(--space-xs, 8px);
+}
+
+.header-row-left,
+.badges-row-left {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-xxs, 4px);
+  flex: 1;
+  min-width: 0;
+}
+
+.header-row-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs, 6px);
+  flex-shrink: 0;
+}
+
+.author-row-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xxs, 4px);
+  flex: 1;
+  min-width: 0;
 }
 
 .selection-checkbox {
@@ -2266,13 +2343,28 @@ export default {
   box-shadow: 0 0 0 2px var(--color-primary-light);
 }
 
-.author-section {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  width: 100%;
+/* Old author-section - now using header-row structure */
+
+/* Prevent delete button and other icon buttons from wrapping unnecessarily */
+.delete-icon-button,
+.envelope-icon-button {
+  flex-shrink: 0;
+  flex-grow: 0;
+  white-space: nowrap;
+  flex-basis: auto;
+}
+
+/* Ensure delete button stays on first line when there's space - give it lower wrap priority */
+.delete-icon-button {
+  order: 1; /* Place delete button after badges but before wrapping */
+}
+
+/* Badges should wrap before icon buttons */
+.recipients-toggle,
+.tags-toggle,
+.channels-toggle,
+.globe-emoji {
+  order: 0; /* Badges wrap first */
 }
 
 .unread-thread-badge {
@@ -2296,13 +2388,16 @@ export default {
 .author-info {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   justify-content: flex-start;
   min-width: 0; /* Ensures proper text truncation */
 }
 
 .message-author {
   font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .message-author.current-user-name {
@@ -2317,12 +2412,13 @@ export default {
 
 .visibility-indicator, .recipients-toggle {
   /* Apply consistent base styling to both types of indicators */
-  font-size: var(--font-size-xs);
-  padding: 2px 6px;
+  font-size: calc(var(--font-size-xs) - 1px);
+  padding: 1px 5px;
   border-radius: var(--radius-pill);
-  height: 22px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
+  line-height: 1.2;
 }
 
 .visibility-indicator {
@@ -2350,16 +2446,17 @@ export default {
 
 /* Tags toggle (blue tone) */
 .tags-toggle {
-  font-size: var(--font-size-xs);
-  padding: 2px 6px;
+  font-size: calc(var(--font-size-xs) - 1px);
+  padding: 1px 5px;
   cursor: pointer;
   border-radius: var(--radius-pill);
   transition: all var(--transition-fast);
   margin-left: 0;
-  height: 22px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  line-height: 1.2;
   background-color: rgba(79, 140, 255, 0.12);
   border: 1px solid rgba(79, 140, 255, 0.45);
   color: #4F8CFF;
@@ -2372,16 +2469,17 @@ export default {
 
 /* Channels toggle (similar to tags but with different color) */
 .channels-toggle {
-  font-size: var(--font-size-xs);
-  padding: 2px 6px;
+  font-size: calc(var(--font-size-xs) - 1px);
+  padding: 1px 5px;
   cursor: pointer;
   border-radius: var(--radius-pill);
   transition: all var(--transition-fast);
   margin-left: 0;
-  height: 22px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  line-height: 1.2;
   background-color: rgba(255, 165, 0, 0.12);
   border: 1px solid rgba(255, 165, 0, 0.45);
   color: #FFA500;
@@ -2541,6 +2639,8 @@ export default {
   border-radius: var(--radius-xs);
   width: 24px;
   height: 24px;
+  flex-shrink: 0; /* Prevent wrapping when there's space */
+  white-space: nowrap;
 }
 
 .delete-icon-button:hover {
@@ -2560,15 +2660,18 @@ export default {
 }
 
 .message-timestamp {
-  font-size: var(--font-size-xs);
+  font-size: calc(var(--font-size-xs) - 1px);
   color: var(--color-text-secondary);
   white-space: nowrap;
+  line-height: 1.2;
 }
+
+/* Timestamp container removed - now in header-row */
 
 .message-subject {
   font-weight: 700;
-  font-size: 1.1em;
-  margin-bottom: 8px;
+  font-size: 1.05em;
+  margin-bottom: 6px;
   color: var(--color-text);
   line-height: 1.3;
 }
@@ -2579,12 +2682,13 @@ export default {
 }
 
 .message-body {
-  margin-bottom: var(--space-xxs, 4px);
+  margin-bottom: var(--space-sm, 12px); /* Increased space before footer */
   white-space: normal;
   word-wrap: break-word;
   width: 100%;
   color: #ffffff; /* Force white text color */
   transition: max-height 0.3s ease-out, opacity 0.2s ease;
+  line-height: 1.5;
 }
 
 .message-content p {
@@ -2642,14 +2746,22 @@ export default {
   align-items: center;
   justify-content: space-between;
   margin-top: var(--space-xxs, 4px);
+  gap: var(--space-xs, 6px);
+}
+
+.footer-right-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs, 8px);
 }
 
 .reply-count {
-  font-size: var(--font-size-xs);
+  font-size: calc(var(--font-size-xs) - 1px);
   color: var(--color-text-secondary);
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
+  line-height: 1.2;
 }
 
 /* copy-id-button removed (moved into actions menu) */
@@ -2671,13 +2783,15 @@ export default {
     flex-wrap: nowrap;
   }
 
-  /* Hide the header-right timestamp on mobile; keep checkbox on the right */
-  .header-right .message-timestamp {
-    display: none;
+  /* Hide desktop timestamp on mobile - but show it on desktop */
+  @media (max-width: 768px) {
+    .header-row--author .header-row-right {
+      display: none;
+    }
   }
 
   /* Show mobile timestamp beneath the username/buttons, full width */
-  .author-section .mobile-inline-timestamp {
+  .header-row--author .mobile-inline-timestamp {
     display: block;
     flex-basis: 100%;
     width: 100%;
@@ -2986,7 +3100,7 @@ export default {
     width: 100%;
     position: relative;
     perspective: 1000px;
-    padding: 0 5px; /* Slightly less padding on mobile */
+    padding: 0 3px; /* Reduced padding on mobile */
   }
   
   .message-content {
@@ -2997,24 +3111,38 @@ export default {
     transition: transform 0.02s linear, opacity 0.02s linear;
     z-index: 1;
     background-color: var(--color-surface);
-    padding: var(--space-xs) var(--space-md); /* Reduce padding for mobile */
+    padding: var(--space-xxs, 6px) var(--space-sm, 10px); /* More compact padding */
     margin: 0; /* Remove margins since parent now has padding */
   }
-  
-  /* No extra padding needed - navigation is now inline with action buttons */
   
   .message-body {
     word-break: break-word;
     overflow-wrap: break-word;
     max-width: 100%;
+    font-size: 0.9rem; /* Slightly smaller text on mobile */
+    line-height: 1.4;
+  }
+  
+  .message-subject {
+    font-size: 1em;
+    margin-bottom: 4px;
   }
   
   .author-info {
     flex-wrap: nowrap;
-    max-width: 70%; /* Prevent username overflow */
+    max-width: 65%; /* More space for author info */
+    gap: 3px;
   }
   
-  .message-author, .author-user-tag {
+  .message-author {
+    font-size: calc(var(--font-size-sm) - 1px);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .author-user-tag {
+    font-size: calc(var(--font-size-xs) - 2px);
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3022,13 +3150,60 @@ export default {
   
   .message-header {
     flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 3px;
   }
   
-  .author-section {
+  .header-right {
+    gap: 4px;
+  }
+  
+  .message-timestamp {
+    font-size: calc(var(--font-size-xs) - 2px);
+  }
+  
+  .header-row {
     flex-wrap: wrap;
-    gap: 8px;
-    flex: 1;
-    min-width: 0; /* Allows proper text truncation */
+    gap: 4px;
+  }
+  
+  .author-row-left,
+  .badges-row-left {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  
+  .visibility-indicator, .recipients-toggle, .tags-toggle, .channels-toggle {
+    font-size: calc(var(--font-size-xs) - 2px);
+    padding: 1px 4px;
+    height: 18px;
+  }
+  
+  .envelope-icon-button {
+    width: 20px;
+    height: 20px;
+    padding: 2px;
+  }
+  
+  .envelope-icon {
+    width: 14px;
+    height: 14px;
+  }
+  
+  .delete-icon-button {
+    width: 20px;
+    height: 20px;
+    padding: 2px;
+  }
+  
+  .delete-icon {
+    width: 14px;
+    height: 14px;
+  }
+  
+  .selection-checkbox {
+    width: 16px;
+    height: 16px;
   }
   
   /* Hide desktop actions on mobile */
@@ -3047,11 +3222,40 @@ export default {
   .mobile-action-controls {
     display: flex !important; /* Override desktop display: none */
     position: absolute;
-    bottom: 8px;
-    right: 8px;
+    bottom: 6px;
+    right: 6px;
     z-index: 10;
-    gap: 8px;
+    gap: 6px;
     align-items: flex-end;
+  }
+  
+  /* Hide desktop collapse button on mobile */
+  .collapse-button--desktop {
+    display: none !important;
+  }
+  
+  /* Hide timestamp container on mobile (already shown inline) */
+  /* Mobile collapse button styling - smaller */
+  .collapse-button--mobile {
+    min-width: 20px;
+    height: 20px;
+    padding: 2px;
+  }
+  
+  .collapse-button--mobile .collapse-icon {
+    font-size: 8px;
+  }
+  
+  /* Top collapse button on mobile - smaller */
+  .collapse-button--top {
+    min-width: 20px;
+    height: 20px;
+    padding: 2px;
+    margin-left: 4px;
+  }
+  
+  .collapse-button--top .collapse-icon {
+    font-size: 8px;
   }
   
   /* Mobile reply count - positioned next to reply button */
@@ -3071,10 +3275,11 @@ export default {
   
   /* Mobile action button specific styling */
   .mobile-action-button {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
     z-index: 12;
-    min-height: 36px;
-    padding: 8px 12px;
+    min-height: 32px;
+    padding: 6px 10px;
+    font-size: calc(var(--font-size-xs) - 1px);
   }
   
   .mobile-action-button:hover {
@@ -3086,8 +3291,9 @@ export default {
   }
   
   .mobile-action-button.menu-button {
-    min-width: 36px;
-    padding: 8px;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 6px;
     opacity: 0.7;
   }
   
@@ -3107,16 +3313,16 @@ export default {
   /* Floating Action Bar */
   .floating-action-bar {
     position: absolute;
-    bottom: 52px; /* Position above the reply button */
+    bottom: 46px; /* Position above the reply button */
     right: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 8px;
+    gap: 6px;
+    padding: 6px;
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
-    border-radius: 16px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-radius: 12px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
     backdrop-filter: blur(10px);
     z-index: 100; /* High z-index to appear above other message nodes */
     max-height: calc(100vh - 60px); /* Prevent overflow beyond viewport */
@@ -3139,16 +3345,17 @@ export default {
   /* Position mobile menu below button when not enough space above */
   .floating-action-bar.position-below {
     bottom: auto;
-    top: 52px; /* Position below the menu button */
+    top: 46px; /* Position below the menu button */
     max-height: calc(100vh - 60px); /* Ensure it doesn't overflow bottom either */
   }
   
   /* Floating Action Bar Buttons */
   .fab-button {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: 40px;
+    min-height: 40px;
     background-color: transparent;
     color: var(--color-text);
+    font-size: calc(var(--font-size-xs) - 1px);
     border: none;
     border-radius: 12px;
     display: flex;
@@ -3227,74 +3434,128 @@ export default {
 
 
 @media (max-width: 480px) {
-  .message-content {
-    padding: var(--space-xs) var(--space-sm); /* Further reduce padding */
-    margin: 0 2px; /* Minimal margins */
+  .message-node {
+    padding: 0 2px; /* Minimal padding on very small screens */
   }
   
-  /* Navigation buttons are inline - no special padding needed */
+  .message-content {
+    padding: 5px 8px; /* Very compact padding */
+    margin: 0;
+  }
+  
+  .message-body {
+    font-size: 0.85rem; /* Smaller text on very small screens */
+    line-height: 1.35;
+  }
+  
+  .message-subject {
+    font-size: 0.95em;
+    margin-bottom: 3px;
+  }
   
   .message-header {
-    gap: 4px; /* Reduce header gaps */
+    gap: 3px;
+    margin-bottom: 2px;
   }
   
-  .author-section {
-    gap: 4px;
-    max-width: 75%; /* More space for author info */
+  .header-right {
+    gap: 3px;
+  }
+  
+  .author-row-left,
+  .badges-row-left {
+    gap: 3px;
+  }
+  
+  .header-row--author .author-row-left {
+    max-width: 70%; /* Balance between author info and controls */
+  }
+  
+  .author-info {
+    gap: 2px;
   }
   
   .message-author {
-    font-size: calc(var(--font-size-sm) - 1px);
+    font-size: calc(var(--font-size-sm) - 2px);
   }
   
   .author-user-tag {
-    font-size: calc(var(--font-size-xs) - 1px);
+    font-size: calc(var(--font-size-xs) - 3px);
   }
   
-  .visibility-indicator, .recipients-toggle {
-    font-size: calc(var(--font-size-xs) - 1px);
-    padding: 1px 4px;
+  .message-timestamp {
+    font-size: calc(var(--font-size-xs) - 3px);
+  }
+  
+  .visibility-indicator, .recipients-toggle, .tags-toggle, .channels-toggle {
+    font-size: calc(var(--font-size-xs) - 3px);
+    padding: 1px 3px;
+    height: 16px;
+  }
+  
+  .envelope-icon-button, .delete-icon-button {
+    width: 18px;
     height: 18px;
+    padding: 1px;
+  }
+  
+  .envelope-icon, .delete-icon {
+    width: 12px;
+    height: 12px;
+  }
+  
+  .selection-checkbox {
+    width: 14px;
+    height: 14px;
   }
   
   /* Adjust mobile action controls for very narrow screens */
   .mobile-action-controls {
-    bottom: 6px;
-    right: 6px;
-    gap: 6px;
+    bottom: 4px;
+    right: 4px;
+    gap: 4px;
   }
   
   .mobile-reply-count {
-    padding: 6px 10px;
-    font-size: calc(var(--font-size-xs) - 1px);
-    min-height: 32px;
+    padding: 5px 8px;
+    font-size: calc(var(--font-size-xs) - 2px);
+    min-height: 28px;
   }
   
   .mobile-action-button {
-    padding: 6px 10px;
-    font-size: calc(var(--font-size-xs) - 1px);
-    min-height: 32px;
+    padding: 5px 8px;
+    font-size: calc(var(--font-size-xs) - 2px);
+    min-height: 28px;
   }
   
   .mobile-action-button.menu-button {
-    padding: 6px;
-    min-width: 32px;
-    min-height: 32px;
+    padding: 5px;
+    min-width: 28px;
+    min-height: 28px;
   }
   
   .floating-action-bar {
-    bottom: 48px; /* Adjust for smaller reply button */
-    padding: 6px;
-    gap: 6px;
+    bottom: 40px;
+    padding: 5px;
+    gap: 5px;
+    border-radius: 10px;
   }
   
   .fab-button {
-    min-width: 40px;
-    min-height: 40px;
-    font-size: 14px;
+    min-width: 36px;
+    min-height: 36px;
+    font-size: calc(var(--font-size-xs) - 2px);
   }
   
-
+  .collapse-button--top, .collapse-button--mobile {
+    min-width: 18px;
+    height: 18px;
+    padding: 1px;
+  }
+  
+  .collapse-button--top .collapse-icon, .collapse-button--mobile .collapse-icon {
+    font-size: 7px;
+  }
 }
 
 
@@ -3336,14 +3597,6 @@ export default {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
   white-space: nowrap;
-}
-
-.message-body {
-  margin-bottom: var(--space-xs);
-  white-space: normal;
-  word-wrap: break-word;
-  width: 100%;
-  color: #ffffff; /* Force white text color */
 }
 
 .message-subject {
@@ -3456,7 +3709,7 @@ export default {
 
 .message-content p {
   color: #ffffff; /* Force white text color */
-  margin-bottom: .6rem;
+  margin-bottom: .5rem;
 }
 
 /* Add larger font size when not in list view */
@@ -3467,51 +3720,51 @@ export default {
 
 /* Compact mode - smaller font sizes and spacing */
 .message-node.compact .message-content {
-  padding: var(--space-md) var(--space-lg);
+  padding: var(--space-sm) var(--space-md); /* More compact */
 }
 
 .message-node.compact .plaintext-content {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .message-node.compact .message-author {
-  font-size: var(--font-size-sm);
+  font-size: calc(var(--font-size-sm) - 1px);
 }
 
 .message-node.compact .author-user-tag {
-  font-size: calc(var(--font-size-xs) - 1px);
+  font-size: calc(var(--font-size-xs) - 2px);
 }
 
 .message-node.compact .message-timestamp {
-  font-size: calc(var(--font-size-xs) - 1px);
+  font-size: calc(var(--font-size-xs) - 2px);
 }
 
 .message-node.compact .visibility-indicator,
 .message-node.compact .recipients-toggle {
-  font-size: calc(var(--font-size-xs) - 1px);
-  padding: 1px 5px;
-  height: 20px;
+  font-size: calc(var(--font-size-xs) - 2px);
+  padding: 1px 4px;
+  height: 18px;
 }
 
 .message-node.compact .message-actions {
-  gap: 12px;
+  gap: 8px;
 }
 
   .message-node.compact .action-button,
   .message-node.compact .mobile-action-button,
   .message-node.compact .desktop-menu-button {
-    font-size: calc(var(--font-size-xs) - 1px);
-    padding: 4px 6px;
+    font-size: calc(var(--font-size-xs) - 2px);
+    padding: 3px 5px;
   }
 
 .message-footer {
   display: flex;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-xs, 6px);
 }
 
 .reply-count {
-  font-size: var(--font-size-xs);
+  font-size: calc(var(--font-size-xs) - 1px);
   color: var(--color-text-secondary);
   padding: 2px 6px;
   background-color: var(--color-surface-hover);
@@ -3531,6 +3784,7 @@ export default {
 }
 
 </style>
+
 
 
 
