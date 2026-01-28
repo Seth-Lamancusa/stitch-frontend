@@ -181,9 +181,10 @@ async function saveEndpoint() {
     if (next === prevEndpoint) return;
     const payload = { endpoint: next || null };
     await store.dispatch('auth/updateProfile', payload);
-    // If there was a signing secret before and the URL changed, hint that it should be rotated.
+    // If there was a signing secret before and the URL changed, re-verification is required.
+    // Secret rotation is recommended but not required (backend can migrate the existing secret).
     if (hasEndpointSigningSecret.value && prevEndpoint && next && next !== prevEndpoint) {
-      endpointRotationHint.value = 'Endpoint URL updated. After verifying this URL, rotate your signing secret so it matches the new endpoint.';
+      endpointRotationHint.value = 'Endpoint URL updated. Verify this URL to resume deliveries. Rotating your signing secret is optional (recommended).';
     } else {
       endpointRotationHint.value = '';
     }
@@ -282,7 +283,7 @@ async function setOrRotateSigningSecret() {
                 </div>
                 <div v-if="endpointChanged && hasEndpointSigningSecret" class="endpoint-warning">
                   <strong>Heads up:</strong> You changed your endpoint URL. After saving and verifying this URL, click
-                  <em>Rotate Secret</em> below to generate a new signing secret. Existing secrets are tied to the previous URL.
+                  <em>Rotate Secret</em> below if you want to rotate your signing secret (recommended). Your existing secret can be reused.
                 </div>
 
                 <label>Verification</label>
