@@ -6,26 +6,3 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
-services:
-  stitch-frontend:
-    build: .
-    container_name: stitch-frontend
-    restart: always
-    ports:
-      - "8080:8080"
-    env_file:
-      - .env
-    volumes:
-      # Bind mount for OpenCode workspaces
-      # Ensure this directory exists on the host
-      - /home/seth/stitch-workspaces:/workspaces
-    environment:
-      # Override workspace path to match the mount point inside the container
-      - OPENCODE_WORKSPACE=/workspaces
-
-    # Optional: Resource limits if needed on a small VM
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '2'
-    #       memory: 1G
