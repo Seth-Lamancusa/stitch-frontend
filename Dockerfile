@@ -3,11 +3,11 @@ WORKDIR /app
 
 # Copy package files and install dependencies
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 # Copy source code and build
 COPY . .
-RUN npm run build --verbose
+RUN npm run build
 
 # Production stage with nginx to serve static files
 FROM nginx:alpine

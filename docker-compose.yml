@@ -1,5 +1,13 @@
 services:
   stitch-frontend:
+    container_name: stitch-frontend
+    build:
+      context: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+services:
+  stitch-frontend:
     build: .
     container_name: stitch-frontend
     restart: always
