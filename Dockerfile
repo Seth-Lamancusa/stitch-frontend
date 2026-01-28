@@ -7,7 +7,7 @@ RUN npm ci
 
 # Copy source code and build
 COPY . .
-RUN npm run build
+RUN NODE_OPTIONS="--max-old-space-size=1024" npm run build
 
 # Production stage with nginx to serve static files
 FROM nginx:alpine
