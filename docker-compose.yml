@@ -1,3 +1,7 @@
+# 1. Code pushed to main (agent or human)
+# 2. GitHub Actions detects the push, spins up a machine to build the image, and pushes the image to Artifact Registry
+# 3. A monitor service on the service VM pulls the new image and restarts the containers 
+
 services:
   stitch-frontend:
     container_name: stitch-frontend
