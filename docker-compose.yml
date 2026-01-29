@@ -5,8 +5,11 @@
 services:
   stitch-frontend:
     container_name: stitch-frontend
-    build:
-      context: .
+    image: us-east1-docker.pkg.dev/stitch-463823/stitch-frontend:latest
     restart: unless-stopped
     ports:
       - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
