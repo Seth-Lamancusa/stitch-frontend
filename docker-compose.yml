@@ -1,11 +1,10 @@
 # 1. Code pushed to main (agent or human)
-# 2. GitHub Actions detects the push, spins up a machine to build the image, and pushes the image to Artifact Registry
-# 3. A monitor service on the service VM pulls the new image and restarts the containers 
+# 2. GitHub Actions detects the push, rebuilds the image, pushes to Artifact Registry, and deploys to the service VM
 
 services:
   stitch-frontend:
     container_name: stitch-frontend
-    image: us-east1-docker.pkg.dev/stitch-463823/stitch-frontend/stitch-frontend:latest
+    image: ${ IMAGE_PATH }
     restart: unless-stopped
     ports:
       - "8080:8080"
