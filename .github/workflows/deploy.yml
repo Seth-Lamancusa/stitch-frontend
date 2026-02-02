@@ -57,8 +57,8 @@ jobs:
             gcloud auth configure-docker ${{ secrets.REGISTRY_DOMAIN }} --quiet
             
             # Pull and Update
-            docker compose pull ${{ env.IMAGE_NAME }}
-            docker compose up -d ${{ env.IMAGE_NAME }}
+            docker compose pull
+            docker compose up -d
             
             # Housekeeping
             docker image prune -f
