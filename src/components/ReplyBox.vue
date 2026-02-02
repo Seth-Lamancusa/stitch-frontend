@@ -1113,14 +1113,69 @@ const ensureMentionRecipient = (user) => {
   if (!user || !user.uid) return;
   const current = recipients.value || [];
   const exists = current.some(recipient => recipient && recipient.uid === user.uid);
+  
+  // Get parent message to identify parent author (if replying)
+  let parentAuthorUid = null;
+  let parentAuthorTag = null;
+  if (props.targetId) {
+    const parentMessage = store.getters['messages/getMessage'](props.targetId);
+    if (parentMessage) {
+      parentAuthorUid = parentMessage.content_author || parentMessage.author?.uid;
+      parentAuthorTag = parentMessage.author_user_tag || parentMessage.author?.user_tag;
+    }
+  }
+  
   if (!exists) {
     store.dispatch('navigation/addRecipient', {
       uid: user.uid,
       display_name: user.display_name,
       user_tag: user.user_tag,
       email: user.email,
-      public: true
+      public: true,
+      notify: true  // Tagged users get notify: true (they replace parent author as notification recipient)
     });
+    
+    // After adding tagged user, update parent author's notify flag to false
+    if (parentAuthorUid || parentAuthorTag) {
+      nextTick(() => {
+        const updatedRecipients = (recipients.value || []).map(recipient => {
+          if (!recipient || typeof recipient !== 'object') return recipient;
+          const recipientUid = recipient.uid;
+          const recipientTag = recipient.user_tag;
+          const isParentAuthor = (parentAuthorUid && recipientUid === parentAuthorUid) ||
+                                  (parentAuthorTag && recipientTag && 
+                                   parentAuthorTag.toLowerCase() === recipientTag.toLowerCase());
+          if (isParentAuthor) {
+            return { ...recipient, notify: false };
+          }
+          return recipient;
+        });
+        store.commit('navigation/SET_REPLY_RECIPIENTS', updatedRecipients);
+      });
+    }
+  } else {
+    // If user already exists, update their notify flag to true and parent author to false
+    const updatedRecipients = current.map(recipient => {
+      if (!recipient || typeof recipient !== 'object') return recipient;
+      const recipientUid = recipient.uid;
+      const recipientTag = recipient.user_tag;
+      
+      // Check if this is the tagged user
+      if (recipientUid === user.uid) {
+        return { ...recipient, notify: true };
+      }
+      
+      // Check if this is the parent author
+      const isParentAuthor = (parentAuthorUid && recipientUid === parentAuthorUid) ||
+                              (parentAuthorTag && recipientTag && 
+                               parentAuthorTag.toLowerCase() === recipientTag.toLowerCase());
+      if (isParentAuthor) {
+        return { ...recipient, notify: false };
+      }
+      
+      return recipient;
+    });
+    store.commit('navigation/SET_REPLY_RECIPIENTS', updatedRecipients);
   }
 };
 
@@ -1421,6 +1476,34 @@ const reconcileInlineRecipientsWithContent = (activeMentionSet) => {
     const normalizedTag = typeof recipientTag === 'string' ? recipientTag.toLowerCase() : '';
     return !recipientsToRemove.has(normalizedTag);
   });
+  
+  // If all tagged users are removed, restore parent author's notify flag to true
+  const hasRemainingTaggedUsers = inlineTrackedRecipients.value.size > 0;
+  if (!hasRemainingTaggedUsers && props.targetId) {
+    // Get parent message to identify parent author
+    const parentMessage = store.getters['messages/getMessage'](props.targetId);
+    if (parentMessage) {
+      const parentAuthorUid = parentMessage.content_author || parentMessage.author?.uid;
+      const parentAuthorTag = parentMessage.author_user_tag || parentMessage.author?.user_tag;
+      
+      // Restore parent author's notify flag to true
+      const updatedRecipients = filtered.map(recipient => {
+        if (!recipient || typeof recipient !== 'object') return recipient;
+        const recipientUid = recipient.uid;
+        const recipientTag = recipient.user_tag;
+        const isParentAuthor = (parentAuthorUid && recipientUid === parentAuthorUid) ||
+                                (parentAuthorTag && recipientTag && 
+                                 parentAuthorTag.toLowerCase() === recipientTag.toLowerCase());
+        if (isParentAuthor) {
+          return { ...recipient, notify: true };
+        }
+        return recipient;
+      });
+      store.commit('navigation/SET_REPLY_RECIPIENTS', updatedRecipients);
+      return;
+    }
+  }
+  
   store.commit('navigation/SET_REPLY_RECIPIENTS', filtered);
 };
 
@@ -1543,6 +1626,44 @@ const sendReply = async () => {
       // Preserve object recipients as-is (including their notify flag from user toggles)
       return recipient;
     });
+    
+    // NEW BEHAVIOR: If user has tagged someone, tagged users replace parent author as notification recipient
+    // Check if there are any tagged users (users added via inline mentions)
+    const hasTaggedUsers = inlineTrackedRecipients.value.size > 0;
+    
+    if (hasTaggedUsers && props.targetId) {
+      // Get parent message to identify parent author
+      const parentMessage = store.getters['messages/getMessage'](props.targetId);
+      if (parentMessage) {
+        const parentAuthorUid = parentMessage.content_author || parentMessage.author?.uid;
+        const parentAuthorTag = parentMessage.author_user_tag || parentMessage.author?.user_tag;
+        
+        // Update recipients: tagged users get notify: true, parent author gets notify: false
+        processedRecipientsForReply = processedRecipientsForReply.map(recipient => {
+          const recipientUid = typeof recipient === 'object' ? recipient.uid : null;
+          const recipientTag = typeof recipient === 'object' ? recipient.user_tag : null;
+          
+          // Check if this is a tagged user (added via inline mention)
+          const isTaggedUser = recipientTag && inlineTrackedRecipients.value.has(recipientTag.toLowerCase());
+          
+          // Check if this is the parent author
+          const isParentAuthor = (parentAuthorUid && recipientUid === parentAuthorUid) ||
+                                  (parentAuthorTag && recipientTag && 
+                                   parentAuthorTag.toLowerCase() === recipientTag.toLowerCase());
+          
+          if (isTaggedUser) {
+            // Tagged users get notify: true (they replace parent author as notification recipient)
+            return { ...recipient, notify: true };
+          } else if (isParentAuthor) {
+            // Parent author gets notify: false when there are tagged users
+            return { ...recipient, notify: false };
+          }
+          
+          // Other recipients keep their existing notify flag
+          return recipient;
+        });
+      }
+    }
     
     const newMessage = await store.dispatch('messages/sendReply', {
       parentId: props.targetId, // Will be null for new threads

@@ -11,6 +11,7 @@ import htmlLinksFormatter from './plugins/html_links';
 import markdownFormatter from './plugins/markdown';
 import latexFormatter from './plugins/latex';
 import codeFormatter from './plugins/code';
+import mermaidFormatter from './plugins/mermaid';
 import mcpExamplesFormatter from './plugins/mcp_examples';
 import mentionsHashtagsFormatter from './plugins/mentions_hashtags';
 
@@ -30,13 +31,14 @@ export function initFormatters(options = {}) {
   }
   
   try {
-    // Register standard formatters
-    registerFormatter(htmlLinksFormatter); // Run before markdown
-    registerFormatter(mcpExamplesFormatter); // Detect MCP example sections early
-    registerFormatter(markdownFormatter);
-    registerFormatter(latexFormatter);
-    registerFormatter(codeFormatter);
-    registerFormatter(mentionsHashtagsFormatter);
+    // Register standard formatters (lower priority = runs first)
+    registerFormatter(htmlLinksFormatter); // Priority: default (100) - Run before markdown
+    registerFormatter(mcpExamplesFormatter); // Priority: default (100) - Detect MCP example sections early
+    registerFormatter(mermaidFormatter); // Priority: 35 - Run BEFORE markdown to process mermaid blocks
+    registerFormatter(markdownFormatter); // Priority: 40 - Process markdown (mermaid blocks already processed)
+    registerFormatter(latexFormatter); // Priority: 60 - Process LaTeX after markdown
+    registerFormatter(codeFormatter); // Priority: 50 - Process code blocks after markdown
+    registerFormatter(mentionsHashtagsFormatter); // Priority: default (100) - Process mentions/hashtags last
     
     // Register custom formatters provided in options
     if (options.formatters && Array.isArray(options.formatters)) {

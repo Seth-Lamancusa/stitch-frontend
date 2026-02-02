@@ -175,6 +175,111 @@ export function protectInlineLatex(content, context) {
 }
 
 /**
+ * Protect Mermaid code blocks from markdown processing
+ * 
+ * @param {string} content - The content to process
+ * @param {Object} context - The processing context
+ * @returns {string} - The content with mermaid blocks replaced by placeholders
+ */
+export function protectMermaidBlocks(content, context) {
+  const { protectedZones } = context;
+  
+  // Match mermaid code blocks: ```mermaid\ncode\n```
+  const mermaidBlockRegex = /```mermaid\s*\n([\s\S]*?)\n```/gim;
+  
+  // Replace mermaid blocks with placeholders
+  return content.replace(mermaidBlockRegex, (match, code) => {
+    const placeholder = generatePlaceholder('mermaid_block');
+    
+    // Store full match with the placeholder
+    protectedZones.set(placeholder, {
+      type: 'mermaid_block',
+      original: match,
+      content: code.trim()
+    });
+    
+    return placeholder;
+  });
+}
+
+/**
+ * Protect already-rendered Mermaid HTML from markdown processing
+ * 
+ * @param {string} content - The content to process
+ * @param {Object} context - The processing context
+ * @returns {string} - The content with mermaid HTML replaced by placeholders
+ */
+export function protectMermaidHtml(content, context) {
+  const { protectedZones } = context;
+  
+  // Match rendered mermaid HTML: <div class="mermaid-diagram">...</div>
+  // Need to match from opening tag to matching closing tag, handling nested content
+  // We'll use a simple approach: find opening tag, then find matching closing tag
+  const openingTagRegex = /<div\s+class=["']mermaid-diagram["'][^>]*>/gi;
+  
+  let result = content;
+  let match;
+  const matches = [];
+  
+  // Find all opening tags and their matching closing tags
+  while ((match = openingTagRegex.exec(content)) !== null) {
+    const startIndex = match.index;
+    const tagStart = match[0];
+    
+    // Find the matching closing </div> tag
+    // Count nested divs to find the correct closing tag
+    let depth = 1;
+    let currentIndex = startIndex + tagStart.length;
+    
+    while (depth > 0 && currentIndex < content.length) {
+      const nextOpen = content.indexOf('<div', currentIndex);
+      const nextClose = content.indexOf('</div>', currentIndex);
+      
+      if (nextClose === -1) break; // No closing tag found
+      
+      if (nextOpen !== -1 && nextOpen < nextClose) {
+        // Found nested div
+        depth++;
+        currentIndex = nextOpen + 4;
+      } else {
+        // Found closing div
+        depth--;
+        if (depth === 0) {
+          // Found matching closing tag
+          const endIndex = nextClose + 6; // 6 = length of '</div>'
+          const fullMatch = content.substring(startIndex, endIndex);
+          
+          matches.push({
+            fullMatch,
+            startIndex,
+            endIndex
+          });
+          break;
+        }
+        currentIndex = nextClose + 6;
+      }
+    }
+  }
+  
+  // Replace in reverse order to preserve indices
+  for (let i = matches.length - 1; i >= 0; i--) {
+    const { fullMatch, startIndex, endIndex } = matches[i];
+    const placeholder = generatePlaceholder('mermaid_html');
+    
+    // Store the rendered HTML
+    protectedZones.set(placeholder, {
+      type: 'mermaid_html',
+      original: fullMatch,
+      html: fullMatch
+    });
+    
+    result = result.slice(0, startIndex) + placeholder + result.slice(endIndex);
+  }
+  
+  return result;
+}
+
+/**
  * Restore all protected content
  * 
  * @param {string} content - The content with placeholders

@@ -4,7 +4,7 @@
  * Formats content with markdown-it.
  */
 import { createFormatter } from './base';
-import { protectLatexBlocks, protectInlineLatex, restoreProtectedContent } from '../helpers/protection';
+import { protectLatexBlocks, protectInlineLatex, protectMermaidBlocks, protectMermaidHtml, restoreProtectedContent } from '../helpers/protection';
 
 // Will need to be installed: npm install markdown-it
 let markdownIt = null;
@@ -56,15 +56,30 @@ export const markdownFormatter = createFormatter(
     if (!content) return '';
     
     try {
-      // First, protect LaTeX expressions
-      // so markdown doesn't process them (code blocks are handled natively by markdown-it)
+      // First, protect special content blocks so markdown doesn't process them
+      // Protect rendered mermaid HTML first (from mermaid formatter that ran earlier)
+      // Then protect any remaining raw mermaid blocks
+      // LaTeX expressions need protection
       let processedContent = content;
+      
+      const debug = context?.options?.debugMermaid || false;
+      if (debug) {
+        const mermaidHtmlMatches = (processedContent.match(/<div\s+class=["']mermaid-diagram["'][^>]*>/gi) || []).length;
+        console.log('[Markdown Formatter] Found', mermaidHtmlMatches, 'rendered mermaid HTML block(s) to protect');
+      }
+      
+      processedContent = protectMermaidHtml(processedContent, context); // Protect rendered HTML
+      processedContent = protectMermaidBlocks(processedContent, context); // Protect any remaining raw blocks
       processedContent = protectLatexBlocks(processedContent, context);
       processedContent = protectInlineLatex(processedContent, context);
       
       // Process the content with markdown-it
       const md = await getMarkdownIt();
       processedContent = md.render(processedContent);
+      
+      if (debug) {
+        console.log('[Markdown Formatter] After markdown processing, protected zones count:', context.protectedZones?.size || 0);
+      }
       
       // Add target="_blank" to all links so they open in new tabs
       processedContent = processedContent.replace(/<a\s+([^>]*?)>/gi, (match, attrs) => {

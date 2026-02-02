@@ -1484,7 +1484,8 @@ export default {
 
     const formattedContentOptions = computed(() => ({
       validTags: renderTagSet.value,
-      validMentions: renderMentionSet.value
+      validMentions: renderMentionSet.value,
+      debugMermaid: true
     }));
     
     // const handleReformat = async () => {
