@@ -52,6 +52,9 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           envs: FULL_IMAGE_NAME
           script: |
+            # Exit on error, and print each command
+            set -ex
+
             cd ~/stitch-frontend
             # Authenticate VM to the registry (GCP specific helper)
             gcloud auth configure-docker ${{ secrets.REGISTRY_DOMAIN }} --quiet
