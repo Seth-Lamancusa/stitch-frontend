@@ -20,6 +20,13 @@ app.use(router)
 app.use(store)
 app.directive('can', vCan)
 
+// When another tab syncs a token to us (e.g. visibility + token_request/response), update auth store so UI shows logged-in
+try {
+  window.addEventListener('stitch_token_synced', () => {
+    store.dispatch('auth/validateExistingToken').catch(() => {});
+  });
+} catch (_) {}
+
 const initApp = async () => {
   try {
     

@@ -12,6 +12,7 @@ class TokenManager {
   static _tabId = null;
   static _crossTabRefreshPromise = null;  // Promise that resolves when another tab completes refresh
   static _crossTabRefreshResolver = null; // Resolver for the above promise
+  static _crossTabRefreshSourceTabId = null; // Tab we're waiting for (so tab_closing only resolves when that tab closes)
   static _crossTabTimeoutMs = 8000;  // Max time to wait for another tab's refresh
   static _syncInitialized = false;
 
@@ -164,8 +165,8 @@ class TokenManager {
         break;
         
       case 'tab_closing':
-        // Tab that was refreshing is closing - resolve with null so we can continue
-        if (this._crossTabRefreshPromise) {
+        // Only resolve if the closing tab is the one we were waiting for (avoids unrelated tab closes triggering retries)
+        if (this._crossTabRefreshPromise && data.tabId === this._crossTabRefreshSourceTabId) {
           if (this.debug) console.log('[TokenManager] Refreshing tab closed', { fromTab: data.tabId?.slice(0, 8) });
           this._resolveCrossTabWait(null);
         }
@@ -220,6 +221,7 @@ class TokenManager {
       this._crossTabRefreshResolver(token);
       this._crossTabRefreshResolver = null;
       this._crossTabRefreshPromise = null;
+      this._crossTabRefreshSourceTabId = null;
     }
   }
   
@@ -233,6 +235,9 @@ class TokenManager {
       this.lastSuccessfulRefreshAt = timestamp;
       this.lastRefreshFailedAt = 0; // Clear failure state since we got a good token
       if (this.debug) console.log('[TokenManager] Applied synced token', { age: Date.now() - timestamp });
+      try {
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('stitch_token_synced'));
+      } catch (_) {}
     }
   }
   
@@ -347,7 +352,9 @@ class TokenManager {
       }
     }
 
-    // Broadcast that we're starting a refresh (so other tabs can wait)
+    // Broadcast that we're starting a refresh (so other tabs can wait). Note: two tabs can
+    // both pass the _crossTabRefreshPromise check before either receives this message, so
+    // the backend may see two refresh requests; it uses per-family locking and reuse detection.
     this._broadcastMessage({ type: 'refresh_started', tabId: this._tabId });
 
     this.inFlightRefreshPromise = (async () => {
