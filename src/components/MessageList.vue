@@ -942,11 +942,14 @@ const handleLinkDelete = async (linkData) => {
       </div>
     </div>
 
-    <!-- Mode description and channel filter indicator -->
-    <div v-if="(modeDescription || isFilteredByChannel) && !hideInfoBox" class="mode-description">
+    <!-- Mode description (info box) -->
+    <div v-if="modeDescription && !hideInfoBox" class="mode-description">
       <span class="info-icon">ℹ</span>
-      <p v-if="modeDescription">{{ modeDescription }}</p>
-      <p v-if="isFilteredByChannel" class="channel-filter-note">Filtered by channel. Change selection on the Channels tab.</p>
+      <p>{{ modeDescription }}</p>
+    </div>
+    <!-- Channel filter indicator: below the info box when a channel is selected -->
+    <div v-if="isFilteredByChannel && !hideInfoBox" class="channel-filter-indicator">
+      Filtered by channel. Change selection on the Channels tab.
     </div>
 
     <!-- Empty state - only shown when logged in but no messages -->
@@ -1251,7 +1254,7 @@ const handleLinkDelete = async (linkData) => {
   gap: var(--space-sm);
   width: 50%;
   padding: var(--space-md);
-  margin: 0 auto var(--space-md) auto;
+  margin: 0 auto 0 auto;
   background-color: var(--color-surface);
   border-radius: var(--radius-md);
 }
@@ -1279,9 +1282,15 @@ const handleLinkDelete = async (linkData) => {
   line-height: 1.5;
 }
 
-.mode-description p.channel-filter-note {
-  margin-top: 0.5em;
+.channel-filter-indicator {
+  margin: 0 auto 0 auto;
+  padding: var(--space-xs) var(--space-md);
+  width: 50%;
+  max-width: 100%;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
   font-style: italic;
+  text-align: center;
 }
 
 .empty-state {
@@ -1451,6 +1460,10 @@ const handleLinkDelete = async (linkData) => {
     width: calc(100% - var(--space-md) * 2);
     margin: 0 auto var(--space-md) auto;
     padding: var(--space-sm);
+  }
+  
+  .channel-filter-indicator {
+    width: calc(100% - var(--space-md) * 2);
   }
   
   .empty-state {

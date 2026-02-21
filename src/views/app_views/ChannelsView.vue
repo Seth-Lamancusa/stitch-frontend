@@ -4,7 +4,7 @@
       <!-- Mode description: explains that channel selection is global (filter + default for new messages) -->
       <div class="mode-description">
         <span class="info-icon">ℹ</span>
-        <p>Channels are group discussion spaces. Selecting a channel here applies everywhere: it becomes the default for new messages and filters Inbox, History, Timeline, and Saved to that channel. Choose “Select a channel” (no channel) to see all messages and have no default channel.</p>
+        <p>Channels are group discussion spaces. Selecting a channel here applies everywhere: it becomes the default for new messages and filters Inbox, History, and Timeline. Choose “Select a channel” (no channel) to see all messages and have no default channel.</p>
       </div>
       
       <!-- Channel selector dropdown -->
@@ -28,7 +28,7 @@
         </div>
       </div>
 
-      <!-- Selected channel details and messages -->
+      <!-- Selected channel: header, members, admin actions -->
       <div v-if="selectedChannel" class="channel-content">
         <div class="channel-header">
           <div class="channel-info">
@@ -50,13 +50,12 @@
           </div>
         </div>
 
-        <!-- Manage members: list, add (user search), remove/leave. Shown only to channel admins. -->
-        <div v-if="selectedChannel?.is_admin" class="channel-members-section">
+        <!-- Members: list for all; add/remove only for admins -->
+        <div class="channel-members-section">
           <h3 class="members-heading">Members</h3>
           <div v-if="membersLoading" class="members-loading">Loading members...</div>
           <template v-else>
-            <!-- Add member: user search -->
-            <div class="add-member-row">
+            <div v-if="selectedChannel?.is_admin" class="add-member-row">
               <UserSearchInput @user-selected="handleAddMember" />
               <span v-if="addMemberError" class="add-member-error">{{ addMemberError }}</span>
               <span v-if="isAddingMember" class="add-member-status">Adding...</span>
@@ -95,38 +94,12 @@
           </template>
         </div>
 
-        <!-- Channel messages list -->
-        <MessageList 
-          v-if="channelMessages.length > 0 || isLoadingMessages"
-          mode="custom" 
-          :customMessages="channelMessages"
-          :hideHeader="true"
-          :hideInfoBox="true"
-        />
-        
-        <!-- Loading state -->
-        <div v-if="isLoadingMessages && channelMessages.length === 0" class="loading-state">
-          <div class="loading-spinner"></div>
-          <p>Loading messages...</p>
-        </div>
-        
-        <!-- Empty state when no messages -->
-        <div v-if="!isLoadingMessages && channelMessages.length === 0" class="empty-state">
-          <p>No messages in this channel yet.</p>
-        </div>
-
-        <!-- Load more button -->
-        <div v-if="hasMoreMessages && !isLoadingMessages" class="load-more-container">
-          <button @click="loadMoreMessages" class="load-more-btn">
-            Load More Messages
-          </button>
-        </div>
       </div>
 
       <!-- No channel selected state -->
       <div v-else-if="!channelsLoading" class="no-selection-state">
         <p v-if="userChannels.length === 0">You are not a member of any channels yet.</p>
-        <p v-else>Select a channel from the dropdown above to view its messages.</p>
+        <p v-else>Select a channel from the dropdown above to manage it and see members.</p>
       </div>
 
       <!-- Initial loading state -->
@@ -170,7 +143,6 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute, useRouter } from 'vue-router';
 import TabViewLayout from '../../components/layouts/TabViewLayout.vue';
-import MessageList from '../../components/MessageList.vue';
 import UserSearchInput from '../../components/UserSearchInput.vue';
 import ChannelsService from '../../services/ChannelsService.js';
 
@@ -180,12 +152,7 @@ const router = useRouter();
 
 // State
 const userChannels = ref([]);
-const channelMessages = ref([]);
 const channelsLoading = ref(false);
-const isLoadingMessages = ref(false);
-const hasMoreMessages = ref(false);
-const currentSkip = ref(0);
-const pageSize = 15;
 const showDeleteConfirm = ref(false);
 const isDeletingChannel = ref(false);
 // Members (for admin): list, add, remove
@@ -230,85 +197,20 @@ const fetchUserChannels = async () => {
   }
 };
 
-const fetchChannelMessages = async (reset = false) => {
-  if (!selectedChannelId.value) return;
-
-  try {
-    isLoadingMessages.value = true;
-    
-    const skip = reset ? 0 : currentSkip.value;
-    const response = await ChannelsService.getChannelMessages(
-      selectedChannelId.value,
-      skip,
-      pageSize
-    );
-
-    if (reset) {
-      // Reset - replace messages
-      channelMessages.value = response.messages || [];
-      currentSkip.value = response.messages?.length || 0;
-    } else {
-      // Append - add more messages
-      channelMessages.value = [
-        ...channelMessages.value,
-        ...(response.messages || [])
-      ];
-      currentSkip.value += response.messages?.length || 0;
-    }
-
-    hasMoreMessages.value = response.has_more || false;
-    
-    console.log('[ChannelsView] Fetched messages:', {
-      channelId: selectedChannelId.value,
-      messagesCount: response.messages?.length || 0,
-      totalLoaded: channelMessages.value.length,
-      hasMore: hasMoreMessages.value
-    });
-  } catch (error) {
-    console.error('[ChannelsView] Error fetching channel messages:', error);
-    store.commit('ui/SET_ERROR', 'Failed to load channel messages');
-    if (reset) {
-      channelMessages.value = [];
-    }
-  } finally {
-    isLoadingMessages.value = false;
-  }
-};
-
 const handleChannelSelect = () => {
   const channelId = selectedChannelId.value;
-  console.log('[ChannelsView] Channel selected:', channelId);
-  
-  // Persist to store (already done via computed setter, but ensure it's saved)
   store.dispatch('navigation/setSelectedChannelId', channelId);
-  
-  // Update URL with channel ID for proper back navigation
   if (channelId) {
     router.replace({ path: '/channels', query: { channelId } });
   } else {
     router.replace({ path: '/channels' });
   }
-  
-  // Reset message state
-  channelMessages.value = [];
-  currentSkip.value = 0;
-  hasMoreMessages.value = false;
-
-  // Fetch messages for selected channel
-  if (channelId) {
-    fetchChannelMessages(true);
-  }
-};
-
-const loadMoreMessages = () => {
-  if (!isLoadingMessages.value && hasMoreMessages.value) {
-    fetchChannelMessages(false);
-  }
+  if (channelId) fetchChannelMembers();
 };
 
 // --- Members (admin): fetch, add, remove ---
 const fetchChannelMembers = async () => {
-  if (!selectedChannelId.value || !selectedChannel.value?.is_admin) {
+  if (!selectedChannelId.value) {
     channelMembers.value = [];
     return;
   }
@@ -375,7 +277,6 @@ const handleLeaveChannel = async () => {
     store.commit('ui/SET_SUCCESS', 'You left the channel');
     channelMembers.value = [];
     selectedChannelId.value = '';
-    channelMessages.value = [];
     router.replace({ path: '/channels' });
     await fetchUserChannels();
   } catch (err) {
@@ -400,17 +301,12 @@ const handleDeleteChannel = async () => {
       type: 'success' 
     });
     
-    // Clear selection and refresh channel list
     selectedChannelId.value = '';
-    channelMessages.value = [];
     await fetchUserChannels();
-    
-    // Select first channel if available
     if (userChannels.value.length > 0) {
       selectedChannelId.value = userChannels.value[0].id || userChannels.value[0]._key;
-      fetchChannelMessages(true);
+      fetchChannelMembers();
     }
-    
     showDeleteConfirm.value = false;
   } catch (error) {
     console.error('[ChannelsView] Error deleting channel:', error);
@@ -478,21 +374,11 @@ watch(user, (newUser, oldUser) => {
   }
 });
 
-// Watch for channel selection changes and fetch messages
+// Watch for channel selection changes: fetch members when a channel is selected
 watch(selectedChannelId, (newChannelId, oldChannelId) => {
   if (newChannelId && newChannelId !== oldChannelId) {
-    // Reset message state
-    channelMessages.value = [];
-    currentSkip.value = 0;
-    hasMoreMessages.value = false;
-    // Fetch messages and members for selected channel
-    fetchChannelMessages(true);
     fetchChannelMembers();
   } else if (!newChannelId) {
-    // Clear messages and members when no channel selected
-    channelMessages.value = [];
-    currentSkip.value = 0;
-    hasMoreMessages.value = false;
     channelMembers.value = [];
   }
 });
@@ -506,12 +392,9 @@ watch(userChannels, (channels) => {
     );
     
     if (!channelExists) {
-      // Selected channel no longer exists, clear selection
       store.dispatch('navigation/setSelectedChannelId', null);
     } else if (selectedChannelId.value) {
-      // Channel exists: ensure messages and members are loaded
-      if (!channelMessages.value.length) fetchChannelMessages(true);
-      if (selectedChannel.value?.is_admin) fetchChannelMembers();
+      fetchChannelMembers();
     }
   } else if (channels.length > 0 && !selectedChannelId.value) {
     // No channel selected but channels available - check URL
@@ -753,7 +636,6 @@ watch(userChannels, (channels) => {
 }
 
 .loading-state,
-.empty-state,
 .no-selection-state {
   display: flex;
   flex-direction: column;
@@ -762,7 +644,7 @@ watch(userChannels, (channels) => {
   padding: var(--space-xl);
   text-align: center;
   color: var(--color-text-secondary);
-  min-height: 200px;
+  min-height: 120px;
 }
 
 .loading-spinner {
@@ -778,33 +660,6 @@ watch(userChannels, (channels) => {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
-}
-
-.load-more-container {
-  display: flex;
-  justify-content: center;
-  padding: var(--space-lg);
-}
-
-.load-more-btn {
-  background-color: var(--color-primary);
-  color: var(--color-text-inverse);
-  border: none;
-  border-radius: var(--radius-md);
-  padding: var(--space-sm) var(--space-lg);
-  font-size: var(--font-size-base);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.1s ease;
-}
-
-.load-more-btn:hover {
-  background-color: var(--color-primary-dark);
-  transform: translateY(-1px);
-}
-
-.load-more-btn:active {
-  transform: translateY(0);
 }
 
 /* Mobile responsive styles */
