@@ -73,6 +73,8 @@ export default {
     refreshTrigger: 0, // Timestamp that increments when refresh is requested
     // Selected channel ID for channels tab
     selectedChannelId: null, // Channel ID selected in channels view
+    // When set, message list should remove this id from local list/cache (used after delete + redirect)
+    lastDeletedMessageId: null,
   },
   
   mutations: {
@@ -122,7 +124,11 @@ export default {
         state.listCache = {};
       }
     },
-    
+
+    SET_LAST_DELETED_MESSAGE_ID(state, messageId) {
+      state.lastDeletedMessageId = messageId;
+    },
+
     SET_REPLY_PUBLIC(state, isPublic) {
       state.replySettings.isPublic = isPublic;
     },
@@ -409,6 +415,7 @@ export default {
     speedDialTargetMessageId: (state) => state.speedDialTargetMessageId,
     // Refresh trigger getter
     refreshTrigger: (state) => state.refreshTrigger,
+    lastDeletedMessageId: (state) => state.lastDeletedMessageId,
   },
   
   actions: {

@@ -1,9 +1,16 @@
 <template>
-  <div v-if="isVisible" class="modal-overlay" :class="{ 'closing': isClosing }" @click.self="handleOverlayClick">
+  <div
+    v-if="isVisible || inline"
+    :class="[
+      inline ? 'channels-inline-panel' : 'modal-overlay',
+      { 'closing': !inline && isClosing }
+    ]"
+    @click.self="inline ? undefined : handleOverlayClick($event)"
+  >
     <div class="channels-modal" @click.stop="handleModalContentClick">
       <div class="modal-header">
         <h3>{{ isAddMode ? 'Channels' : 'Channels (new message)' }}</h3>
-        <button class="close-button" @click.stop="closeModal">×</button>
+        <button v-if="!inline" class="close-button" @click.stop="closeModal">×</button>
       </div>
 
       <div class="modal-content">
@@ -62,7 +69,7 @@
         </div>
       </div>
 
-      <div class="modal-footer">
+      <div v-if="!inline" class="modal-footer">
         <button class="done-button" @click.stop="handleDone" :disabled="isUpdating">
           {{ isUpdating ? 'Saving...' : 'Done' }}
         </button>
@@ -80,6 +87,7 @@ import ChannelsService from '../../services/ChannelsService.js';
 
 const props = defineProps({
   isVisible: { type: Boolean, default: false },
+  inline: { type: Boolean, default: false },
   isAddMode: { type: Boolean, default: false },
   existingChannels: { type: Array, default: () => [] },
   messageId: { type: String, default: null }
@@ -119,8 +127,9 @@ const initializeChannels = () => {
     // In add mode, start with existing channels
     channelsLocal.value = (props.existingChannels || []).slice();
   } else {
-    // In draft mode, start with empty selection
-    channelsLocal.value = [];
+    // In draft mode, use existingChannels when provided (e.g. from ReplyBox or NewThreadView)
+    const existing = props.existingChannels || [];
+    channelsLocal.value = Array.isArray(existing) ? existing.slice() : [];
   }
 };
 
@@ -228,17 +237,20 @@ const handleDone = () => {
   closeModal();
 };
 
-watch(() => props.isVisible, (visible) => {
+watch(() => props.isVisible || props.inline, (visible) => {
   if (visible) {
     initializeChannels();
     fetchUserChannels();
   }
 });
 
-// Watch existingChannels to refresh local channels after backend updates (when modal is open)
+// Watch existingChannels to refresh local channels after backend updates (when modal is open) or when inline (draft from store)
 watch(() => props.existingChannels, (newChannels) => {
-  if (props.isVisible && !isUpdating.value && props.isAddMode) {
+  if (props.isAddMode && props.isVisible && !isUpdating.value) {
     channelsLocal.value = (newChannels || []).slice();
+  }
+  if (props.inline && !props.isAddMode && !isUpdating.value) {
+    channelsLocal.value = Array.isArray(newChannels) ? newChannels.slice() : [];
   }
 }, { deep: true });
 
@@ -251,6 +263,17 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* Inline panel (no overlay, for embedding in New Thread view) */
+.channels-inline-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.channels-inline-panel .channels-modal {
+  max-height: 50vh;
+}
+
 .modal-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;

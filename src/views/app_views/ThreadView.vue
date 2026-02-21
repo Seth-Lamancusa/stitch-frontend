@@ -1169,6 +1169,7 @@ const deleteMessage = async (options) => {
 
     // If we deleted the currently centered message, navigate back to previous route (message list)
     if (String(deletedId) === String(messageId.value)) {
+      store.commit('navigation/SET_LAST_DELETED_MESSAGE_ID', deletedId);
       const prevRoute = store.getters['navigation/previousRoute'];
       const fallback = '/inbox';
       router.push(prevRoute || fallback);
@@ -1187,11 +1188,10 @@ const deleteMessage = async (options) => {
       errorMessage = 'This message has already been deleted (likely when its parent was deleted)';
       // Hide confirmation modal and navigate away since the message is already gone
       store.commit('ui/SET_DELETE_CONFIRM', { show: false, message: null });
-      
+      store.commit('navigation/SET_LAST_DELETED_MESSAGE_ID', deletedId);
       // Navigate back since the current thread no longer exists
       const prevRoute = store.getters['navigation/previousRoute'];
       const defaultRoute = '/feed';
-      
       router.push(prevRoute || defaultRoute);
     } else if (error.response?.status === 403) {
       errorMessage = 'You do not have permission to delete this message';

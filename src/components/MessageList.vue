@@ -536,8 +536,24 @@ onMounted(async () => {
       // Mark that we're restoring from cache (to prevent watch from clearing)
       restoredFromCache.value = true;
       
+      // If we navigated here after deleting a message, exclude it from restored list
+      let messagesToRestore = cached.messages;
+      const deletedId = store.getters['navigation/lastDeletedMessageId'];
+      if (deletedId) {
+        store.commit('navigation/SET_LAST_DELETED_MESSAGE_ID', null);
+        messagesToRestore = cached.messages.filter(m => String(m.id) !== String(deletedId));
+        if (messagesToRestore.length !== cached.messages.length) {
+          store.dispatch('navigation/saveListCache', {
+            tab: props.mode,
+            messages: messagesToRestore,
+            currentSkip: cached.currentSkip,
+            isAllLoaded: cached.isAllLoaded
+          });
+        }
+      }
+      
       // Restore from cache
-      localMessages.value = cached.messages;
+      localMessages.value = messagesToRestore;
       currentSkip.value = cached.currentSkip;
       isAllLoaded.value = cached.isAllLoaded;
       
@@ -575,6 +591,30 @@ onMounted(async () => {
 // Add: auto-load when component is re-activated via keep-alive (e.g., switching tabs)
 onActivated(() => {
   try {
+    // If we navigated here after deleting a message, remove it from local list and cache
+    const deletedId = store.getters['navigation/lastDeletedMessageId'];
+    if (deletedId) {
+      store.commit('navigation/SET_LAST_DELETED_MESSAGE_ID', null);
+      if (isLocalMode.value) {
+        const before = localMessages.value.length;
+        localMessages.value = localMessages.value.filter(m => String(m.id) !== String(deletedId));
+        if (localMessages.value.length !== before) {
+          // Update list cache so restored state also excludes the deleted message
+          const cached = store.getters['navigation/getListCache'](props.mode);
+          if (cached?.messages?.length) {
+            const filtered = cached.messages.filter(m => String(m.id) !== String(deletedId));
+            store.dispatch('navigation/saveListCache', {
+              tab: props.mode,
+              messages: filtered,
+              currentSkip: cached.currentSkip,
+              isAllLoaded: cached.isAllLoaded
+            });
+          }
+        }
+      }
+      // Store modes use getLoadedMessages which already had the message removed by REMOVE_MESSAGE_CASCADE
+    }
+
     const hasUser = !!user.value;
     const needsAuth = requiresAuth.value;
     const anyMessages = (store.getters['messages/getLoadedMessages'] || []).length > 0;

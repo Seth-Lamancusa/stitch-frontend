@@ -31,8 +31,9 @@
           <span class="reply-sheet__title">{{ replyHeaderText }}</span>
         </div>
         <div class="reply-sheet__header-right">
-          <!-- Close button -->
+          <!-- Close button (hidden in new thread view - reply box is not closable there) -->
           <button 
+            v-if="!isNewThread"
             class="reply-sheet__close-button"
             @click.stop="hideBottomSheet"
             :aria-label="'Close reply box'"
@@ -615,31 +616,39 @@ const ensureReplyingActive = () => {
 
 // Bottom sheet methods
 const focusTextarea = () => {
-  // Always focus the message textarea when opening
-  setTimeout(() => {
+  // Always focus the message textarea when opening (never start in subject)
+  const delay = props.isNewThread ? 450 : 350;
+  const tryFocus = () => {
     if (replyTextarea.value) {
       replyTextarea.value.focus();
-    } else if (showSubject.value && subjectInput.value) {
-      subjectInput.value.focus();
+      return true;
     }
-  }, 350);
+    if (!props.isNewThread && showSubject.value && subjectInput.value) {
+      subjectInput.value.focus();
+      return true;
+    }
+    return false;
+  };
+  setTimeout(() => {
+    if (!tryFocus() && props.isNewThread) {
+      setTimeout(tryFocus, 100);
+    }
+  }, delay);
 };
 
 const hideBottomSheet = () => {
+  // In new thread view the reply box cannot be closed (no X, no outside click)
+  if (props.isNewThread) return;
   isKeyboardVisible.value = false;
 
-  if (isReplying.value || props.isNewThread) {
+  if (isReplying.value) {
     isReplyBoxClosing.value = true;
     setTimeout(() => {
       isReplyBoxClosing.value = false;
-      if (!props.isNewThread) {
-        store.dispatch('navigation/clearReplyingTo');
-      }
+      store.dispatch('navigation/clearReplyingTo');
     }, 150);
   } else {
-    if (!props.isNewThread) {
-      store.dispatch('navigation/clearReplyingTo');
-    }
+    store.dispatch('navigation/clearReplyingTo');
   }
 };
 
@@ -1877,8 +1886,10 @@ const closeChannelsModal = () => {
 };
 
 const handleChannelsChange = (channelIds) => {
-  // Store channel IDs for sending with the message
-  replyChannels.value = channelIds.map(id => ({ id }));
+  // Store channel IDs for sending with the message and keep store in sync (for NewThreadView inline panel)
+  const list = Array.isArray(channelIds) ? channelIds.map(id => ({ id })) : [];
+  replyChannels.value = list;
+  store.commit('navigation/SET_REPLY_CHANNEL_IDS', list.map(ch => ch.id).filter(Boolean));
 };
 
 const handleChannelsDone = (channelIds) => {
@@ -1890,6 +1901,8 @@ const handleChannelsDone = (channelIds) => {
 
 // Handle clicks outside reply box
 const handleClickOutside = (event) => {
+  // In new thread view the reply box is not closable (avoids flicker from outside-click close)
+  if (props.isNewThread) return;
   // Guard: if we just toggled a control inside the sheet, skip this close once
   if (suppressOutsideClose.value) {
     suppressOutsideClose.value = false;
@@ -2037,17 +2050,30 @@ watch(() => props.targetId, (targetId) => {
       replyChannels.value = [];
     }
   } else {
-    // New thread: use global selected channel as default if set (Channels tab selection applies app-wide)
-    const globalChannelId = store.getters['navigation/selectedChannelId'];
-    if (globalChannelId) {
-      replyChannels.value = [{ id: globalChannelId }];
+    // New thread: prefer store (e.g. set by NewThreadView inline panel), else global selected channel
+    const storedIds = store.getters['navigation/replyChannelIds'] || [];
+    if (storedIds.length > 0) {
+      replyChannels.value = storedIds.map(id => ({ id: typeof id === 'string' ? id : String(id) }));
     } else {
-      replyChannels.value = [];
+      const globalChannelId = store.getters['navigation/selectedChannelId'];
+      if (globalChannelId) {
+        const list = [{ id: globalChannelId }];
+        replyChannels.value = list;
+        // Keep store in sync so NewThreadView background and ReplyBox share one source of truth
+        store.commit('navigation/SET_REPLY_CHANNEL_IDS', [globalChannelId]);
+      } else {
+        replyChannels.value = [];
+      }
     }
   }
 }, { immediate: true });
 
-
+// When on new-thread view, keep replyChannels in sync with store (e.g. inline channels panel)
+watch(() => store.getters['navigation/replyChannelIds'], (channelIds) => {
+  if (!props.targetId && props.isNewThread && Array.isArray(channelIds)) {
+    replyChannels.value = channelIds.map(id => ({ id: typeof id === 'string' ? id : String(id) }));
+  }
+}, { deep: true });
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutsideSearch);
@@ -2130,9 +2156,10 @@ defineExpose({
   content,
   isSending,
   focus: () => {
+    // Prefer message box; only fall back to subject when not new-thread and no textarea
     if (replyTextarea.value) {
       replyTextarea.value.focus();
-    } else if (showSubject.value && subjectInput.value) {
+    } else if (!props.isNewThread && showSubject.value && subjectInput.value) {
       subjectInput.value.focus();
     }
   },
@@ -2403,36 +2430,42 @@ defineExpose({
 
 .reply-sheet__subject-input {
   flex: 1;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--color-border);
-  padding: 8px 4px;
-  padding-right: 50px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 10px;
+  padding-right: 44px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background-color: transparent;
   color: var(--color-text);
-  font-size: var(--font-size-md);
-  font-weight: 600;
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease;
 }
 
 .reply-sheet__subject-input:focus {
   outline: none;
-  border-bottom-color: var(--color-primary);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 79, 140, 255), 0.2);
 }
 
 .reply-sheet__subject-input.subject-input--error {
-  border-bottom-color: var(--color-error);
+  border-color: var(--color-error);
 }
 
 .reply-sheet__subject-input::placeholder {
   color: var(--color-text-secondary);
-  font-weight: 400;
 }
 
 .subject-char-count {
   position: absolute;
-  right: 4px;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
-  font-weight: 400;
   pointer-events: none;
 }
 

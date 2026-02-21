@@ -1,9 +1,16 @@
 <template>
-  <div v-if="isVisible" class="modal-overlay" :class="{ 'closing': isClosing }" @click.self="closeModal">
-    <div class="recipient-modal">
+  <div
+    v-if="isVisible || inline"
+    :class="[
+      inline ? 'recipients-inline-panel' : 'modal-overlay',
+      { 'closing': !inline && isClosing }
+    ]"
+    @click.self="inline ? undefined : closeModal()"
+  >
+    <div class="recipient-modal" @click.stop>
       <div class="modal-header">
         <h3>{{ isActuallyAddingToExisting ? 'Add Recipients' : 'Recipients (new message)' }}</h3>
-        <button class="close-button" @click.stop="closeModal">×</button>
+        <button v-if="!inline" class="close-button" @click.stop="closeModal">×</button>
       </div>
       
       <div class="modal-content">
@@ -480,6 +487,10 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  inline: {
+    type: Boolean,
+    default: false
+  },
   isPublic: {
     type: Boolean,
     default: true
@@ -926,8 +937,8 @@ defineExpose({
 
 // Debounce function for search
 const searchUsers = (event) => {
-  // Don't search if modal isn't visible
-  if (!props.isVisible) {
+  // Don't search if modal isn't visible (or inline panel)
+  if (!props.isVisible && !props.inline) {
     return;
   }
   
@@ -1352,6 +1363,19 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* Inline panel (no overlay, for embedding in New Thread view) */
+.recipients-inline-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.recipients-inline-panel .recipient-modal {
+  height: 100%;
+  min-height: 200px;
+  max-height: 50vh;
+}
+
 /* Modal overlay */
 .modal-overlay {
   position: fixed;

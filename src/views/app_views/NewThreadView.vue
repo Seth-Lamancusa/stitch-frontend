@@ -42,6 +42,121 @@
         </div>
       </div>
 
+      <!-- Background: embedded recipients and channels (no modal containers) -->
+      <div v-if="user" class="new-thread-background">
+        <div class="draft-row">
+          <label class="draft-label">Recipients</label>
+          <div class="draft-recipients">
+            <div class="draft-input-row">
+              <input
+                v-model="newRecipient"
+                type="text"
+                placeholder="Search by username or tag"
+                class="draft-input"
+                @input="onRecipientSearchInput"
+                @keydown.enter.prevent="addRecipientFromSearch"
+              />
+              <button
+                type="button"
+                class="draft-add-btn"
+                :disabled="!canAddRecipient"
+                @click="addRecipientFromSearch"
+              >
+                Add
+              </button>
+            </div>
+            <div v-if="showRecipientResults" class="draft-search-results">
+              <button
+                v-for="u in searchResults"
+                :key="u.uid"
+                type="button"
+                class="draft-search-item"
+                @click="selectRecipient(u)"
+              >
+                {{ u.display_name || u.user_tag }} @{{ u.user_tag }}
+              </button>
+              <p v-if="searchResults.length === 0 && hasSearched && !isSearching" class="draft-no-results">No users found</p>
+            </div>
+            <!-- Speed dial cards -->
+            <div v-if="mainSpeedDialUsers.length > 0 || expandedSpeedDialUsers.length > 0" class="draft-speed-dial">
+              <span class="draft-label draft-speed-dial-label">Speed dial</span>
+              <div class="draft-speed-dial-cards">
+                <button
+                  v-for="u in mainSpeedDialUsers"
+                  :key="u.uid"
+                  type="button"
+                  class="draft-speed-dial-card"
+                  :class="{ 'draft-speed-dial-card--selected': isSpeedDialUserSelected(u) }"
+                  @click="toggleSpeedDialUser(u)"
+                >
+                  <span class="draft-speed-dial-name">{{ u.display_name }}</span>
+                  <span class="draft-speed-dial-tag">@{{ u.user_tag }}</span>
+                </button>
+              </div>
+              <div v-if="expandedSpeedDialUsers.length > 0" class="draft-speed-dial-more">
+                <button
+                  type="button"
+                  class="draft-speed-dial-more-btn"
+                  :aria-expanded="showMoreSpeedDial"
+                  @click="showMoreSpeedDial = !showMoreSpeedDial"
+                >
+                  More ({{ expandedSpeedDialUsers.length }}) {{ showMoreSpeedDial ? '▲' : '▼' }}
+                </button>
+                <div v-if="showMoreSpeedDial" class="draft-speed-dial-cards">
+                  <button
+                    v-for="u in expandedSpeedDialUsers"
+                    :key="u.uid"
+                    type="button"
+                    class="draft-speed-dial-card"
+                    :class="{ 'draft-speed-dial-card--selected': isSpeedDialUserSelected(u) }"
+                    @click="toggleSpeedDialUser(u)"
+                  >
+                    <span class="draft-speed-dial-name">{{ u.display_name }}</span>
+                    <span class="draft-speed-dial-tag">@{{ u.user_tag }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="draft-tags">
+              <span
+                v-for="(r, i) in replyRecipients"
+                :key="r.uid || i"
+                class="draft-tag"
+              >
+                {{ r.display_name || r.user_tag }}
+                <button type="button" class="draft-tag-remove" aria-label="Remove" @click="removeRecipient(i)">×</button>
+              </span>
+              <span v-if="!replyRecipients.length" class="draft-empty-hint">None</span>
+            </div>
+          </div>
+        </div>
+        <div class="draft-row">
+          <label class="draft-label">Channels</label>
+          <div class="draft-channels">
+            <div class="draft-input-row draft-channel-row">
+              <ChannelDropdown
+                :available-channels="availableChannels"
+                :selected-channel-ids="replyChannelIds"
+                :placeholder="isLoadingChannels ? 'Loading...' : 'Select channel...'"
+                :disabled="isLoadingChannels"
+                @select="onChannelSelect"
+              />
+            </div>
+            <div class="draft-tags">
+              <span
+                v-for="(ch, i) in selectedChannelsDisplay"
+                :key="ch.id"
+                class="draft-tag"
+              >
+                {{ ch.display_name || ch.id }}
+                <button type="button" class="draft-tag-remove" aria-label="Remove" @click="removeChannel(i)">×</button>
+              </span>
+              <span v-if="!replyChannelIds.length" class="draft-empty-hint">None</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Reply box component -->
       <reply-box
         :is-new-thread="true"
@@ -81,6 +196,8 @@ import { useRouter, useRoute } from 'vue-router';
 import ReplyBox from '../../components/ReplyBox.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
 import ProfileEditModal from '../../components/modals/ProfileEditModal.vue';
+import ChannelDropdown from '../../components/ChannelDropdown.vue';
+import ChannelsService from '../../services/ChannelsService.js';
 import { useAuthentication } from '../../composables/useAuthentication';
 import LoginButton from '@buttons/LoginButton.vue'
 
@@ -125,6 +242,132 @@ const userTag = computed(() => {
 // Add computed property for current reply visibility
 const isPublic = computed(() => store.getters['navigation/replyIsPublic']);
 
+// Single source of truth with ReplyBox: recipients and channels from navigation store
+const replyRecipients = computed(() => store.getters['navigation/replyRecipients'] || []);
+const replyChannelIds = computed(() => store.getters['navigation/replyChannelIds'] || []);
+
+// Recipients: search and add
+const newRecipient = ref('');
+const searchResults = ref([]);
+const isSearching = ref(false);
+const showRecipientResults = ref(false);
+const hasSearched = ref(false);
+let searchTimeout = null;
+
+const canAddRecipient = computed(() => {
+  const tag = newRecipient.value.trim();
+  if (tag) return true;
+  return searchResults.value.length > 0;
+});
+
+function onRecipientSearchInput() {
+  if (searchTimeout) clearTimeout(searchTimeout);
+  const query = newRecipient.value.trim();
+  if (!query) {
+    searchResults.value = [];
+    showRecipientResults.value = false;
+    hasSearched.value = false;
+    return;
+  }
+  searchTimeout = setTimeout(async () => {
+    isSearching.value = true;
+    hasSearched.value = true;
+    try {
+      const results = await store.dispatch('auth/searchUsers', query);
+      const list = Array.isArray(results) ? results : [];
+      searchResults.value = list;
+      showRecipientResults.value = true;
+    } catch (e) {
+      searchResults.value = [];
+      showRecipientResults.value = true;
+    }
+    isSearching.value = false;
+  }, 300);
+}
+
+function addRecipientFromSearch() {
+  if (searchResults.value.length > 0) {
+    selectRecipient(searchResults.value[0]);
+  }
+}
+
+function selectRecipient(user) {
+  if (!user?.user_tag) return;
+  store.dispatch('navigation/addRecipient', {
+    uid: user.uid,
+    display_name: user.display_name,
+    user_tag: user.user_tag,
+    public: true,
+    notify: true
+  });
+  newRecipient.value = '';
+  searchResults.value = [];
+  showRecipientResults.value = false;
+}
+
+function removeRecipient(index) {
+  store.dispatch('navigation/removeRecipient', index);
+}
+
+// Speed dial (under recipients)
+const mainSpeedDialUsers = computed(() => store.getters['speedDial/mainUsers'] || []);
+const expandedSpeedDialUsers = computed(() => store.getters['speedDial/expandedUsers'] || []);
+const showMoreSpeedDial = ref(false);
+
+function isSpeedDialUserSelected(u) {
+  return (replyRecipients.value || []).some((r) => r.uid === u.uid);
+}
+
+function toggleSpeedDialUser(user) {
+  if (isSpeedDialUserSelected(user)) {
+    const index = (replyRecipients.value || []).findIndex((r) => r.uid === user.uid);
+    if (index !== -1) store.dispatch('navigation/removeRecipient', index);
+  } else {
+    store.dispatch('navigation/addRecipient', {
+      uid: user.uid,
+      display_name: user.display_name,
+      user_tag: user.user_tag,
+      public: true,
+      notify: true
+    });
+  }
+}
+
+// Channels: dropdown and list
+const availableChannels = ref([]);
+const isLoadingChannels = ref(false);
+
+const selectedChannelsDisplay = computed(() => {
+  const ids = replyChannelIds.value || [];
+  const byId = new Map(availableChannels.value.map((c) => [c.id, c]));
+  return ids.map((id) => byId.get(id) || { id, display_name: id }).filter(Boolean);
+});
+
+function onChannelSelect(channel) {
+  if (!channel?.id) return;
+  const ids = [...(replyChannelIds.value || [])];
+  if (ids.includes(channel.id)) return;
+  ids.push(channel.id);
+  store.commit('navigation/SET_REPLY_CHANNEL_IDS', ids);
+}
+
+function removeChannel(index) {
+  const ids = [...(replyChannelIds.value || [])];
+  ids.splice(index, 1);
+  store.commit('navigation/SET_REPLY_CHANNEL_IDS', ids);
+}
+
+async function loadChannels() {
+  isLoadingChannels.value = true;
+  try {
+    const list = await ChannelsService.getUserChannels();
+    availableChannels.value = Array.isArray(list) ? list : [];
+  } catch (e) {
+    availableChannels.value = [];
+  }
+  isLoadingChannels.value = false;
+}
+
 // Add computed property for previous route
 const previousRoute = computed(() => store.getters['navigation/previousRoute']);
 
@@ -162,6 +405,20 @@ onMounted(async () => {
     recipients: []
   });
   
+  // Single source of truth with ReplyBox: seed store with global selected channel if none set
+  const storedChannelIds = store.getters['navigation/replyChannelIds'] || [];
+  if (storedChannelIds.length === 0) {
+    const globalId = store.getters['navigation/selectedChannelId'];
+    if (globalId) {
+      store.commit('navigation/SET_REPLY_CHANNEL_IDS', [globalId]);
+    }
+  }
+  
+  // Load channels and speed dial when logged in
+  if (user.value) {
+    loadChannels();
+    store.dispatch('speedDial/fetchSpeedDial');
+  }
   // Focus the reply box textarea on mount
   nextTick(() => {
     if (replyBox.value) {
@@ -232,6 +489,220 @@ const closeProfileModal = () => {
   height: 100vh;
   position: relative;
   overflow: hidden;
+}
+
+/* Background: embedded recipients and channels, stacked and centered */
+.new-thread-background {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-md);
+}
+
+.draft-row {
+  width: 100%;
+  max-width: 360px;
+  margin-bottom: var(--space-md);
+}
+
+.draft-label {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+.draft-recipients,
+.draft-channels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.draft-input-row {
+  display: flex;
+  gap: var(--space-xs);
+  align-items: center;
+}
+
+.draft-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.draft-input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+.draft-add-btn {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.draft-add-btn:hover:not(:disabled) {
+  background: var(--color-hover-overlay);
+}
+
+.draft-add-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.draft-search-results {
+  max-height: 120px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.draft-search-item {
+  display: block;
+  width: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-sm);
+  text-align: left;
+  border: none;
+  background: none;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.draft-search-item:hover {
+  background: var(--color-hover-overlay);
+}
+
+.draft-no-results {
+  padding: var(--space-sm);
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.draft-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  align-items: center;
+  min-height: 28px;
+}
+
+.draft-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  font-size: var(--font-size-xs);
+  background: var(--color-surface-light, rgba(0, 0, 0, 0.05));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.draft-tag-remove {
+  padding: 0 2px;
+  font-size: 14px;
+  line-height: 1;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.draft-tag-remove:hover {
+  color: var(--color-error);
+}
+
+.draft-empty-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+/* Speed dial under recipients */
+.draft-speed-dial {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.draft-speed-dial-label {
+  margin-bottom: 0;
+}
+
+.draft-speed-dial-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.draft-speed-dial-card {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.draft-speed-dial-card:hover {
+  background: var(--color-hover-overlay);
+}
+
+.draft-speed-dial-card--selected {
+  border-color: var(--color-primary);
+  background: rgba(79, 140, 255, 0.08);
+}
+
+.draft-speed-dial-name {
+  font-weight: 500;
+}
+
+.draft-speed-dial-tag {
+  color: var(--color-text-secondary);
+  font-size: 0.9em;
+}
+
+.draft-speed-dial-more {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.draft-speed-dial-more-btn {
+  align-self: flex-start;
+  padding: 2px 6px;
+  font-size: var(--font-size-xs);
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.draft-speed-dial-more-btn:hover {
+  color: var(--color-text);
+}
+
+.draft-channel-row :deep(.channel-dropdown) {
+  flex: 1;
+  min-width: 0;
 }
 
 .thread-header {

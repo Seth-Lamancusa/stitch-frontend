@@ -22,7 +22,7 @@
               :key="channel.id || channel._key"
               :value="channel.id || channel._key"
             >
-              {{ channel.display_name }} - {{ channel.description }}
+              {{ channel.display_name }}
             </option>
           </select>
         </div>
