@@ -132,9 +132,10 @@ export default {
   },
 
   /**
-   * Get channel members
+   * Get channel members.
+   * Backend returns the member list directly (JSON array), not wrapped in { members }.
    * @param {string} channelId - The channel ID
-   * @returns {Promise} - Promise resolving to member list
+   * @returns {Promise<Array>} - Promise resolving to list of member objects (uid, display_name, user_tag, is_admin, joined_at, etc.)
    */
   async getChannelMembers(channelId) {
     const headers = getAuthHeaders()
@@ -142,7 +143,7 @@ export default {
     
     try {
       const response = await apiClient.get(url, { headers })
-      return response.data.members || []
+      return Array.isArray(response.data) ? response.data : []
     } catch (error) {
       console.error('[ChannelsService] Error fetching channel members:', error)
       throw error

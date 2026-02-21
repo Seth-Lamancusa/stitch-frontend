@@ -1,5 +1,6 @@
 <template>
   <nav class="mobile-tab-bar" role="tablist" aria-label="Main navigation">
+    <!-- Search tab commented out
     <router-link 
       to="/search" 
       class="mobile-tab"
@@ -11,6 +12,7 @@
       <span class="tab-emoji" aria-hidden="true">🔎</span>
       <span class="tab-label">Search</span>
     </router-link>
+    -->
     
     <router-link 
       to="/history" 

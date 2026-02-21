@@ -9,6 +9,7 @@
       
       <!-- Navigation Tabs - desktop only -->
       <div class="navigation-tabs" role="tablist" aria-label="Main tabs">
+          <!-- Search tab commented out
           <router-link 
             to="/search" 
             class="nav-tab"
@@ -19,6 +20,7 @@
             <span class="tab-emoji" aria-hidden="true">🔎</span>
             <span class="tab-label">Search</span>
           </router-link>
+          -->
           <router-link 
             to="/history" 
             class="nav-tab"

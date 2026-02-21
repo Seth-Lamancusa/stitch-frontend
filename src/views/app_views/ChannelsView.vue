@@ -50,6 +50,54 @@
           </div>
         </div>
 
+        <!-- Manage members (admins only) -->
+        <div v-if="selectedChannel?.is_admin" class="channel-members-section">
+          <h3 class="members-heading">Members</h3>
+          <div v-if="membersLoading" class="members-loading">Loading members...</div>
+          <template v-else>
+            <!-- Add member: user search -->
+            <div class="add-member-row">
+              <UserSearchInput
+                placeholder="Search by name or @username to add..."
+                @user-selected="handleAddMember"
+              />
+              <span v-if="addMemberError" class="add-member-error">{{ addMemberError }}</span>
+              <span v-if="isAddingMember" class="add-member-status">Adding...</span>
+            </div>
+            <ul class="members-list">
+              <li v-for="member in channelMembers" :key="member.uid" class="member-row">
+                <span class="member-info">
+                  <span class="member-name">{{ member.display_name }}</span>
+                  <span class="member-tag">@{{ member.user_tag }}</span>
+                  <span v-if="member.is_admin" class="member-admin-badge">Admin</span>
+                </span>
+                <span class="member-actions">
+                  <button
+                    v-if="member.uid !== user?.uid && selectedChannel?.is_admin"
+                    type="button"
+                    class="member-remove-btn"
+                    title="Remove from channel"
+                    aria-label="Remove from channel"
+                    @click="handleRemoveMember(member)"
+                  >
+                    Remove
+                  </button>
+                  <button
+                    v-else-if="member.uid === user?.uid"
+                    type="button"
+                    class="member-leave-btn"
+                    title="Leave channel"
+                    aria-label="Leave channel"
+                    @click="handleLeaveChannel"
+                  >
+                    Leave channel
+                  </button>
+                </span>
+              </li>
+            </ul>
+          </template>
+        </div>
+
         <!-- Channel messages list -->
         <MessageList 
           v-if="channelMessages.length > 0 || isLoadingMessages"
@@ -126,6 +174,7 @@ import { useStore } from 'vuex';
 import { useRoute, useRouter } from 'vue-router';
 import TabViewLayout from '../../components/layouts/TabViewLayout.vue';
 import MessageList from '../../components/MessageList.vue';
+import UserSearchInput from '../../components/UserSearchInput.vue';
 import ChannelsService from '../../services/ChannelsService.js';
 
 const store = useStore();
@@ -142,6 +191,11 @@ const currentSkip = ref(0);
 const pageSize = 15;
 const showDeleteConfirm = ref(false);
 const isDeletingChannel = ref(false);
+// Members (for admin): list, add, remove
+const channelMembers = ref([]);
+const membersLoading = ref(false);
+const isAddingMember = ref(false);
+const addMemberError = ref('');
 
 // Computed - use store for selectedChannelId
 const user = computed(() => store.getters['auth/user']);
@@ -252,6 +306,84 @@ const handleChannelSelect = () => {
 const loadMoreMessages = () => {
   if (!isLoadingMessages.value && hasMoreMessages.value) {
     fetchChannelMessages(false);
+  }
+};
+
+// --- Members (admin): fetch, add, remove ---
+const fetchChannelMembers = async () => {
+  if (!selectedChannelId.value || !selectedChannel.value?.is_admin) {
+    channelMembers.value = [];
+    return;
+  }
+  try {
+    membersLoading.value = true;
+    addMemberError.value = '';
+    const list = await ChannelsService.getChannelMembers(selectedChannelId.value);
+    channelMembers.value = Array.isArray(list) ? list : [];
+  } catch (err) {
+    console.error('[ChannelsView] Error fetching channel members:', err);
+    store.commit('ui/SET_ERROR', err.message || 'Failed to load members');
+    channelMembers.value = [];
+  } finally {
+    membersLoading.value = false;
+  }
+};
+
+const handleAddMember = async (selectedUser) => {
+  if (!selectedChannelId.value || !selectedUser?.uid || isAddingMember.value) return;
+  const already = channelMembers.value.some(m => m.uid === selectedUser.uid);
+  if (already) {
+    addMemberError.value = 'Already a member';
+    return;
+  }
+  addMemberError.value = '';
+  try {
+    isAddingMember.value = true;
+    const result = await ChannelsService.addChannelMembers(selectedChannelId.value, [selectedUser.uid]);
+    const added = result?.added || [];
+    const failed = result?.failed || [];
+    if (added.length) {
+      store.commit('ui/SET_SUCCESS', `Added @${selectedUser.user_tag || selectedUser.display_name} to the channel`);
+      await fetchChannelMembers();
+    }
+    if (failed.length) {
+      addMemberError.value = 'Could not add one or more users (may already be members or lack access)';
+    }
+  } catch (err) {
+    console.error('[ChannelsView] Error adding member:', err);
+    const msg = err.response?.data?.detail || err.message || 'Failed to add member';
+    store.commit('ui/SET_ERROR', msg);
+    addMemberError.value = msg;
+  } finally {
+    isAddingMember.value = false;
+  }
+};
+
+const handleRemoveMember = async (member) => {
+  if (!selectedChannelId.value || !member?.uid || !selectedChannel.value?.is_admin) return;
+  try {
+    await ChannelsService.removeChannelMember(selectedChannelId.value, member.uid);
+    store.commit('ui/SET_SUCCESS', `Removed @${member.user_tag} from the channel`);
+    await fetchChannelMembers();
+  } catch (err) {
+    console.error('[ChannelsView] Error removing member:', err);
+    store.commit('ui/SET_ERROR', err.response?.data?.detail || err.message || 'Failed to remove member');
+  }
+};
+
+const handleLeaveChannel = async () => {
+  if (!selectedChannelId.value || !user.value?.uid) return;
+  try {
+    await ChannelsService.removeChannelMember(selectedChannelId.value, user.value.uid);
+    store.commit('ui/SET_SUCCESS', 'You left the channel');
+    channelMembers.value = [];
+    selectedChannelId.value = '';
+    channelMessages.value = [];
+    router.replace({ path: '/channels' });
+    await fetchUserChannels();
+  } catch (err) {
+    console.error('[ChannelsView] Error leaving channel:', err);
+    store.commit('ui/SET_ERROR', err.response?.data?.detail || err.message || 'Failed to leave channel');
   }
 };
 
