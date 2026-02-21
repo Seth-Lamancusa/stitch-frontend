@@ -32,12 +32,55 @@
       <div v-if="selectedChannel" class="channel-content">
         <div class="channel-header">
           <div class="channel-info">
-            <h2 class="channel-name">{{ selectedChannel.display_name }}</h2>
-            <p class="channel-description">{{ selectedChannel.description }}</p>
+            <!-- View mode: name + description + edit button (admin) -->
+            <template v-if="!isEditingChannel">
+              <h2 class="channel-name">{{ selectedChannel.display_name }}</h2>
+              <p class="channel-description">{{ selectedChannel.description || 'No description' }}</p>
+              <button
+                v-if="selectedChannel.is_admin"
+                type="button"
+                class="edit-channel-btn"
+                @click="startEditChannel"
+                title="Edit channel name and description"
+                aria-label="Edit channel"
+              >
+                Edit channel
+              </button>
+            </template>
+            <!-- Edit mode: inputs + save/cancel (admin) -->
+            <template v-else>
+              <div class="edit-channel-form">
+                <label for="edit-channel-name" class="edit-label">Name</label>
+                <input
+                  id="edit-channel-name"
+                  v-model="editDisplayName"
+                  type="text"
+                  class="edit-input"
+                  placeholder="Channel name"
+                  maxlength="200"
+                  @keydown.enter.prevent="saveChannelEdit"
+                />
+                <label for="edit-channel-desc" class="edit-label">Description</label>
+                <textarea
+                  id="edit-channel-desc"
+                  v-model="editDescription"
+                  class="edit-textarea"
+                  placeholder="Channel description (max 512 characters)"
+                  rows="3"
+                  maxlength="512"
+                />
+                <div class="edit-actions">
+                  <button type="button" class="cancel-edit-btn" @click="cancelEditChannel">Cancel</button>
+                  <button type="button" class="save-edit-btn" :disabled="isSavingEdit || !editDisplayName.trim()" @click="saveChannelEdit">
+                    {{ isSavingEdit ? 'Saving...' : 'Save' }}
+                  </button>
+                </div>
+              </div>
+            </template>
           </div>
           <div class="channel-actions">
             <button
-              v-if="selectedChannel.is_admin"
+              v-if="selectedChannel.is_admin && !isEditingChannel"
               class="delete-channel-btn"
               @click="showDeleteConfirm = true"
               title="Delete channel"
@@ -155,6 +198,11 @@ const userChannels = ref([]);
 const channelsLoading = ref(false);
 const showDeleteConfirm = ref(false);
 const isDeletingChannel = ref(false);
+// Edit channel (admin): inline name/description
+const isEditingChannel = ref(false);
+const editDisplayName = ref('');
+const editDescription = ref('');
+const isSavingEdit = ref(false);
 // Members (for admin): list, add, remove
 const channelMembers = ref([]);
 const membersLoading = ref(false);
@@ -206,6 +254,53 @@ const handleChannelSelect = () => {
     router.replace({ path: '/channels' });
   }
   if (channelId) fetchChannelMembers();
+};
+
+// --- Edit channel (admin): start, cancel, save ---
+const startEditChannel = () => {
+  if (!selectedChannel.value) return;
+  editDisplayName.value = selectedChannel.value.display_name || '';
+  editDescription.value = selectedChannel.value.description || '';
+  isEditingChannel.value = true;
+};
+
+const cancelEditChannel = () => {
+  isEditingChannel.value = false;
+  editDisplayName.value = '';
+  editDescription.value = '';
+};
+
+const saveChannelEdit = async () => {
+  if (!selectedChannel.value || isSavingEdit.value) return;
+  const name = editDisplayName.value?.trim();
+  if (!name) return;
+
+  const channelId = selectedChannel.value.id || selectedChannel.value._key;
+  if (!channelId) return;
+
+  try {
+    isSavingEdit.value = true;
+    const updated = await ChannelsService.updateChannel(channelId, {
+      display_name: name,
+      description: (editDescription.value || '').trim()
+    });
+    // Update channel in local list so dropdown and header stay in sync
+    const idx = userChannels.value.findIndex(ch => (ch.id || ch._key) === channelId);
+    if (idx !== -1) {
+      userChannels.value = [
+        ...userChannels.value.slice(0, idx),
+        { ...userChannels.value[idx], ...updated },
+        ...userChannels.value.slice(idx + 1)
+      ];
+    }
+    store.commit('ui/SET_SUCCESS', 'Channel updated');
+    isEditingChannel.value = false;
+  } catch (err) {
+    console.error('[ChannelsView] Error updating channel:', err);
+    store.commit('ui/SET_ERROR', err.response?.data?.detail || err.message || 'Failed to update channel');
+  } finally {
+    isSavingEdit.value = false;
+  }
 };
 
 // --- Members (admin): fetch, add, remove ---
@@ -370,12 +465,14 @@ watch(user, (newUser, oldUser) => {
     // User logged out
     userChannels.value = [];
     store.dispatch('navigation/setSelectedChannelId', null);
-    channelMessages.value = [];
   }
 });
 
-// Watch for channel selection changes: fetch members when a channel is selected
+// Watch for channel selection changes: fetch members when a channel is selected; exit edit mode when switching
 watch(selectedChannelId, (newChannelId, oldChannelId) => {
+  if (newChannelId !== oldChannelId) {
+    cancelEditChannel();
+  }
   if (newChannelId && newChannelId !== oldChannelId) {
     fetchChannelMembers();
   } else if (!newChannelId) {
@@ -559,6 +656,101 @@ watch(userChannels, (channels) => {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   line-height: 1.5;
+}
+
+.edit-channel-btn {
+  margin-top: var(--space-sm);
+  padding: 6px 12px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-primary);
+  background: transparent;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.edit-channel-btn:hover {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.edit-channel-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  width: 100%;
+}
+
+.edit-label {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.edit-input,
+.edit-textarea {
+  padding: 8px 12px;
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: inherit;
+}
+
+.edit-input:focus,
+.edit-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(79, 140, 255, 0.15);
+}
+
+.edit-textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.edit-actions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+}
+
+.cancel-edit-btn {
+  padding: 8px 14px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  background: var(--color-surface-light);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.cancel-edit-btn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.save-edit-btn {
+  padding: 8px 14px;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-inverse);
+  background: var(--color-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.save-edit-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.save-edit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Members section (admin only) */

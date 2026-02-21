@@ -104,7 +104,11 @@ export default {
     },
     
     CLEAR_LIST_SCROLL_POSITION(state, tab) {
-      delete state.listScrollPositions[tab];
+      if (tab) {
+        delete state.listScrollPositions[tab];
+      } else {
+        state.listScrollPositions = {};
+      }
     },
     
     SET_LIST_CACHE(state, { tab, messages, currentSkip, isAllLoaded }) {
@@ -548,7 +552,13 @@ export default {
       console.log(`[Navigation] Clearing list cache${tab ? ` for "${tab}"` : ' (all)'}`);
       commit('CLEAR_LIST_CACHE', tab);
     },
-    
+
+    /** Clear list cache and scroll position for every in-app message list tab (e.g. on logout). */
+    clearAllListStateForLogout({ commit }) {
+      commit('CLEAR_LIST_CACHE', null);
+      commit('CLEAR_LIST_SCROLL_POSITION', null);
+    },
+
     async setActiveTab({ commit, state, dispatch }, tab) {
       // Only clear caches if the tab is actually changing
       const previousTab = state.activeTab;

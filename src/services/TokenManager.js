@@ -89,6 +89,23 @@ class TokenManager {
 
   static _now() { return Date.now(); }
 
+  /**
+   * Clear all auth-related data from storage (call on logout).
+   * Clears auth_token from both sessionStorage and localStorage, and manager_refresh_backup.
+   * Does not clear device_id so the same device can be recognized on re-login.
+   */
+  static clearAuthStorage() {
+    try {
+      const ss = this._ss();
+      const ls = this._ls();
+      if (ss) {
+        ss.removeItem('auth_token');
+        ss.removeItem(this.backupManagerRefreshKey);
+      }
+      if (ls) ls.removeItem('auth_token');
+    } catch (_) {}
+  }
+
   // ==================== Cross-Tab Sync ====================
   
   /**

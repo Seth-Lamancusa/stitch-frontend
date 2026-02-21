@@ -21,8 +21,8 @@ export function useAuthentication() {
   const store = useStore();
 
   /**
-   * Signs out the current user
-   * On success, clears store
+   * Signs out the current user.
+   * Calls backend to clear httpOnly cookies, then clears all local auth state and storage via the store.
    */
   const logout = async () => {
     try {
@@ -32,8 +32,7 @@ export function useAuthentication() {
       } catch (e) {
         // Non-fatal; proceed to clear local state regardless
       }
-      TokenManager.accessToken = null;
-      store.commit('auth/SET_USER', null);
+      await store.dispatch('auth/signOut');
     } catch (e) {
       error.value = e.message;
     }

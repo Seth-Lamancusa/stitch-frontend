@@ -29,13 +29,13 @@
               id="description"
               v-model="description"
               placeholder="Brief description of the channel"
-              maxlength="128"
+              maxlength="512"
               rows="3"
               required
               class="form-textarea"
               :disabled="isCreating"
             ></textarea>
-            <span class="char-count">{{ description.length }}/128</span>
+            <span class="char-count">{{ description.length }}/512</span>
           </div>
 
           <div class="form-actions">

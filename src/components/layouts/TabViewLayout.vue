@@ -75,6 +75,17 @@
             </span>
             <span v-else-if="unreadCount > 0" class="unread-inline-badge">{{ unreadCount }}</span>
           </router-link>
+          <router-link
+            v-if="isAdmin"
+            to="/admin/metrics"
+            class="nav-tab"
+            :class="{ 'active': activeTab === 'admin-metrics' }"
+            role="tab"
+            :aria-selected="activeTab === 'admin-metrics'"
+          >
+            <span class="tab-emoji" aria-hidden="true">📊</span>
+            <span class="tab-label">Admin</span>
+          </router-link>
         </div>
       
       <div class="user-controls">
@@ -339,6 +350,7 @@ const activeTab = computed(() => {
   if (p.startsWith('/saved')) return 'saved';
   if (p.startsWith('/channels')) return 'channels';
   if (p.startsWith('/inbox')) return 'inbox';
+  if (p.startsWith('/admin')) return 'admin-metrics';
   return 'history';
 });
 const unreadCount = computed(() => store.getters['messages/getUnreadMessageCount']);

@@ -94,12 +94,22 @@ export default {
     // Internal helper to consistently clear local auth state
     _clearLocalAuth({ commit, dispatch }) {
       try { WebSocketService.cleanup(); } catch (e) {}
+      try { TokenManager.clearAuthStorage(); } catch (e) {}
       try { TokenManager.accessToken = null; } catch (e) {}
       // Refresh token is in httpOnly cookie only; will be cleared by logout endpoint
-      try { sessionStorage.removeItem('active_principal_uid'); sessionStorage.removeItem('manager_uid'); } catch (_) {}
+      try {
+        sessionStorage.removeItem('active_principal_uid');
+        sessionStorage.removeItem('manager_uid');
+        sessionStorage.removeItem('manager_snapshot_uid');
+        sessionStorage.removeItem('manager_snapshot_display_name');
+        sessionStorage.removeItem('manager_snapshot_user_tag');
+      } catch (_) {}
       commit('SET_USER', null);
       commit('SET_MANAGER_SNAPSHOT', null);
       commit('SET_AUTH_READY', true);
+      // Clear messages and list caches for all in-app tabs so we don't keep showing previous user's data
+      try { dispatch('messages/clearCache', {}, { root: true }); } catch (_) {}
+      try { dispatch('navigation/clearAllListStateForLogout', null, { root: true }); } catch (_) {}
       // Clear speed dial
       try { dispatch('speedDial/clearSpeedDial', null, { root: true }); } catch (_) {}
     },

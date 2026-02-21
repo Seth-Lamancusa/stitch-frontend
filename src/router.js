@@ -14,6 +14,7 @@ import HowView from './views/info_views/HowView.vue';
 import MessageListView from './views/app_views/MessageListView.vue';
 import PasswordResetView from './views/app_views/PasswordResetView.vue';
 import ImportView from './views/app_views/ImportView.vue';
+import AdminMetricsView from './views/app_views/AdminMetricsView.vue';
 import store from './store';
 import { usePermissions } from './composables/usePermissions';
 import TokenManager from './services/TokenManager';
@@ -98,6 +99,20 @@ const routes = [
     path: '/channels',
     name: 'channels',
     component: ChannelsView
+  },
+  {
+    path: '/admin',
+    redirect: '/admin/metrics',
+    meta: { requiredPermissions: ['admin'] }
+  },
+  {
+    path: '/admin/metrics',
+    name: 'admin-metrics',
+    component: AdminMetricsView,
+    meta: {
+      title: 'Admin – Messages per day',
+      requiredPermissions: ['admin']
+    }
   },
   {
     path: '/new-thread',
