@@ -1665,17 +1665,22 @@ const sendReply = async () => {
       }
     }
     
+    // Channel IDs: from reply draft, or for new threads fall back to global selected channel
+    let channelIdsToSend = replyChannelIds.value;
+    if (channelIdsToSend.length === 0 && !props.targetId) {
+      const globalChannelId = store.getters['navigation/selectedChannelId'];
+      if (globalChannelId) channelIdsToSend = [globalChannelId];
+    }
     const newMessage = await store.dispatch('messages/sendReply', {
       parentId: props.targetId, // Will be null for new threads
       content: content.value,
       subject: subject.value,
       isPrivate: !isPublic.value,
       recipients: processedRecipientsForReply,
-      // Ensure the author is explicitly set to the user's UID (not email)
       content_author: currentUser.uid,
       tags: replyTags.value,
       files: attachments.value,
-      ...(replyChannelIds.value.length > 0 && { channel_ids: replyChannelIds.value })
+      ...(channelIdsToSend.length > 0 && { channel_ids: channelIdsToSend })
     });
     
     
@@ -2032,9 +2037,13 @@ watch(() => props.targetId, (targetId) => {
       replyChannels.value = [];
     }
   } else {
-    // Clear channels when not replying
-    console.log('[ReplyBox] No targetId, clearing replyChannels');
-    replyChannels.value = [];
+    // New thread: use global selected channel as default if set (Channels tab selection applies app-wide)
+    const globalChannelId = store.getters['navigation/selectedChannelId'];
+    if (globalChannelId) {
+      replyChannels.value = [{ id: globalChannelId }];
+    } else {
+      replyChannels.value = [];
+    }
   }
 }, { immediate: true });
 

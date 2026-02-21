@@ -128,6 +128,13 @@ const shouldShowEmptyState = computed(() => {
   return !isLoading.value && isAllLoaded.value && threads.value.length === 0;
 });
 
+// When global channel is selected, list is filtered to that channel (inbox, history, timeline)
+const selectedChannelId = computed(() => store.getters['navigation/selectedChannelId']);
+const isFilteredByChannel = computed(() => {
+  if (!selectedChannelId.value) return false;
+  return ['inbox', 'history', 'timeline'].includes(props.mode);
+});
+
 // Get description text for current mode
 const modeDescription = computed(() => {
   switch (props.mode) {
@@ -935,10 +942,11 @@ const handleLinkDelete = async (linkData) => {
       </div>
     </div>
 
-    <!-- Mode description -->
-    <div v-if="modeDescription && !hideInfoBox" class="mode-description">
+    <!-- Mode description and channel filter indicator -->
+    <div v-if="(modeDescription || isFilteredByChannel) && !hideInfoBox" class="mode-description">
       <span class="info-icon">ℹ</span>
-      <p>{{ modeDescription }}</p>
+      <p v-if="modeDescription">{{ modeDescription }}</p>
+      <p v-if="isFilteredByChannel" class="channel-filter-note">Filtered by channel. Change selection on the Channels tab.</p>
     </div>
 
     <!-- Empty state - only shown when logged in but no messages -->
@@ -1269,6 +1277,11 @@ const handleLinkDelete = async (linkData) => {
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   line-height: 1.5;
+}
+
+.mode-description p.channel-filter-note {
+  margin-top: 0.5em;
+  font-style: italic;
 }
 
 .empty-state {

@@ -968,9 +968,13 @@ export default {
     
     // Removed: reformatMessage (no server endpoint)
     
-    // Universal fetch action that routes to appropriate service based on mode
-    async fetchMessages({ commit, state, rootState }, { mode, skip = 0, limit = 15, sourceMessageId = null, showAllLinks = false }) {
+    // Universal fetch action that routes to appropriate service based on mode.
+    // channelId: optional; when set (global channel selection), inbox/history/timeline are filtered to that channel.
+    async fetchMessages({ commit, state, rootState }, { mode, skip = 0, limit = 15, sourceMessageId = null, showAllLinks = false, channelId = null }) {
       try {
+        // Use global selected channel when channelId not explicitly passed (for list tabs)
+        const effectiveChannelId = channelId ?? rootState.navigation?.selectedChannelId ?? null;
+
         // Check auth for modes that require it
         if ((mode === 'inbox') && !rootState.auth?.user) {
           console.log('[Store] fetchMessages called but no user authenticated for inbox mode, skipping');
@@ -981,7 +985,7 @@ export default {
         commit('SET_LOADING', { key: 'fetchingMessages', isLoading: true });
         
         console.log(`[Store] fetchMessages called with:`, {
-          mode, skip, limit, sourceMessageId, showAllLinks,
+          mode, skip, limit, sourceMessageId, showAllLinks, channelId: effectiveChannelId,
           user: rootState.auth?.user?.email || 'unauthenticated'
         });
         
@@ -990,7 +994,7 @@ export default {
         // Route to appropriate service based on mode
         switch(mode) {
           case 'inbox':
-            response = await UserService.fetchUserMessages(limit, skip);
+            response = await UserService.fetchUserMessages(limit, skip, effectiveChannelId);
             break;
           
           case 'public':
@@ -1013,7 +1017,7 @@ export default {
               // History mode uses limit 6 by default (override general default of 15)
               // If limit is explicitly set to something other than 15, use that value
               const historyLimit = limit === 15 ? 6 : limit;
-              const histResponse = await MessageService.getUserHistory(skip, historyLimit);
+              const histResponse = await MessageService.getUserHistory(skip, historyLimit, effectiveChannelId);
               response = {
                 messages: histResponse.data.messages || [],
                 has_more: histResponse.data.has_more || false,
@@ -1024,7 +1028,7 @@ export default {
           case 'timeline':
             {
               const MessageService = (await import('../../services/MessageService')).default;
-              const timelineResponse = await MessageService.getTimeline(skip, limit);
+              const timelineResponse = await MessageService.getTimeline(skip, limit, effectiveChannelId);
               response = {
                 messages: timelineResponse.data.messages || [],
                 has_more: timelineResponse.data.has_more || false,

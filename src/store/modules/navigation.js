@@ -794,6 +794,8 @@ export default {
     
     setSelectedChannelId({ commit }, channelId) {
       commit('SET_SELECTED_CHANNEL_ID', channelId);
+      // Clear list caches for tabs that are filtered by channel so they refetch with the new selection
+      ['inbox', 'history', 'timeline'].forEach(tab => commit('CLEAR_LIST_CACHE', tab));
     },
   }
 };

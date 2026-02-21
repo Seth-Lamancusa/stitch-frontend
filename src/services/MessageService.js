@@ -207,10 +207,12 @@ export default {
     return apiClient.get(`/messages/public?skip=${skip}&limit=${limit}`, { headers })
   },
 
-  // Get user history root messages (auth required)
-  async getUserHistory(skip = 0, limit = 6) {
+  // Get user history root messages (auth required). Optional channel_id filters to that channel.
+  async getUserHistory(skip = 0, limit = 6, channelId = null) {
     const headers = await getAuthHeaders()
-    return apiClient.get(`/messages/history?skip=${skip}&limit=${limit}`, { headers })
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit) })
+    if (channelId) params.set('channel_id', channelId)
+    return apiClient.get(`/messages/history?${params.toString()}`, { headers })
   },
 
   // Get all tags for the current user
@@ -219,9 +221,11 @@ export default {
     return apiClient.get(`/messages/tags`, { headers })
   },
 
-  // Get timeline messages (chronological order) for the current user
-  async getTimeline(skip = 0, limit = 15) {
+  // Get timeline messages (chronological order) for the current user. Optional channel_id filters to that channel.
+  async getTimeline(skip = 0, limit = 15, channelId = null) {
     const headers = getAuthHeaders()
-    return apiClient.get(`/messages/timeline?skip=${skip}&limit=${limit}`, { headers })
+    const params = new URLSearchParams({ skip: String(skip), limit: String(limit) })
+    if (channelId) params.set('channel_id', channelId)
+    return apiClient.get(`/messages/timeline?${params.toString()}`, { headers })
   },
 }

@@ -1,10 +1,10 @@
 <template>
   <TabViewLayout>
     <div class="channels-view">
-      <!-- Mode description -->
+      <!-- Mode description: explains that channel selection is global (filter + default for new messages) -->
       <div class="mode-description">
         <span class="info-icon">ℹ</span>
-        <p>Channels are group discussion spaces. Select a channel to view its messages, or browse all your channels below.</p>
+        <p>Channels are group discussion spaces. Selecting a channel here applies everywhere: it becomes the default for new messages and filters Inbox, History, Timeline, and Saved to that channel. Choose “Select a channel” (no channel) to see all messages and have no default channel.</p>
       </div>
       
       <!-- Channel selector dropdown -->
@@ -50,17 +50,14 @@
           </div>
         </div>
 
-        <!-- Manage members (admins only) -->
+        <!-- Manage members: list, add (user search), remove/leave. Shown only to channel admins. -->
         <div v-if="selectedChannel?.is_admin" class="channel-members-section">
           <h3 class="members-heading">Members</h3>
           <div v-if="membersLoading" class="members-loading">Loading members...</div>
           <template v-else>
             <!-- Add member: user search -->
             <div class="add-member-row">
-              <UserSearchInput
-                placeholder="Search by name or @username to add..."
-                @user-selected="handleAddMember"
-              />
+              <UserSearchInput @user-selected="handleAddMember" />
               <span v-if="addMemberError" class="add-member-error">{{ addMemberError }}</span>
               <span v-if="isAddingMember" class="add-member-status">Adding...</span>
             </div>
@@ -488,14 +485,15 @@ watch(selectedChannelId, (newChannelId, oldChannelId) => {
     channelMessages.value = [];
     currentSkip.value = 0;
     hasMoreMessages.value = false;
-    
-    // Fetch messages for selected channel
+    // Fetch messages and members for selected channel
     fetchChannelMessages(true);
+    fetchChannelMembers();
   } else if (!newChannelId) {
-    // Clear messages when no channel selected
+    // Clear messages and members when no channel selected
     channelMessages.value = [];
     currentSkip.value = 0;
     hasMoreMessages.value = false;
+    channelMembers.value = [];
   }
 });
 
@@ -510,9 +508,10 @@ watch(userChannels, (channels) => {
     if (!channelExists) {
       // Selected channel no longer exists, clear selection
       store.dispatch('navigation/setSelectedChannelId', null);
-    } else if (!channelMessages.value.length && selectedChannelId.value) {
-      // Channel exists but messages not loaded yet, fetch them
-      fetchChannelMessages(true);
+    } else if (selectedChannelId.value) {
+      // Channel exists: ensure messages and members are loaded
+      if (!channelMessages.value.length) fetchChannelMessages(true);
+      if (selectedChannel.value?.is_admin) fetchChannelMembers();
     }
   } else if (channels.length > 0 && !selectedChannelId.value) {
     // No channel selected but channels available - check URL
@@ -677,6 +676,80 @@ watch(userChannels, (channels) => {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   line-height: 1.5;
+}
+
+/* Members section (admin only) */
+.channel-members-section {
+  padding: var(--space-md);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-md);
+}
+.members-heading {
+  margin: 0 0 var(--space-sm) 0;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text);
+}
+.members-loading,
+.add-member-error,
+.add-member-status {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+.add-member-error { color: var(--color-error, #ef4444); }
+.add-member-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+  flex-wrap: wrap;
+}
+.add-member-row .user-search-input { flex: 1; min-width: 200px; }
+.members-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.member-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--color-border);
+  gap: var(--space-sm);
+}
+.member-row:last-child { border-bottom: none; }
+.member-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+.member-name { font-weight: 500; color: var(--color-text); }
+.member-tag { font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+.member-admin-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+.member-remove-btn,
+.member-leave-btn {
+  font-size: var(--font-size-xs);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+.member-remove-btn:hover,
+.member-leave-btn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-error);
 }
 
 .loading-state,

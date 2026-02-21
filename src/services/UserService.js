@@ -47,16 +47,16 @@ export default {
 
 
   /**
-   * Get messages for the current user with skip-based pagination
+   * Get messages for the current user with skip-based pagination.
    * @param {Number} limit - Number of messages to return (defaults to 15 on backend)
    * @param {Number} skip - Number of messages to skip (for pagination)
+   * @param {String} [channelId] - Optional channel ID to filter to that channel (user must be a member)
    * @returns {Promise<Object>} - Response with messages and pagination info
    */
-  async fetchUserMessages(limit = 15, skip = 0) {
+  async fetchUserMessages(limit = 15, skip = 0, channelId = null) {
     try {
-      // Build query parameters with skip-based pagination
       const params = { limit, skip };
-      
+      if (channelId) params.channel_id = channelId;
       const response = await apiClient.get('/messages/inbox', { params });
       
       
