@@ -228,4 +228,16 @@ export default {
     if (channelId) params.set('channel_id', channelId)
     return apiClient.get(`/messages/timeline?${params.toString()}`, { headers })
   },
+
+  // Get tree message IDs
+  async getTreeIds(messageId) {
+    const headers = getAuthHeaders()
+    return apiClient.get(`/messages/${messageId}/tree-ids`, { headers })
+  },
+
+  // Batch set public flag
+  async setMessagesPublic(messageIds, isPublic) {
+    const headers = getAuthHeaders()
+    return apiClient.patch(`/messages/public/batch`, { message_ids: messageIds, public: !!isPublic }, { headers })
+  },
 }

@@ -33,8 +33,8 @@
         >
           <div v-if="isLoadingAll" class="button-spinner"></div>
           <svg v-else width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 2v4m0 4v4M2 8h4m4 0h4"/>
-            <path d="M4 4l2 2m4 4l2 2M12 4l-2 2M6 10l-2 2"/>
+            <path d="M8 12L3 7h3V1h4v6h3L8 12z"/>
+            <path d="M14 14H2v-2h12v2z"/>
           </svg>
           {{ isLoadingAll ? loadingProgress : 'Load All' }}
         </button>

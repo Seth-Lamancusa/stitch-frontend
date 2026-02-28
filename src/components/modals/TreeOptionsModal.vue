@@ -2,19 +2,26 @@
   <div v-if="isVisible" class="modal-overlay" @click.self="closeModal">
     <div class="tree-options-modal">
       <div class="modal-header">
-        <h3>Tree Options</h3>
+        <h3>
+          Conversation
+          <span
+            class="conversation-info-icon"
+            title="Conversation includes all ancestors and descendants of the current message."
+            aria-label="Info: conversation includes all ancestors and descendants"
+          >ⓘ</span>
+        </h3>
         <button class="close-button" @click.stop="closeModal">×</button>
       </div>
       
       <div class="modal-content">
-        <!-- Add recipients to tree option -->
+        <!-- Add recipients to conversation option -->
         <div class="option-section">
           <button 
             @click="toggleAddRecipientsDropdown"
             class="dropdown-toggle"
             :class="{ 'open': showAddRecipientsDropdown }"
           >
-            <span>Add recipients to tree</span>
+            <span>Add recipients to conversation</span>
             <span class="dropdown-arrow">{{ showAddRecipientsDropdown ? '▲' : '▼' }}</span>
           </button>
           
@@ -52,6 +59,78 @@
             </div>
           </div>
         </div>
+
+        <!-- Add to channel option -->
+        <div class="option-section">
+          <button 
+            @click="toggleAddChannelsDropdown"
+            class="dropdown-toggle"
+            :class="{ 'open': showAddChannelsDropdown }"
+          >
+            <span>Add conversation to channel</span>
+            <span class="dropdown-arrow">{{ showAddChannelsDropdown ? '▲' : '▼' }}</span>
+          </button>
+          
+          <div v-if="showAddChannelsDropdown" class="dropdown-content">
+            <div class="search-section">
+              <div class="input-wrapper" :class="{ 'searching': isSearchingChannels }">
+                <input 
+                  v-model="channelSearchQuery" 
+                  @input="searchChannels"
+                  placeholder="Search channels" 
+                  class="search-input"
+                  ref="channelSearchInput"
+                />
+                <div v-if="isSearchingChannels" class="search-indicator" title="Searching...">
+                  <div class="spinner"></div>
+                </div>
+              </div>
+              
+              <!-- Search results -->
+              <div v-if="showChannelSearchResults && channelSearchResults.length > 0" class="search-results-list">
+                <div 
+                  v-for="channel in channelSearchResults" 
+                  :key="channel.id" 
+                  class="search-result-item"
+                  @click="selectChannel(channel)"
+                >
+                  <span class="search-result-name">{{ channel.display_name }}</span>
+                  <span class="search-result-tag">{{ channel.description }}</span>
+                </div>
+              </div>
+              
+              <div v-else-if="hasSearchedChannels && !isSearchingChannels && channelSearchQuery.length > 1 && channelSearchResults.length === 0" class="no-search-results">
+                No channels found.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Publicity option -->
+        <div class="option-section">
+          <button 
+            @click="togglePublicityOptions"
+            class="dropdown-toggle"
+            :class="{ 'open': showPublicityOptions }"
+          >
+            <span>Set conversation visibility</span>
+            <span class="dropdown-arrow">{{ showPublicityOptions ? '▲' : '▼' }}</span>
+          </button>
+          
+          <div v-if="showPublicityOptions" class="dropdown-content">
+            <div class="publicity-actions">
+              <button class="action-btn public-btn" @click="initiateSetPublic">
+                <span class="icon">🌍</span>
+                <span class="text">Make Public</span>
+              </button>
+              <button class="action-btn private-btn" @click="initiateSetPrivate">
+                <span class="icon">🔒</span>
+                <span class="text">Make Private</span>
+              </button>
+            </div>
+            <p class="helper-text">This will update visibility for all messages in this conversation.</p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -65,18 +144,29 @@
         </div>
         
         <div class="confirmation-content">
-          <p>Add <strong>{{ selectedUser?.display_name || selectedUser?.user_tag }}</strong> (@{{ selectedUser?.user_tag }}) to all messages in this tree?</p>
+          <p v-if="confirmationType === 'recipient'">
+            Add <strong>{{ selectedUser?.display_name || selectedUser?.user_tag }}</strong> (@{{ selectedUser?.user_tag }}) to all messages in this conversation?
+          </p>
+          <p v-else-if="confirmationType === 'channel'">
+            Add all messages in this conversation to channel <strong>{{ selectedChannel?.display_name }}</strong>?
+          </p>
+          <p v-else-if="confirmationType === 'public'">
+            Make all messages in this conversation <strong>public</strong>?
+          </p>
+          <p v-else-if="confirmationType === 'private'">
+            Make all messages in this conversation <strong>private</strong>?
+          </p>
           
           <div class="confirmation-actions">
             <button 
-              @click="confirmAddRecipient"
+              @click="confirmAction"
               class="confirm-btn"
-              :disabled="isAdding"
-              :class="{ 'loading': isAdding }"
+              :disabled="isProcessing"
+              :class="{ 'loading': isProcessing }"
             >
-              <div v-if="isAdding" class="button-loading">
+              <div v-if="isProcessing" class="button-loading">
                 <div class="spinner-small"></div>
-                <span>Adding...</span>
+                <span>Processing...</span>
               </div>
               <span v-else>Confirm</span>
             </button>
@@ -84,7 +174,7 @@
             <button 
               @click="cancelConfirmation"
               class="cancel-btn"
-              :disabled="isAdding"
+              :disabled="isProcessing"
             >
               Cancel
             </button>
@@ -99,6 +189,7 @@
 import { ref, watch, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import MessageService from '../../services/MessageService.js';
+import ChannelsService from '../../services/ChannelsService.js';
 
 const props = defineProps({
   isVisible: {
@@ -111,14 +202,14 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['close', 'recipients-added']);
+const emit = defineEmits(['close', 'recipients-added', 'channels-added', 'publicity-updated']);
 
 const store = useStore();
+
+// Recipient state
 const showAddRecipientsDropdown = ref(false);
 const searchResults = ref([]);
 const selectedUser = ref(null);
-const showConfirmation = ref(false);
-const isAdding = ref(false);
 const searchQuery = ref('');
 const isSearching = ref(false);
 const hasSearched = ref(false);
@@ -126,32 +217,63 @@ const showSearchResults = ref(false);
 const searchInput = ref(null);
 let searchTimeout = null;
 
+// Channel state
+const showAddChannelsDropdown = ref(false);
+const channelSearchResults = ref([]);
+const selectedChannel = ref(null);
+const channelSearchQuery = ref('');
+const isSearchingChannels = ref(false);
+const hasSearchedChannels = ref(false);
+const showChannelSearchResults = ref(false);
+const channelSearchInput = ref(null);
+let channelSearchTimeout = null;
+
+// Publicity state
+const showPublicityOptions = ref(false);
+
+// Confirmation state
+const showConfirmation = ref(false);
+const confirmationType = ref(null); // 'recipient', 'channel', 'public', 'private'
+const isProcessing = ref(false);
+
 // Watch for modal visibility
 watch(() => props.isVisible, (newVal) => {
   if (newVal) {
-    // Reset state when modal opens
-    showAddRecipientsDropdown.value = false;
-    searchResults.value = [];
-    selectedUser.value = null;
-    showConfirmation.value = false;
-    searchQuery.value = '';
-    isSearching.value = false;
-    hasSearched.value = false;
-    showSearchResults.value = false;
+    resetState();
   }
 });
 
-// Search users function
+const resetState = () => {
+  showAddRecipientsDropdown.value = false;
+  searchResults.value = [];
+  selectedUser.value = null;
+  searchQuery.value = '';
+  isSearching.value = false;
+  hasSearched.value = false;
+  showSearchResults.value = false;
+  
+  showAddChannelsDropdown.value = false;
+  channelSearchResults.value = [];
+  selectedChannel.value = null;
+  channelSearchQuery.value = '';
+  isSearchingChannels.value = false;
+  hasSearchedChannels.value = false;
+  showChannelSearchResults.value = false;
+  
+  showPublicityOptions.value = false;
+  
+  showConfirmation.value = false;
+  confirmationType.value = null;
+  isProcessing.value = false;
+};
+
+// --- User Search ---
 const searchUsers = (event) => {
-  if (!props.isVisible) {
-    return;
-  }
+  if (!props.isVisible) return;
   
   clearTimeout(searchTimeout);
   const query = event.target.value.trim();
   searchQuery.value = query;
-  
-  // Clear previous search state
   isSearching.value = query.length >= 1;
   
   if (query.length < 1) {
@@ -161,26 +283,13 @@ const searchUsers = (event) => {
     return;
   }
   
-  // Set up debounce
   searchTimeout = setTimeout(async () => {
     try {
       isSearching.value = true;
       hasSearched.value = true;
-      
-      // Call API to search users
       const results = await store.dispatch('auth/searchUsers', query);
-      
-      if (!results) {
-        searchResults.value = [];
-        showSearchResults.value = false;
-      } else if (!Array.isArray(results)) {
-        searchResults.value = [];
-        showSearchResults.value = false;
-      } else {
-        searchResults.value = results;
-        showSearchResults.value = results.length > 0;
-      }
-      
+      searchResults.value = Array.isArray(results) ? results : [];
+      showSearchResults.value = searchResults.value.length > 0;
       isSearching.value = false;
     } catch (error) {
       console.error('Error searching users:', error);
@@ -188,81 +297,177 @@ const searchUsers = (event) => {
       isSearching.value = false;
       showSearchResults.value = false;
     }
-  }, 300); // 300ms debounce
+  }, 300);
 };
 
 const toggleAddRecipientsDropdown = () => {
   showAddRecipientsDropdown.value = !showAddRecipientsDropdown.value;
+  if (showAddRecipientsDropdown.value) {
+    showAddChannelsDropdown.value = false;
+    showPublicityOptions.value = false;
+    nextTick(() => searchInput.value?.focus());
+  }
 };
 
 const selectUser = (user) => {
   selectedUser.value = user;
+  confirmationType.value = 'recipient';
   showConfirmation.value = true;
   searchResults.value = [];
 };
 
-const cancelConfirmation = () => {
-  if (isAdding.value) return;
-  showConfirmation.value = false;
-  selectedUser.value = null;
-};
-
-const confirmAddRecipient = async () => {
-  if (!selectedUser.value || !props.centeredMessageId) {
+// --- Channel Search ---
+const searchChannels = (event) => {
+  if (!props.isVisible) return;
+  
+  clearTimeout(channelSearchTimeout);
+  const query = event.target.value.trim();
+  channelSearchQuery.value = query;
+  isSearchingChannels.value = query.length >= 1;
+  
+  if (query.length < 1) {
+    channelSearchResults.value = [];
+    showChannelSearchResults.value = false;
+    hasSearchedChannels.value = false;
     return;
   }
   
-  isAdding.value = true;
+  channelSearchTimeout = setTimeout(async () => {
+    try {
+      isSearchingChannels.value = true;
+      hasSearchedChannels.value = true;
+      // Use existing user channels as base, filter by query
+      // Ideally we'd have a global channel search, but for now search user's channels
+      const allChannels = await ChannelsService.getUserChannels();
+      const results = allChannels.filter(c => 
+        c.display_name.toLowerCase().includes(query.toLowerCase()) || 
+        (c.description && c.description.toLowerCase().includes(query.toLowerCase()))
+      );
+      
+      channelSearchResults.value = results;
+      showChannelSearchResults.value = results.length > 0;
+      isSearchingChannels.value = false;
+    } catch (error) {
+      console.error('Error searching channels:', error);
+      channelSearchResults.value = [];
+      isSearchingChannels.value = false;
+      showChannelSearchResults.value = false;
+    }
+  }, 300);
+};
+
+const toggleAddChannelsDropdown = () => {
+  showAddChannelsDropdown.value = !showAddChannelsDropdown.value;
+  if (showAddChannelsDropdown.value) {
+    showAddRecipientsDropdown.value = false;
+    showPublicityOptions.value = false;
+    nextTick(() => channelSearchInput.value?.focus());
+  }
+};
+
+const selectChannel = (channel) => {
+  selectedChannel.value = channel;
+  confirmationType.value = 'channel';
+  showConfirmation.value = true;
+  channelSearchResults.value = [];
+};
+
+// --- Publicity Options ---
+const togglePublicityOptions = () => {
+  showPublicityOptions.value = !showPublicityOptions.value;
+  if (showPublicityOptions.value) {
+    showAddRecipientsDropdown.value = false;
+    showAddChannelsDropdown.value = false;
+  }
+};
+
+const initiateSetPublic = () => {
+  confirmationType.value = 'public';
+  showConfirmation.value = true;
+};
+
+const initiateSetPrivate = () => {
+  confirmationType.value = 'private';
+  showConfirmation.value = true;
+};
+
+// --- Confirmation & Execution ---
+const cancelConfirmation = () => {
+  if (isProcessing.value) return;
+  showConfirmation.value = false;
+  selectedUser.value = null;
+  selectedChannel.value = null;
+  confirmationType.value = null;
+};
+
+const confirmAction = async () => {
+  if (!props.centeredMessageId) return;
+  
+  isProcessing.value = true;
   
   try {
-    // Format recipient
-    const recipient = {
-      uid: selectedUser.value.uid,
-      display_name: selectedUser.value.display_name,
-      user_tag: selectedUser.value.user_tag,
-      public: true
-    };
+    // 1. Get conversation message IDs
+    const treeResponse = await MessageService.getTreeIds(props.centeredMessageId);
+    const messageIds = treeResponse.data.message_ids;
     
-    // Add recipient to full tree using the centered message as reference
-    // Backend will traverse up to root and down to all leaves
-    await MessageService.addRecipientsToMessage(
-      props.centeredMessageId,  // Single message ID (the centered one)
-      [recipient],
-      false, // Don't use ancestor propagation (add_to_full_tree overrides this)
-      true   // add_to_full_tree = true
-    );
+    if (!messageIds || messageIds.length === 0) {
+      throw new Error("No messages found in conversation");
+    }
     
-    // Refresh messages - refresh the centered message's radius to get all related messages
+    // 2. Execute Action
+    if (confirmationType.value === 'recipient') {
+      const recipient = {
+        uid: selectedUser.value.uid,
+        display_name: selectedUser.value.display_name,
+        user_tag: selectedUser.value.user_tag,
+        public: true
+      };
+      
+      // Use batch add (no propagation param needed as we have explicit IDs)
+      await MessageService.addRecipientsToMessage(
+        messageIds,
+        [recipient],
+        false, // addToAncestors
+        false  // addToFullTree (we handled it)
+      );
+      
+      emit('recipients-added', { recipient, count: messageIds.length });
+      
+    } else if (confirmationType.value === 'channel') {
+      await ChannelsService.batchAddMessagesToChannels(
+        messageIds,
+        [selectedChannel.value.id]
+      );
+      
+      emit('channels-added', { channel: selectedChannel.value, count: messageIds.length });
+      
+    } else if (confirmationType.value === 'public' || confirmationType.value === 'private') {
+      const isPublic = confirmationType.value === 'public';
+      await MessageService.setMessagesPublic(messageIds, isPublic);
+      
+      emit('publicity-updated', { isPublic, count: messageIds.length });
+    }
+    
+    // 3. Refresh UI
     await store.dispatch('messages/loadMessageRadius', {
       messageId: props.centeredMessageId,
-      radius: 10 // Load a larger radius to ensure all tree messages are refreshed
+      radius: 10
     });
     
-    // Emit success event
-    emit('recipients-added', {
-      recipient: selectedUser.value,
-      centeredMessageId: props.centeredMessageId
-    });
-    
-    // Close confirmation and reset
+    // Close
     showConfirmation.value = false;
-    selectedUser.value = null;
-    showAddRecipientsDropdown.value = false;
-    
-    // Close modal after brief delay
-    setTimeout(() => {
-      closeModal();
-    }, 500);
+    resetState();
+    closeModal();
     
   } catch (error) {
-    console.error('Error adding recipient to tree:', error);
-    const errorMessage = error.response?.data?.detail || 'Failed to add recipient to tree';
+    console.error(`Error executing ${confirmationType.value} action:`, error);
+    const errorMessage = error.response?.data?.detail || 'Operation failed';
     store.commit('ui/SET_ERROR', { 
-      code: 'tree_recipient_add_failed', 
+      code: 'tree_op_failed', 
       message: errorMessage 
     });
   } finally {
-    isAdding.value = false;
+    isProcessing.value = false;
   }
 };
 
@@ -317,6 +522,20 @@ const closeModal = () => {
   font-size: var(--font-size-lg);
   font-weight: 600;
   color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.conversation-info-icon {
+  font-size: 0.95em;
+  opacity: 0.7;
+  cursor: help;
+  color: var(--color-text-muted, #6b7280);
+}
+
+.conversation-info-icon:hover {
+  opacity: 1;
 }
 
 .close-button {
@@ -613,6 +832,54 @@ const closeModal = () => {
   .confirmation-content {
     padding: 16px 20px;
   }
+}
+
+.publicity-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+}
+
+.action-btn:hover {
+  background-color: var(--color-hover-overlay);
+  border-color: var(--color-border-hover);
+}
+
+.public-btn:hover {
+  background-color: rgba(var(--color-success-rgb, 40, 167, 69), 0.1);
+  border-color: var(--color-success);
+}
+
+.private-btn:hover {
+  background-color: rgba(var(--color-warning-rgb, 255, 193, 7), 0.1);
+  border-color: var(--color-warning);
+}
+
+.icon {
+  font-size: 16px;
+}
+
+.helper-text {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin: 0;
+  text-align: center;
 }
 </style>
 

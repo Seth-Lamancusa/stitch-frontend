@@ -174,7 +174,7 @@
       @recipient-removed="handleRecipientRemoved"
     />
 
-    <!-- Tree Options Modal -->
+    <!-- Conversation options modal -->
     <TreeOptionsModal
       :is-visible="treeOptionsModalVisible"
       :centered-message-id="messageId"
@@ -373,7 +373,7 @@ const recipientsModalIsAddMode = computed(() => store.getters['navigation/recipi
 const recipientsModalExistingRecipients = computed(() => store.getters['navigation/recipientsModalExistingRecipients']);
 const recipientsModalMessageId = computed(() => store.getters['navigation/recipientsModalMessageId']);
 
-// Tree options modal state
+// Conversation options modal state
 const treeOptionsModalVisible = ref(false);
 
 // In the script setup section, add refs for the adaptive markers
@@ -793,10 +793,10 @@ const closeTreeOptionsModal = () => {
 };
 
 const handleTreeRecipientsAdded = async ({ recipient, centeredMessageId }) => {
-  console.log('[ThreadView] Tree recipients added:', { recipient, centeredMessageId });
+  console.log('[ThreadView] Conversation recipients added:', { recipient, centeredMessageId });
   
-  // Refresh all messages in the tree to show updated recipients
-  // We already refresh in TreeOptionsModal, but let's ensure UI updates
+  // Refresh all messages in the conversation to show updated recipients
+  // We already refresh in the modal, but let's ensure UI updates
   await renderThread(true, true);
 };
 

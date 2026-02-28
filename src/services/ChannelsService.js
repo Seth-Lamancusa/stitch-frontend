@@ -205,6 +205,25 @@ export default {
       console.error('[ChannelsService] Error updating message channels:', error)
       throw error
     }
+  },
+
+  /**
+   * Batch add messages to channels
+   * @param {Array<string>} messageIds - Message IDs to update
+   * @param {Array<string>} channelIds - Channel IDs to add
+   * @returns {Promise} - Promise resolving to batch result
+   */
+  async batchAddMessagesToChannels(messageIds, channelIds) {
+    const headers = getAuthHeaders()
+    const url = `/channels/batch/add`
+    
+    try {
+      const response = await apiClient.post(url, { message_ids: messageIds, channel_ids: channelIds }, { headers })
+      return response.data
+    } catch (error) {
+      console.error('[ChannelsService] Error batch adding messages to channels:', error)
+      throw error
+    }
   }
 }
 
