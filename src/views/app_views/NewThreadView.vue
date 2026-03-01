@@ -405,13 +405,11 @@ onMounted(async () => {
     recipients: []
   });
   
-  // Single source of truth with ReplyBox: seed store with global selected channel if none set
-  const storedChannelIds = store.getters['navigation/replyChannelIds'] || [];
-  if (storedChannelIds.length === 0) {
-    const globalId = store.getters['navigation/selectedChannelId'];
-    if (globalId) {
-      store.commit('navigation/SET_REPLY_CHANNEL_IDS', [globalId]);
-    }
+  // Clear channels so each new-thread visit starts fresh (no carry-over between new messages)
+  store.commit('navigation/CLEAR_REPLY_CHANNEL_IDS');
+  const globalId = store.getters['navigation/selectedChannelId'];
+  if (globalId) {
+    store.commit('navigation/SET_REPLY_CHANNEL_IDS', [globalId]);
   }
   
   // Load channels and speed dial when logged in
