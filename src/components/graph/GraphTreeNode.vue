@@ -26,6 +26,17 @@
       class="unread-dot"
     />
     
+    <!-- Saved indicator (bottom-right of node) -->
+    <text
+      v-if="isSaved && zoomLevel >= 0.3"
+      :x="nodeRadius + 6"
+      :y="nodeRadius + 6"
+      text-anchor="middle"
+      dominant-baseline="central"
+      class="saved-indicator"
+      font-size="10"
+    >🔖</text>
+    
     <!-- Author initial or icon -->
     <text
       v-if="showLabel && zoomLevel >= 0.5"
@@ -254,6 +265,10 @@ export default {
       return false;
     },
 
+    isSaved() {
+      return this.message.is_saved === true;
+    },
+
     isRootMessage() {
       return !this.message.parent_id;
     },
@@ -366,6 +381,11 @@ export default {
 
 .node-label {
   font-weight: 600;
+  pointer-events: none;
+  user-select: none;
+}
+
+.saved-indicator {
   pointer-events: none;
   user-select: none;
 }
