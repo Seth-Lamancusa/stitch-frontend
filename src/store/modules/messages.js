@@ -711,7 +711,7 @@ export default {
     },
     
     // Send a reply to a message
-    async sendReply({ commit, dispatch, rootState, state }, { parentId, content, isPrivate, recipients, content_author, tags, files, subject, channel_ids }) {
+    async sendReply({ commit, dispatch, rootState, state, getters }, { parentId, content, isPrivate, recipients, content_author, tags, files, subject, channel_ids }) {
       try {
         console.log('[Messages Store] Starting sendReply', { 
           parentId, 
@@ -720,6 +720,23 @@ export default {
           hasAuthor: !!content_author,
           subject
         });
+
+        // Resolve context (ancestors) for the bot
+        let context = null;
+        if (parentId) {
+          try {
+            // Get the visible branch leading up to the parent
+            const branchMessages = getters.getVisibleBranchMessages(parentId);
+            if (branchMessages && branchMessages.length > 0) {
+              // Context should be chronological (oldest first)
+              // getVisibleBranchMessages already returns them in order
+              context = branchMessages;
+              console.log(`[Messages Store] Resolved context for bot: ${context.length} messages`);
+            }
+          } catch (contextError) {
+            console.warn('[Messages Store] Failed to resolve context for bot reply:', contextError);
+          }
+        }
 
         // Use the current user if content_author is not provided
         const effectiveAuthor = content_author || rootState.auth?.user?.uid;
@@ -766,7 +783,8 @@ export default {
           isPrivate,
           processedRecipients,
           effectiveAuthor,
-          tagsCount: Array.isArray(tags) ? tags.length : 0
+          tagsCount: Array.isArray(tags) ? tags.length : 0,
+          contextCount: context?.length || 0
         });
         
         const response = await MessageService.sendReply(
@@ -774,12 +792,14 @@ export default {
           content, 
           isPrivate, 
           processedRecipients, 
-          effectiveAuthor,
-          tags,
-          files,
-          subject,
-          channel_ids
+          effectiveAuthor, 
+          tags, 
+          files, 
+          subject, 
+          channel_ids,
+          context
         );
+
         
         console.log('[Messages Store] sendReply response:', response?.data?.id ? {
           messageId: response.data.id,

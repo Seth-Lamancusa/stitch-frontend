@@ -1179,9 +1179,22 @@ const pingRecipient = async (recipient) => {
     // This triggers a 'ping' notification instead of 'added'
     const recipientsToPing = [recipient.user_tag || recipient.uid];
     
+    // Resolve context (ancestors) for the bot
+    let context = null;
+    try {
+      const branchMessages = store.getters['messages/getVisibleBranchMessages'](props.messageId);
+      if (branchMessages && branchMessages.length > 0) {
+        context = branchMessages;
+        console.log(`[RecipientsModal] Resolved context for ping: ${context.length} messages`);
+      }
+    } catch (contextError) {
+      console.warn('[RecipientsModal] Failed to resolve context for ping:', contextError);
+    }
+
     await MessageService.pingMessage(
       props.messageId, 
-      recipientsToPing
+      recipientsToPing,
+      context
     );
     
     // Refresh the message data to reflect any changes

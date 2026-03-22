@@ -1141,7 +1141,20 @@ const handleAddRecipients = async (recipients, addToAncestors = true) => {
     // If we added to ancestors, we explicitly ping the origin message to get a response
     if (addToAncestors) {
       const pingRecipients = recipients.map(r => (typeof r === 'string' ? r : r.user_tag || r.uid));
-      await MessageService.pingMessage(messageId, pingRecipients);
+      
+      // Resolve context (ancestors) for the bot
+      let context = null;
+      try {
+        const branchMessages = store.getters['messages/getVisibleBranchMessages'](messageId);
+        if (branchMessages && branchMessages.length > 0) {
+          context = branchMessages;
+          console.log(`[ThreadView] Resolved context for ping: ${context.length} messages`);
+        }
+      } catch (contextError) {
+        console.warn('[ThreadView] Failed to resolve context for ping:', contextError);
+      }
+
+      await MessageService.pingMessage(messageId, pingRecipients, context);
     }
 
     // Refresh origin and all loaded ancestors to reflect recipient changes

@@ -78,7 +78,20 @@ const addSelectedUsers = async () => {
 
     // 2. Trigger Response (Explicit Ping)
     const pingRecipients = recipients.map(r => r.user_tag || r.uid);
-    await MessageService.pingMessage(targetMessageId.value, pingRecipients);
+    
+    // Resolve context (ancestors) for the bot
+    let context = null;
+    try {
+      const branchMessages = store.getters['messages/getVisibleBranchMessages'](targetMessageId.value);
+      if (branchMessages && branchMessages.length > 0) {
+        context = branchMessages;
+        console.log(`[QuickPromptModal] Resolved context for ping: ${context.length} messages`);
+      }
+    } catch (contextError) {
+      console.warn('[QuickPromptModal] Failed to resolve context for ping:', contextError);
+    }
+
+    await MessageService.pingMessage(targetMessageId.value, pingRecipients, context);
 
     await store.dispatch('messages/refreshLoadedAncestors', {
       messageId: targetMessageId.value,
