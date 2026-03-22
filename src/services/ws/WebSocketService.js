@@ -605,10 +605,12 @@ const WebSocketService = {
           if (data?.type === 'notification') {
             try {
               const payload = data.data || {};
-              const messages = payload.messages || [];
+              const content = payload.content || {};
+              const messages = content.messages || payload.messages || [];
+              const notificationType = payload.notification_type || payload.type || 'sent';
               
               if (messages.length > 0) {
-                this.log(`Received notification type=${payload.type} with ${messages.length} messages`);
+                this.log(`Received notification type=${notificationType} with ${messages.length} messages`);
                 
                 if (this.messageListeners && this.messageListeners.size > 0) {
                   for (const cb of Array.from(this.messageListeners)) {
