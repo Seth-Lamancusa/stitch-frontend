@@ -495,7 +495,7 @@ export default {
             // If the parent currently has NO branch child selected, auto-select this one.
             // This ensures the first reply to a message appears 'live' in the thread.
             if (!parentInStore.branch_child) {
-              this.log(`Establishing first reply ${messageData.id} as branch child for ${parentId}`);
+              console.log(`[messages store] Establishing first reply ${messageData.id} as branch child for ${parentId}`);
               commit('SET_BRANCH_CHILD', { messageId: parentId, childId: messageData.id });
             }
           }
