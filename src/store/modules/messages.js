@@ -485,28 +485,33 @@ export default {
           });
         }
 
+        // Maintain parent-child relationships and branch path
+        const parentId = messageData.parent_id;
+        if (parentId) {
+          const parentInStore = getters.getMessage(parentId);
+          if (parentInStore) {
+            commit('ADD_CHILD_TO_PARENT', { parentId, childId: messageData.id });
+            
+            // If the parent currently has NO branch child selected, auto-select this one.
+            // This ensures the first reply to a message appears 'live' in the thread.
+            if (!parentInStore.branch_child) {
+              this.log(`Establishing first reply ${messageData.id} as branch child for ${parentId}`);
+              commit('SET_BRANCH_CHILD', { messageId: parentId, childId: messageData.id });
+            }
+          }
+        }
+
         // Increment unread count for messages to current user (not authored by current user)
         if (isToCurrentUser && !isFromCurrentUser) {
           dispatch('incrementUnreadCount');
 
-          // Skip notification if this is the next message in the visible branch
-          // Determine visibility based on current route id if available
-          let isNextInBranch = false;
-          try {
-            const path = typeof window !== 'undefined' ? window.location.pathname : '';
-            const match = path && path.match(/\/([^\/\?]+)$/);
-            const urlMessageId = match ? match[1] : null;
-            if (urlMessageId) {
-              const visibleMessages = getters.getVisibleBranchMessages(urlMessageId);
-              if (visibleMessages && visibleMessages.length > 0) {
-                const lastVisible = visibleMessages[visibleMessages.length - 1];
-                isNextInBranch = messageData.parent_id === lastVisible?.id;
-              }
-            }
-          } catch (_) {}
+          // Check if the message is in the active branch path.
+          // If we just established it above, it will be.
+          const parent = parentId ? getters.getMessage(parentId) : null;
+          const isNextInBranch = parent && parent.branch_child === messageData.id;
 
           if (isNextInBranch) {
-            // Auto-mark as read if user is actively viewing the branch
+            // Auto-mark as read if message is part of the current active path
             dispatch('batchMarkAsRead', [messageData.id]);
           } else {
             // Extract author name from nested object or flat fields
@@ -526,20 +531,6 @@ export default {
             };
             // Delegate UI notification to ui module
             dispatch('ui/setMessageNotification', notificationData, { root: true });
-          }
-        }
-
-        // Maintain parent-child relationships
-        const parentId = messageData.parent_id;
-        if (parentId) {
-          const parentInStore = getters.getMessage(parentId);
-          if (parentInStore) {
-            commit('ADD_CHILD_TO_PARENT', { parentId, childId: messageData.id });
-            const updatedParent = getters.getMessage(parentId);
-            const parentChildren = updatedParent?.child_ids || [];
-            if (parentChildren.length === 1) {
-              commit('SET_BRANCH_CHILD', { messageId: parentId, childId: messageData.id });
-            }
           }
         }
       } catch (e) {
