@@ -1941,6 +1941,7 @@ export default {
       isUserRecipient,
       isUserAuthor,
       isBot,
+      isImported,
       authorUid,
       isPublic,
       isAdmin,

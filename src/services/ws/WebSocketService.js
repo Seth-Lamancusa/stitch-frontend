@@ -593,6 +593,9 @@ const WebSocketService = {
       });
 
       this.client.on('json', (data) => {
+        // All other data types
+        this.log('WebSocket data received:', data);
+        
         try {
           if (data?.type === 'connection_established') {
             this.userId = data.user_id;
