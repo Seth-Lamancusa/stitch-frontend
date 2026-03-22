@@ -59,15 +59,28 @@
             </template>
             <UserDisplay
               v-else
-              :display-name="authorDisplayName"
-              :user-tag="authorUserTag"
-              :show-tag="!!authorUserTag"
+              :display-name="isImported ? message.import_info.display_name : authorDisplayName"
+              :user-tag="isImported ? null : authorUserTag"
+              :show-tag="!isImported && !!authorUserTag"
               :is-current-user="isCurrentUser"
               :is-bot="isBot"
+              :is-imported="isImported"
               name-class="message-author"
               tag-class="author-user-tag"
               variant="message"
             />
+            <span v-if="isImported" class="imported-badge" :title="'Imported by ' + message.import_info.importer_user_tag">
+              via <UserDisplay 
+                :display-name="message.import_info.importer_user_tag"
+                :user-tag="message.import_info.importer_user_tag"
+                :show-tag="false"
+                variant="badge"
+                size="xs"
+              />
+              <a v-if="message.import_info.source_url" :href="message.import_info.source_url" target="_blank" rel="noopener noreferrer" class="import-source-link">
+                🔗
+              </a>
+            </span>
           </div>
         </div>
         
@@ -532,6 +545,9 @@ export default {
     // Add refs for save button state
     const isMessageSaved = ref(false);
     const isSavingMessage = ref(false);
+
+    // Import status
+    const isImported = computed(() => !!props.message.import_info);
     
     // Subject addition state
     const isAddingSubject = ref(false);
@@ -3784,6 +3800,28 @@ export default {
   margin-right: var(--space-sm);
 }
 
+.imported-badge {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--color-hover-overlay);
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+
+.import-source-link {
+  text-decoration: none;
+  font-size: 0.8rem;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.import-source-link:hover {
+  opacity: 1;
+}
 </style>
 
 

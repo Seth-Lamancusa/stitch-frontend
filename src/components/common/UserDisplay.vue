@@ -84,6 +84,10 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  isImported: {
+    type: Boolean,
+    default: false
+  },
   badges: {
     type: Array,
     default: () => []
@@ -199,7 +203,10 @@ const wrapperClasses = computed(() => [
 
 const nameClasses = computed(() => [
   props.nameClass,
-  { 'user-display__name--current': props.isCurrentUser }
+  { 
+    'user-display__name--current': props.isCurrentUser,
+    'user-display__name--imported': props.isImported
+  }
 ]);
 
 const tagClasses = computed(() => [
@@ -222,6 +229,11 @@ const tagClasses = computed(() => [
 
 .user-display__name--current {
   color: var(--color-primary);
+}
+
+.user-display__name--imported {
+  font-style: italic;
+  font-weight: 500;
 }
 
 .user-display__tag {
