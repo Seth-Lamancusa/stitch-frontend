@@ -62,14 +62,24 @@ const addSelectedUsers = async () => {
   try {
     isAdding.value = true;
     addError.value = null;
-    const recipientsToAdd = selectedUsersList.value.map(user => ({
+    
+    const recipients = selectedUsersList.value.map(user => ({
       uid: user.uid,
       display_name: user.display_name,
       user_tag: user.user_tag,
       public: true,
       visible: true
     }));
-    await MessageService.addRecipientsToMessage(targetMessageId.value, recipientsToAdd, addToAncestors.value);
+
+    // 1. Grant Access (Silent Add)
+    // We set notify: false because we will follow up with an explicit ping
+    const accessRecipients = recipients.map(r => ({ ...r, notify: false }));
+    await MessageService.addRecipientsToMessage(targetMessageId.value, accessRecipients, addToAncestors.value);
+
+    // 2. Trigger Response (Explicit Ping)
+    const pingRecipients = recipients.map(r => r.user_tag || r.uid);
+    await MessageService.pingMessage(targetMessageId.value, pingRecipients);
+
     await store.dispatch('messages/refreshLoadedAncestors', {
       messageId: targetMessageId.value,
       get_replies: true,

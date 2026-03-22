@@ -1127,9 +1127,22 @@ const handleAddRecipients = async (recipients, addToAncestors = true) => {
       return;
     }
 
-    // Backend now supports per-recipient notify flag, send all recipients in one call
-    // Recipients can include notify field: {user_tag: "alice", notify: false}
-    await MessageService.addRecipientsToMessage(messageId, recipients, addToAncestors);
+    // 1. Grant Access (Add recipients to message/ancestors)
+    // Backend supports per-recipient notify flag. We set notify: false for additions
+    // if we are going to ping the origin message later.
+    const accessRecipients = recipients.map(r => ({
+      ...(typeof r === 'string' ? { user_tag: r } : r),
+      notify: !addToAncestors // Only notify via 'added' if NOT doing an explicit ping
+    }));
+
+    await MessageService.addRecipientsToMessage(messageId, accessRecipients, addToAncestors);
+
+    // 2. Trigger Response (Explicit Ping)
+    // If we added to ancestors, we explicitly ping the origin message to get a response
+    if (addToAncestors) {
+      const pingRecipients = recipients.map(r => (typeof r === 'string' ? r : r.user_tag || r.uid));
+      await MessageService.pingMessage(messageId, pingRecipients);
+    }
 
     // Refresh origin and all loaded ancestors to reflect recipient changes
     await store.dispatch('messages/refreshLoadedAncestors', {

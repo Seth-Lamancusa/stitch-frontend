@@ -240,4 +240,10 @@ export default {
     const headers = getAuthHeaders()
     return apiClient.patch(`/messages/public/batch`, { message_ids: messageIds, public: !!isPublic }, { headers })
   },
+
+  // Ping recipients of a message
+  async pingMessage(id, recipients) {
+    const headers = getAuthHeaders()
+    return apiClient.post(`/messages/${id}/ping`, { recipients }, { headers })
+  },
 }
