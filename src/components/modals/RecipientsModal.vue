@@ -1175,19 +1175,13 @@ const pingRecipient = async (recipient) => {
   try {
     console.log('[RecipientsModal] Pinging recipient:', recipient);
     
-    // Construct recipient object with notify: true
-    // Use user_tag if available, otherwise use uid
-    const recipientToAdd = recipient.user_tag 
-      ? { user_tag: recipient.user_tag, notify: true }
-      : { uid: recipient.uid, notify: true };
+    // Use the new explicit ping endpoint
+    // This triggers a 'ping' notification instead of 'added'
+    const recipientsToPing = [recipient.user_tag || recipient.uid];
     
-    // Call API to re-add recipient with notify: true
-    // Since the API is idempotent, this won't create duplicates but will send a notification
-    await MessageService.addRecipientsToMessage(
+    await MessageService.pingMessage(
       props.messageId, 
-      [recipientToAdd], 
-      false, // Don't add to ancestors for ping
-      false  // Don't add to full tree for ping
+      recipientsToPing
     );
     
     // Refresh the message data to reflect any changes
