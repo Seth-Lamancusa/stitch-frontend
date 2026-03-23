@@ -408,7 +408,7 @@ const WebSocketService = {
       const urlMessageId = messageIdMatch[1];
       
       // Get visible branch messages for this thread
-      const visibleMessages = store.getters['messages/getVisibleBranchMessages'](urlMessageId);
+      const visibleMessages = store.getters['messages/getFullVisibleBranch'](urlMessageId);
       if (!visibleMessages || visibleMessages.length === 0) {
         return false;
       }

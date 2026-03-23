@@ -1566,7 +1566,7 @@ export default {
       if (!messageId) return;
             
       // Get visible branch messages
-      const visibleMessages = getters.getVisibleBranchMessages(messageId);
+      const visibleMessages = getters.getFullVisibleBranch(messageId);
       if (!visibleMessages || visibleMessages.length === 0) {
         return;
       }
@@ -1782,9 +1782,25 @@ export default {
     
     // REMOVED getBranchPathMessages - no longer needed since in_branch_path flags are unused
     
+    // Get the path from root to the specified message
+    getAncestorPath: (state) => (messageId) => {
+      const result = [];
+      let currentId = messageId;
+      while (currentId && state.messages[currentId]) {
+        result.push(state.messages[currentId]);
+        currentId = state.messages[currentId].parent_id;
+      }
+      return result.reverse();
+    },
+
+    // Current "context" getter - now returns only the path up to the message
+    getVisibleBranchMessages: (state, getters) => (messageId) => {
+      return getters.getAncestorPath(messageId);
+    },
+
     // Modified getter - PURE GETTER with no state modifications
-    // Get the visible branch - follows the path from root where each message is in branch_path
-    getVisibleBranchMessages: (state) => (messageId) => {
+    // Get the FULL visible branch - follows the path from root down to the leaf
+    getFullVisibleBranch: (state, getters) => (messageId) => {
       const result = [];
       
       // Get the starting message using the provided ID

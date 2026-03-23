@@ -323,7 +323,7 @@ const displayedMessages = computed(() => {
   // Don't show any messages while loading thread
   if (isLoadingThread.value) return [];
   
-  const msgs = store.getters['messages/getVisibleBranchMessages'](messageId.value);
+  const msgs = store.getters['messages/getFullVisibleBranch'](messageId.value);
   return msgs;
 });
 
@@ -1056,7 +1056,7 @@ const copySelectedMessages = () => {
     const formattedText = messagesToCopy.reduce((acc, message, index) => {
       // Format the current message
       const userTag = message.author_user_tag ? `(@${message.author_user_tag})` : '';
-      const header = `${message.author_display_name || 'Unknown'} ${userTag}, ${new Date(message.timestamp).toLocaleString()} (stitch.fyi/messages/${message.id})`;
+      const header = `${message.author_display_name || 'Unknown'} ${userTag}, ${new Date(message.timestamp).toLocaleString()} (https://stitch.fyi/messages/${message.id})`;
       const messageText = `${header}\n\n${message.content || ''}`;
       
       // If this is the first message, just add it
