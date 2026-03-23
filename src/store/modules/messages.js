@@ -725,8 +725,8 @@ export default {
         let context = null;
         if (parentId) {
           try {
-            // Get the visible branch leading up to the parent
-            const branchMessages = getters.getVisibleBranchMessages(parentId);
+            // Get the visible branch leading up to AND INCLUDING the parent
+            const branchMessages = getters.getAncestorPath(parentId);
             if (branchMessages && branchMessages.length > 0) {
               // Context should be chronological (oldest first)
               // getVisibleBranchMessages already returns them in order
@@ -1793,9 +1793,10 @@ export default {
       return result.reverse();
     },
 
-    // Current "context" getter - now returns only the path up to the message
+    // Current "context" getter - returns the path up to but EXCLUDING the message
     getVisibleBranchMessages: (state, getters) => (messageId) => {
-      return getters.getAncestorPath(messageId);
+      const path = getters.getAncestorPath(messageId);
+      return path.length > 0 ? path.slice(0, -1) : [];
     },
 
     // Modified getter - PURE GETTER with no state modifications
