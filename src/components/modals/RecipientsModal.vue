@@ -1186,6 +1186,13 @@ const pingRecipient = async (recipient) => {
       if (branchMessages && branchMessages.length > 0) {
         context = branchMessages;
         console.log(`[RecipientsModal] Resolved context for ping: ${context.length} messages`);
+        console.log('[RecipientsModal] Context messages details:');
+        context.forEach((m, i) => {
+          console.log(`  ${i}: ID=${m.id}, Author=${m.author_user_tag}, Files=${m.files?.length || 0}`);
+          if (m.files && m.files.length > 0) {
+            m.files.forEach(f => console.log(`    - File: ${f.filename}`));
+          }
+        });
       }
     } catch (contextError) {
       console.warn('[RecipientsModal] Failed to resolve context for ping:', contextError);

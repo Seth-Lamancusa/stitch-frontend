@@ -1149,6 +1149,13 @@ const handleAddRecipients = async (recipients, addToAncestors = true) => {
         if (branchMessages && branchMessages.length > 0) {
           context = branchMessages;
           console.log(`[ThreadView] Resolved context for ping: ${context.length} messages`);
+          console.log('[ThreadView] Context messages details:');
+          context.forEach((m, i) => {
+            console.log(`  ${i}: ID=${m.id}, Author=${m.author_user_tag}, Files=${m.files?.length || 0}`);
+            if (m.files && m.files.length > 0) {
+              m.files.forEach(f => console.log(`    - File: ${f.filename}`));
+            }
+          });
         }
       } catch (contextError) {
         console.warn('[ThreadView] Failed to resolve context for ping:', contextError);
