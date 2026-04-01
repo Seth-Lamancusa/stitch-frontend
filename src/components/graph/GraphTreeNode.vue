@@ -184,6 +184,8 @@ export default {
 
     // Get author ID for color mapping
     authorId() {
+      // If imported, color by the imported display identity rather than sender edge.
+      if (this.message.import_info?.display_name) return this.message.import_info.display_name;
       return this.message.content_author || this.message.author?.uid || this.message.author?.user_tag || this.authorDisplay || 'unknown';
     },
 
@@ -227,6 +229,7 @@ export default {
     },
 
     authorDisplay() {
+      if (this.message.import_info?.display_name) return this.message.import_info.display_name;
       if (this.message.author?.display_name) return this.message.author.display_name;
       return this.message.author_display_name || this.message.author?.username || this.message.author?.email || 'Unknown';
     },
@@ -248,6 +251,7 @@ export default {
     },
 
     isOwnMessage() {
+      if (this.message.import_info?.display_name) return false;
       const currentUserId = this.$store?.getters['auth/user']?.uid;
       const authorId = this.message.content_author || this.message.author?.uid;
       return currentUserId && authorId && currentUserId === authorId;

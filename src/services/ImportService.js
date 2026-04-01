@@ -169,6 +169,62 @@ class ImportService {
   }
 
   /**
+   * General-purpose builder import using the quoting/override model.
+   * Author is always the authenticated user; non-me speakers are represented via import_info.display_name.
+   *
+   * @param {Array} messages - Array of { content, isMe, speakerName }
+   * @param {Array} recipients - recipients from the recipients modal
+   * @param {boolean} isPublic - conversation public flag
+   * @returns {Promise<Object>} Import result shape: { success, thread_id, message_count, total_requested, partial_success }
+   */
+  async importQuoteConversation(messages, recipients = [], isPublic = true) {
+    const headers = getAuthHeaders();
+    const endpoint = '/messages/import/quote';
+
+    const payload = (messages || []).map(m => {
+      if (!m || !m.content || !m.content.trim()) {
+        throw new Error('Empty message content is not allowed');
+      }
+
+      const base = {
+        content: m.content,
+        public: isPublic,
+        recipients: Array.isArray(recipients) ? recipients : [],
+        files: []
+      };
+
+      if (!m.isMe) {
+        base.import_info = {
+          display_name: (m.speakerName || '').trim() || 'Imported Speaker'
+        };
+      }
+
+      return base;
+    });
+
+    try {
+      const response = await axios.post(`${apiBaseUrl}${endpoint}`, payload, { headers });
+      const results = Array.isArray(response.data) ? response.data : [];
+      const successful = results.filter(r => r && r.success && r.message);
+      const totalRequested = payload.length;
+      const messageCount = successful.length;
+      const partial_success = messageCount < totalRequested;
+      const thread_id = successful.length > 0 ? successful[0].message.id : null;
+
+      return {
+        success: messageCount > 0,
+        thread_id,
+        message_count: messageCount,
+        total_requested: totalRequested,
+        partial_success
+      };
+    } catch (error) {
+      console.error('[ImportService] ImportQuoteConversation failed:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Parse conversation text based on detected format
    * @param {String} text - The conversation text to parse
    * @param {String} botName - The selected bot name to help with format detection

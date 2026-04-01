@@ -17,11 +17,6 @@
               <span class="permission-name">msg.write</span>
               <span class="permission-desc">— Write messages</span>
             </li>
-            <li :class="{ 'has-permission': hasAnyImportScope }">
-              <span class="permission-icon">{{ hasAnyImportScope ? '✓' : '✗' }}</span>
-              <span class="permission-name">msg.import.*</span>
-              <span class="permission-desc">— Import conversations (cursor or audio)</span>
-            </li>
           </ul>
         </div>
         
@@ -42,14 +37,14 @@
 
       <div class="import-content">
         <!-- Mode Tabs -->
-        <div class="import-tabs" v-if="canCursorImport && canAudioImport">
+        <div class="import-tabs" v-if="true">
           <button 
             class="tab-button" 
             :class="{ active: activeMode === 'cursor' }"
             @click="activeMode = 'cursor'"
           >
             <span class="tab-icon">📝</span>
-            Cursor / Text
+            Text / Markdown
           </button>
           <button 
             class="tab-button" 
@@ -63,24 +58,16 @@
 
         <div class="import-panel">
           
-          <!-- Cursor / Text Import Mode -->
+          <!-- Text / Markdown Import Mode -->
           <div v-if="activeMode === 'cursor'" class="mode-container">
-            <h3>Import from Cursor</h3>
+            <h3>Import Text / Markdown</h3>
             <p class="mode-description">
-              Paste conversation text or upload a markdown file from Cursor.
+              Paste conversation text or upload a markdown file.
             </p>
 
-            <!-- Bot Selection -->
-            <div class="input-group">
-              <label>AI Assistant Identity</label>
-              <select v-model="selectedBot" class="select-input">
-                <option :value="null">Select an AI...</option>
-                <option v-for="user in speedDialUsers" :key="user.uid" :value="user">
-                  {{ user.display_name }} (@{{ user.user_tag }})
-                </option>
-              </select>
-              <p class="help-text">Select which bot represents the "Assistant" in the conversation.</p>
-            </div>
+            <p class="help-text">
+              Prefill runs a best-effort parse. Then set each message’s speaker name (and optionally mark it as "Me").
+            </p>
 
             <div class="input-method-container">
               <div class="input-group">
@@ -111,12 +98,47 @@
             <!-- Preview -->
             <div v-if="parsedMessages.length > 0" class="preview-section">
               <h4>Preview ({{ parsedMessages.length }} messages)</h4>
-              <div class="preview-list">
-                <div v-for="(msg, idx) in parsedMessages.slice(0, 3)" :key="idx" class="preview-item">
-                  <strong>{{ msg.role }}:</strong> {{ truncate(msg.content) }}
-                </div>
-                <div v-if="parsedMessages.length > 3" class="preview-more">
-                  ... and {{ parsedMessages.length - 3 }} more
+              <div class="preview-list manual-preview-list">
+                <div v-for="(msg, idx) in parsedMessages" :key="idx" class="preview-item">
+                  <div class="preview-item-header">
+                    <div class="preview-speaker-header">
+                      <strong>{{ idx + 1 }}.</strong>
+                      <label class="checkbox-label me-checkbox">
+                        <input type="checkbox" v-model="msg.isMe" />
+                        Me
+                      </label>
+                      <input
+                        v-if="!msg.isMe"
+                        v-model="msg.speakerName"
+                        class="select-input speaker-name-input"
+                        placeholder="Speaker name"
+                      />
+                    </div>
+                    <div class="preview-item-actions">
+                      <button
+                        class="text-button"
+                        :disabled="!canSplit(idx) || isImporting"
+                        @click="splitAt(idx)"
+                      >
+                        Split here
+                      </button>
+                      <button
+                        class="text-button"
+                        :disabled="isImporting"
+                        @click="removeMessage(idx)"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+
+                  <textarea
+                    v-model="parsedMessages[idx].content"
+                    class="preview-textarea"
+                    @click="onCaretUpdate(idx, $event)"
+                    @keyup="onCaretUpdate(idx, $event)"
+                    @select="onCaretUpdate(idx, $event)"
+                  />
                 </div>
               </div>
             </div>
@@ -173,14 +195,16 @@
               <div class="speaker-mapping">
                 <div v-for="speakerId in uniqueSpeakers" :key="speakerId" class="mapping-row">
                   <span class="speaker-name">Speaker {{ speakerId }}</span>
-                  <span class="arrow">→</span>
-                  <select v-model="speakerRegistry[speakerId]" class="select-input">
-                    <option :value="null">Assign to...</option>
-                    <option :value="currentUser">Me ({{ currentUser?.display_name }})</option>
-                    <option v-for="user in speedDialUsers" :key="user.uid" :value="user">
-                      {{ user.display_name }} (@{{ user.user_tag }})
-                    </option>
-                  </select>
+                  <label class="checkbox-label me-checkbox">
+                    <input type="checkbox" v-model="speakerRegistry[speakerId].isMe" />
+                    Me
+                  </label>
+                  <input
+                    v-if="!speakerRegistry[speakerId].isMe"
+                    v-model="speakerRegistry[speakerId].speakerName"
+                    class="select-input speaker-name-input"
+                    placeholder="Speaker name"
+                  />
                 </div>
               </div>
 
@@ -256,52 +280,24 @@ const router = useRouter();
 const store = useStore();
 const { can, canAny, isAdmin, user: currentUser } = usePermissions();
 
-// Permissions
-const canCursorImport = computed(() => {
-  const result = can('msg.import.cursor');
-  console.log('[ImportView] canCursorImport check:', { 
-    scope: 'msg.import.cursor', 
-    result, 
-    userScopes: currentUser.value?.scopes,
-    userUid: currentUser.value?.uid
-  });
-  return result;
-});
-const canAudioImport = computed(() => {
-  const result = can('msg.import.audio');
-  console.log('[ImportView] canAudioImport check:', { 
-    scope: 'msg.import.audio', 
-    result,
-    userScopes: currentUser.value?.scopes 
-  });
-  return result;
-});
-const hasAnyImportScope = computed(() => {
-  const result = canCursorImport.value || canAudioImport.value;
-  console.log('[ImportView] hasAnyImportScope check:', { result, canCursor: canCursorImport.value, canAudio: canAudioImport.value });
-  return result;
-});
 const hasImportPermissions = computed(() => {
-  const canWrite = can('msg.write');
-  const result = canWrite && hasAnyImportScope.value;
-  console.log('[ImportView] hasImportPermissions check:', { result, canWrite, hasAnyImportScope: hasAnyImportScope.value });
-  return result;
+  return can('msg.write');
 });
 
 // State
-const activeMode = ref(canCursorImport.value ? 'cursor' : 'audio');
+const activeMode = ref('cursor');
 const isImporting = ref(false);
 const importError = ref('');
 const isPublic = ref(false);
 const recipients = ref([]);
 const showRecipients = ref(false);
-const speedDialUsers = computed(() => store.getters['speedDial/users']);
-const selectedBot = ref(null);
+// Builder mode state (Cursor)
 
 // Cursor Mode State
 const importText = ref('');
 const parsedMessages = ref([]);
 const fileInput = ref(null);
+const caretPositions = ref({});
 
 // Audio Mode State
 const audioInput = ref(null);
@@ -312,16 +308,23 @@ const builtMessages = ref([]);
 const speakerRegistry = ref({}); // speakerId -> user object
 
 onMounted(async () => {
-  // Speed dial is loaded globally
+  // No-op
 });
 
 // Watchers
 watch(importText, (val) => {
   if (val) {
     const result = ImportService.parseConversation(val);
-    parsedMessages.value = Array.isArray(result) ? result : (result.messages || []);
+    const normalized = Array.isArray(result) ? result : (result.messages || []);
+    parsedMessages.value = (normalized || []).map(m => ({
+      content: m.content || '',
+      isMe: m.role === 'user',
+      speakerName: m.role === 'assistant' ? 'Assistant' : 'User',
+    }));
+    caretPositions.value = {};
   } else {
     parsedMessages.value = [];
+    caretPositions.value = {};
   }
 });
 
@@ -368,7 +371,12 @@ const transcribeAudio = async () => {
     // Initialize registry
     const speakers = [...new Set(builtMessages.value.map(m => m.speakerId))];
     const reg = {};
-    speakers.forEach(s => reg[s] = null);
+    speakers.forEach(s => {
+      reg[s] = {
+        isMe: false,
+        speakerName: `Speaker ${s}`
+      };
+    });
     speakerRegistry.value = reg;
     
   } catch (e) {
@@ -392,15 +400,55 @@ const uniqueSpeakers = computed(() => Object.keys(speakerRegistry.value));
 
 const canProceed = computed(() => {
   if (activeMode.value === 'cursor') {
-    return parsedMessages.value.length > 0 && selectedBot.value;
+    if (!parsedMessages.value.length) return false;
+    return parsedMessages.value.every(m => {
+      if (!m || !m.content || !m.content.trim()) return false;
+      if (m.isMe) return true;
+      return !!(m.speakerName && m.speakerName.trim());
+    });
   }
   if (activeMode.value === 'audio') {
     // All speakers must be assigned
-    return builtMessages.value.length > 0 && 
-           uniqueSpeakers.value.every(s => !!speakerRegistry.value[s]);
+    if (!builtMessages.value.length) return false;
+    return uniqueSpeakers.value.every(s => {
+      const reg = speakerRegistry.value[s];
+      if (!reg) return false;
+      if (reg.isMe) return true;
+      return !!(reg.speakerName && reg.speakerName.trim());
+    });
   }
   return false;
 });
+
+const onCaretUpdate = (idx, e) => {
+  const el = e && e.target ? e.target : null;
+  const pos = el && typeof el.selectionStart === 'number' ? el.selectionStart : null;
+  caretPositions.value[idx] = pos;
+};
+
+const canSplit = (idx) => {
+  const pos = caretPositions.value[idx];
+  const content = (parsedMessages.value[idx] && parsedMessages.value[idx].content) || '';
+  return Number.isInteger(pos) && pos > 0 && pos < content.length;
+};
+
+const splitAt = (idx) => {
+  const pos = caretPositions.value[idx];
+  const msg = parsedMessages.value[idx];
+  if (!msg || !Number.isInteger(pos)) return;
+
+  const before = msg.content.slice(0, pos).trim();
+  const after = msg.content.slice(pos).trim();
+  if (!before || !after) return;
+
+  parsedMessages.value.splice(idx, 1, { ...msg, content: before }, { ...msg, content: after });
+  caretPositions.value = {};
+};
+
+const removeMessage = (idx) => {
+  parsedMessages.value.splice(idx, 1);
+  caretPositions.value = {};
+};
 
 const importConversation = async () => {
   if (!canProceed.value) return;
@@ -409,34 +457,30 @@ const importConversation = async () => {
   importError.value = '';
   
   try {
-    let messages = [];
-    let options = {};
-    let botToUse = selectedBot.value;
-    
+    let builderMessages = [];
+
     if (activeMode.value === 'cursor') {
-      messages = parsedMessages.value;
-      options = { sourceType: 'cursor' };
+      builderMessages = parsedMessages.value.map(m => ({
+        content: m.content,
+        isMe: !!m.isMe,
+        speakerName: m.speakerName
+      }));
     } else {
-      // Audio import logic
-      // Map utterances to admin-style messages with authorUid
-      messages = builtMessages.value.map(m => {
-        const assignedUser = speakerRegistry.value[m.speakerId];
-        if (!assignedUser) throw new Error(`Speaker ${m.speakerId} not assigned`);
+      builderMessages = builtMessages.value.map(u => {
+        const reg = speakerRegistry.value[u.speakerId];
+        if (!reg) throw new Error(`Speaker ${u.speakerId} not configured`);
         return {
-          content: m.content,
-          authorUid: assignedUser.uid
+          content: u.content,
+          isMe: !!reg.isMe,
+          speakerName: reg.speakerName
         };
       });
-      options = { sourceType: 'audio' };
-      botToUse = null; // Not used in admin mode (authorUid present)
     }
-    
-    const result = await ImportService.importConversation(
-      messages,
-      botToUse,
+
+    const result = await ImportService.importQuoteConversation(
+      builderMessages,
       recipients.value,
-      isPublic.value,
-      options
+      isPublic.value
     );
     
     if (result.success) {
@@ -631,6 +675,52 @@ const importConversation = async () => {
   border-bottom: 1px solid var(--color-border-light);
 }
 
+.manual-preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.preview-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-xs);
+}
+
+.preview-speaker-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.speaker-name-input {
+  flex: 1;
+  min-width: 160px;
+}
+
+.me-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.preview-item-actions {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.preview-textarea {
+  width: 100%;
+  min-height: 70px;
+  padding: var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: monospace;
+}
+
 .actions-section {
   background: var(--color-surface);
   padding: var(--space-lg);
@@ -656,7 +746,7 @@ const importConversation = async () => {
 
 .primary-button {
   background-color: var(--color-primary);
-  color: white;
+  color: var(--color-button-text);
   padding: var(--space-sm) var(--space-md);
   border: none;
   border-radius: var(--radius-sm);

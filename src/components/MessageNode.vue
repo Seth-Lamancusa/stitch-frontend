@@ -547,7 +547,10 @@ export default {
     const isSavingMessage = ref(false);
 
     // Import status
-    const isImported = computed(() => !!props.message.import_info);
+    const isImported = computed(() => {
+      const info = props.message?.import_info;
+      return !!(info && (info.display_name || info.importer_user_tag));
+    });
     
     // Subject addition state
     const isAddingSubject = ref(false);
@@ -829,16 +832,11 @@ export default {
     
     const openAddRecipientsModal = () => {
       dismissMobileKeyboard();
-      console.log('[MessageNode] openAddRecipientsModal called for message', props.message.id);
-      console.log('[MessageNode] hasRecipients computed value:', hasRecipients.value);
-      console.log('[MessageNode] message.recipients:', props.message.recipients);
-      console.log('[MessageNode] typeof message.recipients:', typeof props.message.recipients);
       
       // Add debug logging for existing recipients
       const existingRecipients = props.message.recipients && Array.isArray(props.message.recipients) 
         ? props.message.recipients 
         : [];
-      console.log('[MessageNode] Existing recipients:', existingRecipients);
       
       // Show the global recipients modal
       const modalConfig = {
@@ -847,17 +845,9 @@ export default {
         existingRecipients: existingRecipients,
         messageId: props.message.id
       };
-      console.log('[MessageNode] Opening recipients modal with config:', modalConfig);
       
       try {
         store.dispatch('navigation/showRecipientsModal', modalConfig);
-        console.log('[MessageNode] Successfully dispatched showRecipientsModal action');
-        
-        // Check if modal state changed
-        setTimeout(() => {
-          const modalVisible = store.getters['navigation/recipientsModalVisible'];
-          console.log('[MessageNode] Modal visibility after dispatch:', modalVisible);
-        }, 100);
       } catch (error) {
         console.error('[MessageNode] Error dispatching showRecipientsModal:', error);
       }
@@ -1007,6 +997,10 @@ export default {
       return !!props.message.author?.is_bot;
     });
 
+    // If imported, we still store the author edge as the importer user,
+    // but the UI should display the quoted/imported identity.
+    // This means participant name lists should also show import_info.display_name.
+
     // Show participants label only for inbox list previews
     const showParticipantsLabel = computed(() => {
       return props.inListView === true && props.currentTab === 'inbox';
@@ -1032,11 +1026,13 @@ export default {
         });
       };
 
-      const authorName = authorDisplayName.value || '';
+      const authorName = isImported.value
+        ? (props.message?.import_info?.display_name || '')
+        : (authorDisplayName.value || '');
       if (authorName || authorUserTag.value) {
         addParticipant({
-          displayName: authorName || authorUserTag.value || '',
-          userTag: authorUserTag.value,
+          displayName: authorName || (isImported.value ? '' : (authorUserTag.value || '')),
+          userTag: isImported.value ? null : authorUserTag.value,
           isBot: isBot.value
         });
       }
@@ -1787,33 +1783,6 @@ export default {
       window.addEventListener('scroll', menuPositionRecalcHandler, true);
       window.addEventListener('resize', menuPositionRecalcHandler);
 
-
-      // Observe DOM mutations inside message content to catch late appends
-      try {
-        if (messageContentRef.value && typeof MutationObserver !== 'undefined') {
-          domObserver.value = new MutationObserver((records) => {
-            try {
-              const el = messageContentRef.value;
-              if (!el) return;
-              const text = el.innerText || '';
-              if (text.includes('[object Promise]')) {
-                const changes = records.map(r => ({
-                  type: r.type,
-                  addedNodes: Array.from(r.addedNodes || []).map(n => ({ nodeType: n.nodeType, text: n.textContent?.slice?.(0, 80) })),
-                  removedNodes: Array.from(r.removedNodes || []).map(n => ({ nodeType: n.nodeType, text: n.textContent?.slice?.(0, 80) }))
-                }));
-                debugLog('Detected "[object Promise]" in message content', {
-                  messageId: props.message.id,
-                  displayMode: props.displayMode,
-                  changes
-                });
-              }
-            } catch (e) {}
-          });
-          domObserver.value.observe(messageContentRef.value, { childList: true, subtree: true, characterData: true });
-        }
-      } catch (e) {}
-
     });
     
     onBeforeUnmount(() => {
@@ -1836,18 +1805,13 @@ export default {
       // Disconnect observer
       try { if (domObserver.value) { domObserver.value.disconnect(); domObserver.value = null; } } catch (e) {}
 
-      
       // Close this message's action bar if it's open
       if (showActionBar.value) {
         store.dispatch('navigation/hideActionBar', props.message.id);
       }
-      
-
     });
     
     // We've simplified the read/unread handling - each message now just shows its own status
-    
-
     
     // Loading state for navigation buttons (similar to SiblingNavigator)
     const isParentLoading = computed(() => {
@@ -1856,15 +1820,7 @@ export default {
       return !parent;
     });
     
-    // Add debug computed property to help diagnose button visibility
     const shouldShowAddRecipientsButton = computed(() => {
-      const conditions = {
-        inListView: props.inListView,
-        isSelectionMode: isSelectionMode.value,
-        messageId: props.message.id,
-        hasRecipients: hasRecipients.value
-      };
-      console.log('[MessageNode] Add Recipients button visibility conditions:', conditions);
       return !props.inListView && !isSelectionMode.value;
     });
     
@@ -1877,54 +1833,6 @@ export default {
     const showSiblingNavDesktop = computed(() => {
       const val = !props.inListView && !!props.message.parent_id && !isMobile.value;
       return val;
-    });
-
-    watch(isSelectionMode, (next, prev) => {
-      try { console.log('[MessageNode] isSelectionMode changed', { messageId: props.message.id, prev, next }); } catch (e) {}
-    });
-
-
-    // Debug: watch for content changes and log state + DOM tail
-    watch(() => props.message?.content, (next, prev) => {
-      try {
-        debugLog('message.content changed', {
-          messageId: props.message?.id,
-          prevType: typeof prev,
-          nextType: typeof next,
-          prevIsPromise: isPromiseValue(prev),
-          nextIsPromise: isPromiseValue(next)
-        });
-      } catch (e) {}
-      console.log('[MessageNode] message.content changed', {
-        messageId: props.message?.id,
-        content: next,
-        prev: prev
-      });
-    });
-
-    // Debug: watch truncated content as well (preview mode path)
-    watch(() => (typeof truncatedContent !== 'undefined' ? truncatedContent.value : undefined), () => {
-      console.log('[MessageNode] truncatedContent changed', {
-        messageId: props.message?.id,
-        truncatedContent: truncatedContent.value
-      });
-    });
-
-    watch(() => props.inListView, (next, prev) => {
-      try { console.log('[MessageNode] inListView changed', { messageId: props.message.id, prev, next }); } catch (e) {}
-    });
-
-    // Watch parent_id changes directly
-    watch(() => props.message.parent_id, (next, prev) => {
-      try { console.log('[MessageNode] parent_id changed', { messageId: props.message.id, prev, next }); } catch (e) {}
-    });
-
-    // Watch parent child count when available
-    watch(() => {
-      const parent = props.message.parent_id ? store.getters['messages/getMessage'](props.message.parent_id) : null;
-      return parent && Array.isArray(parent.child_ids) ? parent.child_ids.length : null;
-    }, (next, prev) => {
-      try { console.log('[MessageNode] parent child_ids length changed', { messageId: props.message.id, parentId: props.message.parent_id, prev, next }); } catch (e) {}
     });
     
     return {
@@ -1971,6 +1879,7 @@ export default {
       recipientsExcludingUser,
       authorDisplayName,
       authorUserTag,
+      isImported,
       showParticipantsLabel,
       participantItems,
       openTagsModal,
@@ -3824,12 +3733,6 @@ export default {
   opacity: 1;
 }
 </style>
-
-
-
-
-
-
 
 
 

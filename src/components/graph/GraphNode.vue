@@ -216,6 +216,8 @@ export default {
     
     // Content calculations
     authorName() {
+      const importDisplay = this.message.import_info?.display_name;
+      if (importDisplay) return importDisplay;
       // Robust access to display name
       if (this.message.author?.display_name) return `${this.message.author.display_name} (@${this.message.author.user_tag})`;
       
@@ -227,10 +229,13 @@ export default {
       return `${display}${tag}`;
     },
     authorDisplay() {
+      const importDisplay = this.message.import_info?.display_name;
+      if (importDisplay) return importDisplay;
       if (this.message.author?.display_name) return this.message.author.display_name;
       return this.message.author_display_name || this.message.author?.username || this.message.author?.email || 'Unknown';
     },
     authorTag() {
+      if (this.message.import_info?.display_name) return null;
       if (this.message.author?.user_tag) return this.message.author.user_tag;
       return this.message.author_user_tag || null;
     },
@@ -261,6 +266,7 @@ export default {
     },
     
     isOwnMessage() {
+      if (this.message.import_info?.display_name) return false;
       const currentUserId = this.$store?.getters['auth/user']?.uid;
       const authorId = this.message.content_author || this.message.author?.uid;
       return currentUserId && authorId && currentUserId === authorId;
