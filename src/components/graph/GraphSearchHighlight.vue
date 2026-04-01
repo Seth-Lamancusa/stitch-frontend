@@ -248,6 +248,7 @@ export default {
     },
     
     getAuthorName(message) {
+      if (message.import_info?.display_name) return message.import_info.display_name;
       if (!message.author) return 'Unknown';
       return message.author.display_name || message.author.username || 'User';
     },
