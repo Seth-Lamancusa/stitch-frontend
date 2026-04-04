@@ -30,6 +30,7 @@
                   :user-tag="participant.userTag"
                   :show-tag="false"
                   :is-bot="participant.isBot"
+                  :is-imported="participant.isImported"
                   name-class="message-author"
                   variant="message"
                 />
@@ -48,10 +49,34 @@
               :show-tag="!!authorUserTag"
               :is-current-user="isCurrentUser"
               :is-bot="isBot"
+              :is-imported="isImported"
               name-class="message-author"
               tag-class="author-user-tag"
               variant="message"
             />
+
+            <span
+              v-if="isImported"
+              class="imported-badge"
+              :title="'Imported by ' + props.message.import_info?.importer_user_tag"
+            >
+              via <UserDisplay
+                :display-name="props.message.import_info?.importer_user_tag"
+                :user-tag="props.message.import_info?.importer_user_tag"
+                :show-tag="false"
+                variant="badge"
+                size="xs"
+              />
+              <a
+                v-if="props.message.import_info?.source_url"
+                :href="props.message.import_info.source_url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="import-source-link"
+              >
+                🔗
+              </a>
+            </span>
           </div>
 
           <button
@@ -239,12 +264,20 @@ const canToggleVisibility = computed(() => {
   return store.getters['auth/canUpdateMessagePublicity'](props.message);
 });
 
+const isImported = computed(() => {
+  return !!props.message.import_info?.display_name;
+});
+
 const authorDisplayName = computed(() => {
+  if (isImported.value && props.message.import_info?.display_name) {
+    return props.message.import_info.display_name;
+  }
   if (props.message.author?.display_name) return props.message.author.display_name;
   return props.message.author_display_name || '';
 });
 
 const authorUserTag = computed(() => {
+  if (isImported.value) return null;
   if (props.message.author?.user_tag) return props.message.author.user_tag;
   return props.message.author_user_tag || null;
 });
@@ -310,7 +343,12 @@ const participantItems = computed(() => {
 
   const items = [];
   const seen = new Set();
-  const addParticipant = ({ displayName, userTag = null, isBot = false }) => {
+  const addParticipant = ({
+    displayName,
+    userTag = null,
+    isBot = false,
+    isImported: participantIsImported = false
+  }) => {
     const keySource = displayName || userTag || '';
     const key = String(keySource).trim().toLowerCase();
     if (!key) return;
@@ -320,7 +358,8 @@ const participantItems = computed(() => {
       key: `${key}-${items.length}`,
       displayName: displayName || userTag || 'Unknown',
       userTag,
-      isBot: !!isBot
+      isBot: !!isBot,
+      isImported: !!participantIsImported
     });
   };
 
@@ -329,7 +368,8 @@ const participantItems = computed(() => {
     addParticipant({
       displayName: authorName || authorUserTag.value || '',
       userTag: authorUserTag.value,
-      isBot: isBot.value
+      isBot: isBot.value,
+      isImported: isImported.value
     });
   }
 
@@ -874,6 +914,29 @@ const formatTimestamp = (timestamp) => {
   font-size: calc(var(--font-size-xs) - 1px);
 }
 
+.imported-badge {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--color-hover-overlay);
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+
+.import-source-link {
+  text-decoration: none;
+  font-size: 0.8rem;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.import-source-link:hover {
+  opacity: 1;
+}
+
 .message-preview.compact .recipients-toggle,
 .message-preview.compact .tags-toggle,
 .message-preview.compact .channels-toggle {
@@ -921,4 +984,3 @@ const formatTimestamp = (timestamp) => {
   }
 }
 </style>
-

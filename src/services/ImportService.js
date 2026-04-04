@@ -197,6 +197,11 @@ class ImportService {
         base.import_info = {
           display_name: (m.speakerName || '').trim() || 'Imported Speaker'
         };
+
+        const rawOriginalTimestamp = (m.originalTimestamp || '').trim();
+        if (rawOriginalTimestamp) {
+          base.import_info.original_timestamp = rawOriginalTimestamp;
+        }
       }
 
       return base;
