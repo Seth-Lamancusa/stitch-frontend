@@ -31,7 +31,7 @@
       </div>
       
       <!-- Guest notification box - only shown for guests -->
-      <div v-if="!user" class="guest-notification">
+      <div v-if="!user && !loginModalOpen" class="guest-notification">
         <div class="notification-content">
           <div class="notification-icon">🔒</div>
           <div class="notification-text">
@@ -222,6 +222,7 @@ const isProfileModalOpen = ref(false);
 
 // Computed properties from store
 const user = computed(() => store.getters['auth/user']);
+const loginModalOpen = computed(() => store.getters['ui/loginModalOpen']);
 const authReady = computed(() => store.getters['auth/authReady']);
 const isAdmin = computed(() => store.getters['auth/isAdmin']);
 const canInteract = computed(() => store.getters['auth/canInteract']);

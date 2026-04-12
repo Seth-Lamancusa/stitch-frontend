@@ -8,7 +8,8 @@ export default {
     success: null,
     messageNotification: null,
     showDeleteConfirm: false,
-    messageToDelete: null
+    messageToDelete: null,
+    loginModalOpen: false,
   },
   
   mutations: {
@@ -41,6 +42,10 @@ export default {
     REQUEST_MESSAGE_DELETE(state, message) {
       // This mutation is observed by the DeleteConfirmModal component
       // No state changes needed here as the modal handles its own state
+    },
+
+    SET_LOGIN_MODAL_OPEN(state, value) {
+      state.loginModalOpen = !!value;
     }
   },
   
@@ -75,6 +80,10 @@ export default {
     
     hideDeleteConfirm({ commit }) {
       commit('SET_DELETE_CONFIRM', { show: false, message: null });
+    },
+
+    setLoginModalOpen({ commit }, value) {
+      commit('SET_LOGIN_MODAL_OPEN', value);
     }
   },
   
@@ -83,6 +92,7 @@ export default {
     success: state => state.success,
     messageNotification: state => state.messageNotification,
     showDeleteConfirm: state => state.showDeleteConfirm,
-    messageToDelete: state => state.messageToDelete
+    messageToDelete: state => state.messageToDelete,
+    loginModalOpen: state => state.loginModalOpen,
   }
 }

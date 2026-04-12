@@ -1401,7 +1401,8 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1001;
+  /* Keep below LoginModal to prevent blocking sign-in interactions */
+  z-index: calc(var(--z-index-modal) - 2);
   padding: 20px;
 }
 
@@ -2598,7 +2599,8 @@ onBeforeUnmount(() => {
 
 /* Remove confirmation dialog */
 .remove-confirm-overlay {
-  z-index: 1002; /* Above the main modal */
+  /* Still above the recipients modal content, but below LoginModal */
+  z-index: calc(var(--z-index-modal) - 1);
 }
 
 .remove-confirm-modal {

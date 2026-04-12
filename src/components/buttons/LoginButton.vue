@@ -12,10 +12,10 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import { useStore } from 'vuex'
-import { useAuthentication } from '@/composables/useAuthentication'
+ import { ref, watch } from 'vue'
+ import { useRouter, useRoute } from 'vue-router'
+ import { useStore } from 'vuex'
+ import { useAuthentication } from '@/composables/useAuthentication'
 import RegisterButton from '@/components/buttons/RegisterButton.vue'
 import LoginModal from '@/components/modals/LoginModal.vue'
 
@@ -30,10 +30,16 @@ const router = useRouter()
 const route = useRoute()
 const store = useStore()
 const { logout } = useAuthentication()
-const showLogin = ref(false)
+ const showLogin = ref(false)
 
-const openLoginModal = () => { showLogin.value = true }
-const closeLoginModal = () => { showLogin.value = false }
+ // If the login modal opens, close guest-blocking modals.
+ watch(showLogin, (open) => {
+   store.dispatch('ui/setLoginModalOpen', open)
+   if (open) store.dispatch('navigation/hideRecipientsModal')
+ })
+ 
+ const openLoginModal = () => { showLogin.value = true }
+ const closeLoginModal = () => { showLogin.value = false }
 const onSuccess = async () => {
   // After successful login, route if redirect present
   await new Promise(resolve => setTimeout(resolve, 300))
@@ -67,5 +73,4 @@ const onSuccess = async () => {
   cursor: not-allowed;
 }
 </style>
-
 

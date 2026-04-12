@@ -291,6 +291,13 @@ const importError = ref('');
 const isPublic = ref(false);
 const recipients = ref([]);
 const showRecipients = ref(false);
+
+const loginModalOpen = computed(() => store.getters['ui/loginModalOpen']);
+
+watch(loginModalOpen, (open) => {
+  if (open) showRecipients.value = false;
+});
+
 // Builder mode state (Cursor)
 
 // Cursor Mode State

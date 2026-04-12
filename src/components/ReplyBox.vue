@@ -430,11 +430,21 @@ const addRecipientsExisting = computed(() => store.getters['navigation/addRecipi
 
 // Computed properties from store
 const user = computed(() => store.getters['auth/user']);
+const loginModalOpen = computed(() => store.getters['ui/loginModalOpen']);
 const isEmailVerified = computed(() => !!(user.value && user.value.is_email_verified));
 const isPublic = computed({
   get: () => store.getters['navigation/replyIsPublic'],
   set: (value) => store.dispatch('navigation/updateReplyVisibility', value)
 });
+
+// Prevent other guest modals from sitting above the login modal.
+watch(loginModalOpen, (open) => {
+  if (!open) return
+  showRecipientSelector.value = false
+  showBotModal.value = false
+  showTagsModal.value = false
+  showChannelsModal.value = false
+})
 const recipients = computed(() => store.getters['navigation/replyRecipients']);
 const normalizedReplyTagSet = computed(() => {
   const set = new Set();
@@ -3743,7 +3753,6 @@ defineExpose({
   color: var(--color-error);
 }
 </style> 
-
 
 
 
