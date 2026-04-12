@@ -5,6 +5,8 @@
  * by other formatters, particularly for code blocks and LaTeX.
  */
 
+import { replaceInlineDollarMath } from './inlineDollarMath';
+
 /**
  * Generate a unique placeholder for protected content
  * 
@@ -133,24 +135,19 @@ export function protectLatexBlocks(content, context) {
  */
 export function protectInlineLatex(content, context) {
   const { protectedZones } = context;
-  
-  let processedContent = content;
-  
-  // Match inline LaTeX: $latex$
-  const inlineLatexRegex = /\$([^\$\n]+)\$/g;
-  
-  // Replace inline LaTeX with placeholders
-  processedContent = processedContent.replace(inlineLatexRegex, (match, latex) => {
-    const placeholder = generatePlaceholder('latex_inline');
-    
-    // Store full match with the placeholder
-    protectedZones.set(placeholder, {
-      type: 'latex_inline',
-      original: match,
-      content: latex
-    });
-    
-    return placeholder;
+
+  // Protect inline `$...$` that looks like LaTeX.
+  // This keeps scanning safe for prose/currency-like spans.
+  let processedContent = replaceInlineDollarMath(content, {
+    onMath: ({ inner, raw }) => {
+      const placeholder = generatePlaceholder('latex_inline');
+      protectedZones.set(placeholder, {
+        type: 'latex_inline',
+        original: raw,
+        content: inner
+      });
+      return placeholder;
+    }
   });
   
   // Match inline LaTeX: \(latex\)

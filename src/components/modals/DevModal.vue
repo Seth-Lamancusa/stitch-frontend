@@ -51,6 +51,7 @@ onUnmounted(() => {
 });
 
 const isEmailVerified = computed(() => !!(user.value?.is_email_verified));
+const isManaged = computed(() => !!(user.value && user.value.is_managed));
 const isEndpointVerified = computed(() => !!((user.value?.contacts || []).some(c => c.type === 'endpoint' && c.verified)));
 const hasSavedEndpoint = computed(() => !!((user.value?.contacts || []).find(c => c.type === 'endpoint')?.value));
 const hasEndpointSigningSecret = computed(() => !!(user.value?.has_endpoint_signing_secret));
@@ -320,24 +321,32 @@ async function setOrRotateSigningSecret() {
             <div class="api-section-wrapper" :class="{ 'blocked-state': !isApiAllowed }">
               <div class="modal-content-body" :class="{ 'is-blurred': !isApiAllowed }">
                 <div class="create-box">
-                  <div class="row header small">Create New Key</div>
-                  <div class="create-grid">
-                    <label>Label</label>
-                    <input placeholder="Optional label" v-model="newKeyLabel" />
-                    <label>Scopes cap</label>
-                    <div>
-                      <input placeholder="e.g. msg.read msg.write" v-model="newKeyScopes" />
-                      <div class="field-hint">Leave empty to use default: msg.read msg.write</div>
+                  <div v-if="!isManaged">
+                    <div class="row header small">Create New Key</div>
+                    <div class="create-grid">
+                      <label>Label</label>
+                      <input placeholder="Optional label" v-model="newKeyLabel" />
+                      <label>Scopes cap</label>
+                      <div>
+                        <input placeholder="e.g. msg.read msg.write" v-model="newKeyScopes" />
+                        <div class="field-hint">Leave empty to use default: msg.read msg.write</div>
+                      </div>
+                      <div></div>
+                      <div class="actions">
+                        <button class="primary" :disabled="creating" @click="createKey">{{ creating ? 'Creating…' : 'Create Key' }}</button>
+                      </div>
                     </div>
-                    <div></div>
-                    <div class="actions">
-                      <button class="primary" :disabled="creating" @click="createKey">{{ creating ? 'Creating…' : 'Create Key' }}</button>
+                    <div v-if="createdKeyToken" class="new-key-warning">
+                      <div class="note">Copy your new API key now. It will not be shown again.</div>
+                      <div class="mono token">{{ createdKeyToken }}</div>
                     </div>
                   </div>
-                  <div v-if="createdKeyToken" class="new-key-warning">
-                    <div class="note">Copy your new API key now. It will not be shown again.</div>
-                    <div class="mono token">{{ createdKeyToken }}</div>
+
+                  <div v-else class="managed-delegation-hint">
+                    <div class="row header small">Managed Account</div>
+                    <p class="hint-text">Managed users (bots) cannot create API keys. Ask your manager to delegate for you, then use that token to import messages.</p>
                   </div>
+
                 </div>
 
                 <div class="table">
@@ -437,6 +446,8 @@ async function setOrRotateSigningSecret() {
 .new-key-warning{ margin-top:10px; background: rgba(16,185,129,.08); border:1px solid rgba(16,185,129,.35); padding:8px; border-radius:6px; }
 .new-key-warning .note{ font-size:12px; margin-bottom:6px; color: var(--color-text-secondary); }
 .token{ word-break: break-all; }
+.managed-delegation-hint{ display:flex; flex-direction:column; gap:8px; }
+.managed-delegation-hint .hint-text{ margin:0; font-size:12px; color: var(--color-text-secondary); line-height:1.4; }
 .actions .danger{ background:transparent; color: var(--color-error); border:1px solid var(--color-border); padding:6px 10px; border-radius:6px; cursor:pointer; }
 .actions .primary{ background: var(--color-primary); color: var(--color-text-inverse); border:none; padding:6px 10px; border-radius:6px; cursor:pointer; }
 .modal-footer{ display:flex; padding:var(--space-md) var(--space-lg); border-top:1px solid var(--color-border); flex-shrink:0; }
@@ -514,6 +525,3 @@ async function setOrRotateSigningSecret() {
   .endpoint-secret{ flex-direction: column; align-items: flex-start; }
 }
 </style>
-
-
-

@@ -39,12 +39,17 @@ class TreeNode {
  * @returns {Map} Map of messageId -> {x, y, layer, message} positions
  */
 export function calculateTreeLayout(messages, options = {}) {
+  const rootPriorityMap = options.rootPriorityMap;
+
   const config = {
     verticalGap: 180,      // Vertical spacing between layers
     horizontalGap: 80,     // Horizontal gap between sibling subtrees
     nodeWidth: 60,         // Base width for leaf nodes (circle diameter)
     ...options
   };
+
+  // Prevent rootPriorityMap from leaking into numeric config.
+  delete config.rootPriorityMap;
 
   if (!messages || messages.length === 0) {
     return new Map();
@@ -55,9 +60,25 @@ export function calculateTreeLayout(messages, options = {}) {
   messages.forEach(msg => messageMap.set(msg.id, msg));
 
   // Find root messages (no parent_id or parent not in set)
-  const rootMessages = messages.filter(msg => 
+  let rootMessages = messages.filter(msg => 
     !msg.parent_id || !messageMap.has(msg.parent_id)
   );
+
+  if (rootPriorityMap instanceof Map && rootMessages.length > 1) {
+    // Stable ordering: priority first, then original array index.
+    const indexed = rootMessages.map((m, idx) => ({
+      m,
+      idx,
+      p: rootPriorityMap.has(m.id) ? rootPriorityMap.get(m.id) : Infinity
+    }));
+
+    indexed.sort((a, b) => {
+      if (a.p !== b.p) return a.p - b.p;
+      return a.idx - b.idx;
+    });
+
+    rootMessages = indexed.map(x => x.m);
+  }
 
   if (rootMessages.length === 0) {
     return new Map();

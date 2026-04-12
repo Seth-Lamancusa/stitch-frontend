@@ -50,7 +50,9 @@ const state = {
     sidePanelOpen: false,
     minimapVisible: true,
     toolbarExpanded: false,
-    showingFilters: false
+    showingFilters: false,
+    isStitchDrawingMode: false,
+    stitchSourceId: null
   },
 
   // Filter state
@@ -110,9 +112,27 @@ const getters = {
   },
 
   // UI getters
-  selectedMessageForPanel: (state) => {
-    if (!state.selection.lastSelectedId) return null;
-    return state.messages.find(msg => msg.id === state.selection.lastSelectedId);
+  selectedMessageForPanel: (state, getters, rootState, rootGetters) => {
+    const selectedId = state.selection.lastSelectedId;
+    if (!selectedId) return null;
+
+    // Prefer the locally-rendered subgraph, but fall back to the global
+    // messages store to avoid empty panel flickers when the subgraph refreshes.
+    const local = state.messages.find(msg => msg.id === selectedId);
+    if (local) return local;
+
+    try {
+      const resolved = rootGetters?.['messages/getMessage']?.(selectedId) ?? null;
+      if (!resolved) {
+        console.debug('[GRAPH SIDE PANEL] selectedMessageForPanel resolved null', {
+          selectedId,
+          hasLocal: !!local,
+        });
+      }
+      return resolved;
+    } catch (e) {
+      return null;
+    }
   },
 
   // Filter getters
@@ -203,6 +223,13 @@ const mutations = {
     }
     state.selection.lastSelectedId = messageId;
     state.ui.sidePanelOpen = true;
+
+    console.debug('[GRAPH SIDE PANEL] open via SELECT_MESSAGE', {
+      messageId,
+      lastSelectedId: state.selection.lastSelectedId,
+      sidePanelOpen: state.ui.sidePanelOpen,
+      selectedIds: [...state.selection.selectedIds]
+    });
   },
 
   DESELECT_MESSAGE(state, messageId) {
@@ -212,13 +239,18 @@ const mutations = {
     }
     
     if (state.selection.lastSelectedId === messageId) {
-      state.selection.lastSelectedId = state.selection.selectedIds.length > 0 
+      // Keep panel content stable even when multi-select toggling clears
+      // the last selected node. The panel close should be explicit.
+      state.selection.lastSelectedId = state.selection.selectedIds.length > 0
         ? state.selection.selectedIds[state.selection.selectedIds.length - 1]
-        : null;
-    }
+        : messageId;
 
-    if (state.selection.selectedIds.length === 0) {
-      state.ui.sidePanelOpen = false;
+      console.debug('[GRAPH SIDE PANEL] deselect (keep panel stable)', {
+        messageId,
+        lastSelectedId: state.selection.lastSelectedId,
+        sidePanelOpen: state.ui.sidePanelOpen,
+        selectedIds: [...state.selection.selectedIds]
+      });
     }
   },
 
@@ -226,6 +258,25 @@ const mutations = {
     state.selection.selectedIds = [];
     state.selection.lastSelectedId = null;
     state.ui.sidePanelOpen = false;
+
+    console.debug('[GRAPH SIDE PANEL] closed via CLEAR_SELECTION', {
+      lastSelectedId: state.selection.lastSelectedId,
+      sidePanelOpen: state.ui.sidePanelOpen
+    });
+  },
+
+  // Single-select replacement in one commit to avoid intermediate
+  // empty-selection renders that make the side panel feel buggy.
+  SET_SINGLE_SELECTION(state, messageId) {
+    state.selection.selectedIds = [messageId];
+    state.selection.lastSelectedId = messageId;
+    state.ui.sidePanelOpen = true;
+
+    console.debug('[GRAPH SIDE PANEL] open via SET_SINGLE_SELECTION', {
+      messageId,
+      lastSelectedId: state.selection.lastSelectedId,
+      sidePanelOpen: state.ui.sidePanelOpen
+    });
   },
 
   TOGGLE_SELECTION_MODE(state) {
@@ -245,6 +296,12 @@ const mutations = {
     state.ui.toolbarExpanded = isExpanded;
   },
 
+  UPDATE_LAYOUT_POSITIONS(state, { positions, bounds }) {
+    state.layout.positions = positions;
+    state.layout.bounds = bounds;
+    state.layout.lastCalculated = Date.now();
+  },
+
   TOGGLE_FILTERS(state) {
     state.ui.showingFilters = !state.ui.showingFilters;
   },
@@ -252,6 +309,37 @@ const mutations = {
   // Filter mutations
   SET_FILTER(state, { key, value }) {
     state.filters[key] = value;
+  },
+
+  SET_SIDE_PANEL_OPEN(state, isOpen) {
+    state.ui.sidePanelOpen = isOpen;
+  },
+
+  SET_STITCH_DRAWING_MODE(state, { isDrawing, sourceId = null }) {
+    state.ui.isStitchDrawingMode = isDrawing;
+    state.ui.stitchSourceId = sourceId;
+  },
+
+  ADD_STITCH_ADJACENCY(state, { sourceId, targetId }) {
+    // Find messages in local state and update their stitch adjacency
+    const sourceMsg = state.messages.find(m => m.id === sourceId);
+    if (sourceMsg) {
+      if (!sourceMsg.stitch_child_ids) sourceMsg.stitch_child_ids = [];
+      if (!sourceMsg.stitch_child_ids.includes(targetId)) {
+        sourceMsg.stitch_child_ids.push(targetId);
+      }
+    }
+
+    const targetMsg = state.messages.find(m => m.id === targetId);
+    if (targetMsg) {
+      if (!targetMsg.stitch_parent_ids) targetMsg.stitch_parent_ids = [];
+      if (!targetMsg.stitch_parent_ids.includes(sourceId)) {
+        targetMsg.stitch_parent_ids.push(sourceId);
+      }
+    }
+
+    // Recalculate edges to include the new stitch
+    state.edges = calculateEdges(state.messages);
   },
 
   CLEAR_FILTERS(state) {
@@ -301,14 +389,96 @@ const actions = {
     dispatch('fitToContent');
   },
 
+  // Update messages and update layout without disturbing existing trees.
+  // Rule of thumb:
+  // - Keep `anchorId` node at its previous coordinates.
+  // - Preserve coordinates for `lockedNodeIds` (typically nodes in other reply trees).
+  // - Recompute positions only for everything else.
+  async updateGraphMessages({ commit, dispatch, state }, { messageId, messages, fitToContent = false, anchorId = null, rootPriorityMap = null, lockedNodeIds = null }) {
+    const prevPositions = new Map(state.layout.positions);
+    const prevAnchorPos = anchorId ? prevPositions.get(anchorId) : null;
+
+    commit('SET_CURRENT_MESSAGE_ID', messageId);
+    commit('SET_MESSAGES', messages);
+
+    commit('SET_LAYOUT_CALCULATING', true);
+    try {
+      const positions = calculateTreeLayout(messages, {
+        ...state.layout.treeOptions,
+        rootPriorityMap
+      });
+
+      if (anchorId && prevAnchorPos && positions.has(anchorId)) {
+        const computedAnchorPos = positions.get(anchorId);
+        const dx = prevAnchorPos.x - computedAnchorPos.x;
+        const dy = prevAnchorPos.y - computedAnchorPos.y;
+
+        if (dx !== 0 || dy !== 0) {
+          for (const [id, p] of positions.entries()) {
+            positions.set(id, {
+              ...p,
+              x: p.x + dx,
+              y: p.y + dy
+            });
+          }
+        }
+      }
+
+      if (lockedNodeIds && lockedNodeIds.size > 0) {
+        for (const id of lockedNodeIds) {
+          if (!prevPositions.has(id)) continue;
+          // Preserve full position object for stable rendering.
+          positions.set(id, prevPositions.get(id));
+        }
+      }
+
+      const bounds = calculateBounds(positions);
+      commit('SET_LAYOUT_RESULT', { positions, bounds });
+    } finally {
+      commit('SET_LAYOUT_CALCULATING', false);
+    }
+
+    if (fitToContent) {
+      dispatch('fitToContent');
+    }
+  },
+
+  clearSelection({ commit }) {
+    commit('CLEAR_SELECTION');
+  },
+
   // Calculate layout for current messages
-  async calculateLayout({ state, commit, getters }) {
+  async calculateLayout({ state, commit, getters }, { anchorId = null, rootPriorityMap = null } = {}) {
     commit('SET_LAYOUT_CALCULATING', true);
     
     try {
       const messages = getters.filteredMessages;
       // Use matplotlib-inspired tree layout
-      const positions = calculateTreeLayout(messages, state.layout.treeOptions);
+
+      // Preserve previous anchor coordinates so incremental loads don't shift whole trees.
+      const prevAnchorPos = anchorId ? state.layout.positions.get(anchorId) : null;
+
+      const positions = calculateTreeLayout(messages, {
+        ...state.layout.treeOptions,
+        rootPriorityMap
+      });
+
+      if (anchorId && prevAnchorPos && positions.has(anchorId)) {
+        const nextAnchorPos = positions.get(anchorId);
+        const dx = prevAnchorPos.x - nextAnchorPos.x;
+        const dy = prevAnchorPos.y - nextAnchorPos.y;
+
+        if (dx !== 0 || dy !== 0) {
+          for (const [id, p] of positions.entries()) {
+            positions.set(id, {
+              ...p,
+              x: p.x + dx,
+              y: p.y + dy
+            });
+          }
+        }
+      }
+
       const bounds = calculateBounds(positions);
       
       commit('SET_LAYOUT_RESULT', { positions, bounds });
@@ -344,9 +514,8 @@ const actions = {
         commit('SELECT_MESSAGE', messageId);
       }
     } else {
-      // Single selection - clear others first
-      commit('CLEAR_SELECTION');
-      commit('SELECT_MESSAGE', messageId);
+      // Single selection - replace selection deterministically.
+      commit('SET_SINGLE_SELECTION', messageId);
     }
   },
 
@@ -395,6 +564,42 @@ const actions = {
     commit('CLEAR_FILTERS');
     dispatch('calculateLayout');
   }
+  ,
+
+  // Translate a reply-tree component by a graph-space delta.
+  // Used to let users drag dotted reply-tree boundaries.
+  dragReplyTree({ state, commit }, { nodeIds, dx, dy }) {
+    if (!Array.isArray(nodeIds) || nodeIds.length === 0) return;
+
+    const positions = new Map(state.layout.positions);
+    nodeIds.forEach((id) => {
+      const p = positions.get(id);
+      if (!p) return;
+      positions.set(id, {
+        ...p,
+        x: p.x + dx,
+        y: p.y + dy
+      });
+    });
+
+    const bounds = calculateBounds(positions);
+    commit('UPDATE_LAYOUT_POSITIONS', { positions, bounds });
+  },
+
+  startStitchDrawing({ commit, state }) {
+    // Clear selection so the panel closes and we start fresh for source selection.
+    commit('CLEAR_SELECTION');
+    commit('SET_STITCH_DRAWING_MODE', { isDrawing: true });
+  },
+
+  cancelStitchDrawing({ commit }) {
+    commit('SET_STITCH_DRAWING_MODE', { isDrawing: false });
+  },
+
+  addStitchLink({ commit }, { sourceId, targetId }) {
+    commit('ADD_STITCH_ADJACENCY', { sourceId, targetId });
+    commit('SET_STITCH_DRAWING_MODE', { isDrawing: false });
+  }
 };
 
 // Helper functions
@@ -404,11 +609,24 @@ function calculateEdges(messages) {
   messages.forEach(message => {
     if (message.parent_id) {
       edges.push({
-        id: `${message.parent_id}-${message.id}`,
+        id: `reply-${message.parent_id}-${message.id}`,
         source: message.parent_id,
-        target: message.id
+        target: message.id,
+        edgeType: 'reply'
       });
     }
+
+     // Stitch links: draw directed edges from message -> stitch_child
+     const stitchChildren = Array.isArray(message.stitch_child_ids) ? message.stitch_child_ids : [];
+     stitchChildren.forEach(childId => {
+       if (!childId) return;
+       edges.push({
+         id: `stitch-${message.id}-${childId}`,
+         source: message.id,
+         target: childId,
+         edgeType: 'stitch'
+       });
+     });
   });
   
   return edges;

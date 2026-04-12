@@ -4,6 +4,7 @@
  * Formats LaTeX expressions using KaTeX.
  */
 import { createFormatter } from './base';
+import { replaceInlineDollarMath } from '../helpers/inlineDollarMath';
 
 // Will need to be installed: npm install katex
 let katex = null;
@@ -88,19 +89,19 @@ async function processLatexBlocks(content) {
  */
 async function processInlineLatex(content) {
   const katex = await getKaTeX();
-  
-  let processedContent = content;
-  
-  // Find all inline LaTeX: $latex$
-  processedContent = processedContent.replace(/\$([^\$\n]+)\$/g, (match, latex) => {
-    try {
-      return katex.renderToString(latex, {
-        displayMode: false,
-        throwOnError: false
-      });
-    } catch (error) {
-      console.error('Error rendering inline LaTeX:', error);
-      return `<span class="katex-error">${latex}</span>`;
+
+  // Inline `$...$` with awareness of escaped dollars like `\\$900`.
+  let processedContent = replaceInlineDollarMath(content, {
+    onMath: ({ inner }) => {
+      try {
+        return katex.renderToString(inner, {
+          displayMode: false,
+          throwOnError: false
+        });
+      } catch (error) {
+        console.error('Error rendering inline LaTeX:', error);
+        return `<span class="katex-error">${inner}</span>`;
+      }
     }
   });
   

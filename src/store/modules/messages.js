@@ -663,10 +663,10 @@ export default {
     // REMOVED setBranchPath - no longer needed since in_branch_path flags are unused
     
     // Unified traversal loader
-    async loadTraversal({ commit, state }, { messageId, up_depth = 0, down_depth = 0, get_replies = true, get_children = false }) {
+    async loadTraversal({ commit, state }, { messageId, up_depth = 0, down_depth = 0, get_replies = true, get_children = false, edge_type = 'replies' }) {
       if (!messageId) return [];
       try {
-        const response = await MessageService.traverseFrom(messageId, { up_depth, down_depth, get_replies, get_children });
+        const response = await MessageService.traverseFrom(messageId, { up_depth, down_depth, get_replies, get_children, edge_type });
         const data = response?.data || {};
         const combined = [];
         if (data.origin) combined.push(data.origin);
@@ -682,18 +682,18 @@ export default {
     },
     
     // Load parent branch - delegate to unified traversal
-    async loadMessageBranchUp({ dispatch }, { messageId, depth = 1, get_replies = true, get_children = true }) {
-      return dispatch('loadTraversal', { messageId, up_depth: depth, down_depth: 0, get_replies, get_children });
+    async loadMessageBranchUp({ dispatch }, { messageId, depth = 1, get_replies = true, get_children = true, edge_type = 'replies' }) {
+      return dispatch('loadTraversal', { messageId, up_depth: depth, down_depth: 0, get_replies, get_children, edge_type });
     },
     
     // Load child branch - delegate to unified traversal
-    async loadMessageBranchDown({ dispatch }, { messageId, depth = 1, get_replies = true, get_children = true }) {
-      return dispatch('loadTraversal', { messageId, up_depth: 0, down_depth: depth, get_replies, get_children });
+    async loadMessageBranchDown({ dispatch }, { messageId, depth = 1, get_replies = true, get_children = true, edge_type = 'replies' }) {
+      return dispatch('loadTraversal', { messageId, up_depth: 0, down_depth: depth, get_replies, get_children, edge_type });
     },
     
     // Load radius - delegate to unified traversal
-    async loadMessageRadius({ dispatch }, { messageId, radius, get_replies = true, get_children = true }) {
-      return dispatch('loadTraversal', { messageId, up_depth: radius, down_depth: radius, get_replies, get_children });
+    async loadMessageRadius({ dispatch }, { messageId, radius, get_replies = true, get_children = true, edge_type = 'replies' }) {
+      return dispatch('loadTraversal', { messageId, up_depth: radius, down_depth: radius, get_replies, get_children, edge_type });
     },
     
     // Refresh all loaded ancestors of a message (only up to those present in the store)
@@ -1983,4 +1983,3 @@ export default {
     getMarkingAsReadIds: state => state.markingAsReadIds
   }
 }
-

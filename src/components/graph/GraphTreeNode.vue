@@ -13,6 +13,7 @@
       :fill="fillColor"
       :stroke="strokeColor"
       :stroke-width="strokeWidth"
+      :opacity="nodeOpacity"
       class="node-circle"
     />
     
@@ -101,6 +102,31 @@
       >↑</text>
     </g>
 
+    <!-- Stitch parent button (left) -->
+    <g
+      v-if="canLoadStitchParent"
+      class="load-button load-stitch-parent"
+      @click.stop="emitLoadStitchParent"
+      @mouseenter.stop="handleLoadButtonEnter"
+      @mouseleave.stop="handleLoadButtonLeave"
+    >
+      <circle
+        :cx="-nodeRadius - 12"
+        :cy="0"
+        r="8"
+        fill="var(--color-secondary)"
+        opacity="0.9"
+      />
+      <text
+        :x="-nodeRadius - 12"
+        y="4"
+        text-anchor="middle"
+        fill="white"
+        font-size="12"
+        font-weight="bold"
+      >←</text>
+    </g>
+
     <!-- Load children button (bottom) -->
     <g
       v-if="canLoadChildren"
@@ -122,6 +148,31 @@
         font-size="12"
         font-weight="bold"
       >↓</text>
+    </g>
+
+    <!-- Stitch children button (right) -->
+    <g
+      v-if="canLoadStitchChild"
+      class="load-button load-stitch-child"
+      @click.stop="emitLoadStitchChild"
+      @mouseenter.stop="handleLoadButtonEnter"
+      @mouseleave.stop="handleLoadButtonLeave"
+    >
+      <circle
+        :cx="nodeRadius + 12"
+        :cy="0"
+        r="8"
+        fill="var(--color-secondary)"
+        opacity="0.9"
+      />
+      <text
+        :x="nodeRadius + 12"
+        y="4"
+        text-anchor="middle"
+        fill="white"
+        font-size="12"
+        font-weight="bold"
+      >→</text>
     </g>
   </g>
 </template>
@@ -154,7 +205,7 @@ export default {
     }
   },
 
-  emits: ['click', 'mouseenter', 'mouseleave', 'load-more-up', 'load-more-down'],
+  emits: ['click', 'mouseenter', 'mouseleave', 'load-more-up', 'load-more-down', 'load-stitch-in', 'load-stitch-out'],
 
   data() {
     return {
@@ -180,6 +231,13 @@ export default {
       // Base radius, slightly larger for root
       const base = this.isRootMessage ? 24 : 20;
       return base;
+    },
+
+    // Temporary debug knob: make nodes semi-transparent so edges/arrows aren't occluded.
+    // Flip to false once arrow head positioning looks correct.
+    nodeOpacity() {
+      const TEMP_TRANSPARENT_NODES = false;
+      return TEMP_TRANSPARENT_NODES ? 0.25 : 1;
     },
 
     // Get author ID for color mapping
@@ -283,6 +341,19 @@ export default {
       const childIds = this.message.child_ids || [];
       if (!childIds.length) return false;
       return childIds.some(id => !this.$store.getters['messages/getMessage'](id));
+    },
+
+    // Stitch navigation controls (placeholders for future wiring)
+    canLoadStitchParent() {
+      const stitchParentIds = this.message.stitch_parent_ids || [];
+      if (!stitchParentIds.length) return false;
+      return stitchParentIds.some(id => !this.$store.getters['messages/getMessage'](id));
+    },
+
+    canLoadStitchChild() {
+      const stitchChildIds = this.message.stitch_child_ids || [];
+      if (!stitchChildIds.length) return false;
+      return stitchChildIds.some(id => !this.$store.getters['messages/getMessage'](id));
     }
   },
 
@@ -357,6 +428,16 @@ export default {
 
     emitLoadChildren() {
       this.$emit('load-more-down', { message: this.message });
+    },
+
+    // Intentionally no implementation yet in the parent.
+    emitLoadStitchParent() {
+      this.$emit('load-stitch-in', { message: this.message });
+    },
+
+    // Intentionally no implementation yet in the parent.
+    emitLoadStitchChild() {
+      this.$emit('load-stitch-out', { message: this.message });
     },
     
     handleLoadButtonEnter() {

@@ -270,7 +270,8 @@
         </div>
       </div>
       
-      <!-- Add recipients info - shown only in add recipients mode -->
+      <!-- Add recipients info - shown only in add recipients mode.
+           NOTE: `navigation.addRecipientsMode` appears to have no call sites in the current frontend, so this block is likely legacy/dead code (kept for safety). -->
       <div v-if="isAddRecipientsMode" class="add-recipients-info">
         <p class="add-recipients-description">
           Add new recipients to this message. Only you (the author) can see this list.
@@ -3743,8 +3744,5 @@ defineExpose({
   color: var(--color-error);
 }
 </style> 
-
-
-
 
 
