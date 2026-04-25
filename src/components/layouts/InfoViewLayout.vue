@@ -10,14 +10,15 @@
         </div>
         <ul class="nav-links" :class="{ active: isMenuOpen }">
           <li><router-link to="/home" :class="{ active: currentRoute === '/home' }">Home</router-link></li>
-          <!-- <li><router-link to="/about" :class="{ active: currentRoute === '/about' }">About</router-link></li> -->
-          <!-- <li><router-link to="/architecture" :class="{ active: currentRoute === '/architecture' }">Architecture</router-link></li> -->
-          <!-- <li><router-link to="/features" :class="{ active: currentRoute === '/features' }">Features</router-link></li> -->
-          <li><router-link to="/how" :class="{ active: currentRoute.startsWith('/how') }">How it works</router-link></li>
-          <!--<li><router-link to="/chats" :class="{ active: currentRoute === '/chats' }">Stitch Chats</router-link></li>-->
-          <li><router-link to="/terms" :class="{ active: currentRoute === '/terms' }">Terms</router-link></li>
-          <li><router-link to="/history" class="login-btn">Go to Stitch</router-link></li>
-        </ul>
+           <!-- <li><router-link to="/about" :class="{ active: currentRoute === '/about' }">About</router-link></li> -->
+           <!-- <li><router-link to="/architecture" :class="{ active: currentRoute === '/architecture' }">Architecture</router-link></li> -->
+           <!-- <li><router-link to="/features" :class="{ active: currentRoute === '/features' }">Features</router-link></li> -->
+           <li><router-link to="/how" :class="{ active: currentRoute.startsWith('/how') }">How it works</router-link></li>
+           <!--<li><router-link to="/chats" :class="{ active: currentRoute === '/chats' }">Stitch Chats</router-link></li>-->
+           <li><router-link to="/bots" :class="{ active: currentRoute === '/bots' }">Stitch Bots</router-link></li>
+           <li><router-link to="/terms" :class="{ active: currentRoute === '/terms' }">Terms</router-link></li>
+           <li><router-link to="/history" class="login-btn">Go to Stitch</router-link></li>
+         </ul>
         <div class="hamburger" @click="toggleMenu" :class="{ active: isMenuOpen }">
           <span></span>
           <span></span>

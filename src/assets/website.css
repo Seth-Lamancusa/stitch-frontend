@@ -266,6 +266,10 @@ header {
   background: var(--chats-hero-bg);
 }
 
+.bots-hero {
+  background: var(--featured-hero-bg);
+}
+
 .hero-content {
   max-width: 800px;
   text-align: center;

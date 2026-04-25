@@ -108,7 +108,7 @@
           <input 
             ref="fileInput"
             type="file" 
-            accept="application/pdf,image/*,text/plain,audio/*,.txt,.pdf,.jpg,.jpeg,.png,.gif,.webp,.mp3,.wav,.ogg,.flac,.aac,.mp4,.m4a"
+            accept="application/pdf,image/*,text/plain,audio/*,.txt,.py,.pdf,.jpg,.jpeg,.png,.gif,.webp,.mp3,.wav,.ogg,.flac,.aac,.mp4,.m4a"
             multiple
             style="display: none"
             @change="handleFileSelect"
@@ -132,10 +132,21 @@
       
       <!-- Attachment preview -->
       <div v-if="attachments.length > 0" class="attachment-preview">
-        <div v-for="(att, index) in attachments" :key="att.name || att.gcs_path" class="attachment-item">
+        <div v-for="(att, index) in attachments" :key="att.id || att.gcs_path || att.url || att.name || index" class="attachment-item">
+          <span class="attachment-preview-icon" aria-hidden="true">{{ getIcon(att) }}</span>
           <div class="attachment-info">
-            <span class="attachment-name">{{ att.name }}</span>
-            <span v-if="att.size" class="attachment-size">{{ formatFileSize(att.size) }}</span>
+            <span class="attachment-name">{{ att.name || att.filename }}</span>
+
+            <div v-if="att.isUploading" class="attachment-progress">
+              <span class="attachment-progress-text">
+                {{ typeof att.progress === 'number' ? `${att.progress}%` : 'Uploading...' }}
+              </span>
+              <div class="attachment-progress-bar" role="progressbar" :aria-valuenow="att.progress || 0" aria-valuemin="0" aria-valuemax="100">
+                <div class="attachment-progress-fill" :style="{ width: `${att.progress || 0}%` }"></div>
+              </div>
+            </div>
+
+            <span v-else-if="att.size" class="attachment-size">{{ formatFileSize(att.size) }}</span>
           </div>
           <button 
             type="button" 
@@ -490,7 +501,7 @@ let suppressNextMentionDetection = false;
 // Centralized validation logic
 const canSendReply = computed(() => {
   const subjectValid = !subject.value || subject.value.length <= 72;
-  return props.canInteract && content.value.trim() !== '' && subjectValid && !isSending.value;
+  return props.canInteract && content.value.trim() !== '' && subjectValid && !isSending.value && !uploading.value;
 });
 
 // Generate placeholder text
@@ -1140,6 +1151,8 @@ const ensureMentionRecipient = (user) => {
       uid: user.uid,
       display_name: user.display_name,
       user_tag: user.user_tag,
+      is_bot: !!(user.is_bot ?? user.isBot),
+      available_versions: user.available_versions ?? user.availableVersions ?? null,
       email: user.email,
       public: true,
       notify: true  // Tagged users get notify: true (they replace parent author as notification recipient)
@@ -1172,7 +1185,12 @@ const ensureMentionRecipient = (user) => {
       
       // Check if this is the tagged user
       if (recipientUid === user.uid) {
-        return { ...recipient, notify: true };
+        return {
+          ...recipient,
+          notify: true,
+          is_bot: !!(user.is_bot ?? user.isBot),
+          available_versions: user.available_versions ?? user.availableVersions ?? null,
+        };
       }
       
       // Check if this is the parent author
@@ -1222,6 +1240,44 @@ const selectMentionResult = (index) => {
   insertMentionResult(user);
 };
 
+const makeAttachmentId = () => {
+  return `att_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+};
+
+const getFileExt = (att) => {
+  const name = att?.name || att?.filename || '';
+  const gcs = att?.gcs_path || '';
+  const candidate = name || gcs.split('/').pop() || '';
+  const ext = candidate.toLowerCase().split('.').pop();
+  return ext || '';
+};
+
+const getFileType = (att) => {
+  return att?.type || att?.mime_type || att?.content_type || '';
+};
+
+const getIcon = (att) => {
+  const mime = getFileType(att);
+  const ext = getFileExt(att);
+
+  if (mime?.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+    return '🖼️';
+  }
+
+  if (mime === 'application/pdf' || ext === 'pdf') return '📄';
+
+  if (mime?.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'webm'].includes(ext)) {
+    return '🎵';
+  }
+
+  if (ext === 'py') return '🐍';
+  if (mime?.startsWith('text/') || ['txt', 'md', 'json', 'yml', 'yaml', 'log'].includes(ext)) {
+    return '📝';
+  }
+
+  return '📎';
+};
+
 // Handle file upload
 const handleFileSelect = async (event) => {
   const files = Array.from(event.target.files || []);
@@ -1232,12 +1288,47 @@ const handleFileSelect = async (event) => {
   
   // Upload files sequentially to avoid overwhelming the server
   for (const file of files) {
+    const id = makeAttachmentId();
+    attachments.value.push({
+      id,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      isUploading: true,
+      progress: null,
+    });
+
     try {
-      const metadata = await AttachmentService.uploadFile(file);
-      attachments.value.push(metadata);
+      const metadata = await AttachmentService.uploadFile(file, {
+        onUploadProgress: ({ progress }) => {
+          const idx = attachments.value.findIndex((a) => a?.id === id);
+          if (idx !== -1) {
+            attachments.value[idx].progress = typeof progress === 'number' ? progress : null;
+          }
+        }
+      });
+
+      const idx = attachments.value.findIndex((a) => a?.id === id);
+      if (idx !== -1) {
+        attachments.value[idx] = {
+          ...metadata,
+          id,
+          isUploading: false,
+          progress: undefined,
+        };
+      }
     } catch (error) {
       console.error('Upload failed for file:', file.name, error);
-      // Collect error messages but continue with other files
+
+      const idx = attachments.value.findIndex((a) => a?.id === id);
+      if (idx !== -1) {
+        attachments.value.splice(idx, 1);
+      }
+
+      // If the user removed this attachment before upload completed,
+      // don't show an error for it.
+      if (idx === -1) continue;
+
       const errorMessage = error.message || 'Failed to upload file. Please try again.';
       errors.push(`${file.name}: ${errorMessage}`);
     }
@@ -3699,13 +3790,20 @@ defineExpose({
 
 .attachment-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 6px 10px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 6px;
   font-size: 13px;
+}
+
+.attachment-preview-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-top: 2px;
 }
 
 .attachment-info {
@@ -3730,6 +3828,34 @@ defineExpose({
   opacity: 0.7;
 }
 
+.attachment-progress {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.attachment-progress-text {
+  font-size: 11px;
+  color: var(--color-text-secondary, rgba(0, 0, 0, 0.6));
+  opacity: 0.85;
+}
+
+.attachment-progress-bar {
+  width: 100%;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.attachment-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--color-secondary);
+  transition: width 0.08s linear;
+}
+
 .attachment-remove {
   background: none;
   border: none;
@@ -3744,5 +3870,3 @@ defineExpose({
   color: var(--color-error);
 }
 </style> 
-
-

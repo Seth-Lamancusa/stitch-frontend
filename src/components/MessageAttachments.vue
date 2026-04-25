@@ -2,15 +2,16 @@
   <div v-if="attachments && attachments.length > 0" class="message-attachments">
     <a 
       v-for="att in attachments" 
-      :key="att.name || att.gcs_path"
+      :key="att.id || att.gcs_path || att.url || att.name || att.filename"
       :href="att.url" 
       target="_blank" 
       rel="noopener noreferrer"
+      :title="att.name || att.filename"
       class="attachment-link"
     >
-      <span class="attachment-icon">{{ getIcon(att.type) }}</span>
+      <span class="attachment-icon" aria-hidden="true">{{ getIcon(att) }}</span>
       <div class="attachment-info">
-        <span class="attachment-name">{{ att.name }}</span>
+        <span class="attachment-name">{{ att.name || att.filename || 'attachment' }}</span>
         <span v-if="att.size" class="attachment-size">{{ formatFileSize(att.size) }}</span>
       </div>
     </a>
@@ -25,9 +26,37 @@ defineProps({
   }
 });
 
-const getIcon = (type) => {
-  if (type?.startsWith('image/')) return '🖼️';
-  if (type === 'application/pdf') return '📄';
+const getFileExt = (att) => {
+  const name = att?.name || att?.filename || '';
+  const gcs = att?.gcs_path || '';
+  const candidate = name || gcs.split('/').pop() || '';
+  const ext = candidate.toLowerCase().split('.').pop();
+  return ext || '';
+};
+
+const getFileType = (att) => {
+  return att?.type || att?.mime_type || att?.content_type || '';
+};
+
+const getIcon = (att) => {
+  const mime = getFileType(att);
+  const ext = getFileExt(att);
+
+  if (mime?.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+    return '🖼️';
+  }
+
+  if (mime === 'application/pdf' || ext === 'pdf') return '📄';
+
+  if (mime?.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'webm'].includes(ext)) {
+    return '🎵';
+  }
+
+  if (ext === 'py') return '🐍';
+  if (mime?.startsWith('text/') || ['txt', 'md', 'json', 'yml', 'yaml', 'log'].includes(ext)) {
+    return '📝';
+  }
+
   return '📎';
 };
 
@@ -41,17 +70,23 @@ const formatFileSize = (bytes) => {
 
 <style scoped>
 .message-attachments {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
   margin-top: 8px;
+}
+
+@media (max-width: 520px) {
+  .message-attachments {
+    grid-template-columns: 1fr;
+  }
 }
 
 .attachment-link {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   background: var(--color-surface-2);
   border: 1px solid var(--color-border);
   border-radius: 6px;
@@ -59,7 +94,7 @@ const formatFileSize = (bytes) => {
   color: var(--color-text);
   font-size: 14px;
   transition: background 0.2s;
-  margin-bottom: .6rem;
+  width: 100%;
 }
 
 .attachment-link:hover {
@@ -67,7 +102,7 @@ const formatFileSize = (bytes) => {
 }
 
 .attachment-icon {
-  font-size: 18px;
+  font-size: 16px;
   flex-shrink: 0;
 }
 
@@ -92,7 +127,3 @@ const formatFileSize = (bytes) => {
   opacity: 0.7;
 }
 </style>
-
-
-
-

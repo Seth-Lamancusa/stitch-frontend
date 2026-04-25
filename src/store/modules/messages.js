@@ -741,6 +741,26 @@ export default {
         // Use the current user if content_author is not provided
         const effectiveAuthor = content_author || rootState.auth?.user?.uid;
         
+        // Convert recipient UI selections into bot routing extras.
+        // UI stores per-recipient `bot_version_id` on bot recipients.
+        // Bots service expects `messageData.extras.bot_versions`.
+        let extras = null;
+        if (Array.isArray(recipients) && recipients.length > 0) {
+          const botVersions = {};
+          for (const r of recipients) {
+            if (!r || typeof r !== 'object') continue;
+            const botTag = r.user_tag || r.userTag;
+            const versionId = r.bot_version_id ?? r.botVersionId;
+            if (botTag && versionId) {
+              botVersions[botTag] = versionId;
+            }
+          }
+
+          if (Object.keys(botVersions).length > 0) {
+            extras = { bot_versions: botVersions };
+          }
+        }
+
         // Process recipients - support both string and object formats
         // String format: "alice" or "@alice" or "uid:abc123" (defaults to notify=true)
         // Object format: {user_tag: "alice", public: true, notify: false}
@@ -748,22 +768,25 @@ export default {
         if (recipients && recipients.length > 0) {
           console.log('[Messages Store] Processing recipients:', recipients);
           
-          processedRecipients = recipients.map(recipient => {
-            // If recipient is an object, preserve it with notify flag
-            if (typeof recipient === 'object' && recipient !== null) {
-              // Ensure it has user_tag or uid
-              if (!recipient.user_tag && !recipient.uid) {
-                console.log('[Messages Store] Invalid recipient object (no user_tag or uid):', recipient);
-                return null;
-              }
-              // Preserve the object format for per-recipient options (public, notify)
-              return {
-                user_tag: recipient.user_tag,
-                uid: recipient.uid,
-                public: recipient.public !== undefined ? recipient.public : true,
-                notify: recipient.notify !== undefined ? recipient.notify : true,
-              };
-            }
+              processedRecipients = recipients.map(recipient => {
+                // If recipient is an object, preserve it with notify flag
+                if (typeof recipient === 'object' && recipient !== null) {
+                  // Ensure it has user_tag or uid
+                  if (!recipient.user_tag && !recipient.uid) {
+                    console.log('[Messages Store] Invalid recipient object (no user_tag or uid):', recipient);
+                    return null;
+                  }
+                  // Preserve the object format for per-recipient options (public, notify)
+                  return {
+                    user_tag: recipient.user_tag,
+                    uid: recipient.uid,
+                    public: recipient.public !== undefined ? recipient.public : true,
+                    notify: recipient.notify !== undefined ? recipient.notify : true,
+                    // Preserve per-recipient bot routing selection.
+                    // Backend can merge this into message-level extras for webhook deliveries.
+                    bot_version_id: recipient.bot_version_id ?? recipient.botVersionId ?? null,
+                  };
+                }
             // If recipient is a string, keep as is (defaults to notify=true on backend)
             else if (typeof recipient === 'string') {
               return recipient;
@@ -797,7 +820,8 @@ export default {
           files, 
           subject, 
           channel_ids,
-          context
+          context,
+          extras
         );
 
         
@@ -1430,6 +1454,12 @@ export default {
           messageId: messageId, 
           childId: newChildId 
         });
+
+        // Store the navigation direction for animations
+        commit('navigation/SET_LAST_SIBLING_NAVIGATION', { 
+          targetId: newChildId, 
+          direction: direction 
+        }, { root: true });
         
         // Get current selected message ID
         const selectedMessageId = rootState.navigation?.selectedMessageId;

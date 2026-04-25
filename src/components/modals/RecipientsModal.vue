@@ -30,25 +30,37 @@
               }"
               :title="getRecipientTitle({ ...recipient, isExisting: true })"
             >
-              <div class="recipient-info">
-                <div class="recipient-name-line">
-                  <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
-                  <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
+                <div class="recipient-info">
+                  <div class="recipient-name-line">
+                    <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
+                    <BotVersionIndicator
+                      :is-bot="isBotRecipient(recipient)"
+                      :available-versions="getAvailableVersions(recipient)"
+                      :version-id="getSelectedBotVersionId(recipient)"
+                    />
+                    <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
+                  </div>
+                  <div class="recipient-metadata">
+                  <span class="recipient-timestamp">{{ recipient.timestamp ? new Date(recipient.timestamp).toLocaleString() : 'creation' }}</span>
+                    <span class="recipient-added-by">Added by: {{ recipient.added_by_display }}</span>
+                  </div>
                 </div>
-                <div class="recipient-metadata">
-                <span class="recipient-timestamp">{{ recipient.timestamp ? new Date(recipient.timestamp).toLocaleString() : 'creation' }}</span>
-                  <span class="recipient-added-by">Added by: {{ recipient.added_by_display }}</span>
-                </div>
-              </div>
-              <div class="recipient-controls">
-                <div class="visibility-indicators" :title="getVisibilityTitle(recipient)">
-                  <span v-if="recipient.has_visible" class="visibility-indicator visible">👁️</span>
-                  <span v-if="recipient.has_hidden" class="visibility-indicator hidden">🙈</span>
-                </div>
-                <button 
-                  @click.stop="() => pingRecipient(recipient)" 
-                  class="ping-recipient-btn"
-                  :class="{ 
+                  <div class="recipient-controls">
+                    <div class="visibility-indicators" :title="getVisibilityTitle(recipient)">
+                      <span v-if="recipient.has_visible" class="visibility-indicator visible">👁️</span>
+                      <span v-if="recipient.has_hidden" class="visibility-indicator hidden">🙈</span>
+                    </div>
+                    <BotVersionPicker
+                      v-if="isBotRecipient(recipient) && getAvailableVersions(recipient).length > 1"
+                      :available-versions="getAvailableVersions(recipient)"
+                      :model-value="getSelectedBotVersionId(recipient)"
+                      compact
+                      @update:modelValue="(val) => { botVersionSelection[recipient.uid] = val; }"
+                    />
+                    <button 
+                      @click.stop="() => pingRecipient(recipient)" 
+                      class="ping-recipient-btn"
+                      :class="{ 
                     'pinging': pingingRecipientIds.has(recipient.uid),
                     'success': pingedSuccessfully.has(recipient.uid),
                     'error': pingedWithError.has(recipient.uid)
@@ -263,6 +275,11 @@
                 <div class="recipient-info">
                   <div class="recipient-name-line">
                     <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
+                    <BotVersionIndicator
+                      :is-bot="isBotRecipient(recipient)"
+                      :available-versions="getAvailableVersions(recipient)"
+                      :version-id="botVersionSelection[recipient.uid]"
+                    />
                     <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
                   </div>
                   <div class="recipient-metadata">
@@ -270,6 +287,12 @@
                   </div>
                 </div>
                 <div class="recipient-controls">
+                  <BotVersionPicker
+                    v-if="isBotRecipient(recipient) && getAvailableVersions(recipient).length > 1"
+                    :available-versions="getAvailableVersions(recipient)"
+                    :model-value="botVersionSelection[recipient.uid]"
+                    @update:modelValue="(val) => { botVersionSelection[recipient.uid] = val; store.dispatch('navigation/setRecipientBotVersion', { uid: recipient.uid, versionId: val }); }"
+                  />
                   <button 
                     @click.stop="() => toggleRecipientVisibility(index)"
                     class="visibility-toggle-btn"
@@ -280,6 +303,7 @@
                     <span class="visibility-emoji hidden-emoji">🙈</span>
                     <div class="visibility-slider" :class="{ 'is-visible': recipient.public !== false }"></div>
                   </button>
+
                   <button 
                     @click.stop="() => toggleRecipientNotify(index)"
                     class="notify-toggle-btn"
@@ -316,33 +340,44 @@
             }"
             :title="getRecipientTitle(recipient)"
           >
-            <div class="recipient-info">
-              <div class="recipient-name-line">
-                <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
-                <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
-              </div>
-              <div class="recipient-metadata">
-                <span class="recipient-timestamp">{{ !props.messageId ? 'now' : (recipient.timestamp ? new Date(recipient.timestamp).toLocaleString() : 'creation') }}</span>
-                <span v-if="props.messageId" class="recipient-added-by">Added by: {{ getAddedByText(recipient) }}</span>
-              </div>
-            </div>
-            <div class="recipient-controls">
-              <button 
-                @click.stop="() => toggleRecipientVisibility(index)"
-                class="visibility-toggle-btn"
-                :class="{ 'visible': recipient.public !== false, 'invisible': recipient.public === false }"
-                :title="recipient.public !== false ? 'Visible (CC)' : 'Hidden (BCC)'"
-              >
-                <span class="visibility-emoji visible-emoji">👁️</span>
-                <span class="visibility-emoji hidden-emoji">🙈</span>
-                <div class="visibility-slider" :class="{ 'is-visible': recipient.public !== false }"></div>
-              </button>
-              <button 
-                @click.stop="() => toggleRecipientNotify(index)"
-                class="notify-toggle-btn"
-                :class="{ 'notify': recipient.notify !== false, 'silent': recipient.notify === false }"
-                :title="recipient.notify !== false ? 'Will notify recipient' : 'Silent send (no notification)'"
-              >
+                <div class="recipient-info">
+                  <div class="recipient-name-line">
+                    <span class="recipient-name">{{ recipient.display_name || recipient.user_tag }}</span>
+                    <BotVersionIndicator
+                      :is-bot="isBotRecipient(recipient)"
+                      :available-versions="getAvailableVersions(recipient)"
+                      :version-id="botVersionSelection[recipient.uid]"
+                    />
+                    <span v-if="recipient.user_tag" class="recipient-tag-name">@{{ recipient.user_tag }}</span>
+                  </div>
+                  <div class="recipient-metadata">
+                    <span class="recipient-timestamp">{{ !props.messageId ? 'now' : (recipient.timestamp ? new Date(recipient.timestamp).toLocaleString() : 'creation') }}</span>
+                    <span v-if="props.messageId" class="recipient-added-by">Added by: {{ getAddedByText(recipient) }}</span>
+                  </div>
+                </div>
+                <div class="recipient-controls">
+                  <BotVersionPicker
+                    v-if="isBotRecipient(recipient) && getAvailableVersions(recipient).length > 1"
+                    :available-versions="getAvailableVersions(recipient)"
+                    :model-value="botVersionSelection[recipient.uid]"
+                    @update:modelValue="(val) => { botVersionSelection[recipient.uid] = val; store.dispatch('navigation/setRecipientBotVersion', { uid: recipient.uid, versionId: val }); }"
+                  />
+                  <button 
+                    @click.stop="() => toggleRecipientVisibility(index)"
+                    class="visibility-toggle-btn"
+                    :class="{ 'visible': recipient.public !== false, 'invisible': recipient.public === false }"
+                    :title="recipient.public !== false ? 'Visible (CC)' : 'Hidden (BCC)'"
+                  >
+                    <span class="visibility-emoji visible-emoji">👁️</span>
+                    <span class="visibility-emoji hidden-emoji">🙈</span>
+                    <div class="visibility-slider" :class="{ 'is-visible': recipient.public !== false }"></div>
+                  </button>
+                  <button 
+                    @click.stop="() => toggleRecipientNotify(index)"
+                    class="notify-toggle-btn"
+                    :class="{ 'notify': recipient.notify !== false, 'silent': recipient.notify === false }"
+                    :title="recipient.notify !== false ? 'Will notify recipient' : 'Silent send (no notification)'"
+                  >
                 <span class="notify-emoji notify-emoji-on">🔔</span>
                 <span class="notify-emoji notify-emoji-off">🔕</span>
                 <div class="notify-slider" :class="{ 'is-notify': recipient.notify !== false }"></div>
@@ -477,9 +512,11 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { ref, computed, watch, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import MessageService from '../../services/MessageService.js';
+import BotVersionPicker from '../common/BotVersionPicker.vue';
+import BotVersionIndicator from '../common/BotVersionIndicator.vue';
 // SpeedDialService removed - using Vuex store
 
 const props = defineProps({
@@ -556,14 +593,16 @@ const deduplicateRecipients = (recipientEdges, currentUserUid) => {
   });
   
   // Reconcile each group into a single recipient entry
-  return Object.entries(recipientGroups).map(([uid, edges]) => {
-    // Get basic user info from first edge
-    const firstEdge = edges[0];
-    const reconciled = {
-      uid: uid,
-      display_name: firstEdge.display_name,
-      user_tag: firstEdge.user_tag
-    };
+    return Object.entries(recipientGroups).map(([uid, edges]) => {
+      // Get basic user info from first edge
+      const firstEdge = edges[0];
+      const reconciled = {
+        uid: uid,
+        display_name: firstEdge.display_name,
+        user_tag: firstEdge.user_tag,
+        is_bot: !!(firstEdge.is_bot ?? firstEdge.isBot),
+        available_versions: firstEdge.available_versions ?? firstEdge.availableVersions ?? null
+      };
     
     // Reconcile added_by: collect all unique adders
     const adders = [...new Set(edges.map(e => e.added_by).filter(Boolean))];
@@ -606,13 +645,6 @@ const deduplicateRecipients = (recipientEdges, currentUserUid) => {
 
 // Computed
 const recipients = computed(() => {
-  console.log('[RecipientsModal] recipients computed - debug:', {
-    propsIsAddMode: props.isAddMode,
-    storeIsAddMode: store.getters['navigation/recipientsModalIsAddMode'],
-    addModeRecipients: store.getters['navigation/addModeRecipients'],
-    replyRecipients: store.getters['navigation/replyRecipients']
-  });
-  
   if (props.isAddMode) {
     // In add mode, show only the staged recipients for adding to existing message
     return store.getters['navigation/addModeRecipients'];
@@ -627,13 +659,6 @@ const deduplicatedExistingRecipients = computed(() => {
   if (!props.isAddMode || !props.existingRecipients) return [];
   
   const deduplicated = deduplicateRecipients(props.existingRecipients, currentUser.value?.uid);
-  
-  console.log('[RecipientsModal] Recipient deduplication:', {
-    original: props.existingRecipients.length,
-    deduplicated: deduplicated.length,
-    originalData: props.existingRecipients,
-    deduplicatedData: deduplicated
-  });
   
   return deduplicated;
 });
@@ -682,6 +707,63 @@ const currentMessage = computed(() => {
   return store.getters['messages/getMessage'](props.messageId);
 });
 
+// UI-only bot version selection state.
+// Keys are recipient.uid.
+const botVersionSelection = reactive({});
+
+const getSelectedBotVersionId = (recipient) => {
+  const uid = recipient?.uid;
+  if (!uid) return null;
+
+  // If the user interacted with the dropdown, respect even an explicit null
+  // (which represents "Default" / unspecified).
+  const hasSelection = Object.prototype.hasOwnProperty.call(botVersionSelection, uid);
+  if (hasSelection) return botVersionSelection[uid];
+
+  return recipient.bot_version_id ?? recipient.botVersionId ?? null;
+};
+
+const isBotRecipient = (recipient) => !!(recipient?.is_bot ?? recipient?.isBot);
+
+const getAvailableVersions = (recipient) => {
+  const v = recipient?.available_versions ?? recipient?.availableVersions;
+  return Array.isArray(v) ? v : [];
+};
+
+const getDefaultVersionId = (availableVersions) => {
+  if (!Array.isArray(availableVersions) || availableVersions.length === 0) return null;
+  const def = availableVersions.find(v => v && v.default === true);
+  return def?.id || availableVersions[0]?.id || null;
+};
+
+watch(
+  recipients,
+  (list) => {
+    const uidsInList = new Set((list || []).map(r => r?.uid).filter(Boolean));
+
+    // Drop selections for recipients no longer shown.
+    for (const key of Object.keys(botVersionSelection)) {
+      if (!uidsInList.has(key)) delete botVersionSelection[key];
+    }
+
+    (list || []).forEach((recipient) => {
+      if (!recipient?.uid) return;
+      if (!isBotRecipient(recipient)) return;
+
+      const availableVersions = getAvailableVersions(recipient);
+      if (!availableVersions.length) return;
+
+      // Default (leftmost option) means "unspecified", which should let the backend/bots fall back.
+      if (!(recipient.uid in botVersionSelection)) {
+        botVersionSelection[recipient.uid] = null;
+        store.dispatch('navigation/setRecipientBotVersion', { uid: recipient.uid, versionId: null });
+      }
+    });
+
+  },
+  { immediate: true }
+);
+
 // Determine if we're actually adding to an existing message or just managing staged recipients
 const isActuallyAddingToExisting = computed(() => {
   return props.isAddMode && props.existingRecipients && props.existingRecipients.length > 0;
@@ -693,11 +775,6 @@ const isNewMessageMode = computed(() => {
   // ReplyBox opens with isAddMode: false (new message mode)
   // MessageNode opens with isAddMode: true (add mode)
   const result = !props.isAddMode;
-  console.log('[RecipientsModal] isNewMessageMode:', result, {
-    isAddMode: props.isAddMode,
-    messageId: props.messageId,
-    existingRecipientsLength: props.existingRecipients?.length
-  });
   return result;
 });
 
@@ -742,12 +819,6 @@ const hasNewRecipients = computed(() => {
     ? store.getters['navigation/addModeRecipients'] 
     : store.getters['navigation/replyRecipients'];
   const result = newRecipients.length > 0;
-  console.log('[RecipientsModal] hasNewRecipients:', result, {
-    isAddMode: props.isAddMode,
-    newRecipientsLength: newRecipients.length,
-    newRecipients: newRecipients,
-    isNewMessageMode: isNewMessageMode.value
-  });
   return result;
 });
 
@@ -1006,10 +1077,12 @@ const selectSearchResult = (user) => {
     // Use the full user object
     isTagValid.value = true;
     
-    const recipientToAdd = {
+      const recipientToAdd = {
       uid: user.uid,
       display_name: user.display_name,
       user_tag: user.user_tag,
+      is_bot: !!(user.is_bot ?? user.isBot),
+      available_versions: user.available_versions ?? user.availableVersions ?? null,
       public: true, // Default to public (CC)
       visible: true
     };
@@ -1177,7 +1250,17 @@ const pingRecipient = async (recipient) => {
     
     // Use the new explicit ping endpoint
     // This triggers a 'ping' notification instead of 'added'
-    const recipientsToPing = [recipient.user_tag || recipient.uid];
+    const user_tag = recipient.user_tag ?? recipient.userTag;
+    const uid = recipient.uid;
+    const bot_version_id = getSelectedBotVersionId(recipient);
+
+    const recipientsToPing = [
+      bot_version_id && user_tag
+        ? { user_tag, uid, bot_version_id }
+        : (user_tag || uid)
+    ];
+
+    console.log('[RecipientsModal] ping recipients payload (preserve bot_version_id)', recipientsToPing);
     
     // Resolve context (ancestors) for the bot
     let context = null;
@@ -1274,10 +1357,20 @@ const toggleSpeedDialUser = (user) => {
       store.dispatch('navigation/removeRecipient', index);
     }
   } else {
+    const managedUsers = store.getters['auth/managedUsers'] || [];
+    const managedMatch = managedUsers.find(mu => {
+      const id = mu?.uid || mu?.id || mu?._key;
+      return id && id === user.uid;
+    });
+    const isBot = !!(user.is_bot ?? user.isBot ?? managedMatch?.is_bot ?? managedMatch?.isBot);
+
     store.dispatch('navigation/addRecipient', {
       uid: user.uid,
       display_name: user.display_name,
-      user_tag: user.user_tag
+      user_tag: user.user_tag,
+      // Speed dial users may include bot fields; if not, the UI will fall back to Default.
+      is_bot: isBot,
+      available_versions: user.available_versions ?? user.availableVersions ?? managedMatch?.available_versions ?? managedMatch?.availableVersions ?? null
     });
   }
 };

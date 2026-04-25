@@ -11,6 +11,7 @@ import AboutView from './views/info_views/AboutView.vue';
 import ArchitectureView from './views/info_views/ArchitectureView.vue';
 import TermsView from './views/info_views/TermsView.vue';
 import HowView from './views/info_views/HowView.vue';
+import StitchBotsView from './views/info_views/StitchBotsView.vue';
 import MessageListView from './views/app_views/MessageListView.vue';
 import PasswordResetView from './views/app_views/PasswordResetView.vue';
 import ImportView from './views/app_views/ImportView.vue';
@@ -64,6 +65,11 @@ const routes = [
   {
     path: '/how',
     component: HowView
+  },
+  {
+    path: '/bots',
+    name: 'bots',
+    component: StitchBotsView
   },
   {
     path: '/inbox',

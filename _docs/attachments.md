@@ -17,7 +17,7 @@ Frontend implementation for PDF and image attachment support, integrating with b
   - Returns promise with attachment metadata
   - Handles upload progress and errors
   - Max file size: 100MB (client-side validation; backend may enforce different limit)
-  - Validates file types: PDF, JPEG, PNG, GIF, WebP
+   - Validates file types: PDF, JPEG, PNG, GIF, WebP, and Python code (.py)
   - Provides user-friendly error messages for:
     - File size exceeded
     - Invalid file type
@@ -164,7 +164,7 @@ Attachments are stored in the `attachments` array of each message:
 - Check network connection
 - Verify backend is running
 - Check file size (client validates up to 100MB; backend may enforce different limit)
-- Verify file type is supported (PDF, JPEG, PNG, GIF, WebP)
+   - Verify file type is supported (PDF, JPEG, PNG, GIF, WebP, .py)
 - Check browser console for detailed error message
 
 ### Signed URLs expire
@@ -206,4 +206,3 @@ Attachments are stored in the `attachments` array of each message:
 9. **Cleanup orphaned uploads** - Remove files from GCS if user removes attachment before sending
 10. **Upload retry** - Retry failed uploads automatically
 11. **Image compression** - Client-side compression before upload for large images
-

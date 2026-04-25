@@ -75,6 +75,10 @@ export default {
     selectedChannelId: null, // Channel ID selected in channels view
     // When set, message list should remove this id from local list/cache (used after delete + redirect)
     lastDeletedMessageId: null,
+
+    // Used to trigger sibling-navigation animations in MessageNode.
+    // Shape: { targetId, direction, timestamp }
+    lastSiblingNavigation: null
   },
   
   mutations: {
@@ -205,6 +209,13 @@ export default {
       }
     },
     
+    SET_REPLY_RECIPIENT_BOT_VERSION(state, { uid, versionId }) {
+      const recipient = state.replySettings.recipients.find(r => r.uid === uid);
+      if (recipient) {
+        recipient.bot_version_id = versionId;
+      }
+    },
+    
     CLEAR_REPLY_RECIPIENTS(state) {
       state.replySettings.recipients = [];
     },
@@ -244,6 +255,13 @@ export default {
       if (state.addModeRecipients[index]) {
         const recipient = state.addModeRecipients[index];
         recipient.notify = !recipient.notify;
+      }
+    },
+    
+    SET_ADD_MODE_RECIPIENT_BOT_VERSION(state, { uid, versionId }) {
+      const recipient = state.addModeRecipients.find(r => r.uid === uid);
+      if (recipient) {
+        recipient.bot_version_id = versionId;
       }
     },
     
@@ -329,13 +347,27 @@ export default {
       state.speedDialModalVisible = false;
       state.speedDialTargetMessageId = null;
     },
-    TRIGGER_REFRESH(state) {
+    
+    SET_REFRESH_TRIGGER(state) {
       state.refreshTrigger = Date.now();
     },
     
     SET_SELECTED_CHANNEL_ID(state, channelId) {
-      state.selectedChannelId = channelId || null;
+      state.selectedChannelId = channelId;
     },
+    
+    SET_LAST_DELETED_MESSAGE_ID(state, id) {
+      state.lastDeletedMessageId = id;
+    },
+
+    SET_LAST_SIBLING_NAVIGATION(state, { targetId, direction }) {
+      const timestamp = Date.now();
+      state.lastSiblingNavigation = { targetId, direction, timestamp };
+    },
+    
+    TRIGGER_REFRESH(state) {
+      state.refreshTrigger = Date.now();
+    }
   },
   
   getters: {
@@ -416,6 +448,7 @@ export default {
     // Refresh trigger getter
     refreshTrigger: (state) => state.refreshTrigger,
     lastDeletedMessageId: (state) => state.lastDeletedMessageId,
+    lastSiblingNavigation: (state) => state.lastSiblingNavigation,
   },
   
   actions: {
@@ -477,11 +510,9 @@ export default {
         commit('ADD_REPLY_RECIPIENT', recipient);
       }
     },
-    
+
     removeRecipient({ commit, state }, index) {
-      // Check if we're in add mode or new message mode
       const isAddMode = state.recipientsModal.isAddMode;
-            
       if (isAddMode) {
         commit('REMOVE_ADD_MODE_RECIPIENT', index);
       } else {
@@ -508,6 +539,15 @@ export default {
         commit('TOGGLE_ADD_MODE_RECIPIENT_NOTIFY', index);
       } else {
         commit('TOGGLE_REPLY_RECIPIENT_NOTIFY', index);
+      }
+    },
+    
+    setRecipientBotVersion({ commit, state }, { uid, versionId }) {
+      const isAddMode = state.recipientsModal.isAddMode;
+      if (isAddMode) {
+        commit('SET_ADD_MODE_RECIPIENT_BOT_VERSION', { uid, versionId });
+      } else {
+        commit('SET_REPLY_RECIPIENT_BOT_VERSION', { uid, versionId });
       }
     },
     
@@ -591,7 +631,7 @@ export default {
       const targetId = messageId || state.replyingToMessageId;
       if (!targetId) return;
       
-      const message = rootGetters['messages/getMessage'](targetId);
+      let message = rootGetters['messages/getMessage'](targetId);
       if (!message) return;
       
       const currentUser = rootGetters['auth/user'];
@@ -656,6 +696,8 @@ export default {
             uid: authorUid,
             display_name: message.author_display_name || message.author?.display_name,
             user_tag: authorTag,
+            is_bot: !!(message.author?.is_bot ?? message.author?.isBot),
+            available_versions: message.author?.available_versions ?? message.author?.availableVersions ?? null,
             public: true,
             notify: true
           };
@@ -696,6 +738,8 @@ export default {
             user_tag: recipient.user_tag,
             // keep whatever backend provides; email may be absent
             email: recipient.email,
+            is_bot: !!(recipient.is_bot ?? recipient.isBot),
+            available_versions: recipient.available_versions ?? recipient.availableVersions ?? null,
             public: (recipient.public !== false),
             // Default behavior: all parent recipients get notify: false
             // (parent author already added with notify: true in step 5)
@@ -816,6 +860,3 @@ export default {
     },
   }
 };
-
-
-

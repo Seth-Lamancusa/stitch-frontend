@@ -117,16 +117,30 @@
                 </div>
               </div>
             </div>
-            <div class="draft-tags">
-              <span
+            <div class="draft-recipient-cards">
+              <div
                 v-for="(r, i) in replyRecipients"
                 :key="r.uid || i"
-                class="draft-tag"
+                class="draft-recipient-card"
               >
-                {{ r.display_name || r.user_tag }}
-                <button type="button" class="draft-tag-remove" aria-label="Remove" @click="removeRecipient(i)">×</button>
-              </span>
-              <span v-if="!replyRecipients.length" class="draft-empty-hint">None</span>
+                <div class="draft-recipient-card-main">
+                  <div class="draft-recipient-card-name-line">
+                    <div class="draft-recipient-card-name">{{ r.display_name || r.user_tag }}</div>
+                    <div v-if="r.user_tag" class="draft-recipient-card-tag">@{{ r.user_tag }}</div>
+                  </div>
+                </div>
+
+                <BotVersionPicker
+                  v-if="isBotRecipient(r) && getAvailableVersions(r).length > 1"
+                  :available-versions="getAvailableVersions(r)"
+                  :model-value="r.bot_version_id || null"
+                  @update:modelValue="(val) => store.dispatch('navigation/setRecipientBotVersion', { uid: r.uid, versionId: val })"
+                />
+
+                <button type="button" class="draft-recipient-remove" aria-label="Remove" @click="removeRecipient(i)">×</button>
+              </div>
+
+              <div v-if="!replyRecipients.length" class="draft-empty-hint">None</div>
             </div>
           </div>
         </div>
@@ -200,6 +214,7 @@ import ChannelDropdown from '../../components/ChannelDropdown.vue';
 import ChannelsService from '../../services/ChannelsService.js';
 import { useAuthentication } from '../../composables/useAuthentication';
 import LoginButton from '@buttons/LoginButton.vue'
+import BotVersionPicker from '../../components/common/BotVersionPicker.vue';
 
 // Setup store and routing
 const store = useStore();
@@ -298,7 +313,9 @@ function selectRecipient(user) {
     display_name: user.display_name,
     user_tag: user.user_tag,
     public: true,
-    notify: true
+    notify: true,
+    is_bot: !!(user.is_bot ?? user.isBot),
+    available_versions: user.available_versions ?? user.availableVersions ?? null
   });
   newRecipient.value = '';
   searchResults.value = [];
@@ -307,6 +324,15 @@ function selectRecipient(user) {
 
 function removeRecipient(index) {
   store.dispatch('navigation/removeRecipient', index);
+}
+
+function isBotRecipient(r) {
+  return !!(r?.is_bot ?? r?.isBot);
+}
+
+function getAvailableVersions(r) {
+  const v = r?.available_versions ?? r?.availableVersions;
+  return Array.isArray(v) ? v : [];
 }
 
 // Speed dial (under recipients)
@@ -328,7 +354,9 @@ function toggleSpeedDialUser(user) {
       display_name: user.display_name,
       user_tag: user.user_tag,
       public: true,
-      notify: true
+      notify: true,
+      is_bot: !!(user.is_bot ?? user.isBot),
+      available_versions: user.available_versions ?? user.availableVersions ?? null
     });
   }
 }
@@ -597,6 +625,73 @@ const closeProfileModal = () => {
   gap: var(--space-xs);
   align-items: center;
   min-height: 28px;
+}
+
+.draft-recipient-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.draft-recipient-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background-color: var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.05));
+  border: 1px solid var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.2));
+  transition: all 0.2s ease;
+}
+
+.draft-recipient-card-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.draft-recipient-card-name-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.draft-recipient-card-name {
+  font-weight: 500;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.draft-recipient-card-tag {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.draft-recipient-remove {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-error);
+  font-size: 18px;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.draft-recipient-remove:hover {
+  background-color: var(--color-error-light, rgba(220, 38, 38, 0.1));
 }
 
 .draft-tag {
