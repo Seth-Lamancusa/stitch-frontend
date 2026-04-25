@@ -5,7 +5,7 @@
  * by other formatters, particularly for code blocks and LaTeX.
  */
 
-import { getInlineDollarSegments, looksLikeLatexInline } from './inlineDollarMath';
+import { replaceInlineDollarMath } from './inlineDollarMath';
 
 /**
  * Generate a unique placeholder for protected content
@@ -137,33 +137,18 @@ export function protectInlineLatex(content, context) {
   const { protectedZones } = context;
 
   // Protect inline `$...$` that looks like LaTeX.
-  // This scanner is careful about escaped dollars inside math like `\\$900`.
-  let processedContent = content;
-
-  // Note: we avoid regex /\$([^$\n]+)\$/ because it breaks on inner `\$...`.
-  const segments = getInlineDollarSegments(content);
-  if (segments.length > 0) {
-    let out = '';
-    let cursor = 0;
-    for (const seg of segments) {
-      out += content.slice(cursor, seg.start);
-
-      if (looksLikeLatexInline(seg.inner)) {
-        const placeholder = generatePlaceholder('latex_inline');
-        protectedZones.set(placeholder, {
-          type: 'latex_inline',
-          original: content.slice(seg.start, seg.end),
-          content: seg.inner
-        });
-        out += placeholder;
-      } else {
-        out += content.slice(seg.start, seg.end);
-      }
-
-      cursor = seg.end;
+  // This keeps scanning safe for prose/currency-like spans.
+  let processedContent = replaceInlineDollarMath(content, {
+    onMath: ({ inner, raw }) => {
+      const placeholder = generatePlaceholder('latex_inline');
+      protectedZones.set(placeholder, {
+        type: 'latex_inline',
+        original: raw,
+        content: inner
+      });
+      return placeholder;
     }
-    processedContent = out + content.slice(cursor);
-  }
+  });
   
   // Match inline LaTeX: \(latex\)
   // Use non-greedy match to capture content between \( and \)

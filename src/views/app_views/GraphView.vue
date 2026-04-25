@@ -1,8 +1,8 @@
 <template>
   <div class="graph-view">
     <!-- Header (simplified) -->
-    <div class="graph-header">
-      <div class="header-left">
+    <div class="graph-header" :class="{ 'drawing-mode': ui.isStitchDrawingMode }">
+      <div class="header-left" v-if="!ui.isStitchDrawingMode">
         <button
           @click="goBack"
           class="back-button"
@@ -38,6 +38,35 @@
           </svg>
           {{ isLoadingAll ? loadingProgress : 'Load All' }}
         </button>
+
+        <button
+          @click="startDrawingStitch"
+          class="draw-stitch-button"
+          title="Connect two messages with a stitch"
+        >
+          <span class="stitch-icon">🪡</span>
+          Draw Stitch
+        </button>
+      </div>
+
+      <div class="header-left drawing-controls" v-else>
+        <div class="drawing-instruction">
+          <span class="pulse-dot"></span>
+          {{ ui.stitchSourceId ? 'Select posterior node' : 'Select prior node' }}
+        </div>
+        
+        <div v-if="isLinking" class="linking-status">
+          <div class="button-spinner small"></div>
+          Stitching...
+        </div>
+
+        <button 
+          @click="cancelDrawingStitch" 
+          class="cancel-draw-button"
+          :disabled="isLinking"
+        >
+          ✕
+        </button>
       </div>
     </div>
     
@@ -50,6 +79,7 @@
           :width="canvasWidth"
           :height="canvasHeight"
           @messages-loaded="refreshGraphFromStore"
+          @messages-loading-start="handleMessagesLoadingStart"
           @message-click="handleMessageClick"
         />
         
@@ -62,14 +92,14 @@
             </div>
             
             <div v-else-if="messageCount === 0" class="status-empty">
-              <div class="loading-spinner"></div>
-              <p class="loading-text">Loading thread...</p>
+              <p class="loading-text">No graph data loaded.</p>
             </div>
           </div>
         </div>
       </div>
-      
 
+      <!-- Right side panel (message details) -->
+      <graph-side-panel />
     </div>
   </div>
 </template>
@@ -77,12 +107,15 @@
 <script>
 import { mapState, mapGetters, mapActions } from 'vuex';
 import GraphCanvas from '../../components/graph/GraphCanvas.vue';
+import GraphSidePanel from '../../components/graph/GraphSidePanel.vue';
+import UserService from '../../services/UserService.js';
 
 
 export default {
   name: 'GraphView',
   components: {
     GraphCanvas,
+    GraphSidePanel
   },
   
   data() {
@@ -92,14 +125,18 @@ export default {
       refreshTimeout: null,
       unwatchMessages: null,
       isLoadingAll: false,
-      loadingProgress: ''
+      loadingProgress: '',
+      pendingMessagesLoad: null,
+      stashedSelectedId: null,
+      isLinking: false
     };
   },
   
   computed: {
     ...mapState('graphView', [
       'currentMessageId',
-      'messages'
+      'messages',
+      'ui'
     ]),
     
     ...mapGetters('graphView', [
@@ -116,7 +153,7 @@ export default {
     },
     
     isLoading() {
-      return this.isLayoutCalculating || this.messageCount === 0;
+      return this.isLayoutCalculating;
     },
     
     showStatus() {
@@ -157,6 +194,9 @@ export default {
           clearTimeout(this.refreshTimeout);
         }
         this.refreshTimeout = setTimeout(() => {
+          // When a user-triggered incremental expansion is in-flight,
+          // prefer the explicit payload-based refresh (from GraphCanvas).
+          if (this.pendingMessagesLoad) return;
           this.refreshGraphFromStore();
         }, 300);
       }
@@ -178,33 +218,80 @@ export default {
       'initializeGraph',
       'calculateLayout',
       'selectMessage',
-      'clearSelection'
+      'clearSelection',
+      'startStitchDrawing',
+      'cancelStitchDrawing',
+      'addStitchLink'
     ]),
-    
-    async loadGraphData(messageId) {
-      try {
-        const hasStartingMessage = !!this.$store.getters['messages/getMessage'](messageId);
 
-        // If message not in store (direct load), traverse from center like ThreadView
-        if (!hasStartingMessage) {
-          await this.$store.dispatch('messages/loadMessageRadius', {
-          messageId,
-            radius: 5
-          });
-        }
+    startDrawingStitch() {
+      // Stash currently selected message ID to restore later
+      this.stashedSelectedId = this.$store.state.graphView.selection.lastSelectedId;
+      this.startStitchDrawing();
+    },
 
-        // Prepare branch path from currently available messages in the store
-        await this.$store.dispatch('messages/prepareBranchPath', messageId);
-
-        // Build a store-only subgraph: highest ancestor down through all loaded descendants
-        const messages = this.collectStoreSubgraph(messageId);
-
-        // Initialize graph with data from store
-        await this.initializeGraph({ messageId, messages });
-      } catch (error) {
-        console.error('[GraphView] Failed to load graph data:', error);
-        this.$router.push('/');
+    cancelDrawingStitch() {
+      this.cancelStitchDrawing();
+      // Restore previous selection if it existed
+      if (this.stashedSelectedId) {
+        this.selectMessage({ messageId: this.stashedSelectedId, multiSelect: false });
       }
+    },
+
+    handleMessageClick({ message, multiSelect = false }) {
+      if (!message || !message.id) return;
+
+      // Handle stitch drawing mode
+      if (this.ui.isStitchDrawingMode) {
+        if (!this.ui.stitchSourceId) {
+          // First node selected - set as source
+          this.$store.commit('graphView/SET_STITCH_DRAWING_MODE', { 
+            isDrawing: true, 
+            sourceId: message.id 
+          });
+          // Highlight the source node visually using the standard selection state
+          this.selectMessage({ messageId: message.id, multiSelect: false });
+        } else if (message.id !== this.ui.stitchSourceId) {
+          // Second node selected - perform stitch
+          this.confirmStitchLink(this.ui.stitchSourceId, message.id);
+        }
+        return;
+      }
+
+      // Normal selection mode
+      this.selectMessage({
+        messageId: message.id,
+        multiSelect
+      });
+    },
+
+    async confirmStitchLink(sourceId, targetId) {
+      if (this.isLinking) return;
+      
+      this.isLinking = true;
+      try {
+        const success = await UserService.createLink(sourceId, targetId);
+        if (success) {
+          // Optimistically update the graph edges in the store
+          this.addStitchLink({ sourceId, targetId });
+          
+          // Selection is already on the target node; side panel will open automatically
+          // because isStitchDrawingMode becomes false in addStitchLink action.
+        } else {
+          alert('Failed to create stitch link.');
+          this.cancelDrawingStitch();
+        }
+      } catch (e) {
+        console.error('[GraphView] Error creating stitch:', e);
+        alert('Error creating stitch link.');
+        this.cancelDrawingStitch();
+      } finally {
+        this.isLinking = false;
+      }
+    },
+
+    handleMessagesLoadingStart(payload) {
+      this.pendingMessagesLoad = payload || {};
     },
 
     // Collect a subgraph from store-only data: from highest in-store ancestor and all in-store descendants
@@ -220,7 +307,7 @@ export default {
         p = highest.parent_id;
       }
 
-      // BFS down including all children that already exist in store
+      // BFS across reply-children and stitch-neighbors that already exist in store
       const result = new Map();
       const queue = [highest.id];
       while (queue.length) {
@@ -228,30 +315,118 @@ export default {
         const m = getMsg(id);
         if (!m || result.has(id)) continue;
         result.set(id, m);
+
+        // Include reply parents too.
+        // Without this, reply-ancestor expansions for nodes that were reached via stitch links
+        // can be loaded into the store but omitted from the rendered subgraph.
+        const parentId = m.parent_id;
+        if (parentId && getMsg(parentId)) queue.push(parentId);
+
         const kids = Array.isArray(m.child_ids) ? m.child_ids : [];
-        for (const k of kids) {
-          if (getMsg(k)) queue.push(k);
-        }
+        const stitchKids = Array.isArray(m.stitch_child_ids) ? m.stitch_child_ids : [];
+        const stitchParents = Array.isArray(m.stitch_parent_ids) ? m.stitch_parent_ids : [];
+
+        for (const k of kids) if (getMsg(k)) queue.push(k);
+        for (const sk of stitchKids) if (getMsg(sk)) queue.push(sk);
+        for (const sp of stitchParents) if (getMsg(sp)) queue.push(sp);
       }
 
       return Array.from(result.values());
     },
     
-    // Refresh graph view with current store data
-    async refreshGraphFromStore() {
+    // Refresh graph view with current store data (incremental, anchored)
+    async refreshGraphFromStore(eventPayload = {}) {
       if (!this.currentMessageId) return;
       
       try {
+        const prevIds = new Set(this.messages.map((m) => m.id));
+
         // Re-collect subgraph from store (includes newly loaded messages)
         const messages = this.collectStoreSubgraph(this.currentMessageId);
-        
-        // Update graph view with new messages
-        await this.$store.dispatch('graphView/initializeGraph', {
+        const nextIds = new Set(messages.map((m) => m.id));
+        const addedIds = Array.from(nextIds).filter((id) => !prevIds.has(id));
+
+        const anchorId = eventPayload.anchorMessageId || this.currentMessageId;
+
+        const lockOtherTrees = eventPayload.lockOtherTrees !== false;
+
+        // Reply-connected component rooted at anchorId.
+        // Nodes outside this component are considered "other trees" and must keep their
+        // existing coordinates (locked) so we don't reset the whole canvas.
+        const msgMap = new Map(messages.map((m) => [m.id, m]));
+        const idSet = new Set(messages.map((m) => m.id));
+
+        let lockedNodeIds = null;
+        if (lockOtherTrees) {
+          const replyComponentIds = new Set();
+          if (anchorId && msgMap.has(anchorId)) {
+            const q = [anchorId];
+            while (q.length) {
+              const id = q.shift();
+              if (!id || replyComponentIds.has(id)) continue;
+              if (!msgMap.has(id)) continue;
+              replyComponentIds.add(id);
+
+              const m = msgMap.get(id);
+              const parentId = m?.parent_id;
+              if (parentId && idSet.has(parentId)) q.push(parentId);
+
+              const childIds = Array.isArray(m?.child_ids) ? m.child_ids : [];
+              for (const childId of childIds) {
+                if (idSet.has(childId)) q.push(childId);
+              }
+            }
+          }
+
+          lockedNodeIds = new Set(Array.from(prevIds).filter((id) => !replyComponentIds.has(id)));
+        }
+
+        // For stitched expansions, influence left/right placement.
+        // Only stitch-in is forced to the left; stitch-out keeps existing/default placement.
+        let rootPriorityMap = null;
+        if (eventPayload?.stitchEdgeType === 'in' && addedIds.length > 0) {
+          const findReplyRootId = (startId) => {
+            let cur = startId;
+            let guard = 0;
+            while (cur && msgMap.has(cur) && guard < 2000) {
+              guard += 1;
+              const m = msgMap.get(cur);
+              const p = m?.parent_id;
+              if (p && msgMap.has(p)) {
+                cur = p;
+                continue;
+              }
+              return cur;
+            }
+            return startId;
+          };
+
+          const originalRootId = findReplyRootId(anchorId);
+          const addedRootIds = new Set(addedIds.map((id) => findReplyRootId(id)));
+
+          rootPriorityMap = new Map();
+          // Keep the original root in the middle.
+          if (originalRootId) rootPriorityMap.set(originalRootId, 50);
+
+          for (const rid of addedRootIds) {
+            if (rid === originalRootId) continue;
+            rootPriorityMap.set(rid, 0);
+          }
+        }
+
+        await this.$store.dispatch('graphView/updateGraphMessages', {
           messageId: this.currentMessageId,
-          messages
+          messages,
+          fitToContent: false,
+          anchorId,
+          rootPriorityMap,
+          lockedNodeIds
         });
       } catch (error) {
         console.error('[GraphView] Failed to refresh graph from store:', error);
+      } finally {
+        // Done with this explicit refresh; allow watcher-driven updates again.
+        this.pendingMessagesLoad = null;
       }
     },
     
@@ -271,15 +446,36 @@ export default {
         this.$router.push('/');
       }
     },
-    
-    handleMessageClick({ message }) {
-      // Navigate to thread view with the clicked message ID
-      // ThreadView will automatically scroll to this message via ensureCorrectScroll
-      if (message && message.id) {
-        this.$router.push(`/messages/${message.id}`);
+
+    async loadGraphData(messageId) {
+      // No auto-loading: render whatever is already in store.
+      const graphState = this.$store.state.graphView;
+
+      // Reuse previous session if it matches the current origin and we already have a layout.
+      const hasSession =
+        graphState.currentMessageId === messageId &&
+        Array.isArray(graphState.messages) &&
+        graphState.messages.length > 0 &&
+        graphState.layout?.positions &&
+        graphState.layout.positions.size > 0;
+
+      if (hasSession) {
+        this.clearSelection();
+        return;
       }
+
+      // Otherwise initialize from what is already loaded in the global messages store.
+      const combined = this.collectStoreSubgraph(messageId);
+      if (combined.length > 0) {
+        await this.$store.dispatch('graphView/initializeGraph', {
+          messageId,
+          messages: combined
+        });
+      }
+
+      // Default render should not auto-select any node.
+      this.clearSelection();
     },
-    
     
     // Canvas management
     updateCanvasSize() {
@@ -383,21 +579,39 @@ export default {
           const currentMessages = this.messages;
           if (currentMessages.length === 0) break;
           
-          // Find messages with unloaded parents
-          const messagesWithUnloadedParents = currentMessages.filter(msg => {
-            if (!msg.parent_id) return false;
-            const parentLoaded = !!this.$store.getters['messages/getMessage'](msg.parent_id);
-            return !parentLoaded;
-          });
-          
-          // Find messages with unloaded children
-          const messagesWithUnloadedChildren = currentMessages.filter(msg => {
-            const childIds = msg.child_ids || [];
-            if (!childIds.length) return false;
-            return childIds.some(id => !this.$store.getters['messages/getMessage'](id));
-          });
-          
-          const totalToLoad = messagesWithUnloadedParents.length + messagesWithUnloadedChildren.length;
+           // Find messages with unloaded reply parents
+           const messagesWithUnloadedParents = currentMessages.filter(msg => {
+             if (!msg.parent_id) return false;
+             const parentLoaded = !!this.$store.getters['messages/getMessage'](msg.parent_id);
+             return !parentLoaded;
+           });
+
+           // Find messages with unloaded reply children
+           const messagesWithUnloadedChildren = currentMessages.filter(msg => {
+             const childIds = msg.child_ids || [];
+             if (!childIds.length) return false;
+             return childIds.some(id => !this.$store.getters['messages/getMessage'](id));
+           });
+
+           // Find messages with unloaded stitch-in neighbors (links inbound)
+           const messagesWithUnloadedStitchParents = currentMessages.filter(msg => {
+             const ids = msg.stitch_parent_ids || [];
+             if (!ids.length) return false;
+             return ids.some(id => !this.$store.getters['messages/getMessage'](id));
+           });
+
+           // Find messages with unloaded stitch-out neighbors (links outbound)
+           const messagesWithUnloadedStitchChildren = currentMessages.filter(msg => {
+             const ids = msg.stitch_child_ids || [];
+             if (!ids.length) return false;
+             return ids.some(id => !this.$store.getters['messages/getMessage'](id));
+           });
+
+           const totalToLoad =
+             messagesWithUnloadedParents.length +
+             messagesWithUnloadedChildren.length +
+             messagesWithUnloadedStitchParents.length +
+             messagesWithUnloadedStitchChildren.length;
           
           // If nothing to load, we're done
           if (totalToLoad === 0) {
@@ -411,45 +625,75 @@ export default {
           
           this.loadingProgress = `Iteration ${iteration}: ${totalToLoad} branches`;
           
-          // Load parents in parallel
-          const parentPromises = messagesWithUnloadedParents.map(msg =>
-            this.$store.dispatch('messages/loadMessageBranchUp', {
-              messageId: msg.id,
-              depth: 5
-            }).catch(err => {
-              console.error(`[GraphView] Failed to load parents for ${msg.id}:`, err);
-            })
-          );
+           // Load parents in parallel (replies inbound)
+           const parentPromises = messagesWithUnloadedParents.map(msg =>
+             this.$store.dispatch('messages/loadMessageBranchUp', {
+               messageId: msg.id,
+               depth: 5,
+               edge_type: 'replies'
+             }).catch(err => {
+               console.error(`[GraphView] Failed to load parents for ${msg.id}:`, err);
+             })
+           );
+
+           // Load children in parallel (replies outbound)
+           const childPromises = messagesWithUnloadedChildren.map(msg =>
+             this.$store.dispatch('messages/loadMessageBranchDown', {
+               messageId: msg.id,
+               depth: 5,
+               edge_type: 'replies'
+             }).catch(err => {
+               console.error(`[GraphView] Failed to load children for ${msg.id}:`, err);
+             })
+           );
+
+           // Load stitch parents in parallel (links inbound)
+           const stitchParentPromises = messagesWithUnloadedStitchParents.map(msg =>
+             this.$store.dispatch('messages/loadMessageBranchUp', {
+               messageId: msg.id,
+               depth: 5,
+               edge_type: 'links'
+             }).catch(err => {
+               console.error(`[GraphView] Failed to load stitch-in for ${msg.id}:`, err);
+             })
+           );
+
+           // Load stitch children in parallel (links outbound)
+           const stitchChildPromises = messagesWithUnloadedStitchChildren.map(msg =>
+             this.$store.dispatch('messages/loadMessageBranchDown', {
+               messageId: msg.id,
+               depth: 5,
+               edge_type: 'links'
+             }).catch(err => {
+               console.error(`[GraphView] Failed to load stitch-out for ${msg.id}:`, err);
+             })
+           );
+
+           // Wait for all loads to complete
+           await Promise.all([...parentPromises, ...childPromises, ...stitchParentPromises, ...stitchChildPromises]);
           
-          // Load children in parallel
-          const childPromises = messagesWithUnloadedChildren.map(msg =>
-            this.$store.dispatch('messages/loadMessageBranchDown', {
-              messageId: msg.id,
-              depth: 5
-            }).catch(err => {
-              console.error(`[GraphView] Failed to load children for ${msg.id}:`, err);
-            })
-          );
-          
-          // Wait for all loads to complete
-          await Promise.all([...parentPromises, ...childPromises]);
-          
-          // Refresh graph to include new messages
-          await this.refreshGraphFromStore();
+           // Refresh graph to include new messages.
+           // Disable locking so the reply forest keeps consistent spacing.
+           await this.refreshGraphFromStore({ lockOtherTrees: false });
           
           // Small delay to prevent overwhelming the API
           await new Promise(resolve => setTimeout(resolve, 100));
         }
         
-        if (iteration >= maxIterations) {
-          this.loadingProgress = 'Max iterations reached';
-          setTimeout(() => {
-            this.isLoadingAll = false;
-            this.loadingProgress = '';
-          }, 2000);
-        }
+          if (iteration >= maxIterations) {
+            this.loadingProgress = 'Max iterations reached';
+            setTimeout(() => {
+              this.isLoadingAll = false;
+              this.loadingProgress = '';
+            }, 2000);
+          }
+
+          // Final full layout recompute (no anchoring/locking) to normalize spacing.
+          await this.$store.dispatch('graphView/calculateLayout');
+          this.$store.dispatch('graphView/fitToContent');
+
         
-      } catch (error) {
+       } catch (error) {
         console.error('[GraphView] Error loading all messages:', error);
         this.loadingProgress = 'Error occurred';
         setTimeout(() => {
@@ -638,8 +882,200 @@ export default {
   --color-primary-dark: #2563eb;
 }
 
-/* Responsive design */
-@media (max-width: 768px) {
+/* Side panel */
+  .side-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100vh;
+    width: 380px;
+    max-width: 92vw;
+    background: rgba(248, 250, 252, 0.96);
+    backdrop-filter: blur(8px);
+    border-left: 1px solid var(--color-border);
+    box-shadow: -12px 0 36px rgba(0, 0, 0, 0.12);
+    transform: translateX(100%);
+    will-change: transform;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .side-panel-slide-enter-active,
+  .side-panel-slide-leave-active {
+    transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .side-panel-slide-enter-from,
+  .side-panel-slide-leave-to {
+    transform: translateX(100%);
+  }
+
+  .side-panel-slide-enter-to,
+  .side-panel-slide-leave-from {
+    transform: translateX(0);
+  }
+
+  .side-panel-header {
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--color-border);
+    background: linear-gradient(to bottom, rgba(248, 250, 252, 1), rgba(248, 250, 252, 0.92));
+  }
+
+  .side-panel-title {
+    font-weight: 700;
+    color: var(--color-text-primary);
+  }
+
+  .side-panel-close {
+    border: 1px solid var(--color-border);
+    background: rgba(255, 255, 255, 0.6);
+    color: var(--color-text-primary);
+    border-radius: 10px;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+
+  .side-panel-close:hover {
+    background: rgba(255, 255, 255, 0.9);
+    transform: translateY(-1px);
+  }
+
+  .side-panel-body {
+    padding: 16px;
+    overflow: auto;
+  }
+
+  .side-panel-empty {
+    padding: 16px;
+    color: var(--color-text-secondary);
+  }
+
+  .side-panel-row {
+    margin-bottom: 14px;
+  }
+
+  .side-panel-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    margin-bottom: 6px;
+  }
+
+  .side-panel-value {
+    color: var(--color-text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.35;
+  }
+
+  .side-panel-value.mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 12px;
+  }
+
+.graph-header.drawing-mode {
+  background: var(--color-primary-light);
+  border-bottom: 2px solid var(--color-primary);
+}
+
+.drawing-controls {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.drawing-instruction {
+  font-weight: 700;
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--color-primary);
+  border-radius: 50%;
+  display: inline-block;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.95); opacity: 0.7; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.7; }
+}
+
+.cancel-draw-button {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: all 0.2s ease;
+}
+
+.cancel-draw-button:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+  border-color: var(--color-text-secondary);
+}
+
+.draw-stitch-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-primary);
+  border-radius: 4px;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.draw-stitch-button:hover {
+  background: var(--color-primary-light);
+}
+
+.stitch-icon {
+  font-size: 16px;
+}
+
+.linking-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.button-spinner.small {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+ @media (max-width: 768px) {
   .graph-header {
     flex-direction: column;
     gap: 12px;

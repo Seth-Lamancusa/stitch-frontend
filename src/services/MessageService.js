@@ -14,7 +14,7 @@ export default {
   // recipients can be:
   //   - String: "alice" or "@alice" or "uid:abc123" (defaults to notify=true, public=true)
   //   - Object: {user_tag: "alice", public: true, notify: false} for per-recipient control
-  async sendReply(parentId, content, isPrivate = false, recipients = [], content_author = null, tags = null, files = null, subject = null, channel_ids = null, context = null) {
+  async sendReply(parentId, content, isPrivate = false, recipients = [], content_author = null, tags = null, files = null, subject = null, channel_ids = null, context = null, extras = null) {
     const headers = getAuthHeaders()
 
     const messageData = { content, public: !isPrivate, recipients }
@@ -25,6 +25,7 @@ export default {
     if (Array.isArray(files)) messageData.files = files
     if (Array.isArray(channel_ids)) messageData.channel_ids = channel_ids
     if (Array.isArray(context)) messageData.context = context
+    if (extras) messageData.extras = extras
 
     try {
       // Debug logging for outgoing payload
@@ -150,9 +151,9 @@ export default {
   },
 
   // Load messages via unified traversal endpoint
-  async traverseFrom(messageId, { up_depth = 2, down_depth = 2, get_replies = true, get_children = false } = {}) {
+  async traverseFrom(messageId, { up_depth = 2, down_depth = 2, get_replies = true, get_children = false, edge_type = 'replies' } = {}) {
     const headers = getAuthHeaders()
-    const url = `/messages/traverse-from/${messageId}?up_depth=${up_depth}&down_depth=${down_depth}&get_replies=${get_replies}&get_children=${get_children}`
+    const url = `/messages/traverse-from/${messageId}?up_depth=${up_depth}&down_depth=${down_depth}&get_replies=${get_replies}&get_children=${get_children}&edge_type=${edge_type}`
     const response = await apiClient.get(url, { headers })
     return response
   },

@@ -56,6 +56,28 @@
             :zoom-level="scale"
           />
         </g>
+
+        <!-- Reply-tree boundaries (dotted, draggable) -->
+        <g class="reply-tree-boundaries-layer">
+          <rect
+            v-for="tree in replyTreeGroups"
+            :key="tree.id"
+            class="reply-tree-boundary"
+            :x="tree.bounds.minX"
+            :y="tree.bounds.minY"
+            :width="tree.bounds.width"
+            :height="tree.bounds.height"
+            rx="16"
+            ry="16"
+            fill="transparent"
+            stroke="var(--color-primary)"
+            stroke-width="1"
+            stroke-dasharray="6 4"
+            opacity="0.35"
+            :style="{ cursor: isDraggingReplyTree ? 'grabbing' : 'move' }"
+            @pointerdown.stop.prevent="handleReplyTreeBoundaryPointerDown($event, tree)"
+          />
+        </g>
         
         <!-- Nodes layer -->
         <g class="nodes-layer">
@@ -69,10 +91,12 @@
             :is-hovered="hoveredMessageId === message.id"
             :zoom-level="scale"
             @click="handleNodeClick"
-            @mouseenter="handleNodeMouseEnter"
-            @mouseleave="handleNodeMouseLeave"
-            @load-more-up="handleLoadMoreUp"
-            @load-more-down="handleLoadMoreDown"
+           @mouseenter="handleNodeMouseEnter"
+           @mouseleave="handleNodeMouseLeave"
+           @load-more-up="handleLoadMoreUp"
+           @load-more-down="handleLoadMoreDown"
+           @load-stitch-in="handleLoadStitchIn"
+           @load-stitch-out="handleLoadStitchOut"
           />
         </g>
       </g>
@@ -130,9 +154,23 @@ export default {
       hoveredMessageId: null,
       
       // Zoom constraints
-      minScale: 0.5,
+      // Let users zoom out further than the previous 0.5x cap.
+      minScale: 0.1,
       maxScale: 4,
-      zoomSensitivity: 0.001
+      zoomSensitivity: 0.001,
+
+      // Drag state for dotted reply-tree boundaries
+      isDraggingReplyTree: false,
+      dragReplyTreeInfo: null,
+      dragStartClientX: 0,
+      dragStartClientY: 0,
+      lastAppliedDx: 0,
+      lastAppliedDy: 0,
+      rafId: null,
+      pendingDx: 0,
+      pendingDy: 0,
+      windowPointerMoveHandler: null,
+      windowPointerUpHandler: null
     };
   },
   
@@ -184,6 +222,89 @@ export default {
         const position = this.getNodePosition(message.id);
         return position !== null;
       });
+    },
+
+    // Reply-edge connected components (reply trees) with bounds computed from layout positions.
+    replyTreeGroups() {
+      const messages = this.filteredMessages || [];
+      if (messages.length === 0) return [];
+
+      const messageIdSet = new Set(messages.map((m) => m.id));
+
+      // parent_id -> child_ids
+      const parentToChildren = new Map();
+      for (const m of messages) {
+        if (!m.parent_id) continue;
+        if (!messageIdSet.has(m.parent_id)) continue;
+        if (!parentToChildren.has(m.parent_id)) parentToChildren.set(m.parent_id, []);
+        parentToChildren.get(m.parent_id).push(m.id);
+      }
+
+      // Roots are nodes whose parent is absent (or parent_id is null).
+      const roots = messages.filter((m) => !m.parent_id || !messageIdSet.has(m.parent_id));
+      const visited = new Set();
+      const groups = [];
+
+      const baseRadius = 24;
+      const pad = 44;
+
+      for (const root of roots) {
+        if (visited.has(root.id)) continue;
+
+        const queue = [root.id];
+        const nodeIds = [];
+        visited.add(root.id);
+
+        while (queue.length) {
+          const id = queue.shift();
+          nodeIds.push(id);
+
+          const kids = parentToChildren.get(id) || [];
+          for (const childId of kids) {
+            if (!messageIdSet.has(childId)) continue;
+            if (visited.has(childId)) continue;
+            visited.add(childId);
+            queue.push(childId);
+          }
+        }
+
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        let anyPos = false;
+
+        for (const id of nodeIds) {
+          const p = this.nodePosition(id);
+          if (!p) continue;
+          anyPos = true;
+          minX = Math.min(minX, p.x - baseRadius);
+          maxX = Math.max(maxX, p.x + baseRadius);
+          minY = Math.min(minY, p.y - baseRadius);
+          maxY = Math.max(maxY, p.y + baseRadius);
+        }
+
+        if (!anyPos) continue;
+
+        minX -= pad;
+        minY -= pad;
+        maxX += pad;
+        maxY += pad;
+
+        groups.push({
+          id: `reply-tree-${root.id}`,
+          rootId: root.id,
+          nodeIds,
+          bounds: {
+            minX,
+            minY,
+            width: maxX - minX,
+            height: maxY - minY
+          }
+        });
+      }
+
+      return groups;
     }
   },
   
@@ -249,6 +370,7 @@ export default {
     },
     
     handleMouseDown(event) {
+      if (this.isDraggingReplyTree) return;
       if (event.button === 0) { // Left mouse button
         this.isPanning = true;
         this.lastPanPoint = { x: event.clientX, y: event.clientY };
@@ -257,6 +379,7 @@ export default {
     },
     
     handleMouseMove(event) {
+      if (this.isDraggingReplyTree) return;
       if (this.isPanning && this.lastPanPoint) {
         const deltaX = event.clientX - this.lastPanPoint.x;
         const deltaY = event.clientY - this.lastPanPoint.y;
@@ -271,6 +394,7 @@ export default {
     },
     
     handleMouseUp(event) {
+      if (this.isDraggingReplyTree) return;
       if (event.button === 0) {
         this.isPanning = false;
         this.lastPanPoint = null;
@@ -278,14 +402,93 @@ export default {
     },
     
     handleMouseLeave() {
+      if (this.isDraggingReplyTree) return;
       this.isPanning = false;
       this.lastPanPoint = null;
     },
-    
+
+    handleReplyTreeBoundaryPointerDown(event, tree) {
+      if (!tree || !Array.isArray(tree.nodeIds) || tree.nodeIds.length === 0) return;
+
+      this.isDraggingReplyTree = true;
+      this.dragReplyTreeInfo = tree;
+      this.isPanning = false;
+      this.lastPanPoint = null;
+
+      this.dragStartClientX = event.clientX;
+      this.dragStartClientY = event.clientY;
+      this.lastAppliedDx = 0;
+      this.lastAppliedDy = 0;
+      this.pendingDx = 0;
+      this.pendingDy = 0;
+
+      const applyDeltaFromPending = () => {
+        this.rafId = null;
+        const incDx = this.pendingDx - this.lastAppliedDx;
+        const incDy = this.pendingDy - this.lastAppliedDy;
+
+        if (Math.abs(incDx) < 0.01 && Math.abs(incDy) < 0.01) return;
+
+        this.lastAppliedDx = this.pendingDx;
+        this.lastAppliedDy = this.pendingDy;
+
+        // Apply incremental delta in graph space.
+        this.$store.dispatch('graphView/dragReplyTree', { nodeIds: tree.nodeIds, dx: incDx, dy: incDy });
+      };
+
+      this.windowPointerMoveHandler = (e) => {
+        if (!this.isDraggingReplyTree) return;
+
+        // graph-space delta (viewport scale affects screen delta)
+        const dx = (e.clientX - this.dragStartClientX) / this.scale;
+        const dy = (e.clientY - this.dragStartClientY) / this.scale;
+        this.pendingDx = dx;
+        this.pendingDy = dy;
+
+        if (this.rafId == null) {
+          this.rafId = requestAnimationFrame(applyDeltaFromPending);
+        }
+      };
+
+      this.windowPointerUpHandler = () => {
+        this.isDraggingReplyTree = false;
+        this.dragReplyTreeInfo = null;
+
+        if (this.windowPointerMoveHandler) {
+          window.removeEventListener('pointermove', this.windowPointerMoveHandler);
+        }
+        if (this.windowPointerUpHandler) {
+          window.removeEventListener('pointerup', this.windowPointerUpHandler);
+        }
+        window.removeEventListener('pointercancel', this.windowPointerUpHandler);
+
+        if (this.rafId != null) {
+          cancelAnimationFrame(this.rafId);
+          this.rafId = null;
+        }
+
+        this.windowPointerMoveHandler = null;
+        this.windowPointerUpHandler = null;
+      };
+
+      // Capture pointer when possible.
+      try {
+        if (event.target && event.target.setPointerCapture) {
+          event.target.setPointerCapture(event.pointerId);
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      window.addEventListener('pointermove', this.windowPointerMoveHandler);
+      window.addEventListener('pointerup', this.windowPointerUpHandler);
+      window.addEventListener('pointercancel', this.windowPointerUpHandler);
+    },
+
     // Node interaction handlers
     handleNodeClick({ message, event, multiSelect }) {
       // Emit message click event to parent
-      this.$emit('message-click', { message });
+      this.$emit('message-click', { message, multiSelect: !!multiSelect });
     },
     
     handleNodeMouseEnter({ message }) {
@@ -313,26 +516,76 @@ export default {
       const parentId = message.parent_id;
       if (!parentId) return;
       try {
+        this.$emit('messages-loading-start', {
+          anchorMessageId: message.id,
+          loadKind: 'replies-up'
+        });
         // Load messages from API - they will be added to the messages store
         await this.loadMessageBranchUp({ messageId: message.id, depth: 3 });
         
         // Emit event to notify parent that messages were loaded
         // The parent's watcher will detect the store change and refresh the graph
-        this.$emit('messages-loaded');
+        this.$emit('messages-loaded', {
+          anchorMessageId: message.id,
+          loadKind: 'replies-up'
+        });
       } catch (e) {
         console.error('[GraphCanvas] Failed loading parents:', e);
       }
     },
     async handleLoadMoreDown({ message }) {
       try {
+        this.$emit('messages-loading-start', {
+          anchorMessageId: message.id,
+          loadKind: 'replies-down'
+        });
         // Load messages from API - they will be added to the messages store
         await this.loadMessageBranchDown({ messageId: message.id, depth: 3 });
         
         // Emit event to notify parent that messages were loaded
         // The parent's watcher will detect the store change and refresh the graph
-        this.$emit('messages-loaded');
+        this.$emit('messages-loaded', {
+          anchorMessageId: message.id,
+          loadKind: 'replies-down'
+        });
       } catch (e) {
         console.error('[GraphCanvas] Failed loading children:', e);
+      }
+    },
+
+    async handleLoadStitchIn({ message }) {
+      try {
+        this.$emit('messages-loading-start', {
+          anchorMessageId: message.id,
+          stitchEdgeType: 'in',
+          loadKind: 'stitch-in'
+        });
+        await this.loadMessageBranchUp({ messageId: message.id, depth: 3, edge_type: 'links' });
+        this.$emit('messages-loaded', {
+          anchorMessageId: message.id,
+          stitchEdgeType: 'in',
+          loadKind: 'stitch-in'
+        });
+      } catch (e) {
+        console.error('[GraphCanvas] Failed loading stitch in:', e);
+      }
+    },
+
+    async handleLoadStitchOut({ message }) {
+      try {
+        this.$emit('messages-loading-start', {
+          anchorMessageId: message.id,
+          stitchEdgeType: 'out',
+          loadKind: 'stitch-out'
+        });
+        await this.loadMessageBranchDown({ messageId: message.id, depth: 3, edge_type: 'links' });
+        this.$emit('messages-loaded', {
+          anchorMessageId: message.id,
+          stitchEdgeType: 'out',
+          loadKind: 'stitch-out'
+        });
+      } catch (e) {
+        console.error('[GraphCanvas] Failed loading stitch out:', e);
       }
     },
     
@@ -414,6 +667,11 @@ export default {
   font-size: 16px;
   font-weight: 500;
   fill: var(--color-text-secondary);
+}
+
+/* Dotted reply-tree boundary overlay */
+.reply-tree-boundary {
+  pointer-events: all;
 }
 
 /* CSS Custom Properties */

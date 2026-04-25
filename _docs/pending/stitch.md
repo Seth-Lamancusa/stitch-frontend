@@ -1,47 +1,65 @@
-# Stitch (rebranded Links) — UI and UX
+# Stitches (Graph-Linked Messages) - Frontend Spec
 
-## Status
-Draft stub (rebranding effort). This doc describes the existing **links** feature between messages, using the new name **stitches**.
+The "Stitch" UI transforms a conversation from a series of trees into a navigable web. It enables users to view alternative histories for any message and connect disparate threads.
 
-## What is a stitch?
-A stitch is a **directional** connection between two messages that both users can view.
+## 1. ThreadView: Local Slice
 
-## UI: linking messages
+ThreadView renders a 1D linear projection of the stitched message graph.
 
-Primary component: `stitch-frontend/src/components/modals/LinksModal.vue`.
+Note: This document focuses on GraphView behavior that is implemented in the current frontend. ThreadView stitch-bridge/loop handling is intentionally left as TBD.
 
-### How users create stitches
-- The modal opens in a “Linked Messages” dialog.
-- Two selection modes:
-  - **Incoming**: selected messages link *to* the current message
-  - **Outgoing**: the current message links *to* selected messages
-- The UI uses `MessageList` in link-specific modes:
-  - `incoming-links`
-  - `outgoing-links`
-- Users select messages, then click **Add** to create the connections.
+## 2. GraphView: Forest (Implemented)
 
-### Redux/Vuex flow
-- `LinksModal.vue` dispatches `messages/createLink`.
-- The Vuex store method calls the backend via `stitch-frontend/src/services/UserService.js`.
+GraphView provides a 2D "God View" of a stitched conversation.
 
-## Backend API (referenced)
-The backend creates/deletes stitches via the messages links endpoints:
-- `POST /v1/links/messages/{message_id_from}/{message_id_to}`
-- `DELETE /v1/links/messages/{message_id_from}/{message_id_to}`
+### Visual Language
+- Nodes: rendered as circular `GraphTreeNode` instances.
+- Reply edges: rendered as directed edges based on reply adjacency (`parent_id` and `child_ids`).
+- Stitch edges: rendered as directed edges based on stitch adjacency (`stitch_child_ids`).
+- Edges include an arrow head at the outgoing end.
 
-For “incoming/outgoing” listing, the backend provides:
-- `GET /v1/links/messages/{message_id}/incoming`
-- `GET /v1/links/messages/{message_id}/outgoing`
+### Node Edge Load Controls (Up to 4)
+Each visible message node exposes up to four manual load buttons, each gated by whether the relevant one-hop neighbor exists but is not already loaded:
+- Reply In (↑)
+  - Loads additional reply ancestors using the backend traversal with `edge_type=replies`.
+- Stitch In (←)
+  - Loads additional stitch ancestors using the backend traversal with `edge_type=links`.
+- Reply Out (↓)
+  - Loads additional reply descendants using the backend traversal with `edge_type=replies`.
+- Stitch Out (→)
+  - Loads additional stitch descendants using the backend traversal with `edge_type=links`.
 
-Implementation source in backend:
-- `stitch-backend/app/routers/public_v1/enrichment.py`
+Implementation detail:
+- Stitch In/Out buttons call `loadMessageBranchUp/Down(..., edge_type='links')`.
 
-## Permissions (UI expectations)
-- Creating/deleting requires the user to have `msg.write` capability.
-- Deleting is restricted to the user who created the edge.
-- Guest users are prompted to sign in before creating links.
+### Dotted Reply-Tree Boundaries (Draggable)
+GraphCanvas renders dotted, rounded containers around reply-edge connected components (reply edges only). These boundary containers are draggable and translate the positions of nodes inside that reply component.
 
-## Related files
-- UI modal: `stitch-frontend/src/components/modals/LinksModal.vue`
-- Store actions: `stitch-frontend/src/store/modules/messages.js`
-- Service methods: `stitch-frontend/src/services/UserService.js`
+### Loading
+- Origin expansion / incremental loading
+  - Uses the backend traversal endpoint to fetch messages and their adjacency fields.
+  - GraphView refreshes incrementally after each expansion.
+- Load All
+  - Iteratively expands both reply and stitch edges until no unloaded neighbors remain.
+  - After the loop completes, GraphView performs a final full layout recompute to normalize spacing across the entire forest.
+
+### Selection + Right-Side Message Panel
+- Clicking a node updates GraphView selection.
+- The right-side details drawer is rendered by `GraphSidePanel` and is driven by selection (`graphView.selection.lastSelectedId`).
+- Close dispatches `graphView/clearSelection`.
+
+## 3. Store State (GraphView)
+
+GraphView uses the Vuex module `graphView`.
+
+- `graphView.selection.selectedIds`: supports multi-selection.
+- `graphView.selection.lastSelectedId`: drives `GraphSidePanel`.
+- `graphView.layout.positions`: message coordinate map used by GraphCanvas.
+
+Edges derived from message adjacency:
+- Reply edges: `parent_id` (source) -> `id` (target)
+- Stitch edges: `id` (source) -> each `stitch_child_ids[]` (target)
+
+Adjacency fields come from backend traversal:
+- `parent_id` / `child_ids`
+- `stitch_parent_ids` / `stitch_child_ids`

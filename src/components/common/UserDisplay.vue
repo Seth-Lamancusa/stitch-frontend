@@ -9,7 +9,21 @@
       class="user-display__name"
       :class="nameClasses"
     >
-      {{ displayNameWithBadges }}
+      {{ resolvedDisplayName }}
+    </span>
+    <span 
+      v-for="badge in resolvedBadges" 
+      :key="badge.key"
+      class="user-display__badge"
+      :tabindex="badge.tooltip ? 0 : -1"
+      role="img"
+      :aria-label="badge.tooltip || badge.ariaLabel || badge.label"
+      @mouseenter="($event) => onBadgeEnter($event, badge)"
+      @mouseleave="onBadgeLeave"
+      @focus="($event) => onBadgeEnter($event, badge)"
+      @blur="onBadgeLeave"
+    >
+      {{ badge.content }}
     </span>
     <span
       v-if="shouldShowTag"
@@ -20,16 +34,31 @@
     </span>
     <slot />
   </component>
+
+  <Teleport to="body">
+    <div
+      v-if="tooltip.visible"
+      class="user-display-tooltip"
+      :style="tooltip.style"
+      role="tooltip"
+    >
+      {{ tooltip.text }}
+    </div>
+  </Teleport>
 </template>
 
 <script setup>
-import { computed } from 'vue';
+  import { computed, reactive, onBeforeUnmount } from 'vue';
 
-const props = defineProps({
-  user: {
-    type: Object,
-    default: null
-  },
+  const props = defineProps({
+    title: {
+      type: String,
+      default: undefined
+    },
+    user: {
+      type: Object,
+      default: null
+    },
   displayName: {
     type: [String, Number],
     default: ''
@@ -96,7 +125,61 @@ const props = defineProps({
     type: Boolean,
     default: true
   }
-});
+  });
+
+  const tooltip = reactive({
+    visible: false,
+    text: '',
+    style: {}
+  });
+
+  const hideTooltip = () => {
+    tooltip.visible = false;
+  };
+
+  const showTooltipForRect = (rect, text) => {
+    if (!rect || !text) return;
+
+    const margin = 8;
+    const preferredAbove = rect.top > 28;
+    const top = preferredAbove ? rect.top - 8 : rect.bottom + 8;
+    const leftRaw = rect.left + rect.width / 2;
+    const left = Math.min(Math.max(margin, leftRaw), window.innerWidth - margin);
+
+    tooltip.text = text;
+    tooltip.visible = true;
+    tooltip.style = {
+      position: 'fixed',
+      top: `${top}px`,
+      left: `${left}px`,
+      transform: preferredAbove ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
+      zIndex: 'var(--z-index-tooltip, 300)'
+    };
+  };
+
+  const onBadgeEnter = (event, badge) => {
+    try {
+      const target = event?.currentTarget || event?.target;
+      if (!target?.getBoundingClientRect) return;
+      const text = badge?.tooltip;
+      if (!text) return;
+      const rect = target.getBoundingClientRect();
+      showTooltipForRect(rect, text);
+    } catch {
+      // no-op
+    }
+  };
+
+  const onBadgeLeave = () => {
+    hideTooltip();
+  };
+
+  window.addEventListener('scroll', onBadgeLeave, true);
+  window.addEventListener('resize', onBadgeLeave);
+  onBeforeUnmount(() => {
+    window.removeEventListener('scroll', onBadgeLeave, true);
+    window.removeEventListener('resize', onBadgeLeave);
+  });
 
 const normalizeBadge = (badge, index) => {
   if (!badge && badge !== 0) return null;
@@ -158,7 +241,8 @@ const resolvedBadges = computed(() => {
       key: 'bot',
       label: 'Bot',
       content: '🤖',
-      ariaLabel: 'Bot'
+      ariaLabel: 'Bot',
+      tooltip: props.title || 'No version available'
     });
   }
 
@@ -172,15 +256,6 @@ const resolvedDisplayName = computed(() => {
   if (fromUser) return fromUser;
   if (normalizedTag.value) return `@${normalizedTag.value}`;
   return props.fallback;
-});
-
-const displayNameWithBadges = computed(() => {
-  const baseName = resolvedDisplayName.value;
-  if (resolvedBadges.value.length === 0) return baseName;
-  
-  // Append all badge content directly to the name text, with a preceding space
-  const badgeText = resolvedBadges.value.map(b => b.content).join('');
-  return `${baseName} ${badgeText}`;
 });
 
 const shouldShowTag = computed(() => props.showTag && !!normalizedTag.value);
@@ -214,6 +289,23 @@ const tagClasses = computed(() => [
 ]);
 </script>
 
+<style>
+.user-display-tooltip {
+  background: var(--color-surface, #222);
+  color: var(--color-text, #fff);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  max-width: 260px;
+  white-space: normal;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  border: 1px solid var(--color-border, #444);
+  font-weight: 500;
+  text-align: center;
+}
+</style>
+
 <style scoped>
 .user-display {
   display: inline-flex;
@@ -225,6 +317,20 @@ const tagClasses = computed(() => [
 .user-display__name {
   font-weight: 600;
   line-height: 1.2;
+}
+
+.user-display__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  cursor: help;
+  outline: none;
+}
+
+.user-display__badge:focus {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+  border-radius: 4px;
 }
 
 .user-display__name--current {
@@ -241,6 +347,18 @@ const tagClasses = computed(() => [
   color: var(--color-text-secondary);
   line-height: 1.2;
   white-space: nowrap;
+}
+
+.user-display-tooltip {
+  background: var(--color-surface, #111);
+  color: var(--color-text, #fff);
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  max-width: 260px;
+  white-space: normal;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
 }
 
 
@@ -273,4 +391,3 @@ const tagClasses = computed(() => [
 }
 
 </style>
-

@@ -1,6 +1,6 @@
 <template>
   <div 
-    class="message-node" 
+     class="message-node" 
     :class="{ 
       'list-view': inListView,
       'compact': compact,
@@ -10,33 +10,43 @@
     }"
     :data-message-id="message.id"
     :data-has-siblings="!!message.parent_id"
-    ref="messageNodeRef"
+     ref="messageNodeRef"
   >
+    <!-- Desktop sibling navigator - absolutely positioned outside the rotating card -->
+    <sibling-navigator
+      v-if="showSiblingNavDesktop"
+      :message-id="message.id"
+      :parent-id="message.parent_id"
+      :mobile-mode="false"
+      @navigate="handleSiblingNavigation"
+      :data-debug-has-siblings="hasSiblings"
+    />
+
+    <!-- Mobile sibling navigator is rendered outside the rotating card. -->
+    <div v-if="showSiblingNavMobile" class="mobile-sibling-nav-slot">
+      <sibling-navigator
+        :message-id="message.id"
+        :parent-id="message.parent_id"
+        :mobile-mode="isMobile"
+        @navigate="handleSiblingNavigation"
+        :data-debug-has-siblings="hasSiblings"
+      />
+    </div>
+
     <div 
       class="message-content" 
       ref="messageContentRef" 
       @click="handleMessageClick"
-      :class="{ 'selectable': selectable }"
+      :class="[{ 'selectable': selectable }, navAnimationClass]"
     >
-    <div class="message-header">
-      <!-- Row 1: Author info + datetime -->
-      <div class="header-row header-row--author">
-        <div class="author-row-left">
-          <!-- Sibling navigator - positioned left of display name on mobile only -->
-          <div v-if="showSiblingNavMobile" class="header-sibling-nav-slot">
-            <sibling-navigator
-              :message-id="message.id"
-              :parent-id="message.parent_id"
-              :mobile-mode="isMobile"
-              @navigate="handleSiblingNavigation"
-              :data-debug-has-siblings="hasSiblings"
-            />
-          </div>
-          
-          <!-- Unread thread count badge - only shown in inbox/list view -->
-          <span v-if="inListView && message.unread_count_in_thread && message.unread_count_in_thread > 0" class="unread-thread-badge">
-            {{ message.unread_count_in_thread }}
-          </span>
+      <div class="message-header">
+        <!-- Row 1: Author info + datetime -->
+        <div class="header-row header-row--author">
+          <div class="author-row-left">
+            <!-- Unread thread count badge - only shown in inbox/list view -->
+            <span v-if="inListView && message.unread_count_in_thread && message.unread_count_in_thread > 0" class="unread-thread-badge">
+              {{ message.unread_count_in_thread }}
+            </span>
           
           <div class="author-info">
             <template v-if="showParticipantsLabel">
@@ -68,7 +78,8 @@
               name-class="message-author"
               tag-class="author-user-tag"
               variant="message"
-            />
+               :title="isBot ? botVersionTooltip : undefined"
+             />
             <span v-if="isImported" class="imported-badge" :title="'Imported by ' + message.import_info.importer_user_tag">
               via <UserDisplay 
                 :display-name="message.import_info.importer_user_tag"
@@ -354,16 +365,6 @@
         />
       </teleport>
       
-      <!-- Desktop sibling navigator - absolutely positioned -->
-      <sibling-navigator
-        v-if="showSiblingNavDesktop"
-        :message-id="message.id"
-        :parent-id="message.parent_id"
-        :mobile-mode="false"
-        @navigate="handleSiblingNavigation"
-        :data-debug-has-siblings="hasSiblings"
-      />
-      
       <!-- Unified mobile action controls -->
       <div v-if="!inListView && !isSelectionMode" ref="mobileActionControlsRef" class="mobile-action-controls">
         
@@ -437,9 +438,9 @@
             <span class="action-text">{{ action.text }}</span>
           </button>
         </div>
-      </div>
-    </div>
-  </div>
+       </div>
+     </div>
+   </div>
 
 </template>
 
@@ -547,10 +548,7 @@ export default {
     const isSavingMessage = ref(false);
 
     // Import status
-    const isImported = computed(() => {
-      const info = props.message?.import_info;
-      return !!(info && (info.display_name || info.importer_user_tag));
-    });
+    const isImported = computed(() => !!props.message.import_info);
     
     // Subject addition state
     const isAddingSubject = ref(false);
@@ -583,6 +581,33 @@ export default {
     
     // Whether this message is currently the centered one in the URL
     const isCentered = computed(() => String(route.params.id) === String(props.message.id));
+
+    const navAnimationClass = ref('');
+    const navAnimationTimeout = ref(null);
+
+    const lastSiblingNavigation = computed(
+      () => store.state?.navigation?.lastSiblingNavigation ?? null
+    );
+
+    watch(
+      lastSiblingNavigation,
+      (lastNav) => {
+        if (!lastNav || lastNav.targetId !== props.message.id) return;
+
+        const ageMs = Date.now() - (lastNav.timestamp || 0);
+        if (ageMs > 1500) return;
+
+        navAnimationClass.value =
+          lastNav.direction === 'prev' ? 'animate-nav-prev' : 'animate-nav-next';
+
+        if (navAnimationTimeout.value) clearTimeout(navAnimationTimeout.value);
+        navAnimationTimeout.value = setTimeout(() => {
+          navAnimationClass.value = '';
+          navAnimationTimeout.value = null;
+        }, 360);
+      },
+      { immediate: true }
+    );
 
     const refreshReplies = () => {
       emit('refreshReplies', props.message.id);
@@ -832,12 +857,11 @@ export default {
     
     const openAddRecipientsModal = () => {
       dismissMobileKeyboard();
-      
-      // Add debug logging for existing recipients
+
       const existingRecipients = props.message.recipients && Array.isArray(props.message.recipients) 
         ? props.message.recipients 
         : [];
-      
+
       // Show the global recipients modal
       const modalConfig = {
         isPublic: false, // Adding recipients is always for private messages
@@ -845,7 +869,7 @@ export default {
         existingRecipients: existingRecipients,
         messageId: props.message.id
       };
-      
+       
       try {
         store.dispatch('navigation/showRecipientsModal', modalConfig);
       } catch (error) {
@@ -997,9 +1021,33 @@ export default {
       return !!props.message.author?.is_bot;
     });
 
-    // If imported, we still store the author edge as the importer user,
-    // but the UI should display the quoted/imported identity.
-    // This means participant name lists should also show import_info.display_name.
+    const authorBotVersionId = computed(() => {
+      return props.message.author?.bot_version_id || null;
+    });
+
+    const authorAvailableVersions = computed(() => {
+      return props.message.author?.available_versions || null;
+    });
+
+    const botVersionTooltip = computed(() => {
+      if (!isBot.value) return '';
+
+      // If the sender-edge field isn't present, we should not guess.
+      if (!authorBotVersionId.value) return 'No version available';
+
+      const versions = Array.isArray(authorAvailableVersions.value)
+        ? authorAvailableVersions.value
+        : [];
+      const mv = authorBotVersionId.value;
+      if (mv && versions.length) {
+        const match = versions.find(v => v && v.id === mv);
+        if (match?.label) return `Bot version: ${match.label}`;
+      }
+
+      const def = versions.find(v => v && v.default === true);
+      if (def?.label) return `Bot version: ${def.label}`;
+      return `Bot version: ${mv}`;
+    });
 
     // Show participants label only for inbox list previews
     const showParticipantsLabel = computed(() => {
@@ -1026,13 +1074,11 @@ export default {
         });
       };
 
-      const authorName = isImported.value
-        ? (props.message?.import_info?.display_name || '')
-        : (authorDisplayName.value || '');
+      const authorName = authorDisplayName.value || '';
       if (authorName || authorUserTag.value) {
         addParticipant({
-          displayName: authorName || (isImported.value ? '' : (authorUserTag.value || '')),
-          userTag: isImported.value ? null : authorUserTag.value,
+          displayName: authorName || authorUserTag.value || '',
+          userTag: authorUserTag.value,
           isBot: isBot.value
         });
       }
@@ -1783,9 +1829,41 @@ export default {
       window.addEventListener('scroll', menuPositionRecalcHandler, true);
       window.addEventListener('resize', menuPositionRecalcHandler);
 
+
+      // Observe DOM mutations inside message content to catch late appends
+      try {
+        if (messageContentRef.value && typeof MutationObserver !== 'undefined') {
+          domObserver.value = new MutationObserver((records) => {
+            try {
+              const el = messageContentRef.value;
+              if (!el) return;
+              const text = el.innerText || '';
+              if (text.includes('[object Promise]')) {
+                const changes = records.map(r => ({
+                  type: r.type,
+                  addedNodes: Array.from(r.addedNodes || []).map(n => ({ nodeType: n.nodeType, text: n.textContent?.slice?.(0, 80) })),
+                  removedNodes: Array.from(r.removedNodes || []).map(n => ({ nodeType: n.nodeType, text: n.textContent?.slice?.(0, 80) }))
+                }));
+                debugLog('Detected "[object Promise]" in message content', {
+                  messageId: props.message.id,
+                  displayMode: props.displayMode,
+                  changes
+                });
+              }
+            } catch (e) {}
+          });
+          domObserver.value.observe(messageContentRef.value, { childList: true, subtree: true, characterData: true });
+        }
+      } catch (e) {}
+
     });
     
     onBeforeUnmount(() => {
+      if (navAnimationTimeout.value) {
+        clearTimeout(navAnimationTimeout.value);
+        navAnimationTimeout.value = null;
+      }
+
       document.removeEventListener('click', handleActionBarOutsideClick);
       window.removeEventListener('resize', checkMobileDevice);
       window.removeEventListener('resize', handleViewportChange);
@@ -1805,23 +1883,24 @@ export default {
       // Disconnect observer
       try { if (domObserver.value) { domObserver.value.disconnect(); domObserver.value = null; } } catch (e) {}
 
+      
       // Close this message's action bar if it's open
       if (showActionBar.value) {
         store.dispatch('navigation/hideActionBar', props.message.id);
       }
+      
+
     });
     
     // We've simplified the read/unread handling - each message now just shows its own status
+    
+
     
     // Loading state for navigation buttons (similar to SiblingNavigator)
     const isParentLoading = computed(() => {
       if (!props.message.parent_id) return false;
       const parent = store.getters['messages/getMessage'](props.message.parent_id);
       return !parent;
-    });
-    
-    const shouldShowAddRecipientsButton = computed(() => {
-      return !props.inListView && !isSelectionMode.value;
     });
     
     // Sibling navigator visibility flags (mirror original template conditions)
@@ -1834,6 +1913,8 @@ export default {
       const val = !props.inListView && !!props.message.parent_id && !isMobile.value;
       return val;
     });
+
+    // (debug logging removed)
     
     return {
       isCentered,
@@ -1844,11 +1925,14 @@ export default {
       selected: toRef(props, 'selected'),
       inListView: toRef(props, 'inListView'),
       compact: toRef(props, 'compact'),
+      navAnimationClass,
+      // Sibling-navigation animation
       // Computed and reactive values
       currentUser,
       isUserRecipient,
       isUserAuthor,
       isBot,
+      botVersionTooltip,
       isImported,
       authorUid,
       isPublic,
@@ -1879,7 +1963,6 @@ export default {
       recipientsExcludingUser,
       authorDisplayName,
       authorUserTag,
-      isImported,
       showParticipantsLabel,
       participantItems,
       openTagsModal,
@@ -2167,6 +2250,46 @@ export default {
   position: relative;
   z-index: 1;
   transition: background-color var(--transition-fast), border-color var(--transition-fast), max-height 0.3s ease-out, padding 0.2s ease;
+}
+
+/* Sibling navigation card animation (message node only) */
+.message-content.animate-nav-next,
+.message-content.animate-nav-prev {
+  will-change: transform;
+}
+
+.message-content.animate-nav-next {
+  /* Snap into place without overshoot; fast “drop” then lock. */
+  animation: nav-next 1s cubic-bezier(0.2, 0.95, 0.2, 1) forwards;
+}
+
+.message-content.animate-nav-prev {
+  /* Snap into place without overshoot; fast “drop” then lock. */
+  animation: nav-prev 1s cubic-bezier(0.2, 0.95, 0.2, 1) forwards;
+}
+
+@keyframes nav-next {
+  0% {
+    transform: perspective(1000px) rotateY(14deg) rotateX(14deg);
+  }
+  35% {
+    transform: perspective(1000px) rotateY(0.6deg) rotateX(0deg);
+  }
+  100% {
+    transform: perspective(1000px) rotateY(0deg) rotateX(0deg);
+  }
+}
+
+@keyframes nav-prev {
+  0% {
+    transform: perspective(1000px) rotateY(-14deg) rotateX(14deg);
+  }
+  35% {
+    transform: perspective(1000px) rotateY(-0.6deg) rotateX(0deg);
+  }
+  100% {
+    transform: perspective(1000px) rotateY(0deg) rotateX(0deg);
+  }
 }
 
 /* Add space and adjust positioning for sibling navigation on desktop */
@@ -2701,6 +2824,11 @@ export default {
   margin-right: var(--space-sm);
 }
 
+/* Mobile sibling navigator overlay (rendered outside the rotating card). */
+.mobile-sibling-nav-slot {
+  display: none;
+}
+
 /* Mobile footer layout */
 @media (max-width: 768px) {
   .message-footer {
@@ -3028,6 +3156,24 @@ export default {
     position: relative;
     perspective: 1000px;
     padding: 0 3px; /* Reduced padding on mobile */
+  }
+
+  /* Reserve space for the overlayed sibling navigator so text doesn't overlap it. */
+  .message-node[data-has-siblings="true"] .author-row-left {
+    padding-left: 44px;
+  }
+
+  .mobile-sibling-nav-slot {
+    display: flex;
+    position: absolute;
+    top: 10px;
+    left: 3px;
+    z-index: 20;
+  }
+
+  .message-content.animate-nav-next,
+  .message-content.animate-nav-prev {
+    transition: none !important;
   }
   
   .message-content {
@@ -3702,14 +3848,6 @@ export default {
   align-items: center;
 }
 
-/* Header sibling navigation slot styling */
-.header-sibling-nav-slot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-right: var(--space-sm);
-}
-
 .imported-badge {
   font-size: 0.75rem;
   color: var(--color-text-secondary);
@@ -3733,9 +3871,3 @@ export default {
   opacity: 1;
 }
 </style>
-
-
-
-
-
-

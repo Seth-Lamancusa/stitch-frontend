@@ -1140,7 +1140,24 @@ const handleAddRecipients = async (recipients, addToAncestors = true) => {
     // 2. Trigger Response (Explicit Ping)
     // If we added to ancestors, we explicitly ping the origin message to get a response
     if (addToAncestors) {
-      const pingRecipients = recipients.map(r => (typeof r === 'string' ? r : r.user_tag || r.uid));
+      const pingRecipients = recipients.map(r => {
+        if (typeof r === 'string') return r;
+        if (!r || typeof r !== 'object') return r;
+
+        const user_tag = r.user_tag ?? r.userTag;
+        const uid = r.uid;
+        const bot_version_id = r.bot_version_id ?? r.botVersionId;
+
+        // Preserve bot version selection for bots-service routing.
+        if (bot_version_id && user_tag) {
+          return { user_tag, uid, bot_version_id };
+        }
+
+        // Fall back to whatever identity we have.
+        return user_tag || uid;
+      });
+
+      console.log('[ThreadView] pingRecipients payload (preserve bot_version_id)', pingRecipients);
       
       // Resolve context (ancestors) for the bot
       let context = null;
@@ -1796,7 +1813,6 @@ const closeProfileModal = () => {
   }
 }
 </style>
-
 
 
 

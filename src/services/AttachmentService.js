@@ -11,6 +11,10 @@ const ALLOWED_TYPES = [
   'image/gif',
   'image/webp',
   'text/plain',
+  'text/x-python',
+  'text/x-python-script',
+  'text/x-script.python',
+  'application/x-python-code',
   'audio/mpeg',
   'audio/mp3',
   'audio/wav',
@@ -39,19 +43,23 @@ const validateFile = (file) => {
   
   // Check file type
   const fileType = file.type.toLowerCase()
-  const isValidType = ALLOWED_TYPES.some(type => fileType === type) || 
-                      fileType.startsWith('image/') ||
-                      fileType.startsWith('audio/')
+  const ext = (file.name || '').toLowerCase().split('.').pop()
+  const isValidType =
+    ALLOWED_TYPES.some(type => fileType === type) ||
+    // Some browsers report empty/generic MIME types for code files; fall back to extension.
+    ext === 'py' ||
+                       fileType.startsWith('image/') ||
+                       fileType.startsWith('audio/')
   
   if (!isValidType) {
-    throw new Error(`File type not supported. Please upload a PDF, text file (.txt), image, or audio file`)
+    throw new Error(`File type not supported. Please upload a PDF, text file (.txt/.py), image, or audio file`)
   }
   
   return true
 }
 
 export default {
-  async uploadFile(file) {
+  async uploadFile(file, { onUploadProgress } = {}) {
     // Validate file before upload
     validateFile(file)
     
@@ -63,7 +71,21 @@ export default {
         headers: {
           ...getAuthHeaders(),
           'Content-Type': 'multipart/form-data'
-        }
+        },
+        ...(typeof onUploadProgress === 'function'
+          ? {
+              onUploadProgress: (evt) => {
+                const total = evt?.total
+                const loaded = evt?.loaded
+                const progress =
+                  typeof total === 'number' && total > 0
+                    ? Math.round((loaded / total) * 100)
+                    : null
+
+                onUploadProgress({ loaded, total, progress })
+              }
+            }
+          : {})
       })
       
       return response.data
@@ -92,7 +114,5 @@ export default {
     }
   }
 }
-
-
 
 

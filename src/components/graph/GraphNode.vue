@@ -75,6 +75,42 @@
       <rect :x="(nodeWidth/2) - 8" :y="nodeHeight + 2" width="16" height="16" rx="3" ry="3" fill="var(--color-primary)" opacity="0.9" />
       <path d="M3 8 L13 8" stroke="white" stroke-width="2" stroke-linecap="round" :transform="`translate(0, ${nodeHeight + 2}) translate(${(nodeWidth/2)-8}, 0)`"/>
     </g>
+
+    <!-- Stitch parent button (left) -->
+    <g
+      v-if="canLoadStitchParent"
+      class="load-button load-stitch-parent"
+      @click.stop="emitLoadStitchParent"
+    >
+      <circle :cx="-10" :cy="nodeHeight/2" r="8" fill="var(--color-primary)" opacity="0.9" />
+      <text
+        x="-10"
+        :y="nodeHeight/2 + 4"
+        text-anchor="middle"
+        dominant-baseline="central"
+        fill="white"
+        font-size="12"
+        font-weight="bold"
+      >←</text>
+    </g>
+
+    <!-- Stitch children button (right) -->
+    <g
+      v-if="canLoadStitchChild"
+      class="load-button load-stitch-child"
+      @click.stop="emitLoadStitchChild"
+    >
+      <circle :cx="nodeWidth + 10" :cy="nodeHeight/2" r="8" fill="var(--color-primary)" opacity="0.9" />
+      <text
+        :x="nodeWidth + 10"
+        :y="nodeHeight/2 + 4"
+        text-anchor="middle"
+        dominant-baseline="central"
+        fill="white"
+        font-size="12"
+        font-weight="bold"
+      >→</text>
+    </g>
   </g>
 </template>
 
@@ -125,7 +161,7 @@ export default {
     };
   },
   
-  emits: ['click', 'mouseenter', 'mouseleave', 'load-more-up', 'load-more-down'],
+  emits: ['click', 'mouseenter', 'mouseleave', 'load-more-up', 'load-more-down', 'load-stitch-in', 'load-stitch-out'],
   
   computed: {
     nodeClasses() {
@@ -300,6 +336,19 @@ export default {
       if (!childIds.length) return false;
       // If any child id is not in store, allow loading
       return childIds.some(id => !this.$store.getters['messages/getMessage'](id));
+    },
+
+    // Stitch navigation controls (placeholders for future wiring)
+    canLoadStitchParent() {
+      const stitchParentIds = this.message.stitch_parent_ids || [];
+      if (!stitchParentIds.length) return false;
+      return stitchParentIds.some(id => !this.$store.getters['messages/getMessage'](id));
+    },
+
+    canLoadStitchChild() {
+      const stitchChildIds = this.message.stitch_child_ids || [];
+      if (!stitchChildIds.length) return false;
+      return stitchChildIds.some(id => !this.$store.getters['messages/getMessage'](id));
     }
   },
   
@@ -342,6 +391,16 @@ export default {
     },
     emitLoadChildren() {
       this.$emit('load-more-down', { message: this.message });
+    },
+
+    // Intentionally no implementation yet in the parent.
+    emitLoadStitchParent() {
+      this.$emit('load-stitch-in', { message: this.message });
+    },
+
+    // Intentionally no implementation yet in the parent.
+    emitLoadStitchChild() {
+      this.$emit('load-stitch-out', { message: this.message });
     }
   }
 };

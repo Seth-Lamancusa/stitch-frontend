@@ -4,7 +4,7 @@
  * Formats LaTeX expressions using KaTeX.
  */
 import { createFormatter } from './base';
-import { getInlineDollarSegments, looksLikeLatexInline } from '../helpers/inlineDollarMath';
+import { replaceInlineDollarMath } from '../helpers/inlineDollarMath';
 
 // Will need to be installed: npm install katex
 let katex = null;
@@ -90,37 +90,20 @@ async function processLatexBlocks(content) {
 async function processInlineLatex(content) {
   const katex = await getKaTeX();
 
-  // Inline `$...$` (with awareness of escaped dollars like `\\$900`).
-  // We also apply a heuristic: if the inside doesn't really look like LaTeX,
-  // we treat it as literal currency text and convert `$123$` -> `$123`.
-  let processedContent = '';
-  let cursor = 0;
-  const segments = getInlineDollarSegments(content);
-
-  for (const seg of segments) {
-    processedContent += content.slice(cursor, seg.start);
-
-    if (!looksLikeLatexInline(seg.inner)) {
-      // Not LaTeX: keep the original `$...$` verbatim.
-      processedContent += content.slice(seg.start, seg.end);
-      cursor = seg.end;
-      continue;
+  // Inline `$...$` with awareness of escaped dollars like `\\$900`.
+  let processedContent = replaceInlineDollarMath(content, {
+    onMath: ({ inner }) => {
+      try {
+        return katex.renderToString(inner, {
+          displayMode: false,
+          throwOnError: false
+        });
+      } catch (error) {
+        console.error('Error rendering inline LaTeX:', error);
+        return `<span class="katex-error">${inner}</span>`;
+      }
     }
-
-    try {
-      processedContent += katex.renderToString(seg.inner, {
-        displayMode: false,
-        throwOnError: false
-      });
-    } catch (error) {
-      console.error('Error rendering inline LaTeX:', error);
-      processedContent += `<span class="katex-error">${seg.inner}</span>`;
-    }
-
-    cursor = seg.end;
-  }
-
-  processedContent += content.slice(cursor);
+  });
   
   // Find all inline LaTeX: \(latex\)
   // Use non-greedy match to capture content between \( and \)

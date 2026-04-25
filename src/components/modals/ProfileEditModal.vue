@@ -39,6 +39,7 @@ const isBot = ref(false);
 const inputModalities = ref('');
 const outputModalities = ref('');
 const thirdPartyIntegrations = ref('');
+const availableVersions = ref('');
 const isSubmitting = ref(false);
 const errorMessage = ref('');
 const tagError = ref('');
@@ -178,6 +179,7 @@ const resetForm = () => {
   inputModalities.value = user.value?.input_modalities || '';
   outputModalities.value = user.value?.output_modalities || '';
   thirdPartyIntegrations.value = user.value?.third_party_integrations || '';
+  availableVersions.value = user.value?.available_versions ? JSON.stringify(user.value.available_versions, null, 2) : '';
   const _contacts = (user.value?.contacts || []);
   notifyPrefs.value = {
     email: !!_contacts.find(c => c.type==='email' && c.notify),
@@ -323,6 +325,7 @@ const hasFormChanges = computed(() => {
   const originalInputModalities = user.value?.input_modalities || '';
   const originalOutputModalities = user.value?.output_modalities || '';
   const originalThirdPartyIntegrations = user.value?.third_party_integrations || '';
+  const originalAvailableVersions = user.value?.available_versions ? JSON.stringify(user.value.available_versions, null, 2) : '';
 
   const displayNameChanged = normalizeTrimmed(displayName.value) !== normalizeTrimmed(originalDisplayName);
   const tagChanged = normalizeLowerTrimmed(tag.value) !== normalizeLowerTrimmed(originalTag);
@@ -487,6 +490,7 @@ const updateProfile = async () => {
     const originalInputModalities = user.value?.input_modalities || '';
     const originalOutputModalities = user.value?.output_modalities || '';
     const originalThirdPartyIntegrations = user.value?.third_party_integrations || '';
+    const originalAvailableVersions = user.value?.available_versions ? JSON.stringify(user.value.available_versions, null, 2) : '';
 
     // Only include changed fields (normalized)
     if (normalizeTrimmed(displayName.value) !== normalizeTrimmed(user.value?.displayName || '')) {
@@ -528,6 +532,21 @@ const updateProfile = async () => {
     if (normalizeTrimmed(thirdPartyIntegrations.value) !== normalizeTrimmed(originalThirdPartyIntegrations)) {
       const trimmed = normalizeTrimmed(thirdPartyIntegrations.value);
       profileUpdate.third_party_integrations = trimmed || null;
+    }
+    if (normalizeTrimmed(availableVersions.value) !== normalizeTrimmed(originalAvailableVersions)) {
+      const trimmed = normalizeTrimmed(availableVersions.value);
+      if (trimmed) {
+        try {
+          profileUpdate.available_versions = JSON.parse(trimmed);
+        } catch (e) {
+          botCapabilitiesError.value = 'Available versions must be valid JSON array of objects';
+          errorMessage.value = '';
+          isSubmitting.value = false;
+          return;
+        }
+      } else {
+        profileUpdate.available_versions = null;
+      }
     }
     if (notifyPrefsChanged()) {
       profileUpdate.notify = { ...notifyPrefs.value };
@@ -1224,6 +1243,17 @@ const deleteAccount = async () => {
                   placeholder="e.g., OpenAI, Anthropic"
                 />
                 <div class="field-hint">Optional 3rd party integrations list.</div>
+              </div>
+              <div class="field">
+                <label for="availableVersions">Available versions (JSON)</label>
+                <textarea
+                  id="availableVersions"
+                  v-model="availableVersions"
+                  placeholder='[{"id": "v1", "label": "V1", "default": true}]'
+                  rows="4"
+                  class="json-textarea"
+                ></textarea>
+                <div class="field-hint">JSON array for bot routing versions.</div>
               </div>
             </div>
             <div class="field-error" v-if="botCapabilitiesError">{{ botCapabilitiesError }}</div>

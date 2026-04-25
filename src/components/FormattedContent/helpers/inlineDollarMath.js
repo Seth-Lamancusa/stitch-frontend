@@ -3,10 +3,9 @@
  *
  * The content we receive sometimes uses `$...$` both for:
  *  - real inline LaTeX math
- *  - literal currency like `$1,285.7$`
+ *  - literal currency-ish values like `$1,285.7$`
  *
- * Also, we may see escaped dollars inside math, like `\$900`.
- * A naive regex like /\$([^$\n]+)\$/ breaks on those inner `$` characters.
+ * We also may see escaped dollars inside math, like `\\$900`.
  */
 
 /**
@@ -23,10 +22,6 @@ export function isEscapedByBackslash(str, pos) {
  * Scans for unescaped `$...$` spans.
  *
  * Returns segments in the order they appear in the string.
- * Each segment contains:
- *  - start: index of opening `$`
- *  - end: index AFTER closing `$`
- *  - inner: content between the delimiters
  */
 export function getInlineDollarSegments(content) {
   const segments = [];
@@ -55,39 +50,94 @@ export function getInlineDollarSegments(content) {
 }
 
 /**
+ * Replace inline `$...$` spans using a heuristic.
+ *
+ * Important behavior:
+ * - If a `$...$` candidate does NOT look like LaTeX, we only emit the
+ *   opening `$` as literal and continue scanning from the next character.
+ *   This avoids consuming the closing `$` that might be the opening for a
+ *   later real LaTeX span (e.g. `$1000 ... $n$`).
+ */
+export function replaceInlineDollarMath(content, { onMath, onNonMathDollar } = {}) {
+  const nonMath = typeof onNonMathDollar === 'function' ? onNonMathDollar : () => '$';
+
+  let out = '';
+  let i = 0;
+  while (i < content.length) {
+    if (content[i] !== '$' || isEscapedByBackslash(content, i)) {
+      out += content[i];
+      i += 1;
+      continue;
+    }
+
+    // Find next unescaped '$'
+    let j = i + 1;
+    while (j < content.length) {
+      const next = content.indexOf('$', j);
+      if (next === -1) break;
+      if (!isEscapedByBackslash(content, next)) {
+        j = next;
+        break;
+      }
+      j = next + 1;
+    }
+
+    // Unmatched opening '$' => keep rest verbatim.
+    if (j >= content.length) {
+      out += content.slice(i);
+      break;
+    }
+
+    const inner = content.slice(i + 1, j);
+    if (looksLikeLatexInline(inner)) {
+      const raw = content.slice(i, j + 1);
+      out += (typeof onMath === 'function') ? onMath({ inner, raw, start: i, end: j + 1 }) : raw;
+      i = j + 1;
+    } else {
+      // Do NOT consume the closing '$'.
+      out += nonMath({ start: i });
+      i += 1;
+    }
+  }
+
+  return out;
+}
+
+/**
  * Heuristic: decide whether `$...$` is intended as LaTeX math.
  *
- * If there's no sign of real LaTeX, we treat it as currency-ish text
- * and skip KaTeX, converting `$123$` -> `$123`.
+ * Goal:
+ * - Allow math-ish short forms like `$n$`, `$p$`, `$10$`, `$0.25$`.
+ * - Avoid rendering `$...$` spans that look like prose/currency,
+ *   e.g. `$1000 dollars and my friend has $...$`.
  */
 export function looksLikeLatexInline(inner) {
-  const trimmed = inner.trim();
+  const trimmed = (inner ?? '').trim();
   if (!trimmed) return false;
 
-  // If the `$...$` span crosses lines, it's very likely not intended as
-  // inline math (and can easily happen when a `$` is unmatched).
-  // In that case, we should treat it as plain text.
-  if (/[\n\r]/.test(inner)) return false;
+  // If it crosses lines, it's almost certainly not an inline math span.
+  if (/\r|\n/.test(inner)) return false;
 
-  // Guardrail: if it's enormous, avoid attempting KaTeX.
+  // Guardrail: avoid attempting KaTeX on huge spans.
   if (trimmed.length > 200) return false;
 
-  // Strong LaTeX indicators: commands/operators.
-  // - \% , \times , \text{x}, \frac{...}
-  // - braces, subscripts/superscripts, equals/signs, etc.
-  if (/(\\[a-zA-Z]+)|(~)|\\[%$&_^{}]/.test(trimmed)) return true;
-  if (/(\\(times|cdot|left|right|frac|sqrt|text|mathit|mathrm|mathbf|sum|prod|pm|ge|le|gt|lt)\b)/.test(trimmed)) {
-    return true;
-  }
+  // Strong LaTeX indicators.
+  if (/(\\[a-zA-Z]+)|\\[%$&_^{}]/.test(trimmed)) return true;
+  if (/(\\(times|cdot|left|right|frac|sqrt|text|mathit|mathrm|mathbf|sum|prod|pm|ge|le|gt|lt)\b)/.test(trimmed)) return true;
   if (/[=+\-^_{}]/.test(trimmed)) return true;
 
-  // If the content is basically just a number-ish token, it's probably currency.
-  // Examples: 33.5\% (would be caught above by \\%), 900, 1,158.7
-  if (/^-?\d[\d,]*(?:\.\d+)?\s*(?:[xX]|%)?\s*$/.test(trimmed)) return false;
+  const hasWhitespace = /\s/.test(trimmed);
 
-  // Default: if it contains a backslash anywhere, it's probably LaTeX.
-  if (trimmed.includes('\\')) return true;
+  // If it's multi-word prose (like currency descriptions), don't treat it as math.
+  // Keep this strict unless there are strong indicators above.
+  if (hasWhitespace) return false;
 
-  // Otherwise, treat as non-LaTeX.
+  // No whitespace: accept common math atoms.
+  // Examples: n, p, x1, 10, 0.25, 1,285.7
+  if (/^-?\d[\d,]*(?:\.\d+)?\s*(?:[xX]|%)?$/.test(trimmed)) return true;
+  if (/^[A-Za-z]$/.test(trimmed)) return true;
+  if (/^[A-Za-z][A-Za-z0-9_]*$/.test(trimmed)) return true;
+  if (/^[A-Za-z0-9]+(?:[._][A-Za-z0-9]+)*$/.test(trimmed)) return true;
+
   return false;
 }
