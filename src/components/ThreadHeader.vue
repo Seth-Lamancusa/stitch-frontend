@@ -138,13 +138,13 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'exitSelection', 'l
   align-items: center;
   gap: var(--space-sm);
   margin-left: auto;
-  flex: 0 0 30%;
+  flex: 0 0 auto;
   justify-content: flex-end;
 }
 
-@media (max-width: 768px) {
+@media (min-width: 769px) {
   .selection-controls {
-    flex: 0 0 auto;
+    flex: 0 0 30%;
   }
 }
 
@@ -380,4 +380,3 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'exitSelection', 'l
   }
 }
 </style>
-
