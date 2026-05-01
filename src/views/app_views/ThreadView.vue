@@ -1599,29 +1599,32 @@ const closeProfileModal = () => {
     pointer-events: auto;
     width: 100%;
     max-width: 520px;
-    border: none;
-    border-radius: var(--radius-pill);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
     cursor: pointer;
-    background-color: var(--color-secondary);
-    color: var(--color-text-inverse);
+    background-color: var(--color-surface);
+    color: var(--color-text);
     padding: 14px 18px;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
-    font-size: var(--font-size-lg);
+    font-size: var(--font-size-md);
     font-weight: 600;
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.3);
-    transition: transform var(--transition-fast), background-color var(--transition-fast);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.25);
+    transition: transform var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast);
   }
 
   .copy-thread-fab:hover:not(:disabled) {
-    background-color: var(--color-secondary-dark);
+    background-color: var(--color-hover-overlay);
+    border-color: var(--color-secondary-dark);
     transform: translateY(-1px);
   }
 
   .copy-thread-fab.copied {
     background-color: var(--color-success);
+    border-color: var(--color-success);
+    color: var(--color-text-inverse);
   }
 
   .copy-thread-fab-icon {
@@ -1920,5 +1923,4 @@ const closeProfileModal = () => {
   }
 }
 </style>
-
 
