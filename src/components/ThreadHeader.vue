@@ -138,6 +138,14 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'exitSelection', 'l
   align-items: center;
   gap: var(--space-sm);
   margin-left: auto;
+  flex: 0 0 30%;
+  justify-content: flex-end;
+}
+
+@media (max-width: 768px) {
+  .selection-controls {
+    flex: 0 0 auto;
+  }
 }
 
 .selection-count {
@@ -152,7 +160,7 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'exitSelection', 'l
   gap: 6px;
   background: transparent;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   padding: 5px 8px;
   font-size: var(--font-size-xs);
   cursor: pointer;
@@ -188,7 +196,7 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'exitSelection', 'l
   justify-content: center;
   background: transparent;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   padding: 4px 8px;
   font-size: var(--font-size-md);
   cursor: pointer;
@@ -372,5 +380,4 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'exitSelection', 'l
   }
 }
 </style>
-
 
