@@ -38,7 +38,7 @@
       <div 
         class="messages-container" 
         ref="messageList" 
-        @click="handleContainerClick"
+        @click="handleContainerClick" 
         :style="{ visibility: isContainerVisible ? 'visible' : 'hidden' }"
       >
         <!-- Top of thread marker - only show after scroll is complete -->
@@ -99,6 +99,18 @@
           ref="bottomMarker"
           :key="`bottom-marker-${displayedMessages.length > 0 ? displayedMessages[displayedMessages.length - 1].id : 'empty'}`"
         />
+      </div>
+
+      <div v-if="showCopyThreadButton" class="copy-thread-fab-wrap">
+        <button
+          class="copy-thread-fab"
+          :class="{ copied: isThreadCopied }"
+          type="button"
+          @click="copyThread"
+        >
+          <span class="copy-thread-fab-icon">{{ isThreadCopied ? '✓' : '📝' }}</span>
+          <span class="copy-thread-fab-text">{{ isThreadCopied ? 'Copied!' : 'Copy thread' }}</span>
+        </button>
       </div>
       
       <!-- Reply box component -->
@@ -229,8 +241,10 @@ const recipientsModalRef = ref(null);
 const showLinksModal = ref(false);
 const linksModalMessage = ref(null);
 
-// Copy button state
-const isCopied = ref(false);
+  // Copy button state
+  const isCopied = ref(false);
+
+  const isThreadCopied = ref(false);
 
 // Consolidated loading state - single source of truth
 const isLoadingThread = ref(true); // Main loading state for all thread operations
@@ -360,11 +374,15 @@ const showLoadingState = computed(() => {
   return !isAuthReady.value || isLoadingThread.value;
 });
 
-// Selection mode computed properties
-const isSelectionMode = computed(() => store.getters['navigation/isSelectionMode']);
-const selectedMessageIds = computed(() => store.getters['navigation/selectedMessageIds']);
-const selectedMessageCount = computed(() => store.getters['navigation/selectedMessageCount']);
-const isMessageSelected = computed(() => (messageId) => store.getters['navigation/isMessageSelected'](messageId));
+  // Selection mode computed properties
+  const isSelectionMode = computed(() => store.getters['navigation/isSelectionMode']);
+  const selectedMessageIds = computed(() => store.getters['navigation/selectedMessageIds']);
+  const selectedMessageCount = computed(() => store.getters['navigation/selectedMessageCount']);
+  const isMessageSelected = computed(() => (messageId) => store.getters['navigation/isMessageSelected'](messageId));
+
+  const showCopyThreadButton = computed(() => {
+    return !isSelectionMode.value && displayedMessages.value.length > 0;
+  });
 
 // Recipients modal computed properties
 const recipientsModalVisible = computed(() => store.getters['navigation/recipientsModalVisible']);
@@ -1038,8 +1056,8 @@ const exitSelectionMode = () => {
   store.dispatch('navigation/exitSelectionMode');
 };
 
-const copySelectedMessages = () => {
-  if (selectedMessageIds.value.length === 0) return;
+  const copySelectedMessages = () => {
+    if (selectedMessageIds.value.length === 0) return;
   
   try {
     // Get all messages in the current branch to check for gaps
@@ -1087,7 +1105,39 @@ const copySelectedMessages = () => {
   } catch (error) {
     console.error('Error copying selected messages:', error);
   }
-};
+  };
+
+  const copyThread = () => {
+    if (!displayedMessages.value || displayedMessages.value.length === 0) return;
+
+    try {
+      dismissMobileKeyboard();
+
+      const formattedText = displayedMessages.value
+        .map((message) => {
+          const userTag = message.author_user_tag || 'unknown';
+          const displayName = message.author_display_name || 'Unknown';
+          const datetime = new Date(message.timestamp).toLocaleString();
+          const content = message.content || '';
+          return `[${datetime}] ${displayName} (@${userTag}): ${content}`;
+        })
+        .join('\n\n');
+
+      navigator.clipboard
+        .writeText(formattedText)
+        .then(() => {
+          isThreadCopied.value = true;
+          setTimeout(() => {
+            isThreadCopied.value = false;
+          }, 1000);
+        })
+        .catch((err) => {
+          console.error('Failed to copy thread: ', err);
+        });
+    } catch (error) {
+      console.error('Error copying thread:', error);
+    }
+  };
 
 const confirmDeleteMessage = (message) => {
   dismissMobileKeyboard();
@@ -1529,9 +1579,56 @@ const closeProfileModal = () => {
   transform: translateY(0);
 }
 
-.reply-box-hidden {
-  transform: translateY(100%);
-}
+  .reply-box-hidden {
+    transform: translateY(100%);
+  }
+
+  .copy-thread-fab-wrap {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 92px;
+    z-index: 25;
+    display: flex;
+    justify-content: center;
+    padding: 0 40px;
+    pointer-events: none;
+  }
+
+  .copy-thread-fab {
+    pointer-events: auto;
+    width: 100%;
+    max-width: 520px;
+    border: none;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    background-color: var(--color-secondary);
+    color: var(--color-text-inverse);
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.3);
+    transition: transform var(--transition-fast), background-color var(--transition-fast);
+  }
+
+  .copy-thread-fab:hover:not(:disabled) {
+    background-color: var(--color-secondary-dark);
+    transform: translateY(-1px);
+  }
+
+  .copy-thread-fab.copied {
+    background-color: var(--color-success);
+  }
+
+  .copy-thread-fab-icon {
+    display: inline-flex;
+    width: 22px;
+    justify-content: center;
+  }
 
 /* Update the reply-box-container positioning to overlay on the messages */
 .reply-box-container {
@@ -1686,7 +1783,7 @@ const closeProfileModal = () => {
   100% { transform: rotate(360deg); }
 }
 
-@media (max-width: 768px) {
+  @media (max-width: 768px) {
   .messages-container {
     padding-left: 8px;
     padding-right: 8px;
@@ -1695,11 +1792,16 @@ const closeProfileModal = () => {
     align-items: stretch; /* Let MessageNodes fill width on small screens */
   }
   
-  .reply-box-container {
-    padding: 0 16px; /* Reduce padding on mobile */
-    bottom: 10px; /* Position slightly higher on mobile */
-    z-index: 10; /* Lower than the header controls (z-index 50) */
-  }
+    .reply-box-container {
+      padding: 0 16px; /* Reduce padding on mobile */
+      bottom: 10px; /* Position slightly higher on mobile */
+      z-index: 10; /* Lower than the header controls (z-index 50) */
+    }
+
+    .copy-thread-fab-wrap {
+      bottom: 74px;
+      padding: 0 16px;
+    }
   
   /* Make the reply box take up more width on mobile */
   .reply-box {
@@ -1759,7 +1861,7 @@ const closeProfileModal = () => {
   }
 }
 
-@media (max-width: 480px) {
+  @media (max-width: 480px) {
   .messages-container {
     padding-left: 4px; /* Minimal padding for thread content */
     padding-right: 4px;
@@ -1768,10 +1870,15 @@ const closeProfileModal = () => {
     align-items: stretch; /* Full width on very small screens */
   }
   
-  .reply-box-container {
-    padding: 0 8px; /* Further reduce on very narrow screens */
-    bottom: 5px;
-  }
+    .reply-box-container {
+      padding: 0 8px; /* Further reduce on very narrow screens */
+      bottom: 5px;
+    }
+
+    .copy-thread-fab-wrap {
+      bottom: 62px;
+      padding: 0 8px;
+    }
   
   
   .thread-title {
@@ -1813,6 +1920,5 @@ const closeProfileModal = () => {
   }
 }
 </style>
-
 
 

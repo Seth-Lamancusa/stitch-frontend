@@ -379,7 +379,7 @@ import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
 .content-columns > div {
   background: var(--card-background);
   border: 1px solid var(--card-border);
-  border-radius: var(--border-radius-lg);
+  border-radius: 12px;
   padding: 2.5rem 2rem;
   transition: all 0.3s ease;
   position: relative;

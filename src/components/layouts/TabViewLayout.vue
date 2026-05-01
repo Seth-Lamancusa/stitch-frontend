@@ -174,15 +174,22 @@
                 </div>
                 <template v-else>
                   <div
-                    v-for="m in managedUsers"
-                    :key="resolveUid(m) || Math.random()"
+                    v-for="m in managedUsersOrderedForMenu"
+                    :key="managedUserSortKey(m) || resolveUid(m) || m?.user_tag || Math.random()"
                     class="menu-item"
                     :class="{
                       active: resolveUid(m) === activePrincipalUid,
-                      pending: switchingPrincipalUid === resolveUid(m)
+                      pending: switchingPrincipalUid === resolveUid(m),
+                      dragging: managedUserSortKey(m) === managedDragKey,
+                      'drag-over': managedUserSortKey(m) === managedDragOverKey
                     }"
                     role="menuitem"
                     @click="onSelectPrincipal(resolveUid(m))"
+                    :draggable="!!managedUserSortKey(m)"
+                    @dragstart="onManagedDragStart(managedUserSortKey(m), $event)"
+                    @dragover.prevent="onManagedDragOver(managedUserSortKey(m), $event)"
+                    @drop.prevent="onManagedDrop(managedUserSortKey(m), $event)"
+                    @dragend="onManagedDragEnd"
                   >
                     <div class="menu-item-main">
                       <UserDisplay
@@ -203,7 +210,7 @@
                       <span class="menu-switch-spinner"></span>
                     </span>
                   </div>
-                  <div v-if="managedUsers.length === 0" class="menu-empty">No managed users</div>
+                  <div v-if="managedUsersOrderedForMenu.length === 0" class="menu-empty">No managed users</div>
                 </template>
               </div>
               <div class="menu-divider"></div>
@@ -419,6 +426,94 @@ const managedLoading = ref(false);
 const resolveUid = (u) => (u && (u.uid || u.id || u._key)) || null;
 const activePrincipalUid = computed(() => store.getters['auth/activePrincipalUid'] || resolveUid(user.value));
 const managerUid = computed(() => store.getters['auth/managerUid'] || resolveUid(user.value));
+
+// Managed users reordering (drag/drop) - persisted in localStorage per manager
+const isManagedUsersReordering = ref(false);
+const managedDragKey = ref(null);
+const managedDragOverKey = ref(null);
+const suppressManagedClick = ref(false);
+
+const managedUserSortKey = (m) => {
+  const uid = resolveUid(m);
+  return uid || (m && m.user_tag ? m.user_tag : null);
+};
+
+const managedUsersOrderKey = computed(() => {
+  if (typeof window === 'undefined') return null;
+  const baseUid = managerUid.value || resolveUid(user.value) || 'unknown';
+  return `managed_users_order:${baseUid}`;
+});
+
+const managedUsersOrder = ref([]);
+
+const loadManagedUsersOrder = () => {
+  try {
+    const key = managedUsersOrderKey.value;
+    if (!key || typeof window === 'undefined' || !window.localStorage) return;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) managedUsersOrder.value = parsed.filter(v => typeof v === 'string' && v.length > 0);
+  } catch (e) {
+    console.warn('[TabViewLayout] Failed to load managed user order:', e);
+  }
+};
+
+const persistManagedUsersOrder = (orderedItems) => {
+  try {
+    const key = managedUsersOrderKey.value;
+    if (!key || typeof window === 'undefined' || !window.localStorage) return;
+    const order = (orderedItems || [])
+      .map(managedUserSortKey)
+      .filter(v => typeof v === 'string' && v.length > 0);
+    managedUsersOrder.value = order;
+    window.localStorage.setItem(key, JSON.stringify(order));
+  } catch (e) {
+    console.warn('[TabViewLayout] Failed to persist managed user order:', e);
+  }
+};
+
+const managedUsersOrderedForMenu = computed(() => {
+  const list = managedUsers.value || [];
+  if (!Array.isArray(managedUsersOrder.value) || managedUsersOrder.value.length === 0) return list;
+
+  const keyToItem = new Map();
+  for (const m of list) {
+    const k = managedUserSortKey(m);
+    if (k) keyToItem.set(k, m);
+  }
+
+  const ordered = [];
+  const used = new Set();
+
+  for (const k of managedUsersOrder.value) {
+    if (k && keyToItem.has(k) && !used.has(k)) {
+      ordered.push(keyToItem.get(k));
+      used.add(k);
+    }
+  }
+
+  // Append items missing from stored order.
+  for (const m of list) {
+    const k = managedUserSortKey(m);
+    if (!k) {
+      ordered.push(m);
+      continue;
+    }
+    if (!used.has(k)) ordered.push(m);
+  }
+
+  return ordered;
+});
+
+watch(
+  managedUsersOrderKey,
+  () => {
+    managedUsersOrder.value = [];
+    loadManagedUsersOrder();
+  },
+  { immediate: true }
+);
 const getUserDisplayName = (u) => {
   if (!u) return 'Unknown';
   return u.displayName || u.display_name || (u.user_tag ? `@${u.user_tag}` : (u.email || 'Unknown'));
@@ -526,6 +621,7 @@ const togglePrincipalMenu = async () => {
 const closePrincipalMenu = () => { isPrincipalMenuOpen.value = false; };
 const onSelectPrincipal = async (_uid) => {
   if (!_uid || switchingPrincipalUid.value) return;
+  if (isManagedUsersReordering.value || suppressManagedClick.value) return;
   const currentActive = activePrincipalUid.value;
   if (_uid === currentActive) {
     closePrincipalMenu();
@@ -556,6 +652,60 @@ const onSelectPrincipal = async (_uid) => {
   }
 };
 const onCreateManagedUser = () => { closePrincipalMenu(); isCreateManagedModalOpen.value = true; };
+
+// Drag/drop handlers for managed users menu reordering
+const onManagedDragStart = (key, event) => {
+  if (!key) return;
+  isManagedUsersReordering.value = true;
+  managedDragKey.value = key;
+  managedDragOverKey.value = key;
+  if (event?.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    try { event.dataTransfer.setData('text/plain', key); } catch (_) {}
+  }
+};
+
+const onManagedDragOver = (key, event) => {
+  if (!isManagedUsersReordering.value) return;
+  if (event) event.preventDefault();
+  managedDragOverKey.value = key;
+};
+
+const onManagedDrop = (targetKey, event) => {
+  if (!isManagedUsersReordering.value) return;
+  event?.preventDefault?.();
+
+  const fromKey = event?.dataTransfer?.getData?.('text/plain');
+  if (!fromKey || !targetKey || fromKey === targetKey) return;
+
+  const current = managedUsersOrderedForMenu.value || [];
+  const fromIndex = current.findIndex(m => managedUserSortKey(m) === fromKey);
+  const toIndexRaw = current.findIndex(m => managedUserSortKey(m) === targetKey);
+  if (fromIndex < 0 || toIndexRaw < 0) return;
+
+  // If removing from before the insertion point, the insertion index shifts left by 1.
+  const toIndex = fromIndex < toIndexRaw ? toIndexRaw - 1 : toIndexRaw;
+
+  const next = current.slice();
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+
+  persistManagedUsersOrder(next);
+
+  // Prevent the click handler from running right after drop.
+  suppressManagedClick.value = true;
+  setTimeout(() => { suppressManagedClick.value = false; }, 80);
+
+  isManagedUsersReordering.value = false;
+  managedDragKey.value = null;
+  managedDragOverKey.value = null;
+};
+
+const onManagedDragEnd = () => {
+  isManagedUsersReordering.value = false;
+  managedDragKey.value = null;
+  managedDragOverKey.value = null;
+};
 
 const closeCreateManagedModal = () => {
   isCreateManagedModalOpen.value = false;
@@ -921,6 +1071,21 @@ const handleChannelCreated = async (newChannel) => {
 .menu-item.pending {
   opacity: 0.65;
   cursor: wait;
+}
+
+.menu-item[draggable="true"] {
+  cursor: grab;
+  user-select: none;
+}
+
+.menu-item.dragging {
+  opacity: 0.65;
+  background: var(--color-hover-overlay, #222);
+}
+
+.menu-item.drag-over {
+  outline: 1px dashed rgba(79, 140, 255, 0.95);
+  outline-offset: -2px;
 }
 
 .menu-item-main {

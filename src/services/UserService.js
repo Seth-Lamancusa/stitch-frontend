@@ -45,6 +45,22 @@ export default {
     }
   },
 
+  /**
+   * Fetch a single user profile by exact user_tag (case-insensitive).
+   * Used for bot profile lookups to avoid fuzzy search.
+   */
+  async getUserByTag(userTag) {
+    try {
+      const response = await apiClient.get(`/users/by-tag/${encodeURIComponent(userTag)}`);
+      return response.data;
+    } catch (error) {
+      // Bot tags may not exist (or may be private). Treat as not found.
+      if (error?.response?.status === 404) return null;
+      console.error('[UserService] Error getting user by tag:', error);
+      throw error;
+    }
+  },
+
 
   /**
    * Get messages for the current user with skip-based pagination.

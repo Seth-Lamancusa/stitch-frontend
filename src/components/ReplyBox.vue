@@ -501,7 +501,8 @@ let suppressNextMentionDetection = false;
 // Centralized validation logic
 const canSendReply = computed(() => {
   const subjectValid = !subject.value || subject.value.length <= 72;
-  return props.canInteract && content.value.trim() !== '' && subjectValid && !isSending.value && !uploading.value;
+  const hasFiles = Array.isArray(attachments.value) && attachments.value.length > 0;
+  return props.canInteract && (content.value.trim() !== '' || hasFiles) && subjectValid && !isSending.value && !uploading.value;
 });
 
 // Generate placeholder text

@@ -40,6 +40,9 @@ const inputModalities = ref('');
 const outputModalities = ref('');
 const thirdPartyIntegrations = ref('');
 const availableVersions = ref('');
+const availableVersionsDraft = ref([]);
+const selectedAvailableVersionId = ref('');
+const isInitializingBotCapabilities = ref(false);
 const isSubmitting = ref(false);
 const errorMessage = ref('');
 const tagError = ref('');
@@ -168,24 +171,44 @@ watch(() => props.isOpen, (isOpen) => {
 });
 
 const resetForm = () => {
-  displayName.value = user.value?.displayName || '';
-  tag.value = user.value?.user_tag || '';
-  phoneNumber.value = user.value?.phone_number || '';
-  email.value = user.value?.email || '';
-  bio.value = user.value?.bio || '';
-  endpoint.value = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
-  isPrivate.value = !!(user.value?.private);
-  isBot.value = !!(user.value?.is_bot);
-  inputModalities.value = user.value?.input_modalities || '';
-  outputModalities.value = user.value?.output_modalities || '';
-  thirdPartyIntegrations.value = user.value?.third_party_integrations || '';
-  availableVersions.value = user.value?.available_versions ? JSON.stringify(user.value.available_versions, null, 2) : '';
-  const _contacts = (user.value?.contacts || []);
-  notifyPrefs.value = {
-    email: !!_contacts.find(c => c.type==='email' && c.notify),
-    phone: !!_contacts.find(c => c.type==='phone' && c.notify),
-    endpoint: !!_contacts.find(c => c.type==='endpoint' && c.notify)
-  };
+    isInitializingBotCapabilities.value = true;
+
+    displayName.value = user.value?.displayName || '';
+    tag.value = user.value?.user_tag || '';
+    phoneNumber.value = user.value?.phone_number || '';
+    email.value = user.value?.email || '';
+    bio.value = user.value?.bio || '';
+    endpoint.value = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
+    isPrivate.value = !!(user.value?.private);
+    isBot.value = !!(user.value?.is_bot);
+    thirdPartyIntegrations.value = user.value?.third_party_integrations || '';
+
+    const rawAv = Array.isArray(user.value?.available_versions) ? user.value.available_versions : [];
+    // Clone so UI edits don't mutate store state / originals.
+    const av = rawAv.length ? JSON.parse(JSON.stringify(rawAv)) : [];
+    availableVersionsDraft.value = av;
+    availableVersions.value = av.length ? JSON.stringify(av, null, 2) : '';
+
+    const defaultVersion = av.find(v => v && v.default === true);
+    const firstVersion = av[0];
+    selectedAvailableVersionId.value = (defaultVersion?.id || firstVersion?.id || '');
+
+    if (av.length && selectedAvailableVersionId.value) {
+      const selected = av.find(v => v && v.id === selectedAvailableVersionId.value);
+      inputModalities.value = selected?.input_modalities ?? selected?.inputModalities ?? '';
+      outputModalities.value = selected?.output_modalities ?? selected?.outputModalities ?? '';
+    } else {
+      // Fall back to global union modalities when no per-version data exists.
+      inputModalities.value = user.value?.input_modalities || '';
+      outputModalities.value = user.value?.output_modalities || '';
+    }
+
+    const _contacts = (user.value?.contacts || []);
+    notifyPrefs.value = {
+      email: !!_contacts.find(c => c.type==='email' && c.notify),
+      phone: !!_contacts.find(c => c.type==='phone' && c.notify),
+      endpoint: !!_contacts.find(c => c.type==='endpoint' && c.notify)
+    };
   errorMessage.value = '';
   tagError.value = '';
   displayNameError.value = '';
@@ -232,9 +255,11 @@ const resetForm = () => {
   isAddManagerValid.value = null;
   selectedAddManager.value = null;
   addManagerError.value = '';
-  addManagerSuccess.value = '';
-  if (addManagerSearchTimeout) { clearTimeout(addManagerSearchTimeout); addManagerSearchTimeout = null; }
-};
+    addManagerSuccess.value = '';
+    if (addManagerSearchTimeout) { clearTimeout(addManagerSearchTimeout); addManagerSearchTimeout = null; }
+
+    isInitializingBotCapabilities.value = false;
+  };
 
 onMounted(() => {
   resetForm();
@@ -260,6 +285,50 @@ watch(isBot, (value) => {
   if (!value) {
     botCapabilitiesError.value = '';
   }
+});
+
+watch(selectedAvailableVersionId, (newId) => {
+  if (isInitializingBotCapabilities.value) return;
+  if (!newId || !availableVersionsDraft.value.length) return;
+
+  const selected = availableVersionsDraft.value.find(v => v && v.id === newId);
+  if (!selected) return;
+  inputModalities.value = selected?.input_modalities ?? selected?.inputModalities ?? '';
+  outputModalities.value = selected?.output_modalities ?? selected?.outputModalities ?? '';
+});
+
+watch([inputModalities, outputModalities], ([newInput, newOutput]) => {
+  if (isInitializingBotCapabilities.value) return;
+  if (!selectedAvailableVersionId.value) return;
+  if (!availableVersionsDraft.value.length) return;
+
+  const trimmedInput = normalizeTrimmed(newInput);
+  const trimmedOutput = normalizeTrimmed(newOutput);
+
+  const desiredInput = trimmedInput || null;
+  const desiredOutput = trimmedOutput || null;
+
+  // Persist the edited modalities into the selected available_version entry.
+  let didChange = false;
+  const nextDraft = availableVersionsDraft.value.map(v => {
+    if (!v || v.id !== selectedAvailableVersionId.value) return v;
+
+    const curInput = v.input_modalities ?? v.inputModalities ?? null;
+    const curOutput = v.output_modalities ?? v.outputModalities ?? null;
+
+    if (curInput === desiredInput && curOutput === desiredOutput) return v;
+
+    didChange = true;
+    return {
+      ...v,
+      input_modalities: desiredInput,
+      output_modalities: desiredOutput,
+    };
+  });
+
+  if (!didChange) return;
+  availableVersionsDraft.value = nextDraft;
+  availableVersions.value = JSON.stringify(nextDraft, null, 2);
 });
 
 const validateTag = () => {
@@ -319,27 +388,33 @@ const hasFormChanges = computed(() => {
   const originalTag = user.value.user_tag || '';
   const originalPhoneNumber = user.value?.phone_number || '';
   const originalEmail = user.value?.email || '';
-  const originalEndpoint = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
-  const originalPrivate = !!(user.value?.private);
-  const originalBio = user.value?.bio || '';
-  const originalInputModalities = user.value?.input_modalities || '';
-  const originalOutputModalities = user.value?.output_modalities || '';
-  const originalThirdPartyIntegrations = user.value?.third_party_integrations || '';
-  const originalAvailableVersions = user.value?.available_versions ? JSON.stringify(user.value.available_versions, null, 2) : '';
+const originalEndpoint = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
+const originalPrivate = !!(user.value?.private);
+const originalBio = user.value?.bio || '';
+const originalInputModalities = user.value?.input_modalities || '';
+const originalOutputModalities = user.value?.output_modalities || '';
+const originalThirdPartyIntegrations = user.value?.third_party_integrations || '';
+const originalAvailableVersions = user.value?.available_versions ? JSON.stringify(user.value.available_versions, null, 2) : '';
+
+  const hasPerVersionCapabilities = availableVersionsDraft.value.length > 0;
 
   const displayNameChanged = normalizeTrimmed(displayName.value) !== normalizeTrimmed(originalDisplayName);
   const tagChanged = normalizeLowerTrimmed(tag.value) !== normalizeLowerTrimmed(originalTag);
   const phoneChanged = normalizePhoneForCompare(phoneNumber.value) !== normalizePhoneForCompare(originalPhoneNumber);
   const emailChanged = normalizeLowerTrimmed(email.value) !== normalizeLowerTrimmed(originalEmail);
   const endpointChanged = normalizeEndpointForCompare(endpoint.value) !== normalizeEndpointForCompare(originalEndpoint);
-  const privateChanged = !!isPrivate.value !== originalPrivate;
-  const bioChanged = normalizeTrimmed(bio.value) !== normalizeTrimmed(originalBio);
-  const botChanged = !!isBot.value !== !!(user.value?.is_bot);
-  const inputModalitiesChanged = normalizeTrimmed(inputModalities.value) !== normalizeTrimmed(originalInputModalities);
-  const outputModalitiesChanged = normalizeTrimmed(outputModalities.value) !== normalizeTrimmed(originalOutputModalities);
+const privateChanged = !!isPrivate.value !== originalPrivate;
+const bioChanged = normalizeTrimmed(bio.value) !== normalizeTrimmed(originalBio);
+const botChanged = !!isBot.value !== !!(user.value?.is_bot);
+  const inputModalitiesChanged = hasPerVersionCapabilities ? false : normalizeTrimmed(inputModalities.value) !== normalizeTrimmed(originalInputModalities);
+  const outputModalitiesChanged = hasPerVersionCapabilities ? false : normalizeTrimmed(outputModalities.value) !== normalizeTrimmed(originalOutputModalities);
   const thirdPartyIntegrationsChanged = normalizeTrimmed(thirdPartyIntegrations.value) !== normalizeTrimmed(originalThirdPartyIntegrations);
 
-  return displayNameChanged || tagChanged || phoneChanged || emailChanged || endpointChanged || privateChanged || bioChanged || botChanged || inputModalitiesChanged || outputModalitiesChanged || thirdPartyIntegrationsChanged || notifyPrefsChanged();
+  const availableVersionsChanged = hasPerVersionCapabilities
+    ? normalizeTrimmed(availableVersions.value) !== normalizeTrimmed(originalAvailableVersions)
+    : false;
+
+  return displayNameChanged || tagChanged || phoneChanged || emailChanged || endpointChanged || privateChanged || bioChanged || botChanged || inputModalitiesChanged || outputModalitiesChanged || thirdPartyIntegrationsChanged || availableVersionsChanged || notifyPrefsChanged();
 });
 
 // Function to determine if the update button should be enabled
@@ -521,13 +596,17 @@ const updateProfile = async () => {
     if (!!isBot.value !== !!(user.value?.is_bot)) {
       profileUpdate.is_bot = !!isBot.value;
     }
-    if (normalizeTrimmed(inputModalities.value) !== normalizeTrimmed(originalInputModalities)) {
-      const trimmed = normalizeTrimmed(inputModalities.value);
-      profileUpdate.input_modalities = trimmed || null;
-    }
-    if (normalizeTrimmed(outputModalities.value) !== normalizeTrimmed(originalOutputModalities)) {
-      const trimmed = normalizeTrimmed(outputModalities.value);
-      profileUpdate.output_modalities = trimmed || null;
+    // When per-version data exists, modalities editing is stored in available_versions[].
+    // When there are no available versions, fall back to global input/output modalities.
+    if (!availableVersionsDraft.value.length) {
+      if (normalizeTrimmed(inputModalities.value) !== normalizeTrimmed(originalInputModalities)) {
+        const trimmed = normalizeTrimmed(inputModalities.value);
+        profileUpdate.input_modalities = trimmed || null;
+      }
+      if (normalizeTrimmed(outputModalities.value) !== normalizeTrimmed(originalOutputModalities)) {
+        const trimmed = normalizeTrimmed(outputModalities.value);
+        profileUpdate.output_modalities = trimmed || null;
+      }
     }
     if (normalizeTrimmed(thirdPartyIntegrations.value) !== normalizeTrimmed(originalThirdPartyIntegrations)) {
       const trimmed = normalizeTrimmed(thirdPartyIntegrations.value);
@@ -1213,49 +1292,60 @@ const deleteAccount = async () => {
               <h4>Bot capabilities</h4>
               <p>Help people understand what this bot can handle.</p>
             </div>
-            <div class="capabilities-fields">
-              <div class="field">
-                <label for="inputModalities">Input modalities</label>
-                <input
-                  id="inputModalities"
-                  v-model="inputModalities"
-                  type="text"
-                  placeholder="e.g., txt, png, pdf"
-                />
-                <div class="field-hint">Comma-separated list of supported input filetypes.</div>
+              <div class="capabilities-fields">
+                <div class="field">
+                  <label for="inputModalities">Input modalities</label>
+                  <input
+                    id="inputModalities"
+                    v-model="inputModalities"
+                    type="text"
+                    placeholder="e.g., txt, png, pdf"
+                  />
+                  <div class="field-hint">Comma-separated list of supported input filetypes for the selected version.</div>
+                </div>
+                <div class="field">
+                  <label for="outputModalities">Output modalities</label>
+                  <input
+                    id="outputModalities"
+                    v-model="outputModalities"
+                    type="text"
+                    placeholder="e.g., txt, png"
+                  />
+                  <div class="field-hint">Comma-separated list of output filetypes for the selected version.</div>
+                </div>
+                <div class="field">
+                  <label for="thirdPartyIntegrations">3rd party integrations</label>
+                  <input
+                    id="thirdPartyIntegrations"
+                    v-model="thirdPartyIntegrations"
+                    type="text"
+                    placeholder="e.g., OpenAI, Anthropic"
+                  />
+                  <div class="field-hint">Optional 3rd party integrations list.</div>
+                </div>
+                <div class="field">
+                  <label for="availableVersionSelect">Available version</label>
+                  <select
+                    id="availableVersionSelect"
+                    v-model="selectedAvailableVersionId"
+                    :disabled="!availableVersionsDraft.length"
+                  >
+                    <option
+                      v-for="v in availableVersionsDraft"
+                      :key="v.id"
+                      :value="v.id"
+                    >
+                      {{ v.label || v.id }}{{ v.default ? ' (default)' : '' }}
+                    </option>
+                  </select>
+                  <div class="field-hint" v-if="availableVersionsDraft.length">
+                    Input/output modalities above apply to this routing version.
+                  </div>
+                  <div class="field-hint" v-else>
+                    No per-version capabilities found; editing global union modalities.
+                  </div>
+                </div>
               </div>
-              <div class="field">
-                <label for="outputModalities">Output modalities</label>
-                <input
-                  id="outputModalities"
-                  v-model="outputModalities"
-                  type="text"
-                  placeholder="e.g., txt, png"
-                />
-                <div class="field-hint">Comma-separated list of output filetypes.</div>
-              </div>
-              <div class="field">
-                <label for="thirdPartyIntegrations">3rd party integrations</label>
-                <input
-                  id="thirdPartyIntegrations"
-                  v-model="thirdPartyIntegrations"
-                  type="text"
-                  placeholder="e.g., OpenAI, Anthropic"
-                />
-                <div class="field-hint">Optional 3rd party integrations list.</div>
-              </div>
-              <div class="field">
-                <label for="availableVersions">Available versions (JSON)</label>
-                <textarea
-                  id="availableVersions"
-                  v-model="availableVersions"
-                  placeholder='[{"id": "v1", "label": "V1", "default": true}]'
-                  rows="4"
-                  class="json-textarea"
-                ></textarea>
-                <div class="field-hint">JSON array for bot routing versions.</div>
-              </div>
-            </div>
             <div class="field-error" v-if="botCapabilitiesError">{{ botCapabilitiesError }}</div>
           </section>
 

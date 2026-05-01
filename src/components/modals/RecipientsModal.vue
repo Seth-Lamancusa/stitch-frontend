@@ -290,6 +290,7 @@
                   <BotVersionPicker
                     v-if="isBotRecipient(recipient) && getAvailableVersions(recipient).length > 1"
                     :available-versions="getAvailableVersions(recipient)"
+                    compact
                     :model-value="botVersionSelection[recipient.uid]"
                     @update:modelValue="(val) => { botVersionSelection[recipient.uid] = val; store.dispatch('navigation/setRecipientBotVersion', { uid: recipient.uid, versionId: val }); }"
                   />
@@ -359,6 +360,7 @@
                   <BotVersionPicker
                     v-if="isBotRecipient(recipient) && getAvailableVersions(recipient).length > 1"
                     :available-versions="getAvailableVersions(recipient)"
+                    compact
                     :model-value="botVersionSelection[recipient.uid]"
                     @update:modelValue="(val) => { botVersionSelection[recipient.uid] = val; store.dispatch('navigation/setRecipientBotVersion', { uid: recipient.uid, versionId: val }); }"
                   />
@@ -1908,7 +1910,9 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  margin-left: auto;
+  justify-content: flex-end;
 }
 
 .visibility-toggle-btn {
@@ -2184,11 +2188,17 @@ onBeforeUnmount(() => {
   margin-top: 20px;
 }
 
-  /* New recipient styling */
-  .recipient-tag.new-recipient {
-    background-color: var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.05));
-    border: 1px solid var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.2));
-  }
+   /* New recipient styling */
+   .recipient-tag.new-recipient {
+     background-color: var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.05));
+     border: 1px solid var(--color-primary-light, rgba(var(--color-primary-rgb, 79, 140, 255), 0.2));
+   }
+
+   .recipient-tag.new-recipient .bot-version-picker {
+     max-width: 120px !important;
+     flex: 0 0 auto;
+   }
+
 
   .recipient-tag.existing-recipient,
 .recipient-tag.new-recipient {
