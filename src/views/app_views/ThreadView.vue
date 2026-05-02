@@ -1587,7 +1587,7 @@ const closeProfileModal = () => {
     position: fixed;
     left: 0;
     right: 0;
-    bottom: 92px;
+    bottom: calc(env(safe-area-inset-bottom) + 20px);
     z-index: 25;
     display: flex;
     justify-content: flex-end;
@@ -1597,8 +1597,8 @@ const closeProfileModal = () => {
 
   .copy-thread-fab {
     pointer-events: auto;
-    width: 100%;
-    max-width: 520px;
+    width: auto;
+    max-width: calc(100vw - 80px);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     cursor: pointer;
@@ -1802,7 +1802,7 @@ const closeProfileModal = () => {
     }
 
     .copy-thread-fab-wrap {
-      bottom: 74px;
+      bottom: calc(env(safe-area-inset-bottom) + 20px);
       padding: 0 16px;
     }
   
@@ -1879,8 +1879,25 @@ const closeProfileModal = () => {
     }
 
     .copy-thread-fab-wrap {
-      bottom: 62px;
-      padding: 0 8px;
+      bottom: calc(env(safe-area-inset-bottom) + 20px);
+      padding: 0 12px;
+    }
+
+    .copy-thread-fab {
+      width: 52px;
+      height: 52px;
+      padding: 0;
+      border-radius: 14px;
+      gap: 0;
+    }
+
+    .copy-thread-fab-text {
+      display: none;
+    }
+
+    .copy-thread-fab-icon {
+      width: auto;
+      font-size: 18px;
     }
   
   
