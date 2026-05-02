@@ -1590,7 +1590,7 @@ const closeProfileModal = () => {
     bottom: 92px;
     z-index: 25;
     display: flex;
-    justify-content: center;
+    justify-content: flex-end;
     padding: 0 40px;
     pointer-events: none;
   }
@@ -1923,4 +1923,3 @@ const closeProfileModal = () => {
   }
 }
 </style>
-
