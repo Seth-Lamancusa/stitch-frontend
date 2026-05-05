@@ -38,6 +38,7 @@ import MessageList from '../../components/MessageList.vue';
 import RecipientsModal from '../../components/modals/RecipientsModal.vue';
 import DeleteConfirmModal from '../../components/modals/DeleteConfirmModal.vue';
 import MessageService from '../../services/MessageService.js';
+import { addRecipientsToAncestorsExcludingAuthoredMessages } from '../../utils/recipientPropagation.js';
 
 // Accept mode prop from router
 const props = defineProps({
@@ -103,9 +104,17 @@ const handleAddRecipients = async (recipients, addToAncestors = true) => {
       return;
     }
 
-    // Backend now supports per-recipient notify flag, send all recipients in one call
-    // Recipients can include notify field: {user_tag: "alice", notify: false}
-    await MessageService.addRecipientsToMessage(messageId, recipients, addToAncestors);
+    // Add recipients, optionally propagating to ancestors while excluding
+    // recipient-authored messages in the ancestor chain.
+    if (addToAncestors) {
+      await addRecipientsToAncestorsExcludingAuthoredMessages({
+        originMessageId: messageId,
+        recipients,
+        addToAncestors: true,
+      });
+    } else {
+      await MessageService.addRecipientsToMessage(messageId, recipients, false);
+    }
 
     // Refresh the message to reflect recipient changes
     await store.dispatch('messages/refreshLoadedAncestors', {

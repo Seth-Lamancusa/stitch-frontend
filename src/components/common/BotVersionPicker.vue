@@ -79,13 +79,15 @@ const missingOptionValue = computed(() => {
 .bot-version-picker {
   display: inline-flex;
   align-items: center;
-  max-width: 30%;
+  /* Fixed width so the native select doesn't size itself to the
+     longest option label. */
+  width: 120px;
   flex-shrink: 0;
 }
 
 .bot-version-picker.is-compact {
-  max-width: 120px;
-  flex-shrink: 1;
+  width: 120px;
+  flex-shrink: 0;
 }
 
 .bot-version-select {
@@ -98,11 +100,13 @@ const missingOptionValue = computed(() => {
   color: var(--color-text);
   font-size: var(--font-size-xs, 12px);
   cursor: pointer;
-  min-width: 96px;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
 }
 
 .bot-version-picker.is-compact .bot-version-select {
-  min-width: 72px;
+  min-width: 0;
 }
 
 .bot-version-select:disabled {

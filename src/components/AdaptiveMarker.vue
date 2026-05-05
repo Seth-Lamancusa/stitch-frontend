@@ -232,6 +232,11 @@ export default {
   padding-bottom: 6px;
 }
 
+.adaptive-marker.top.end {
+  /* Extra breathing room above the beginning-of-thread marker */
+  padding-top: calc(var(--space-md) + 12px);
+}
+
 .adaptive-marker.visible {
   opacity: 1;
 }

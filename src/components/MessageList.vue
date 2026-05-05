@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, onUnmounted, nextTick, watch } from 'vue';
+import { computed, onMounted, ref, onUnmounted, nextTick, watch, inject } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
 import MessagePreview from './MessagePreview.vue';
@@ -100,6 +100,40 @@ const loadingIndicatorRef = ref(null);
 // Read active tab from centralized navigation store (synced from TabViewLayout via route)
 const activeTab = computed(() => store.getters['navigation/activeTab'] || 'history');
 
+// NOTE: Inbox "mark all as read" was added but disabled per product decision.
+// Keeping the code here commented so it can be re-enabled later.
+/*
+// Inbox unread state (used for "mark all as read")
+const unreadMessageCount = computed(() => store.getters['messages/getUnreadMessageCount']);
+const isInboxMode = computed(() => props.mode === 'inbox');
+
+const isMarkingAllAsRead = ref(false);
+
+const markAllAsRead = async () => {
+  if (!isInboxMode.value || !user.value) return;
+  if (unreadMessageCount.value <= 0) return;
+  if (isMarkingAllAsRead.value) return;
+
+  try {
+    isMarkingAllAsRead.value = true;
+    await store.dispatch('messages/markAllMessagesAsRead');
+
+    // Reload inbox from scratch so thread unread badges update.
+    currentSkip.value = 0;
+    isAllLoaded.value = false;
+
+    const scrollContainer = messageListRef.value?.closest('.main-content');
+    if (scrollContainer) scrollContainer.scrollTop = 0;
+
+    await loadMessages();
+  } catch (e) {
+    console.error('[MessageList] markAllAsRead failed:', e);
+  } finally {
+    isMarkingAllAsRead.value = false;
+  }
+};
+*/
+
 const threads = computed(() => {
   // Use custom messages if provided
   if (props.customMessages && props.mode === 'custom') {
@@ -114,6 +148,54 @@ const threads = computed(() => {
   // Use store for inbox/admin modes
   const allMessages = store.getters['messages/getLoadedMessages'] || [];
   return allMessages;
+});
+
+// Register download callback with TabViewLayout so the global Download button
+// can export the list currently populated on this tab.
+const registerDownloadCurrentList = inject('registerDownloadCurrentList', null);
+
+const downloadCurrentList = () => {
+  try {
+    const payload = {
+      exported_at: new Date().toISOString(),
+      mode: props.mode,
+      channelId: selectedChannelId.value || null,
+      currentSkip: currentSkip.value,
+      isAllLoaded: isAllLoaded.value,
+      messages: threads.value,
+    };
+
+    const json = JSON.stringify(payload, (_k, v) => {
+      if (typeof v === 'bigint') return v.toString();
+      if (v instanceof Date) return v.toISOString();
+      return v;
+    }, 2);
+
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const safeMode = (props.mode || 'messages').replace(/[^a-z0-9_-]+/gi, '-');
+    a.download = `message-list-${safeMode}-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error('[MessageList] Download failed:', e);
+  }
+};
+
+onMounted(() => {
+  if (typeof registerDownloadCurrentList === 'function') {
+    registerDownloadCurrentList(downloadCurrentList);
+  }
+});
+
+onUnmounted(() => {
+  if (typeof registerDownloadCurrentList === 'function') {
+    registerDownloadCurrentList(null);
+  }
 });
 
 // Loading indicator should be visible if we're loading or have more to load
@@ -979,6 +1061,18 @@ const handleLinkDelete = async (linkData) => {
     <div v-if="!hideHeader" class="message-list-header">
       <div class="header-controls">
         <!-- Create button is now global in TabViewLayout -->
+
+        <!--
+        <button
+          v-if="isInboxMode"
+          class="mark-all-read-button"
+          :disabled="isMarkingAllAsRead || unreadMessageCount <= 0"
+          @click="markAllAsRead"
+          :title="unreadMessageCount > 0 ? `Mark all ${unreadMessageCount} as read` : 'All caught up'"
+        >
+          {{ isMarkingAllAsRead ? 'Marking...' : `Mark all as read${unreadMessageCount > 0 ? ` (${unreadMessageCount})` : ''}` }}
+        </button>
+        -->
       </div>
     </div>
 
@@ -1292,11 +1386,13 @@ const handleLinkDelete = async (linkData) => {
   display: flex;
   align-items: flex-start;
   gap: var(--space-sm);
-  width: 50%;
+  width: 560px;
+  max-width: calc(100% - var(--space-md) * 2);
   padding: var(--space-md);
   margin: 0 auto 0 auto;
   background-color: var(--color-surface);
   border-radius: var(--radius-md);
+  box-sizing: border-box;
 }
 
 .mode-description .info-icon {
@@ -1325,8 +1421,8 @@ const handleLinkDelete = async (linkData) => {
 .channel-filter-indicator {
   margin: 0 auto 0 auto;
   padding: var(--space-xs) var(--space-md);
-  width: 50%;
-  max-width: 100%;
+  width: 560px;
+  max-width: calc(100% - var(--space-md) * 2);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   font-style: italic;
@@ -1393,6 +1489,30 @@ const handleLinkDelete = async (linkData) => {
   margin: 0px;
   padding: 0px;
 }
+
+/*
+.mark-all-read-button {
+  background-color: transparent;
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), opacity var(--transition-fast);
+  min-width: 160px;
+}
+
+.mark-all-read-button:hover:not(:disabled) {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+.mark-all-read-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+*/
 
 .load-more-button {
   background-color: var(--color-primary);

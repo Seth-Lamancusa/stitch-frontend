@@ -1,7 +1,9 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, reactive } from 'vue';
 import { useStore } from 'vuex';
 import MessageService from '../../services/MessageService.js';
+import { addRecipientsToAncestorsExcludingAuthoredMessages } from '../../utils/recipientPropagation.js';
+import BotVersionPicker from '../common/BotVersionPicker.vue';
 
 const store = useStore();
 
@@ -22,6 +24,9 @@ const addSuccess = ref(false);
 const addError = ref(null);
 const addToAncestors = ref(true);
 
+// UI-only bot version selection state (keyed by user uid)
+const botVersionSelection = reactive({});
+
 const selectedUsersList = computed(() => speedDialUsers.value.filter(user => !!selectedUsers.value[user.uid]));
 
 const resetState = () => {
@@ -31,6 +36,7 @@ const resetState = () => {
   addError.value = null;
   showExpanded.value = false;
   addToAncestors.value = true;
+  for (const k of Object.keys(botVersionSelection)) delete botVersionSelection[k];
 };
 
 watch(isOpen, (open) => {
@@ -52,9 +58,29 @@ const closeModal = () => {
 };
 
 const isUserSelected = (user) => !!selectedUsers.value[user.uid];
-const toggleUserSelected = (user) => {
+const toggleUserSelected = (user, evt = null) => {
+  // Prevent card selection toggling when interacting with the bot version dropdown.
+  if (evt?.target && typeof evt.target.closest === 'function') {
+    const hit = evt.target.closest('.bot-version-select, .bot-version-picker, .quick-prompt-bot-version');
+    if (hit) return;
+  }
   const current = !!selectedUsers.value[user.uid];
   selectedUsers.value = { ...selectedUsers.value, [user.uid]: !current };
+};
+
+const isBotRecipient = (user) => !!(user?.is_bot ?? user?.isBot);
+
+const getAvailableVersions = (user) => {
+  const v = user?.available_versions ?? user?.availableVersions;
+  return Array.isArray(v) ? v : [];
+};
+
+const getSelectedBotVersionId = (user) => {
+  const uid = user?.uid;
+  if (!uid) return null;
+  const hasSelection = Object.prototype.hasOwnProperty.call(botVersionSelection, uid);
+  if (hasSelection) return botVersionSelection[uid];
+  return user?.bot_version_id ?? user?.botVersionId ?? null;
 };
 
 const addSelectedUsers = async () => {
@@ -74,10 +100,28 @@ const addSelectedUsers = async () => {
     // 1. Grant Access (Silent Add)
     // We set notify: false because we will follow up with an explicit ping
     const accessRecipients = recipients.map(r => ({ ...r, notify: false }));
-    await MessageService.addRecipientsToMessage(targetMessageId.value, accessRecipients, addToAncestors.value);
+    if (addToAncestors.value) {
+      await addRecipientsToAncestorsExcludingAuthoredMessages({
+        originMessageId: targetMessageId.value,
+        recipients: accessRecipients,
+        addToAncestors: true,
+      });
+    } else {
+      await MessageService.addRecipientsToMessage(targetMessageId.value, accessRecipients, false);
+    }
 
     // 2. Trigger Response (Explicit Ping)
-    const pingRecipients = recipients.map(r => r.user_tag || r.uid);
+    const pingRecipients = selectedUsersList.value.map(user => {
+      const uid = user.uid;
+      const userTag = user.user_tag ?? user.userTag;
+      const botVersionId = getSelectedBotVersionId(user);
+
+      if (botVersionId && userTag && isBotRecipient(user)) {
+        return { user_tag: userTag, uid, bot_version_id: botVersionId };
+      }
+
+      return userTag || uid;
+    });
     
     // Resolve context (ancestors) for the bot
     let context = null;
@@ -95,8 +139,8 @@ const addSelectedUsers = async () => {
 
     await store.dispatch('messages/refreshLoadedAncestors', {
       messageId: targetMessageId.value,
-      get_replies: true,
-      get_children: true,
+      get_replies: false,
+      get_children: false,
     });
     addSuccess.value = true;
     setTimeout(() => {
@@ -113,7 +157,7 @@ const addSelectedUsers = async () => {
 
 <template>
   <transition name="fade">
-    <div v-if="isOpen" class="modal-overlay" @click.self="closeModal">
+  <div v-if="isOpen" class="modal-overlay" @click.self="closeModal">
       <div class="quick-prompt-modal" @click.stop>
         <div class="modal-header">
           <h3>Quick Prompt</h3>
@@ -141,12 +185,23 @@ const addSelectedUsers = async () => {
                 :key="user.uid"
                 class="user-option-button"
                 :class="{ 'user-selected': isUserSelected(user) }"
-                @click="toggleUserSelected(user)"
+                @click="(e) => toggleUserSelected(user, e)"
               >
                 <span class="user-option-icon">
                   <input type="checkbox" :checked="isUserSelected(user)" @click.stop @change="toggleUserSelected(user)" />
                 </span>
                 <span class="user-option-text">{{ user.display_name }}</span>
+
+                <span v-if="isUserSelected(user)" @click.stop @mousedown.stop>
+                  <BotVersionPicker
+                    v-if="isBotRecipient(user) && getAvailableVersions(user).length > 1"
+                    :available-versions="getAvailableVersions(user)"
+                    :model-value="getSelectedBotVersionId(user)"
+                    compact
+                    @update:modelValue="(val) => { botVersionSelection[user.uid] = val; }"
+                    class="quick-prompt-bot-version"
+                  />
+                </span>
               </div>
             </div>
 
@@ -167,12 +222,23 @@ const addSelectedUsers = async () => {
                   :key="user.uid"
                   class="user-option-button expanded-button"
                   :class="{ 'user-selected': isUserSelected(user) }"
-                  @click="toggleUserSelected(user)"
+                  @click="(e) => toggleUserSelected(user, e)"
                 >
                   <span class="user-option-icon">
                     <input type="checkbox" :checked="isUserSelected(user)" @click.stop @change="toggleUserSelected(user)" />
                   </span>
                   <span class="user-option-text">{{ user.display_name }}</span>
+
+                  <span v-if="isUserSelected(user)" @click.stop @mousedown.stop>
+                    <BotVersionPicker
+                      v-if="isBotRecipient(user) && getAvailableVersions(user).length > 1"
+                      :available-versions="getAvailableVersions(user)"
+                      :model-value="getSelectedBotVersionId(user)"
+                      compact
+                      @update:modelValue="(val) => { botVersionSelection[user.uid] = val; }"
+                      class="quick-prompt-bot-version"
+                    />
+                  </span>
                 </div>
               </div>
             </div>
@@ -188,9 +254,7 @@ const addSelectedUsers = async () => {
             :disabled="isAdding || selectedUsersList.length === 0"
             @click.stop="addSelectedUsers"
           >
-            <span v-if="isAdding" class="button-loading"><span class="loading-spinner"></span><span>Adding...</span></span>
-            <span v-else-if="addSuccess">Added!</span>
-            <span v-else>Add</span>
+            <span class="add-button-label">{{ isAdding ? 'Adding...' : (addSuccess ? 'Added!' : 'Add') }}</span>
           </button>
           <button class="cancel-button" :disabled="isAdding" @click.stop="closeModal">Cancel</button>
         </div>
@@ -272,14 +336,32 @@ const addSelectedUsers = async () => {
 .error-message { color: var(--color-error); font-size: var(--font-size-sm); margin-top: var(--space-md); }
 
 .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: var(--space-lg); }
-.add-button { padding: 10px 20px; background-color: var(--color-primary); color: var(--color-text-inverse); border: none; border-radius: var(--radius-md); font-weight: 500; font-size: var(--font-size-sm); cursor: pointer; transition: all 0.2s ease; }
+.add-button { 
+  padding: 10px 20px;
+  min-width: 136px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
 .add-button:hover:not(:disabled) { background-color: var(--color-primary-dark); transform: translateY(-1px); }
 .add-button:disabled { background-color: var(--color-border); color: var(--color-text-secondary); cursor: not-allowed; transform: none; }
 .add-button.success { background-color: var(--color-success); color: rgba(255, 255, 255, 0.9); }
 .cancel-button { padding: 10px 20px; background-color: transparent; color: var(--color-text); border: 1px solid var(--color-border); border-radius: var(--radius-md); font-weight: 500; font-size: var(--font-size-sm); cursor: pointer; transition: all 0.2s ease; }
 .cancel-button:hover { background-color: var(--color-hover-overlay); border-color: var(--color-border-dark); }
-.button-loading { display: inline-flex; align-items: center; gap: 8px; }
-.loading-spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255, 255, 255, 0.3); border-top: 2px solid currentColor; border-radius: 50%; animation: spin 1s linear infinite; }
+.add-button-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
 
 @keyframes spin {
   0% { transform: rotate(0deg); }
@@ -297,5 +379,3 @@ const addSelectedUsers = async () => {
   .user-option-button { padding: 8px 10px; gap: 8px; }
 }
 </style>
-
-

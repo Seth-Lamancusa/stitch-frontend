@@ -4,7 +4,7 @@
       <!-- Mode description: explains that channel selection is global (filter + default for new messages) -->
       <div class="mode-description">
         <span class="info-icon">ℹ</span>
-        <p>Channels are group discussion spaces. Selecting a channel here applies everywhere: it becomes the default for new messages and filters Inbox, History, and Timeline. Choose “Select a channel” (no channel) to see all messages and have no default channel.</p>
+        <p>Channels are group discussion spaces. Selecting a channel here applies it everywhere: new messages will be sent in the channel and Inbox, History, and Timeline will be filtered to include only messages sent in the channel.</p>
       </div>
       
       <!-- Channel selector dropdown -->
@@ -510,7 +510,7 @@ watch(userChannels, (channels) => {
 
 <style scoped>
 .channels-view {
-  padding: 8px;
+  padding: 12px;
   max-width: 900px;
   margin: 0 auto;
 }
@@ -519,11 +519,13 @@ watch(userChannels, (channels) => {
   display: flex;
   align-items: flex-start;
   gap: var(--space-sm);
-  width: 66%;
+  width: 560px;
+  max-width: calc(100% - var(--space-md) * 2);
   padding: var(--space-md);
   margin: 0 auto var(--space-md) auto;
   background-color: var(--color-surface);
   border-radius: var(--radius-md);
+  box-sizing: border-box;
 }
 
 .mode-description .info-icon {
@@ -539,7 +541,8 @@ watch(userChannels, (channels) => {
   font-size: 0.875rem;
   font-weight: 600;
   font-style: normal;
-  margin-top: 2px;
+  /* Nudge the icon glyph down for visual centering. */
+  transform: translateY(2px);
 }
 
 .mode-description p {
@@ -1045,4 +1048,3 @@ watch(userChannels, (channels) => {
 }
 
 </style>
-

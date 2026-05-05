@@ -191,6 +191,19 @@ export default {
     },
 
     /**
+     * Mark all messages as read for the current user.
+     */
+    async markAllMessagesAsRead() {
+      try {
+        const response = await apiClient.post('/users/messages/mark-all-read', {});
+        return response;
+      } catch (error) {
+        console.error('Error marking all messages as read:', error);
+        throw error;
+      }
+    },
+
+    /**
      * Mark multiple messages as read for the current user
      * @param {Array<String>} messageIds - Array of message IDs to mark as read
      * @returns {Promise<Object>} - Response with success status and counts

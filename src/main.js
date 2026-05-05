@@ -29,23 +29,18 @@ try {
 
 const initApp = async () => {
   try {
-    
     // Initialize auth (handles Firebase setup internally)
     await store.dispatch('auth/initAuth');
-    
-    
+
     // Initialize formatters (for rich text)
     initFormatters();
-    
-
-    // Mount the app
-    app.mount('#app');
   } catch (e) {
     console.error("Error initializing app:", e);
-    // Mount anyway so user can see error state
-    app.mount('#app');
   }
 };
 
-// Start initialization
+// Mount immediately so the fallback is replaced as soon as Vue is ready.
+app.mount('#app')
+
+// Continue initialization in the background.
 initApp();

@@ -1,16 +1,16 @@
 <template>
   <div 
      class="message-node" 
-    :class="{ 
-      'list-view': inListView,
-      'compact': compact,
-      'selected': inListView ? selected : isMessageSelected,
-      'dropdown-open': showActionBar,
-      'collapsed': isCollapsed
-    }"
-    :data-message-id="message.id"
-    :data-has-siblings="!!message.parent_id"
-     ref="messageNodeRef"
+   :class="{ 
+       'list-view': inListView,
+       'compact': compact,
+       'selected': inListView ? selected : isMessageSelected,
+       'dropdown-open': showActionBar,
+       'collapsed': isCollapsed
+     }"
+   :data-message-id="message.id"
+   :data-has-siblings="shouldReserveSiblingNavSpace"
+    ref="messageNodeRef"
   >
     <!-- Desktop sibling navigator - absolutely positioned outside the rotating card -->
     <sibling-navigator
@@ -1342,6 +1342,13 @@ export default {
       return orderedChildIds.length > 1;
     });
 
+    // Reserve layout space for sibling navigation buttons.
+    // Only nodes that have a parent in the thread graph should reserve space.
+    // Root nodes (no parent_id) stay full width.
+    const shouldReserveSiblingNavSpace = computed(() => {
+      return !!props.message?.parent_id;
+    });
+
 
     
     const isCurrentUser = computed(() => {
@@ -1905,12 +1912,12 @@ export default {
     
     // Sibling navigator visibility flags (mirror original template conditions)
     const showSiblingNavMobile = computed(() => {
-      const val = !props.inListView && !!props.message.parent_id && isMobile.value;
+      const val = !props.inListView && shouldReserveSiblingNavSpace.value && isMobile.value;
       return val;
     });
 
     const showSiblingNavDesktop = computed(() => {
-      const val = !props.inListView && !!props.message.parent_id && !isMobile.value;
+      const val = !props.inListView && shouldReserveSiblingNavSpace.value && !isMobile.value;
       return val;
     });
 
@@ -1926,6 +1933,8 @@ export default {
       inListView: toRef(props, 'inListView'),
       compact: toRef(props, 'compact'),
       navAnimationClass,
+      // Used for desktop sizing / sibling navigator layout
+      shouldReserveSiblingNavSpace,
       // Sibling-navigation animation
       // Computed and reactive values
       currentUser,
@@ -2068,6 +2077,7 @@ export default {
   margin-left: auto;
   margin-right: auto;
   max-width: 100%;
+  width: 100%; /* Ensure it spans the full available container space */
   padding: 0 4px; /* Reduced horizontal padding */
   transition: all var(--transition-fast);
   position: relative;
@@ -2155,13 +2165,8 @@ export default {
   display: none;
 }
 
-/* Root messages (without siblings) should expand to fill container */
-.message-node:not([data-has-siblings="true"]) {
-  width: 100%;
-  justify-content: stretch;
-}
-
-.message-node:not([data-has-siblings="true"]) .message-content {
+/* Ensure all content stretches out nicely */
+.message-node .message-content {
   width: 100%;
   max-width: none;
 }
@@ -2206,17 +2211,6 @@ export default {
   z-index: 1;
 }
 
-/* Override root node expansion specifically in list view */
-.message-node.list-view:not([data-has-siblings="true"]) {
-  width: 100% !important;
-  justify-content: stretch !important;
-}
-
-.message-node.list-view:not([data-has-siblings="true"]) .message-content {
-  width: 100% !important;
-  max-width: 100% !important;
-}
-
 /* Override sibling-specific styling in list view */
 .message-node.list-view[data-has-siblings="true"] {
   width: 100% !important;
@@ -2250,6 +2244,7 @@ export default {
   position: relative;
   z-index: 1;
   transition: background-color var(--transition-fast), border-color var(--transition-fast), max-height 0.3s ease-out, padding 0.2s ease;
+  box-sizing: border-box;
 }
 
 /* Sibling navigation card animation (message node only) */
@@ -2294,13 +2289,19 @@ export default {
 
 /* Add space and adjust positioning for sibling navigation on desktop */
 @media (min-width: 769px) {
+  .message-node:not([data-has-siblings="true"]) {
+    width: 100%;
+  }
+
   .message-node[data-has-siblings="true"] {
+    /* Non-root nodes reserve space for the desktop sibling navigator buttons. */
     width: calc(100% - 64px); /* Subtract space for both nav buttons (32px * 2) */
     margin-left: auto;
     margin-right: auto;
   }
 
   .message-node[data-has-siblings="true"] .sibling-navigator {
+    /* Allow the absolutely-positioned navigator buttons to still render in the reserved area. */
     width: calc(100% + 64px); /* Add back the space for nav buttons */
     left: -32px; /* Move navigator back to align with full width */
   }

@@ -254,7 +254,8 @@
       </div>
       <div class="feedback-button-container">
         <router-link to="/messages/2HhB" class="feedback-button">
-          💬 Feedback
+          <span class="button-icon" aria-hidden="true">💬</span>
+          <span class="button-label">Feedback</span>
         </router-link>
         <button 
           @click="handleRefresh"
@@ -264,7 +265,22 @@
           aria-label="Refresh message list"
         >
           <span v-if="isRefreshing" class="refresh-spinner"></span>
-          <span v-else>🔄 Refresh</span>
+          <template v-else>
+            <span class="button-icon" aria-hidden="true">↻</span>
+            <span class="button-label">Refresh</span>
+          </template>
+        </button>
+
+        <button
+          v-if="!isChannelsTab"
+          class="download-button"
+          @click="handleDownload"
+          :disabled="!downloadMessageListFn"
+          title="Download current message list"
+          aria-label="Download current message list"
+        >
+          <span class="button-icon" aria-hidden="true">↓</span>
+          <span class="button-label">Download</span>
         </button>
       </div>
       <slot></slot>
@@ -322,7 +338,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
+  import { computed, ref, watch, onMounted, onBeforeUnmount, provide } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useStore } from 'vuex';
 import { useAuthentication } from '../../composables/useAuthentication';
@@ -346,10 +362,10 @@ const { signInWithApiKey, logout } = useAuthentication();
 // Debug: enable dropdown state logging by default; can be toggled via DevTools
 try { if (typeof window !== 'undefined') { window.__STITCH_DEBUG_MENU = true; } } catch (_) {}
 
-const user = computed(() => store.getters['auth/user']);
+  const user = computed(() => store.getters['auth/user']);
 const isAdmin = computed(() => store.getters['auth/isAdmin']);
 const authReady = computed(() => store.getters['auth/authReady']);
-const activeTab = computed(() => {
+  const activeTab = computed(() => {
   const p = route.path || '';
   if (p.startsWith('/search')) return 'search';
   if (p.startsWith('/history')) return 'history';
@@ -359,7 +375,21 @@ const activeTab = computed(() => {
   if (p.startsWith('/inbox')) return 'inbox';
   if (p.startsWith('/admin')) return 'admin-metrics';
   return 'history';
-});
+  });
+
+  const isChannelsTab = computed(() => activeTab.value === 'channels');
+
+  // Download support: MessageList.vue registers a callback with this layout.
+  const downloadMessageListFn = ref(null);
+  provide('registerDownloadCurrentList', (fn) => {
+    downloadMessageListFn.value = fn;
+  });
+
+  const handleDownload = () => {
+    if (downloadMessageListFn.value) {
+      downloadMessageListFn.value();
+    }
+  };
 const unreadCount = computed(() => store.getters['messages/getUnreadMessageCount']);
 const isUnreadCountLoading = computed(() => store.getters['messages/isLoading']('fetchingUnreadCount'));
 const isLoggingIn = ref(false);
@@ -1381,23 +1411,24 @@ const handleChannelCreated = async (newChannel) => {
 
 /* Shared base styles for both buttons */
 .feedback-button,
-.refresh-button {
+.refresh-button,
+.download-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--color-text-inverse, #fff);
   text-decoration: none;
-  padding: 10px 20px;
-  border-radius: 8px;
+  padding: 8px 14px;
+  border-radius: 7px;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   transition: all 0.3s ease;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(8px);
   margin-top: 6px;
   cursor: pointer;
   box-sizing: border-box;
-  border: 1px solid transparent;
-  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
   line-height: 1;
   white-space: nowrap;
   font-family: inherit;
@@ -1408,13 +1439,32 @@ const handleChannelCreated = async (newChannel) => {
   /* Ensure consistent height */
   min-height: 0;
   height: auto;
+  gap: 8px;
+}
+
+.button-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.button-label {
+  display: inline-flex;
+  align-items: center;
 }
 
 /* Feedback button - green colors */
 .feedback-button {
   background: linear-gradient(135deg, rgba(16, 163, 127, 0.8) 0%, rgba(31, 197, 157, 0.7) 100%);
-  box-shadow: 0 2px 8px rgba(16, 163, 127, 0.3);
-  border-color: rgba(16, 163, 127, 0.3);
+  border-color: rgba(16, 163, 127, 0.45);
+  box-shadow: 0 10px 24px rgba(16, 163, 127, 0.18);
 }
 
 .feedback-button:hover {
@@ -1428,8 +1478,23 @@ const handleChannelCreated = async (newChannel) => {
 /* Refresh button - blue colors */
 .refresh-button {
   background: linear-gradient(135deg, rgba(79, 140, 255, 0.8) 0%, rgba(100, 160, 255, 0.7) 100%);
-  box-shadow: 0 2px 8px rgba(79, 140, 255, 0.3);
-  border-color: rgba(79, 140, 255, 0.3);
+  border-color: rgba(79, 140, 255, 0.45);
+  box-shadow: 0 10px 24px rgba(79, 140, 255, 0.18);
+}
+
+/* Download button (subtle purple) */
+.download-button {
+  background: linear-gradient(135deg, rgba(173, 91, 255, 0.75) 0%, rgba(196, 120, 255, 0.65) 100%);
+  border-color: rgba(173, 91, 255, 0.45);
+  box-shadow: 0 10px 24px rgba(173, 91, 255, 0.18);
+}
+
+.download-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(173, 91, 255, 0.35);
+  background: linear-gradient(135deg, rgba(173, 91, 255, 0.88) 0%, rgba(196, 120, 255, 0.78) 100%);
+  border-color: rgba(173, 91, 255, 0.45);
+  color: var(--color-text-inverse, #fff);
 }
 
 .refresh-button:hover:not(:disabled) {
@@ -1439,7 +1504,8 @@ const handleChannelCreated = async (newChannel) => {
   border-color: rgba(79, 140, 255, 0.5);
 }
 
-.refresh-button:disabled {
+.refresh-button:disabled,
+.download-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -1549,7 +1615,8 @@ const handleChannelCreated = async (newChannel) => {
   }
   
   .feedback-button,
-  .refresh-button {
+  .refresh-button,
+  .download-button {
     font-size: 0.85rem; /* Slightly smaller text */
     padding: 8px 16px; /* Smaller button padding */
   }

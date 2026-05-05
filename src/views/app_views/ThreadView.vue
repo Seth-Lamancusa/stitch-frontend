@@ -25,10 +25,13 @@
         :is-selection-mode="isSelectionMode"
         :selected-message-count="selectedMessageCount"
         :is-copied="isCopied"
+        :show-copy-thread-button="showCopyThreadButton"
+        :is-thread-copied="isThreadCopied"
         @back="backToList()"
         @openGraph="openGraphView"
         @openTreeOptions="openTreeOptionsModal"
         @copy="copySelectedMessages"
+        @copyThread="copyThread"
         @exitSelection="exitSelectionMode"
         @logout="logout"
         @openProfile="openProfileModal"
@@ -85,32 +88,21 @@
           </div>
         </template>
         
-        <!-- Bottom of thread marker - only show after scroll is complete -->
-        <adaptive-marker
-          v-if="shouldShowMarkers"
-          position="bottom"
-          :state="bottomMarkerState"
-          class-name="thread-end-marker"
-          @load-more="loadMoreChildren"
-          @retry="loadMoreChildren"
-          :show-refresh-shortcut="bottomMarkerState === 'end'"
-          :refreshing="isRefreshingLastMessage"
-          @refresh-last="refreshRepliesForLastVisibleMessage"
-          ref="bottomMarker"
-          :key="`bottom-marker-${displayedMessages.length > 0 ? displayedMessages[displayedMessages.length - 1].id : 'empty'}`"
-        />
-      </div>
+      <!-- Bottom of thread marker - only show after scroll is complete -->
+      <adaptive-marker
+        v-if="shouldShowMarkers"
+        position="bottom"
+        :state="bottomMarkerState"
+        class-name="thread-end-marker"
+        @load-more="loadMoreChildren"
+        @retry="loadMoreChildren"
+        :show-refresh-shortcut="bottomMarkerState === 'end'"
+        :refreshing="isRefreshingLastMessage"
+        @refresh-last="refreshRepliesForLastVisibleMessage"
+        ref="bottomMarker"
+        :key="`bottom-marker-${displayedMessages.length > 0 ? displayedMessages[displayedMessages.length - 1].id : 'empty'}`"
+      />
 
-      <div v-if="showCopyThreadButton" class="copy-thread-fab-wrap">
-        <button
-          class="copy-thread-fab"
-          :class="{ copied: isThreadCopied }"
-          type="button"
-          @click="copyThread"
-        >
-          <span class="copy-thread-fab-icon">{{ isThreadCopied ? '✓' : '📝' }}</span>
-          <span class="copy-thread-fab-text">{{ isThreadCopied ? 'Copied!' : 'Copy thread' }}</span>
-        </button>
       </div>
       
       <!-- Reply box component -->
@@ -136,10 +128,13 @@
         :is-selection-mode="isSelectionMode"
         :selected-message-count="selectedMessageCount"
         :is-copied="isCopied"
+        :show-copy-thread-button="showCopyThreadButton"
+        :is-thread-copied="isThreadCopied"
         @back="backToList()"
         @openGraph="openGraphView"
         @openTreeOptions="openTreeOptionsModal"
         @copy="copySelectedMessages"
+        @copyThread="copyThread"
         @exitSelection="exitSelectionMode"
         @logout="logout"
         @openProfile="openProfileModal"
@@ -211,6 +206,7 @@ import AdaptiveMarker from '../../components/AdaptiveMarker.vue';
 import ReplyBox from '../../components/ReplyBox.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
 import MessageService from '../../services/MessageService.js';
+import { addRecipientsToAncestorsExcludingAuthoredMessages } from '../../utils/recipientPropagation.js';
 import LinksModal from '../../components/modals/LinksModal.vue';
 import RecipientsModal from '../../components/modals/RecipientsModal.vue';
 import TreeOptionsModal from '../../components/modals/TreeOptionsModal.vue';
@@ -1185,7 +1181,15 @@ const handleAddRecipients = async (recipients, addToAncestors = true) => {
       notify: !addToAncestors // Only notify via 'added' if NOT doing an explicit ping
     }));
 
-    await MessageService.addRecipientsToMessage(messageId, accessRecipients, addToAncestors);
+    if (addToAncestors) {
+      await addRecipientsToAncestorsExcludingAuthoredMessages({
+        originMessageId: messageId,
+        recipients: accessRecipients,
+        addToAncestors: true,
+      });
+    } else {
+      await MessageService.addRecipientsToMessage(messageId, accessRecipients, false);
+    }
 
     // 2. Trigger Response (Explicit Ping)
     // If we added to ancestors, we explicitly ping the origin message to get a response
@@ -1495,15 +1499,29 @@ const closeProfileModal = () => {
   display: flex;
   flex-direction: column;
   align-items: center; /* Center MessageNode components horizontally */
+  width: 100%;
   padding-left: 80px;
   padding-right: 80px;
   padding-bottom: calc(100px + 25vh); /* Add space at bottom for the reply box plus a screen's worth of scrollable space */
   gap: 20px; /* Consistent gap between elements */
-  overflow-y: auto;
+  /* Keep scrollbar width stable so layout doesn't appear to shrink/grow
+     when branch selection changes the amount of content. */
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
   overflow-x: hidden;
   position: relative;
   justify-content: flex-start;
   scroll-behavior: auto;
+}
+
+/* On very wide screens, keep the thread content from expanding too much */
+@media (min-width: 1280px) {
+  .messages-container {
+    max-width: 1000px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+  }
 }
 
 /* Media query for mobile responsiveness - moved to consolidated section below */
@@ -1583,60 +1601,10 @@ const closeProfileModal = () => {
     transform: translateY(100%);
   }
 
-  .copy-thread-fab-wrap {
+  /* Update the reply-box-container positioning to overlay on the messages */
+  .reply-box-container {
     position: fixed;
-    left: 0;
-    right: 0;
-    bottom: calc(env(safe-area-inset-bottom) + 20px);
-    z-index: 25;
-    display: flex;
-    justify-content: flex-end;
-    padding: 0 40px;
-    pointer-events: none;
-  }
-
-  .copy-thread-fab {
-    pointer-events: auto;
-    width: auto;
-    max-width: calc(100vw - 80px);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    background-color: var(--color-surface);
-    color: var(--color-text);
-    padding: 14px 18px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    font-size: var(--font-size-md);
-    font-weight: 600;
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.25);
-    transition: transform var(--transition-fast), background-color var(--transition-fast), border-color var(--transition-fast);
-  }
-
-  .copy-thread-fab:hover:not(:disabled) {
-    background-color: var(--color-hover-overlay);
-    border-color: var(--color-secondary-dark);
-    transform: translateY(-1px);
-  }
-
-  .copy-thread-fab.copied {
-    background-color: var(--color-success);
-    border-color: var(--color-success);
-    color: var(--color-text-inverse);
-  }
-
-  .copy-thread-fab-icon {
-    display: inline-flex;
-    width: 22px;
-    justify-content: center;
-  }
-
-/* Update the reply-box-container positioning to overlay on the messages */
-.reply-box-container {
-  position: fixed;
-  bottom: 20px;
+    bottom: 20px;
   left: 0;
   right: 0;
   z-index: 10;
@@ -1801,11 +1769,6 @@ const closeProfileModal = () => {
       z-index: 10; /* Lower than the header controls (z-index 50) */
     }
 
-    .copy-thread-fab-wrap {
-      bottom: calc(env(safe-area-inset-bottom) + 20px);
-      padding: 0 16px;
-    }
-  
   /* Make the reply box take up more width on mobile */
   .reply-box {
     width: 100%;
@@ -1878,28 +1841,6 @@ const closeProfileModal = () => {
       bottom: 5px;
     }
 
-    .copy-thread-fab-wrap {
-      bottom: calc(env(safe-area-inset-bottom) + 20px);
-      padding: 0 12px;
-    }
-
-    .copy-thread-fab {
-      width: 52px;
-      height: 52px;
-      padding: 0;
-      border-radius: 14px;
-      gap: 0;
-    }
-
-    .copy-thread-fab-text {
-      display: none;
-    }
-
-    .copy-thread-fab-icon {
-      width: auto;
-      font-size: 18px;
-    }
-  
   
   .thread-title {
     font-size: calc(var(--font-size-md) - 1px);

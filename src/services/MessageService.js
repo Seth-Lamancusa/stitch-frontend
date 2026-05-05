@@ -197,6 +197,12 @@ export default {
     return apiClient.post(`/users/messages/mark-read`, { message_id: id }, { headers })
   },
 
+  // Mark all messages as read
+  async markAllMessagesAsRead() {
+    const headers = await getAuthHeaders()
+    return apiClient.post(`/users/messages/mark-all-read`, {}, { headers })
+  },
+
   // Mark a message as unread
   async markMessageAsUnread(id) {
     const headers = await getAuthHeaders()

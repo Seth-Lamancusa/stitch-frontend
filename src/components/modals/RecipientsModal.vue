@@ -2257,7 +2257,7 @@ onBeforeUnmount(() => {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -55%);
-  color: rgb(0, 0, 0);
+  color: rgba(255, 255, 255, 0.95);
   font-size: 12px;
   font-weight: bold;
   line-height: 1;

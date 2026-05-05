@@ -345,6 +345,7 @@ import TagsModal from './modals/TagsModal.vue';
 import ChannelsModal from './modals/ChannelsModal.vue';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 import MessageService from '../services/MessageService.js';
+import { addRecipientsToAncestorsExcludingAuthoredMessages } from '../utils/recipientPropagation.js';
 import AttachmentService from '../services/AttachmentService.js';
 
 const props = defineProps({
@@ -1669,7 +1670,11 @@ const sendReply = async () => {
       if (!addRecipientsMessageId.value || recipients.value.length === 0) {
         throw new Error('No message or recipients to add');
       }
-      await MessageService.addRecipientsToMessage(addRecipientsMessageId.value, recipients.value, true);
+      await addRecipientsToAncestorsExcludingAuthoredMessages({
+        originMessageId: addRecipientsMessageId.value,
+        recipients: recipients.value,
+        addToAncestors: true,
+      });
       // Refresh origin and loaded ancestors
       await store.dispatch('messages/refreshLoadedAncestors', {
         messageId: addRecipientsMessageId.value,
@@ -1701,7 +1706,15 @@ const sendReply = async () => {
         }
         return recipient;
       });
-      await MessageService.addRecipientsToMessage(props.targetId, recipientsWithoutNotification, replyAddToAncestors.value);
+      if (replyAddToAncestors.value) {
+        await addRecipientsToAncestorsExcludingAuthoredMessages({
+          originMessageId: props.targetId,
+          recipients: recipientsWithoutNotification,
+          addToAncestors: true,
+        });
+      } else {
+        await MessageService.addRecipientsToMessage(props.targetId, recipientsWithoutNotification, false);
+      }
       // Refresh origin and loaded ancestors (no notify path)
       await store.dispatch('messages/refreshLoadedAncestors', {
         messageId: props.targetId,
@@ -3589,7 +3602,7 @@ defineExpose({
   top: 50%;
   left: 50%;
   transform: translate(-50%, -55%);
-  color: rgb(0, 0, 0);
+  color: rgba(255, 255, 255, 0.95);
   font-size: 12px;
   font-weight: bold;
   line-height: 1;

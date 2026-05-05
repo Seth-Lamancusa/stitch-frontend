@@ -30,6 +30,19 @@
       Conversation
     </button>
 
+    <!-- Copy entire thread button (thread view only) -->
+    <button
+      v-if="showCopyThreadButton"
+      @click="$emit('copyThread')"
+      class="copy-thread-button"
+      :class="{ copied: isThreadCopied }"
+      type="button"
+      title="Copy thread"
+    >
+      <span class="copy-thread-icon" aria-hidden="true">{{ isThreadCopied ? '✓' : '📝' }}</span>
+      <span class="copy-thread-text">{{ isThreadCopied ? 'Copied!' : 'Copy thread' }}</span>
+    </button>
+
     <!-- Selection mode controls -->
     <div v-if="isSelectionMode" class="selection-controls">
       <span class="selection-count">{{ selectedMessageCount }} message{{ selectedMessageCount === 1 ? '' : 's' }} selected</span>
@@ -73,9 +86,11 @@ defineProps({
   isSelectionMode: { type: Boolean, default: false },
   selectedMessageCount: { type: Number, default: 0 },
   isCopied: { type: Boolean, default: false },
+  showCopyThreadButton: { type: Boolean, default: false },
+  isThreadCopied: { type: Boolean, default: false },
 });
 
-defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'exitSelection', 'logout', 'openProfile']);
+defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'copyThread', 'exitSelection', 'logout', 'openProfile']);
 </script>
 
 <style scoped>
@@ -101,8 +116,9 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'exitSelection', 'l
   color: var(--color-text);
 }
 
-.graph-view-button,
-.tree-options-button {
+  .graph-view-button,
+  .tree-options-button,
+  .copy-thread-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -114,6 +130,18 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'exitSelection', 'l
   color: var(--color-text);
   font-size: var(--font-size-sm);
 }
+
+  .copy-thread-button.copied {
+    background-color: var(--color-success-light);
+    border-color: var(--color-success);
+    color: var(--color-success);
+  }
+
+  .copy-thread-icon {
+    display: inline-flex;
+    width: 22px;
+    justify-content: center;
+  }
 
 .btn-icon {
   display: inline-flex;
@@ -127,11 +155,12 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'exitSelection', 'l
   height: 100%;
 }
 
-.graph-view-button:hover,
-.tree-options-button:hover {
-  background-color: var(--color-surface-hover);
-  border-color: var(--color-border-hover);
-}
+  .graph-view-button:hover,
+  .tree-options-button:hover,
+  .copy-thread-button:hover {
+    background-color: var(--color-surface-hover);
+    border-color: var(--color-border-hover);
+  }
 
 .selection-controls {
   display: flex;
@@ -372,5 +401,3 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'exitSelection', 'l
   }
 }
 </style>
-
-

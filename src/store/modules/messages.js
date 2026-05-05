@@ -1521,6 +1521,29 @@ export default {
       }
     },
 
+    // Mark all messages as read (used by Inbox tab)
+    async markAllMessagesAsRead({ dispatch, commit, rootState }) {
+      try {
+        if (!rootState.auth?.user) {
+          commit('SET_UNREAD_MESSAGE_COUNT', 0)
+          return { success: false, updated_count: 0, already_read_count: 0 }
+        }
+
+        commit('SET_LOADING', { key: 'markingAllAsRead', isLoading: true })
+        const response = await UserService.markAllMessagesAsRead()
+        const result = response?.data || {}
+
+        // Refresh unread counter immediately
+        await dispatch('fetchUnreadMessageCount')
+        return result
+      } catch (error) {
+        console.error('Error marking all messages as read:', error)
+        throw error
+      } finally {
+        commit('SET_LOADING', { key: 'markingAllAsRead', isLoading: false })
+      }
+    },
+
     // Action to increment unread count (for WebSocket updates)
     incrementUnreadCount({ commit, state }) {
       commit('SET_UNREAD_MESSAGE_COUNT', state.unreadMessageCount + 1);
