@@ -1,4 +1,6 @@
 import MessageService from '../../services/MessageService'
+import { mockMessages } from '../../utils/mock/stitchMockData.js'
+console.log('[MOCK] mockMessages loaded, count:', Object.keys(mockMessages).length);
 import UserService from '../../services/UserService'
 import WebSocketService from '../../services/ws/WebSocketService'
 
@@ -70,6 +72,9 @@ export default {
   
   mutations: {
     SET_MESSAGE(state, message) {
+      if (String(message.id).startsWith('msg_')) {
+        console.log('[MOCK] SET_MESSAGE mutation for', message.id);
+      }
       // Normalize light payloads but avoid clobbering existing structure
       if (!Array.isArray(message.child_ids)) {
         message.child_ids = [];
@@ -82,11 +87,14 @@ export default {
         const currentBranchChild = existingMessage.branch_child;
         
         // Handle merging child_ids from existing and new message
-        let mergedChildIds = [...message.child_ids];
+        let mergedChildIds = [...(message.child_ids || [])];
         if (existingMessage.child_ids && existingMessage.child_ids.length > 0) {
-          // Combine child IDs without duplicates
-          mergedChildIds = [...new Set([...existingMessage.child_ids, ...message.child_ids])];
+          mergedChildIds = [...new Set([...existingMessage.child_ids, ...mergedChildIds])];
         }
+
+        // For branch validation, we must consider both replies AND stitch links.
+        const stitchChildIds = message.stitch_child_ids || existingMessage.stitch_child_ids || [];
+        const allPotentialChildren = [...new Set([...mergedChildIds, ...stitchChildIds])];
 
         // Preserve structural fields if missing on payload
         const nextRecipients = Array.isArray(message.recipients)
@@ -114,7 +122,7 @@ export default {
         };
         
         // Default branch_child - always use last child (furthest right) in complete list
-        const hasChildren = mergedChildIds.length > 0;
+        const hasChildren = allPotentialChildren.length > 0;
         if (hasChildren && currentBranchChild === undefined) {
           // If reply_order is set, use last child from ordered list
           if (mergedMessage.reply_order && Array.isArray(mergedMessage.reply_order) && mergedMessage.reply_order.length > 0) {
@@ -127,59 +135,40 @@ export default {
               const aInOrder = orderMap.has(a);
               const bInOrder = orderMap.has(b);
               if (aInOrder && bInOrder) return orderMap.get(a) - orderMap.get(b);
-              if (aInOrder && !bInOrder) return 1; // b (unordered) comes first
-              if (!aInOrder && bInOrder) return -1; // a (unordered) comes first
+              if (aInOrder && !bInOrder) return 1;
+              if (!aInOrder && bInOrder) return -1;
               const msgA = state.messages[a];
               const msgB = state.messages[b];
               if (msgA && msgB) return new Date(msgA.timestamp) - new Date(msgB.timestamp);
               return 0;
             });
-            // Use last child (furthest right, last in complete list)
-            mergedMessage.branch_child = orderedIds[orderedIds.length - 1];
+            
+            // Prefer the last reply, or fall back to the last stitch if no replies exist in this specific merge
+            mergedMessage.branch_child = orderedIds.length > 0 ? orderedIds[orderedIds.length - 1] : stitchChildIds[stitchChildIds.length - 1];
           } else {
             // No custom order - use most recent by timestamp
-            const childMessages = mergedChildIds
+            const childMessages = allPotentialChildren
               .map(childId => state.messages[childId])
               .filter(child => child)
               .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
             mergedMessage.branch_child = childMessages.length > 0 ? 
               childMessages[childMessages.length - 1].id : 
-              mergedChildIds[mergedChildIds.length - 1];
+              allPotentialChildren[allPotentialChildren.length - 1];
           }
         } else if (hasChildren) {
-          // Keep existing selection if it's still valid
-          const isBranchChildValid = mergedChildIds.includes(currentBranchChild);
+          // Keep existing selection if it's still valid (in replies OR stitches)
+          const isBranchChildValid = allPotentialChildren.includes(currentBranchChild);
           if (isBranchChildValid) {
             mergedMessage.branch_child = currentBranchChild;
           } else {
-            // Re-select branch_child respecting reply_order - use last child
-            if (mergedMessage.reply_order && Array.isArray(mergedMessage.reply_order) && mergedMessage.reply_order.length > 0) {
-              const orderMap = new Map();
-              mergedMessage.reply_order.forEach((id, index) => {
-                orderMap.set(id, index);
-              });
-              const orderedIds = [...mergedChildIds].sort((a, b) => {
-                const aInOrder = orderMap.has(a);
-                const bInOrder = orderMap.has(b);
-                if (aInOrder && bInOrder) return orderMap.get(a) - orderMap.get(b);
-                if (aInOrder && !bInOrder) return 1; // b (unordered) comes first
-                if (!aInOrder && bInOrder) return -1; // a (unordered) comes first
-                const msgA = state.messages[a];
-                const msgB = state.messages[b];
-                if (msgA && msgB) return new Date(msgA.timestamp) - new Date(msgB.timestamp);
-                return 0;
-              });
-              // Use last child (furthest right, last in complete list)
-              mergedMessage.branch_child = orderedIds[orderedIds.length - 1];
-            } else {
-              const childMessages = mergedChildIds
-                .map(childId => state.messages[childId])
-                .filter(child => child)
-                .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-              mergedMessage.branch_child = childMessages.length > 0 ? 
-                childMessages[childMessages.length - 1].id : 
-                mergedChildIds[mergedChildIds.length - 1];
-            }
+            // Re-select branch_child respecting pool
+            const childMessages = allPotentialChildren
+              .map(childId => state.messages[childId])
+              .filter(child => child)
+              .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            mergedMessage.branch_child = childMessages.length > 0 ? 
+              childMessages[childMessages.length - 1].id : 
+              allPotentialChildren[allPotentialChildren.length - 1];
           }
         } else {
           mergedMessage.branch_child = null;
@@ -353,13 +342,20 @@ export default {
       const message = state.messages[messageId];
       if (!message) return;
       
-      // Verify childId is a valid child
-      if (message.child_ids && message.child_ids.includes(childId)) {
-        state.messages[messageId] = {
-          ...message,
-          branch_child: childId
-        };
-      }
+      state.messages[messageId] = {
+        ...message,
+        branch_child: childId
+      };
+    },
+    SET_BRANCH_PARENT(state, { messageId, parentId }) {
+      console.log(`[SET_BRANCH_PARENT] ${messageId} -> ${parentId}`);
+      const message = state.messages[messageId];
+      if (!message) return;
+      
+      state.messages[messageId] = {
+        ...message,
+        branch_parent: parentId
+      };
     },
     
     // New mutation for WebSocket updates
@@ -545,7 +541,6 @@ export default {
     // This should be called before using getVisibleBranchMessages
     prepareBranchPath({ commit, state }, threadRootId) {
       if (!threadRootId || !state.messages[threadRootId]) {
-        console.log(`[prepareBranchPath] ⚠️ Cannot prepare path: message ${threadRootId} not found`);
         return false;
       }
       
@@ -553,81 +548,44 @@ export default {
       let startingMessage = state.messages[threadRootId];
       let highestAncestor = startingMessage;
       let childMessage = startingMessage;
-      let currentParentId = startingMessage.parent_id;
       
-      // Trace up through parent_id as far as we can go
+      // Resolve parent using branch_parent (explicit stitch/history override) or standard parent_id
+      const getParentId = (msg) => (msg.branch_parent !== undefined && msg.branch_parent !== null) ? msg.branch_parent : msg.parent_id;
+      
+      let currentParentId = getParentId(startingMessage);
+      
       while (currentParentId && state.messages[currentParentId]) {
         const parentMessage = state.messages[currentParentId];
-
-        // Set this parent's branch_child to point to the child we came from
         commit('SET_BRANCH_CHILD', { 
           messageId: currentParentId, 
           childId: childMessage.id 
         });
         
-        // Move up one level
         highestAncestor = parentMessage;
         childMessage = parentMessage;
-        currentParentId = parentMessage.parent_id;
+        currentParentId = getParentId(parentMessage);
       }
       
       
       // STEP 2: Now follow the branch path down, ensuring each node has branch_child set
       let currentMessage = highestAncestor;
       
-      
-      
       // Trace downward, ensuring each node has a branch_child if it has children
       while (true) {
-        // If message has no branch child but has child_ids, set last child as branch_child
-        if (!currentMessage.branch_child && currentMessage.child_ids && currentMessage.child_ids.length > 0) {
-          // Get ordered child IDs (respects reply_order if set)
-          let orderedChildIds = currentMessage.child_ids;
-          if (currentMessage.reply_order && Array.isArray(currentMessage.reply_order) && currentMessage.reply_order.length > 0) {
-            // Create a map for quick lookup
-            const orderMap = new Map();
-            currentMessage.reply_order.forEach((id, index) => {
-              orderMap.set(id, index);
-            });
-            
-            // Sort: items not in reply_order first (by timestamp), then items in reply_order (by their order)
-            orderedChildIds = [...currentMessage.child_ids].sort((a, b) => {
-              const aInOrder = orderMap.has(a);
-              const bInOrder = orderMap.has(b);
-              
-              if (aInOrder && bInOrder) {
-                return orderMap.get(a) - orderMap.get(b);
-              } else if (aInOrder && !bInOrder) {
-                return 1; // b (unordered) comes first
-              } else if (!aInOrder && bInOrder) {
-                return -1; // a (unordered) comes first
-              } else {
-                const msgA = state.messages[a];
-                const msgB = state.messages[b];
-                if (msgA && msgB) {
-                  return new Date(msgA.timestamp) - new Date(msgB.timestamp);
-                }
-                return 0;
-              }
-            });
-          }
-          
-          // Get all child messages
-          const childMessages = orderedChildIds
+        // pool of children (replies + stitches)
+        const childPool = (currentMessage.child_ids || []).concat(currentMessage.stitch_child_ids || []);
+
+        // If message has no branch child but has children in pool, set last child as branch_child
+        if (!currentMessage.branch_child && childPool.length > 0) {
+          // Get all child messages present in store
+          const childMessages = childPool
             .map(childId => state.messages[childId])
-            .filter(child => child); // Remove any undefined children
+            .filter(child => child)
+            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
           
           if (childMessages.length > 0) {
-            // Always use last child (furthest right) from complete list
-            let branchChild;
-            if (currentMessage.reply_order && Array.isArray(currentMessage.reply_order) && currentMessage.reply_order.length > 0) {
-              // Use last child from ordered list (last in complete merged list)
-              branchChild = childMessages[childMessages.length - 1];
-            } else {
-              // Sort by timestamp ascending (most recent = last)
-              const sortedByTimestamp = [...childMessages].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-              branchChild = sortedByTimestamp[sortedByTimestamp.length - 1];
-            }
+            // Always use last child (furthest right / newest) from complete pool
+            const branchChild = childMessages[childMessages.length - 1];
             
             commit('SET_BRANCH_CHILD', { 
               messageId: currentMessage.id, 
@@ -664,6 +622,48 @@ export default {
     
     // Unified traversal loader
     async loadTraversal({ commit, state }, { messageId, up_depth = 0, down_depth = 0, get_replies = true, get_children = false, edge_type = 'replies' }) {
+      if (String(messageId).startsWith('msg_')) {
+        console.log(`[MOCK] loadTraversal ${messageId} up:${up_depth} down:${down_depth} type:${edge_type}`);
+        
+        const toLoad = new Map(); // id -> depth info
+        const queue = [{ id: messageId, du: 0, dd: 0 }];
+        
+        while (queue.length > 0) {
+          const { id, du, dd } = queue.shift();
+          if (!id || !mockMessages[id] || toLoad.has(id)) continue;
+          
+          const msg = mockMessages[id];
+          toLoad.set(id, msg);
+          
+          // Upward traversal
+          if (du < up_depth) {
+            const parents = (edge_type === 'links') 
+              ? (msg.stitch_parent_ids || []) 
+              : (msg.parent_id ? [msg.parent_id] : []);
+              
+            parents.forEach(pid => queue.push({ id: pid, du: du + 1, dd }));
+          }
+          
+          // Downward traversal
+          if (dd < down_depth) {
+            const children = (edge_type === 'links') 
+              ? (msg.stitch_child_ids || []) 
+              : (msg.child_ids || []);
+              
+            children.forEach(cid => queue.push({ id: cid, du, dd: dd + 1 }));
+          }
+
+          // Special case: get_children=true (one-hop children for all nodes)
+          if (get_children && dd === 0) {
+             const children = msg.child_ids || [];
+             children.forEach(cid => queue.push({ id: cid, du, dd: 1 }));
+          }
+        }
+        
+        const results = Array.from(toLoad.values());
+        results.forEach(m => commit('SET_MESSAGE', m));
+        return results;
+      }
       if (!messageId) return [];
       try {
         const response = await MessageService.traverseFrom(messageId, { up_depth, down_depth, get_replies, get_children, edge_type });
@@ -680,6 +680,11 @@ export default {
         return [];
       }
     },
+
+    // Load a single message
+    async loadMessage({ dispatch }, messageId) {
+      return dispatch('loadTraversal', { messageId, up_depth: 0, down_depth: 0 });
+    },
     
     // Load parent branch - delegate to unified traversal
     async loadMessageBranchUp({ dispatch }, { messageId, depth = 1, get_replies = true, get_children = true, edge_type = 'replies' }) {
@@ -692,7 +697,7 @@ export default {
     },
     
     // Load radius - delegate to unified traversal
-    async loadMessageRadius({ dispatch }, { messageId, radius, get_replies = true, get_children = true, edge_type = 'replies' }) {
+    async loadMessageRadius({ commit, dispatch }, { messageId, radius, get_replies = true, get_children = true, edge_type = 'replies' }) {
       return dispatch('loadTraversal', { messageId, up_depth: radius, down_depth: radius, get_replies, get_children, edge_type });
     },
     
@@ -1454,6 +1459,12 @@ export default {
           messageId: messageId, 
           childId: newChildId 
         });
+        
+        // Also update the chosen child's branch_parent to point back to us
+        commit('SET_BRANCH_PARENT', {
+          messageId: newChildId,
+          parentId: messageId
+        });
 
         // Store the navigation direction for animations
         commit('navigation/SET_LAST_SIBLING_NAVIGATION', { 
@@ -1751,6 +1762,9 @@ export default {
       if (!message) return [];
       
       const childIds = message.child_ids || [];
+      const stitchChildIds = message.stitch_child_ids || [];
+      
+      let orderedReplies = [...childIds];
       
       // If reply_order is set, use it to order child_ids
       if (message.reply_order && Array.isArray(message.reply_order) && message.reply_order.length > 0) {
@@ -1761,7 +1775,7 @@ export default {
         });
         
         // Sort: items not in reply_order first (by timestamp), then items in reply_order (by their order)
-        const ordered = [...childIds].sort((a, b) => {
+        orderedReplies = [...childIds].sort((a, b) => {
           const aInOrder = orderMap.has(a);
           const bInOrder = orderMap.has(b);
           
@@ -1784,29 +1798,27 @@ export default {
             return 0;
           }
         });
-        
-        // Log unordered replies with timestamps
-        const unorderedIds = childIds.filter(id => !orderMap.has(id));
-        if (unorderedIds.length > 0) {
-          const unorderedWithTimestamps = unorderedIds.map(id => {
-            const msg = state.messages[id];
-            return { id, timestamp: msg?.timestamp || 'unknown' };
-          }).sort((a, b) => {
-            if (a.timestamp === 'unknown' || b.timestamp === 'unknown') return 0;
-            return new Date(a.timestamp) - new Date(b.timestamp);
-          });
-          console.log(`[getChildIds] ${parentId}: reply_order active`, {
-            ordered: message.reply_order,
-            unordered: unorderedWithTimestamps,
-            finalOrder: ordered
-          });
-        }
-        
-        return ordered;
+      } else {
+        // Default sort by timestamp if possible
+        orderedReplies.sort((a, b) => {
+          const msgA = state.messages[a];
+          const msgB = state.messages[b];
+          if (msgA && msgB) {
+            return new Date(msgA.timestamp) - new Date(msgB.timestamp);
+          }
+          return 0;
+        });
       }
       
-      // No custom ordering, return as-is
-      return childIds;
+      const result = [...orderedReplies, ...stitchChildIds];
+      if (parentId.startsWith('msg_')) {
+        console.log(`[SIBLING DETECTION DEBUG][store] getChildIds for ${parentId}:`, {
+          replies: orderedReplies,
+          stitches: stitchChildIds,
+          final: result
+        });
+      }
+      return result;
     },
     
     getParentId: state => childId => {
@@ -1841,7 +1853,8 @@ export default {
       let currentId = messageId;
       while (currentId && state.messages[currentId]) {
         result.push(state.messages[currentId]);
-        currentId = state.messages[currentId].parent_id;
+        const msg = state.messages[currentId];
+        currentId = msg.branch_parent !== undefined ? msg.branch_parent : msg.parent_id;
       }
       return result.reverse();
     },
@@ -1856,8 +1869,6 @@ export default {
     // Get the FULL visible branch - follows the path from root down to the leaf
     getFullVisibleBranch: (state, getters) => (messageId) => {
       const result = [];
-      
-      // Get the starting message using the provided ID
       const startingMessage = state.messages[messageId];
       
       if (!startingMessage) {
@@ -1866,44 +1877,28 @@ export default {
             
       // STEP 1: First trace UPWARD to find the highest ancestor that's in the store
       let highestAncestor = startingMessage;
-      let currentParentId = startingMessage.parent_id;
+      const getParentId = (msg) => (msg.branch_parent !== undefined && msg.branch_parent !== null) ? msg.branch_parent : msg.parent_id;
       
-      // Trace up through parent_id as far as we can go
+      let currentParentId = getParentId(startingMessage);
+      
       while (currentParentId && state.messages[currentParentId]) {
         highestAncestor = state.messages[currentParentId];
-        currentParentId = highestAncestor.parent_id;
+        currentParentId = getParentId(highestAncestor);
       }
       
       
       // STEP 2: Now build the chain from highest ancestor down - NO STATE MODIFICATIONS
-      // Start with the highest ancestor found
       result.push(highestAncestor);
-      
-      // Initialize currentMessage to highest ancestor to begin downward traversal
       let currentMessage = highestAncestor;
       
-      // STEP 3: Recursively follow branch_child path downward - NO STATE MODIFICATIONS
       while (true) {
-        // If message has no branch child, break
-        if (!currentMessage.branch_child) {
-          break;
-        }
-        
+        if (!currentMessage.branch_child) break;
         const childId = currentMessage.branch_child;
+        if (!state.messages[childId]) break;
         
-        // If child doesn't exist in the store, break
-        if (!state.messages[childId]) {
-          break;
-        }
-        
-        
-        // Add the branch child to the result
         result.push(state.messages[childId]);
-        
-        // Move to the next message
         currentMessage = state.messages[childId];
       }
-      
       
       return result;
     },

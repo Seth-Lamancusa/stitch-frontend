@@ -8,30 +8,29 @@
        'dropdown-open': showActionBar,
        'collapsed': isCollapsed
      }"
-   :data-message-id="message.id"
-   :data-has-siblings="shouldReserveSiblingNavSpace"
-    ref="messageNodeRef"
-  >
-    <!-- Desktop sibling navigator - absolutely positioned outside the rotating card -->
-    <sibling-navigator
-      v-if="showSiblingNavDesktop"
-      :message-id="message.id"
-      :parent-id="message.parent_id"
-      :mobile-mode="false"
-      @navigate="handleSiblingNavigation"
-      :data-debug-has-siblings="hasSiblings"
-    />
-
+    :data-message-id="message.id"
+    :data-has-siblings="shouldReserveSiblingNavSpace"
+    :data-is-reply-root="isReplyRoot ? 'true' : 'false'"
+     ref="messageNodeRef"
+   >
     <!-- Mobile sibling navigator is rendered outside the rotating card. -->
     <div v-if="showSiblingNavMobile" class="mobile-sibling-nav-slot">
       <sibling-navigator
         :message-id="message.id"
-        :parent-id="message.parent_id"
+        :parent-id="activeParentId"
         :mobile-mode="isMobile"
         @navigate="handleSiblingNavigation"
         :data-debug-has-siblings="hasSiblings"
       />
     </div>
+
+    <LinkSwitcher
+      v-if="shouldShowLinkSwitcher"
+      :activeParentId="activeParentId"
+      :replyParentId="message.parent_id"
+      :stitchParentIds="message.stitch_parent_ids || []"
+      @switchParent="handleSwitchParent"
+    />
 
     <div 
       class="message-content" 
@@ -39,6 +38,15 @@
       @click="handleMessageClick"
       :class="[{ 'selectable': selectable }, navAnimationClass]"
     >
+      <!-- Desktop sibling navigator overlay: constrained to message-content height -->
+      <sibling-navigator
+        v-if="showSiblingNavDesktop"
+        :message-id="message.id"
+        :parent-id="activeParentId"
+        :mobile-mode="false"
+        @navigate="handleSiblingNavigation"
+        :data-debug-has-siblings="hasSiblings"
+      />
       <div class="message-header">
         <!-- Row 1: Author info + datetime -->
         <div class="header-row header-row--author">
@@ -446,6 +454,7 @@
 
 <script>
 import AdaptiveMarker from './AdaptiveMarker.vue';
+import LinkSwitcher from './LinkSwitcher.vue';
 import SiblingNavigator from './SiblingNavigator.vue';
 import FormattedContent from './FormattedContent/index.vue';
 import { initFormatters } from './FormattedContent/init';
@@ -457,7 +466,7 @@ import UserDisplay from './common/UserDisplay.vue';
 import ChannelsService from '../services/ChannelsService.js';
 import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch, toRef } from 'vue';
 import { useStore } from 'vuex';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { memoize } from 'lodash-es';
 import MessageService from '../services/MessageService.js';
 import UserService from '../services/UserService.js';
@@ -468,6 +477,7 @@ export default {
   
   components: {
     AdaptiveMarker,
+    LinkSwitcher,
     SiblingNavigator,
     FormattedContent,
     TagsModal,
@@ -511,12 +521,19 @@ export default {
     currentTab: {
       type: String,
       default: null
+    },
+    // Passed by layout managers (like ThreadView) to establish visual context
+    // This allows the node to know who its parent is in the current 1D layout array
+    activeParentId: {
+      type: String,
+      default: null
     }
   },
   
   setup(props, { emit }) {
     const store = useStore();
     const route = useRoute();
+    const router = useRouter();
     const currentUser = computed(() => store.getters['auth/user']);
     const isAdmin = computed(() => store.getters['auth/isAdmin']);
     const canDeleteMessage = (message) => store.getters['auth/canDeleteMessage'](message);
@@ -1326,19 +1343,74 @@ export default {
       // based on whether the previous sibling was selected
     };
     
+    // Logic Rule: The selected child determines the layout (the 1D list of displayedMessages).
+    // The "selected parent" for any given node is derived contextually from that layout,
+    // meaning the immediate parent is just the message rendered immediately above it.
+    const derivedParentId = computed(() => {
+      if (props.activeParentId !== null) {
+        return props.activeParentId;
+      }
+      return props.message.parent_id; // Fallback for isolated renders
+    });
+
+    // A "reply root" has no incoming reply parent in the reply adjacency.
+    // In stitch contexts, these nodes can still have a stitch parent in the 1D projection;
+    // we tag them so layout can apply the small width tweak without changing sibling-nav behavior.
+    const isReplyRoot = computed(() => props.message.parent_id === null || props.message.parent_id === undefined);
+ 
+    const shouldShowLinkSwitcher = computed(() => {
+      if (props.displayMode !== 'full') return false; // Only show in ThreadView
+      return true;
+    });
+
+    const handleSwitchParent = async (parentId) => {
+      // Capture current viewport position for stabilization
+      if (messageNodeRef.value) {
+        const rect = messageNodeRef.value.getBoundingClientRect();
+        store.commit('navigation/SET_LAST_ANCHOR_OFFSET', rect.top);
+      }
+      
+      // If the target parent isn't in the store, load it and its context first
+      if (!store.getters['messages/getMessage'](parentId)) {
+        try {
+          await store.dispatch('messages/loadMessageRadius', { messageId: parentId, radius: 5 });
+        } catch (err) {
+          console.error('[MessageNode] Failed to load alternative origin:', err);
+          return;
+        }
+      }
+
+      store.commit('messages/SET_BRANCH_PARENT', { messageId: props.message.id, parentId });
+      await store.dispatch('messages/prepareBranchPath', props.message.id);
+      
+      // Navigate to this message to re-anchor the thread.
+      // This ensures that getFullVisibleBranch uses THIS message as the navigation context.
+      const nextUrl = `/messages/${props.message.id}`;
+      
+      try {
+        await router.push(nextUrl);
+      } catch (e) {
+        console.error('[MessageNode] navigation failed', e);
+      }
+      
+      emit('refreshReplies', props.message.id);
+    };
+
+
     // Check if this message has siblings that can be navigated to
     const hasSiblings = computed(() => {
-      if (!props.message.parent_id) {
+      const currentParentId = derivedParentId.value;
+      if (!currentParentId) {
         return false;
       }
       
-      const parent = store.getters['messages/getMessage'](props.message.parent_id);
-      if (!parent || !parent.child_ids || !Array.isArray(parent.child_ids)) {
+      const parent = store.getters['messages/getMessage'](currentParentId);
+      if (!parent) {
         return false;
       }
       
-      // Use getChildIds to respect reply_order
-      const orderedChildIds = store.getters['messages/getChildIds'](props.message.parent_id);
+      // Use getChildIds to respect reply_order and stitch links
+      const orderedChildIds = store.getters['messages/getChildIds'](currentParentId);
       return orderedChildIds.length > 1;
     });
 
@@ -1346,7 +1418,7 @@ export default {
     // Only nodes that have a parent in the thread graph should reserve space.
     // Root nodes (no parent_id) stay full width.
     const shouldReserveSiblingNavSpace = computed(() => {
-      return !!props.message?.parent_id;
+      return !!derivedParentId.value;
     });
 
 
@@ -1924,6 +1996,9 @@ export default {
     // (debug logging removed)
     
     return {
+      activeParentId: derivedParentId,
+      shouldShowLinkSwitcher,
+      handleSwitchParent,
       isCentered,
       // Props for template access
       message: toRef(props, 'message'),
@@ -1993,6 +2068,7 @@ export default {
       isCollapsed,
       canCollapse,
       toggleCollapse,
+      isReplyRoot,
       hasSiblings,
       showSiblingNavMobile,
       showSiblingNavDesktop,
@@ -2298,6 +2374,14 @@ export default {
     width: calc(100% - 64px); /* Subtract space for both nav buttons (32px * 2) */
     margin-left: auto;
     margin-right: auto;
+  }
+
+  .message-node[data-has-siblings="true"][data-is-reply-root="true"] {
+    /*
+      Reply roots that appear in a stitch context (i.e., still render with sibling-nav reservation)
+      are slightly wider than normal non-root nodes.
+    */
+    width: calc(100% - 64px + 18px);
   }
 
   .message-node[data-has-siblings="true"] .sibling-navigator {

@@ -20,6 +20,21 @@
     <div v-else-if="state === 'end'" class="marker-content end-state">
       <div class="end-marker"></div>
       <span class="marker-text">{{ endText }}</span>
+      
+      <!-- Stitch extension option -->
+      <button 
+        v-if="stitchCount > 0"
+        class="stitch-load-btn"
+        @click="$emit('load-stitch')"
+        :title="position === 'top' ? 'Load linked incoming messages' : 'Load linked outgoing messages'"
+      >
+        <svg class="link-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+        </svg>
+        <span>Load {{ stitchCount > 1 ? stitchCount : '' }} stitch{{ stitchCount > 1 ? 'es' : '' }}</span>
+      </button>
+
       <button 
         v-if="showRefreshShortcut && position === 'bottom'"
         class="refresh-shortcut"
@@ -80,6 +95,12 @@ export default {
     refreshing: {
       type: Boolean,
       default: false
+    },
+    
+    // Number of stitch neighbors available at this boundary
+    stitchCount: {
+      type: Number,
+      default: 0
     },
     
     // Custom text for error state
@@ -333,7 +354,7 @@ export default {
   cursor: default;
 }
 
-.loading-spinner.small {
+  .loading-spinner.small {
   width: 14px;
   height: 14px;
   border-width: 2px;
@@ -342,6 +363,34 @@ export default {
   margin: 0;
   vertical-align: middle;
   align-self: center;
+}
+
+.stitch-load-btn {
+  background-color: var(--color-surface, #2a2a2a);
+  color: #ffffff;
+  border: 1px solid rgba(76, 175, 80, 0.6);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xxs) var(--space-xs);
+  cursor: pointer;
+  font-size: 0.85em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xxs);
+  min-height: 24px;
+  transition: all var(--transition-fast);
+}
+
+.stitch-load-btn:hover {
+  background-color: rgba(76, 175, 80, 0.1);
+  border-color: #4caf50;
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.2);
+}
+
+.stitch-load-btn .link-icon {
+  width: 12px;
+  height: 12px;
+  color: #4caf50;
 }
 
 @keyframes spin {

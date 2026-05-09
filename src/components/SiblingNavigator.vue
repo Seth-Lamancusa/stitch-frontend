@@ -2,9 +2,10 @@
   <!-- Mobile mode - render as inline buttons for footer -->
   <div v-if="mobileMode" class="mobile-sibling-nav">
     <button 
+      @mouseover="logHover('prev')"
       @click.stop="navigate('prev')" 
       class="mobile-nav-btn mobile-nav-prev"
-      :class="{ 'disabled': !canNavigatePrev, 'loading': isLoading }"
+      :class="{ 'disabled': !canNavigatePrev, 'loading': isLoading, 'target-is-stitch': isPrevStitch }"
       :disabled="!canNavigatePrev || isLoading"
       title="Previous reply"
     >
@@ -13,9 +14,10 @@
     </button>
     
     <button 
+      @mouseover="logHover('next')"
       @click.stop="navigate('next')" 
       class="mobile-nav-btn mobile-nav-next"
-      :class="{ 'disabled': !canNavigateNext, 'loading': isLoading }"
+      :class="{ 'disabled': !canNavigateNext, 'loading': isLoading, 'target-is-stitch': isNextStitch }"
       :disabled="!canNavigateNext || isLoading" 
       title="Next reply"
     >
@@ -27,10 +29,12 @@
   <!-- Desktop mode - original positioning -->
   <div v-else class="sibling-navigator">
     <button 
+      @mouseover="logHover('prev')"
       @click.stop="navigate('prev')" 
       class="nav-button nav-prev"
-      :class="{ 'disabled': !canNavigatePrev, 'loading': isLoading }"
+      :class="{ 'disabled': !canNavigatePrev, 'loading': isLoading, 'target-is-stitch': isPrevStitch }"
       :disabled="!canNavigatePrev || isLoading"
+      :data-debug-stitch="isPrevStitch"
       title="Previous reply"
     >
       <div v-if="isLoading" class="loading-dot"></div>
@@ -38,10 +42,12 @@
     </button>
     
     <button 
+      @mouseover="logHover('next')"
       @click.stop="navigate('next')" 
       class="nav-button nav-next"
-      :class="{ 'disabled': !canNavigateNext, 'loading': isLoading }"
+      :class="{ 'disabled': !canNavigateNext, 'loading': isLoading, 'target-is-stitch': isNextStitch }"
       :disabled="!canNavigateNext || isLoading" 
+      :data-debug-stitch="isNextStitch"
       title="Next reply"
     >
       <div v-if="isLoading" class="loading-dot"></div>
@@ -85,6 +91,30 @@ const isParentLoading = computed(() => {
   return !parent;
 });
 
+const nextSiblingId = computed(() => {
+  if (!canNavigateNext.value) return null;
+  // currentPosition is 1-indexed, so currentPosition.value is the index of the next item
+  return siblings.value[currentPosition.value];
+});
+
+const prevSiblingId = computed(() => {
+  if (!canNavigatePrev.value) return null;
+  // currentPosition is 1-indexed, so currentPosition.value - 2 is the index of the prev item
+  return siblings.value[currentPosition.value - 2];
+});
+
+const isNextStitch = computed(() => {
+  if (!nextSiblingId.value) return false;
+  const parent = store.getters['messages/getMessage'](props.parentId);
+  return parent && parent.stitch_child_ids && parent.stitch_child_ids.includes(nextSiblingId.value);
+});
+
+const isPrevStitch = computed(() => {
+  if (!prevSiblingId.value) return false;
+  const parent = store.getters['messages/getMessage'](props.parentId);
+  return parent && parent.stitch_child_ids && parent.stitch_child_ids.includes(prevSiblingId.value);
+});
+
 // Check if siblings are currently loading
 const isSiblingLoading = computed(() => {
   return store.getters['messages/isLoading'](`sibling_${props.parentId}`);
@@ -94,6 +124,14 @@ const isSiblingLoading = computed(() => {
 const isLoading = computed(() => {
   return isParentLoading.value || isSiblingLoading.value;
 });
+
+const logHover = (dir) => {
+  const isStitch = dir === 'next' ? isNextStitch.value : isPrevStitch.value;
+  const targetId = dir === 'next' ? nextSiblingId.value : prevSiblingId.value;
+  if (targetId?.startsWith('msg_')) {
+     console.log(`[SIBLING HOVER DEBUG] Hovering ${dir} button. Target: ${targetId}, isStitch: ${isStitch}`);
+  }
+};
 
 // Watch for parent changes to update sibling order
 const parentRef = computed(() => store.getters['messages/getMessage'](props.parentId));
@@ -447,3 +485,54 @@ const navigate = async (direction) => {
 
 
 </style> 
+<style scoped>
+/* State when an arrow targets a stitch link (static preview) */
+.sibling-navigator .nav-button.target-is-stitch:not(:disabled)::after {
+  background: linear-gradient(to left, var(--color-surface), rgba(76, 175, 80, 0.35)) !important;
+  border-color: rgba(76, 175, 80, 0.65);
+  border-style: solid;
+}
+
+.sibling-navigator .nav-button.nav-prev.target-is-stitch:not(:disabled)::after {
+  background: linear-gradient(to right, var(--color-surface), rgba(76, 175, 80, 0.35)) !important;
+}
+
+/* Keep arrow white when targeting a stitch */
+.sibling-navigator .nav-button.target-is-stitch:not(:disabled) .right-triangle {
+  border-color: transparent transparent transparent #ffffff;
+  opacity: 1;
+}
+.sibling-navigator .nav-button.target-is-stitch:not(:disabled) .left-triangle {
+  border-color: transparent #ffffff transparent transparent;
+  opacity: 1;
+}
+
+/* Hover over stitch target */
+.sibling-navigator .nav-button.target-is-stitch:hover:not(:disabled)::after {
+  background: linear-gradient(to left, var(--color-surface), rgba(76, 175, 80, 0.55)) !important;
+  border-color: rgba(76, 175, 80, 0.85);
+  border-style: solid;
+}
+.sibling-navigator .nav-button.nav-prev.target-is-stitch:hover:not(:disabled)::after {
+  background: linear-gradient(to right, var(--color-surface), rgba(76, 175, 80, 0.55)) !important;
+}
+.sibling-navigator .nav-button.target-is-stitch:hover:not(:disabled) .triangle-icon {
+  filter: drop-shadow(0 0 2px rgba(76, 175, 80, 0.5));
+}
+
+.sibling-navigator .nav-button.target-is-stitch:hover:not(:disabled) .right-triangle {
+  /* Guard against generic hover styles that would recolor the arrow */
+  border-color: transparent transparent transparent #ffffff;
+}
+
+.sibling-navigator .nav-button.target-is-stitch:hover:not(:disabled) .left-triangle {
+  border-color: transparent #ffffff transparent transparent;
+}
+
+.mobile-sibling-nav .mobile-nav-btn.target-is-stitch:not(:disabled) {
+  background: rgba(76, 175, 80, 0.1);
+  border-color: rgba(76, 175, 80, 0.55);
+  border-style: solid;
+  color: #ffffff;
+}
+</style>

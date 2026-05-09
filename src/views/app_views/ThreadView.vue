@@ -49,8 +49,10 @@
           v-if="shouldShowMarkers"
           position="top"
           :state="topMarkerState"
+          :stitchCount="topStitchCount"
           class-name="thread-begin-marker"
           @load-more="loadMoreParents"
+          @load-stitch="handleLoadStitchBoundary('top')"
           @retry="loadMoreParents"
           ref="topMarker"
           :key="`top-marker-${displayedMessages.length > 0 ? displayedMessages[0].id : 'empty'}`"
@@ -65,6 +67,7 @@
             v-if="(message.id === replyingToMessageId && !isReplyMessageLoading || 
                     message.id !== replyingToMessageId)"
             :message="message"
+            :active-parent-id="index > 0 ? displayedMessages[index - 1].id : null"
             :displayMode="'full'"
             :selectable="true"
             :selected="isMessageSelected(message.id)"
@@ -93,8 +96,10 @@
         v-if="shouldShowMarkers"
         position="bottom"
         :state="bottomMarkerState"
+        :stitchCount="bottomStitchCount"
         class-name="thread-end-marker"
         @load-more="loadMoreChildren"
+        @load-stitch="handleLoadStitchBoundary('bottom')"
         @retry="loadMoreChildren"
         :show-refresh-shortcut="bottomMarkerState === 'end'"
         :refreshing="isRefreshingLastMessage"
@@ -334,6 +339,7 @@ const displayedMessages = computed(() => {
   if (isLoadingThread.value) return [];
   
   const msgs = store.getters['messages/getFullVisibleBranch'](messageId.value);
+  console.log('[ThreadView] displayedMessages for', messageId.value, 'count:', msgs.length, 'msgs:', msgs.map(m=>m.id));
   return msgs;
 });
 
@@ -405,38 +411,8 @@ const currentSubscribedMessageId = ref(null);
 // When true, a route param change should not trigger a full reload
 const suppressRouteReload = ref(false);
 
-// Add new refs for scroll monitoring
-const lastScrollPosition = ref(0);
-const messageBeingRepliedToRect = ref(null);
-
 // Track if we're switching branches (for clearing reply)
 const lastBranchFirstMessageId = ref(null);
-
-// Add ref for the reply box component
-const replyBox = ref(null);
-
-// Simplified marker states
-const topMarkerState = computed(() => {
-  // If no messages or loading thread, use end state
-  if (displayedMessages.value.length === 0 || isLoadingThread.value) return 'end';
-  
-  // If currently loading parents, show loading state
-  if (isLoadingParents.value) return 'loading';
-  
-  // Get first message in the branch
-  const firstMessage = displayedMessages.value[0];
-  
-  // If first message doesn't have a parent_id at all, we're at the top
-  if (!firstMessage.parent_id) {
-    return 'end';
-  }
-  
-  // Check if parent is already loaded in the store
-  const parentMessage = store.getters['messages/getMessage'](firstMessage.parent_id);
-  
-  // If parent_id exists but parent message isn't in store, we need to load more (waiting state)
-  return parentMessage ? 'end' : 'waiting';
-});
 
 // Add a new helper function to wait for content rendering
 const waitForContentRendering = async () => {
@@ -501,8 +477,19 @@ const ensureCorrectScroll = async () => {
   // Calculate the relative top position of the message within the container
   const relativeTop = messageRect.top - containerRect.top + messageList.value.scrollTop;
   
-  // Adjust 70px up to show a bit more context above the message
-  const adjustedPosition = relativeTop - 70;
+  // Default: adjust 70px up to show a bit more context above the message
+  let adjustedPosition = relativeTop - 70;
+
+  // Stability fix: if we have a stashed viewport offset from an origin switch, use it.
+  const lastOffset = store.state.navigation.lastAnchorOffset;
+  if (lastOffset !== null) {
+    // Current message absolute top - stashed viewport top = target relative container top
+    const targetContainerRelativeTop = lastOffset - containerRect.top;
+    adjustedPosition = relativeTop - targetContainerRelativeTop;
+    
+    // Clear stashed offset
+    store.commit('navigation/SET_LAST_ANCHOR_OFFSET', null);
+  }
   
   // Scroll to the target message
   messageList.value.scrollTop = adjustedPosition;
@@ -511,21 +498,96 @@ const ensureCorrectScroll = async () => {
   isContainerVisible.value = true;
   shouldShowMarkers.value = true;
 };
+ 
+// Navigation
+
+const backToList = async () => {
+  // Get the previous route
+  const prevRoute = store.getters['navigation/previousRoute'];
+  
+  
+  // Navigate back to the previous route - keep cache for faster return
+  router.push(prevRoute || '/inbox'); // Fallback to inbox if no previous route
+};
+
+const openGraphView = () => {
+  const currentMessageId = messageId.value;
+  if (!currentMessageId) return;
+  // Use named route with correct param name to avoid path mismatches
+  router.push({ name: 'graph-view', params: { messageId: currentMessageId } });
+};
+
+const openTreeOptionsModal = () => {
+  dismissMobileKeyboard();
+  treeOptionsModalVisible.value = true;
+};
+
+const closeTreeOptionsModal = () => {
+  treeOptionsModalVisible.value = false;
+};
+
+const handleTreeRecipientsAdded = async ({ recipient, centeredMessageId }) => {
+  console.log('[ThreadView] Conversation recipients added:', { recipient, centeredMessageId });
+  
+  // Refresh all messages in the conversation to show updated recipients
+  // We already refresh in the modal, but let's ensure UI updates
+  await renderThread(true, true);
+};
+
+// Shallowly center on a different message by updating the URL without reloading content
+// Usage: centerOnMessageInUrl('newMessageId') or centerOnMessageInUrl('newMessageId', { replace: true })
+const centerOnMessageInUrl = async (newMessageId, options = { replace: true }) => {
+  if (!newMessageId || newMessageId === messageId.value) return;
+  // Only update URL; do not trigger scroll in shallow mode per requirement
+  suppressRouteReload.value = true;
+  const nav = route.name
+    ? { name: route.name, params: { ...route.params, id: newMessageId }, query: { ...route.query } }
+    : { path: `/messages/${newMessageId}`, query: { ...route.query } };
+  if (options.replace) {
+    await router.replace(nav);
+  } else {
+    await router.push(nav);
+  }
+};
+
+// Simplified marker states
+const topMarkerState = computed(() => {
+  // If no messages or loading thread, use end state
+  if (displayedMessages.value.length === 0 || isLoadingThread.value) return 'end';
+  
+  // If currently loading parents, show loading state
+  if (isLoadingParents.value) return 'loading';
+  
+  // Get first message in the branch
+  const firstMessage = displayedMessages.value[0];
+  
+  // If first message doesn't have a parent_id at all, we're at the top
+  if (!firstMessage.parent_id) {
+    return 'end';
+  }
+  
+  // Check if parent is already loaded in the store
+  const parentMessage = store.getters['messages/getMessage'](firstMessage.parent_id);
+  
+  // If parent_id exists but parent message isn't in store, we need to load more (waiting state)
+  return parentMessage ? 'end' : 'waiting';
+});
+
+// Handle center event from MessageNode
+const handleCenterOnMessage = async (targetId) => {
+  await centerOnMessageInUrl(targetId, { replace: true });
+};
 
 // Simplified thread rendering function - used for incremental updates
 const renderThread = async (preserveScroll = false, preserveBranchPath = true) => {
   try {
-    
-    
     // Guard against missing messageId
     if (!messageId.value) {
-      
       return;
     }
     
     // Prepare branch paths - but only if not asked to preserve existing branch path
     if (!preserveBranchPath) {
-      
       await store.dispatch('messages/prepareBranchPath', messageId.value);
     }
     
@@ -603,6 +665,68 @@ const isRefreshingLastMessage = computed(() => {
   return isRefreshingMessage(lastMessage.id);
 });
 
+const topStitchCount = computed(() => {
+  if (displayedMessages.value.length === 0) return 0;
+  const first = displayedMessages.value[0];
+  const ids = first.stitch_parent_ids || [];
+  // Only count stitches that still need to be loaded.
+  return ids.filter((id) => !store.getters['messages/getMessage'](id)).length;
+});
+
+const bottomStitchCount = computed(() => {
+  if (displayedMessages.value.length === 0) return 0;
+  const last = displayedMessages.value[displayedMessages.value.length - 1];
+  const ids = last.stitch_child_ids || [];
+  // Only count stitches that still need to be loaded.
+  return ids.filter((id) => !store.getters['messages/getMessage'](id)).length;
+});
+
+const handleLoadStitchBoundary = async (position) => {
+  if (displayedMessages.value.length === 0) return;
+  
+  const msg = position === 'top' 
+    ? displayedMessages.value[0] 
+    : displayedMessages.value[displayedMessages.value.length - 1];
+    
+  const stitchIds = position === 'top' 
+    ? (msg.stitch_parent_ids || []) 
+    : (msg.stitch_child_ids || []);
+    
+  if (stitchIds.length === 0) return;
+  
+  // Primary target to switch the branch to
+  const targetId = stitchIds[0];
+  
+  // Load ALL stitch neighbors at this boundary so the LinkSwitcher works immediately for all origins
+  const unloadIds = stitchIds.filter(id => !store.getters['messages/getMessage'](id));
+  if (unloadIds.length > 0) {
+    try {
+      // Load all individual messages first
+      await Promise.all(unloadIds.map(id => store.dispatch('messages/loadMessage', id)));
+      
+      // For the specific target we are switching to, load its radius so the thread has context
+      await store.dispatch('messages/loadMessageRadius', { messageId: targetId, radius: 5 });
+    } catch (err) {
+      console.error(`[ThreadView] Failed to load stitch targets:`, err);
+      return;
+    }
+  }
+  
+  if (position === 'top') {
+    // Set this as our new branch parent and re-path
+    store.commit('messages/SET_BRANCH_PARENT', { messageId: msg.id, parentId: targetId });
+  } else {
+    // Set this as our new branch child and re-path
+    store.commit('messages/SET_BRANCH_CHILD', { messageId: msg.id, childId: targetId });
+  }
+  
+  // Re-path from the boundary message
+  await store.dispatch('messages/prepareBranchPath', msg.id);
+  
+  // Refresh view
+  await renderThread(true, true);
+};
+
 const bottomMarkerState = computed(() => {
   // If no messages or loading thread, use end state
   if (displayedMessages.value.length === 0 || isLoadingThread.value) return 'end';
@@ -627,215 +751,8 @@ const bottomMarkerState = computed(() => {
   return unloadedChildExists ? 'waiting' : 'end';
 });
 
-// Lifecycle hooks
-onMounted(async () => {
-  
-  
-  // Enable thread view mode for auto-marking messages as read
-  store.commit('messages/SET_THREAD_VIEW_MODE', true);
-  
-  // Add reload detection
-  window.addEventListener('beforeunload', () => {
-    
-  });
-  
-  // Wait for auth to be ready before proceeding - auth store handles initialization
-  if (!isAuthReady.value) {
-    
-    await new Promise((resolve) => {
-      const unwatch = store.watch(
-        () => store.getters['auth/authReady'],
-        (newValue) => {
-          if (newValue) {
-            
-            unwatch();
-            resolve();
-          }
-        }
-      );
-    });
-  }
-  
-  // Use loadInitialContent for initial thread loading
-  // loadInitialContent handles branch path preparation and scroll positioning internally
-  if (messageId.value) {
-    await loadInitialContent(messageId.value);
-  }
-  
-  // Add scroll event listener for reply box management
-  if (messageList.value) {
-    messageList.value.addEventListener('scroll', handleScroll);
-  }
-  
-  // Note: WebSocket callback is handled globally by WebSocketService.initialize()
-  // No need to register a component-specific callback here
-  
-  
-  
-  // No whitelist rejection state anymore
-});
-
-onBeforeUnmount(() => {
-  // Disable thread view mode to stop auto-marking
-  store.commit('messages/SET_THREAD_VIEW_MODE', false);
-  
-  // Clean up listeners
-  if (unsubscribeMessages) {
-    unsubscribeMessages();
-    unsubscribeMessages = null;
-  }
-  
-  // Clear message selection when leaving the thread view
-  store.dispatch('navigation/clearReplyingTo');
-  
-  // Clear any open action bars when leaving the thread view
-  store.dispatch('navigation/closeActiveActionBar');
-  
-  // Keep message cache when leaving thread view
-  
-  // Clean up any pending timer
-  if (websocketDebounceTimer.value) {
-    clearTimeout(websocketDebounceTimer.value);
-    websocketDebounceTimer.value = null;
-  }
-  
-  // Remove scroll event listener
-  if (messageList.value) {
-    messageList.value.removeEventListener('scroll', handleScroll);
-  }
-  
-  // (Removed duplicate clearReplyingTo; already called above)
-});
-
-// Watch for route changes - use loadInitialContent for new thread IDs
-watch(messageId, async (newId, oldId) => {
-  if (newId) {
-    // Handle shallow updates where we only want to update the URL/scroll
-    if (suppressRouteReload.value) {
-      suppressRouteReload.value = false;
-      // Keep existing content; do not adjust scroll on shallow URL updates
-      return;
-    }
-    // Clear selection mode when navigating to a new thread
-    if (isSelectionMode.value) {
-      store.dispatch('navigation/exitSelectionMode');
-    }
-    
-    // Reset visibility states immediately when navigating to new thread
-    isContainerVisible.value = false;
-    shouldShowMarkers.value = false;
-    await loadInitialContent(newId);
-  }
-});
-
-// Watch for branch changes (sibling navigation) - removed selection mode clearing to preserve selections
-// when navigating up/down branches
-watch(() => displayedMessages.value.length > 0 ? displayedMessages.value[0].id : null, (newFirstMessageId, oldFirstMessageId) => {
-  
-  if (newFirstMessageId && oldFirstMessageId && newFirstMessageId !== oldFirstMessageId) {
-    // Branch changed (sibling navigation) - no longer clearing selection mode
-    
-    
-    // Auto-mark newly visible branch as read after sibling navigation
-    
-    store.dispatch('messages/markVisibleBranchAsRead', newFirstMessageId);
-  } else {
-    
-  }
-});
-
-// Watch for login while on this view to hydrate read state and auto-mark only unread
-watch(() => store.getters['auth/user'], async (newUser, oldUser) => {
-  // Detect transition from guest -> logged-in
-  if (!oldUser && newUser && messageId.value) {
-    try {
-      
-
-      // Reload current thread radius to hydrate user-specific fields (e.g., is_read, recipients)
-      await store.dispatch('messages/loadMessageRadius', {
-        messageId: messageId.value,
-        radius: 5
-      });
-
-      // Re-prepare branch path in case branch_child needs adjustment
-      await store.dispatch('messages/prepareBranchPath', messageId.value);
-
-      // Re-render without changing scroll or branch path
-      await nextTick();
-      await renderThread(true, true);
-
-      // Auto-mark only the unread messages in the visible branch
-      store.dispatch('messages/markVisibleBranchAsRead', messageId.value);
-    } catch (e) {
-      console.error('[ThreadView] Error hydrating after login:', e);
-    }
-  }
-});
-
-// Watch for message changes to ensure reply settings are always in sync
-watch(replyingToMessageId, () => {
-  // Remove call to syncReplySettingsWithSelectedMessage since it's now automatic
-  // Settings are synced automatically when selecting a message
-}, { immediate: true });
-
-// No whitelist rejection watcher anymore
-
-// Navigation
-const backToList = async () => {
-  // Get the previous route
-  const prevRoute = store.getters['navigation/previousRoute'];
-  
-  
-  // Navigate back to the previous route - keep cache for faster return
-  router.push(prevRoute || '/inbox'); // Fallback to inbox if no previous route
-};
-
-const openGraphView = () => {
-  const currentMessageId = messageId.value;
-  if (!currentMessageId) return;
-  // Use named route with correct param name to avoid path mismatches
-  router.push({ name: 'graph-view', params: { messageId: currentMessageId } });
-};
-
-const openTreeOptionsModal = () => {
-  dismissMobileKeyboard();
-  treeOptionsModalVisible.value = true;
-};
-
-const closeTreeOptionsModal = () => {
-  treeOptionsModalVisible.value = false;
-};
-
-const handleTreeRecipientsAdded = async ({ recipient, centeredMessageId }) => {
-  console.log('[ThreadView] Conversation recipients added:', { recipient, centeredMessageId });
-  
-  // Refresh all messages in the conversation to show updated recipients
-  // We already refresh in the modal, but let's ensure UI updates
-  await renderThread(true, true);
-};
-
-// Shallowly center on a different message by updating the URL without reloading content
-// Usage: centerOnMessageInUrl('newMessageId') or centerOnMessageInUrl('newMessageId', { replace: true })
-const centerOnMessageInUrl = async (newMessageId, options = { replace: true }) => {
-  if (!newMessageId || newMessageId === messageId.value) return;
-  // Only update URL; do not trigger scroll in shallow mode per requirement
-  suppressRouteReload.value = true;
-  const nav = route.name
-    ? { name: route.name, params: { ...route.params, id: newMessageId }, query: { ...route.query } }
-    : { path: `/messages/${newMessageId}`, query: { ...route.query } };
-  if (options.replace) {
-    await router.replace(nav);
-  } else {
-    await router.push(nav);
-  }
-};
-
-// Handle center event from MessageNode
-const handleCenterOnMessage = async (targetId) => {
-  await centerOnMessageInUrl(targetId, { replace: true });
-};
-
 const loadInitialContent = async (targetMessageId) => {
+  console.log('[ThreadView] loadInitialContent', targetMessageId);
   if (!targetMessageId) {
     console.error('[ThreadView] Cannot load initial content: No target message ID provided');
     return;
@@ -1465,7 +1382,92 @@ const findEndOfBranchMessage = () => {
   return lastMessage;
 };
 
-// Login handled by LoginButton component
+// Lifecycle hooks
+onMounted(async () => {
+  // Enable thread view mode for auto-marking messages as read
+  store.commit('messages/SET_THREAD_VIEW_MODE', true);
+  
+  // Wait for auth to be ready before proceeding
+  if (!isAuthReady.value) {
+    await new Promise((resolve) => {
+      const unwatch = store.watch(
+        () => store.getters['auth/authReady'],
+        (newValue) => {
+          if (newValue) {
+            unwatch();
+            resolve();
+          }
+        }
+      );
+    });
+  }
+  
+  if (messageId.value) {
+    await loadInitialContent(messageId.value);
+  }
+  
+  if (messageList.value) {
+    messageList.value.addEventListener('scroll', handleScroll);
+  }
+});
+
+onBeforeUnmount(() => {
+  store.commit('messages/SET_THREAD_VIEW_MODE', false);
+  if (unsubscribeMessages) {
+    unsubscribeMessages();
+    unsubscribeMessages = null;
+  }
+  store.dispatch('navigation/clearReplyingTo');
+  store.dispatch('navigation/closeActiveActionBar');
+  if (websocketDebounceTimer.value) {
+    clearTimeout(websocketDebounceTimer.value);
+    websocketDebounceTimer.value = null;
+  }
+  if (messageList.value) {
+    messageList.value.removeEventListener('scroll', handleScroll);
+  }
+});
+
+// Watch for route changes
+watch(messageId, async (newId, oldId) => {
+  if (newId) {
+    if (suppressRouteReload.value) {
+      suppressRouteReload.value = false;
+      return;
+    }
+    if (isSelectionMode.value) {
+      store.dispatch('navigation/exitSelectionMode');
+    }
+    isContainerVisible.value = false;
+    shouldShowMarkers.value = false;
+    await loadInitialContent(newId);
+  }
+});
+
+// Watch for branch changes
+watch(() => displayedMessages.value.length > 0 ? displayedMessages.value[0].id : null, (newFirstMessageId, oldFirstMessageId) => {
+  if (newFirstMessageId && oldFirstMessageId && newFirstMessageId !== oldFirstMessageId) {
+    store.dispatch('messages/markVisibleBranchAsRead', newFirstMessageId);
+  }
+});
+
+// Watch for login while on this view
+watch(() => store.getters['auth/user'], async (newUser, oldUser) => {
+  if (!oldUser && newUser && messageId.value) {
+    try {
+      await store.dispatch('messages/loadMessageRadius', {
+        messageId: messageId.value,
+        radius: 5
+      });
+      await store.dispatch('messages/prepareBranchPath', messageId.value);
+      await nextTick();
+      await renderThread(true, true);
+      store.dispatch('messages/markVisibleBranchAsRead', messageId.value);
+    } catch (e) {
+      console.error('[ThreadView] Error hydrating after login:', e);
+    }
+  }
+});
 
 // Profile modal methods
 const openProfileModal = () => {
@@ -1513,6 +1515,7 @@ const closeProfileModal = () => {
   justify-content: flex-start;
   scroll-behavior: auto;
 }
+
 
 /* On very wide screens, keep the thread content from expanding too much */
 @media (min-width: 1280px) {

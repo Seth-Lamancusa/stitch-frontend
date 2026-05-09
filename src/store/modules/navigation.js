@@ -76,7 +76,11 @@ export default {
     // When set, message list should remove this id from local list/cache (used after delete + redirect)
     lastDeletedMessageId: null,
 
+    // viewport distance from top for origin-switching stabilization
+    lastAnchorOffset: null,
+ 
     // Used to trigger sibling-navigation animations in MessageNode.
+
     // Shape: { targetId, direction, timestamp }
     lastSiblingNavigation: null
   },
@@ -359,8 +363,13 @@ export default {
     SET_LAST_DELETED_MESSAGE_ID(state, id) {
       state.lastDeletedMessageId = id;
     },
+ 
+    SET_LAST_ANCHOR_OFFSET(state, offset) {
+      state.lastAnchorOffset = offset;
+    },
 
     SET_LAST_SIBLING_NAVIGATION(state, { targetId, direction }) {
+
       const timestamp = Date.now();
       state.lastSiblingNavigation = { targetId, direction, timestamp };
     },

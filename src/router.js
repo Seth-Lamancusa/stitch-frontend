@@ -20,7 +20,17 @@ import store from './store';
 import { usePermissions } from './composables/usePermissions';
 import TokenManager from './services/TokenManager';
 
+import StitchPlaygroundView from './views/app_views/StitchPlaygroundView.vue';
+
 const routes = [
+  {
+    path: '/mock-stitch',
+    name: 'mock-stitch',
+    component: StitchPlaygroundView,
+    meta: {
+      title: 'Stitch Playground'
+    }
+  },
   {
     path: '/',
     redirect: '/home'
