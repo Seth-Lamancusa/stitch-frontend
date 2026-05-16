@@ -494,21 +494,26 @@ const botsToRender = computed(() => bots.value);
 }
 
 .bot-version-select {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: var(--text-light);
-  border-radius: 10px;
-  padding: 0.35rem 0.65rem;
-  font-size: 0.9rem;
+  height: 28px;
   width: 190px;
   max-width: 190px;
+  padding: 0 8px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-input-background, var(--color-surface-light));
+  color: var(--color-text);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-xs, 12px);
+  cursor: pointer;
+  min-width: 0;
   box-sizing: border-box;
   overflow: hidden;
+  white-space: nowrap;
 }
 
 .bot-version-select:focus {
   outline: none;
-  border-color: rgba(99, 102, 241, 0.55);
+  border-color: var(--color-input-focus-border);
 }
 
 .bot-profile-bio {

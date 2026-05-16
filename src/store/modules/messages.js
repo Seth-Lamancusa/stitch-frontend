@@ -68,20 +68,41 @@ export default {
     // Track which messages are currently being marked as read
     markingAsReadIds: [],
 
+    // Version counter incremented on any structural change (add/remove message, add/remove link)
+    // to allow external views (like GraphView) to react without deep-watching the messages object.
+    structureVersion: 0,
   },
   
   mutations: {
     SET_MESSAGE(state, message) {
+      if (!message || !message.id) return;
+      
       if (String(message.id).startsWith('msg_')) {
         console.log('[MOCK] SET_MESSAGE mutation for', message.id);
       }
+
+      // Check if message already exists in store - if so, merge it
+      const existingMessage = state.messages[message.id];
+
+      // Increment structure version if this is a new message or if structural fields changed
+      const isNew = !existingMessage;
+      let structureChanged = isNew;
+      if (existingMessage) {
+        if (message.parent_id !== undefined && message.parent_id !== existingMessage.parent_id) structureChanged = true;
+        if (message.child_ids && JSON.stringify(message.child_ids) !== JSON.stringify(existingMessage.child_ids)) structureChanged = true;
+        if (message.stitch_child_ids && JSON.stringify(message.stitch_child_ids) !== JSON.stringify(existingMessage.stitch_child_ids)) structureChanged = true;
+        if (message.stitch_parent_ids && JSON.stringify(message.stitch_parent_ids) !== JSON.stringify(existingMessage.stitch_parent_ids)) structureChanged = true;
+      }
+
+      if (structureChanged) {
+        state.structureVersion += 1;
+      }
+
       // Normalize light payloads but avoid clobbering existing structure
       if (!Array.isArray(message.child_ids)) {
         message.child_ids = [];
       }
 
-      // Check if message already exists in store - if so, merge it
-      const existingMessage = state.messages[message.id];
       if (existingMessage) {
         // Preserve branch_child if it exists
         const currentBranchChild = existingMessage.branch_child;
@@ -177,25 +198,6 @@ export default {
         // Update the store with merged message
         state.messages[message.id] = mergedMessage;
         
-        // Log reply_order if present (structured logging)
-        if (mergedMessage.reply_order && Array.isArray(mergedMessage.reply_order) && mergedMessage.reply_order.length > 0) {
-          const orderedIds = mergedMessage.reply_order;
-          const unorderedIds = mergedChildIds.filter(id => !orderedIds.includes(id));
-          const unorderedWithTimestamps = unorderedIds.map(id => {
-            const msg = state.messages[id];
-            return { id, timestamp: msg?.timestamp || 'unknown' };
-          }).sort((a, b) => {
-            if (a.timestamp === 'unknown' || b.timestamp === 'unknown') return 0;
-            return new Date(a.timestamp) - new Date(b.timestamp);
-          });
-          console.log(`[SET_MESSAGE] ${message.id}: reply_order active`, {
-            replyOrder: orderedIds,
-            childIds: mergedChildIds,
-            replyOrderLength: orderedIds.length,
-            childIdsLength: mergedChildIds.length,
-            unordered: unorderedWithTimestamps.length > 0 ? unorderedWithTimestamps : undefined
-          });
-        }
       } else {
         // New message, not in store yet
         // Default branch_child - always use last child (furthest right) in complete list
@@ -228,6 +230,25 @@ export default {
         state.messages[message.id] = { ...message };
       }
     },
+    
+    SET_MESSAGES(state, messages) {
+      if (!Array.isArray(messages)) return;
+      for (const message of messages) {
+        if (message && message.id) {
+          // Use inline code since we can't easily call other mutations from a mutation
+          const existingMessage = state.messages[message.id];
+          
+          if (!existingMessage) {
+            state.structureVersion += 1;
+            state.messages[message.id] = { ...message };
+          } else {
+             // Basic merge for bulk set (could be improved to match SET_MESSAGE exactly if needed)
+             state.messages[message.id] = { ...existingMessage, ...message };
+          }
+        }
+      }
+    },
+
     
     SET_MESSAGES(state, messages) {
       for (const message of messages) {
@@ -266,6 +287,7 @@ export default {
       
       // Delete the message
       delete state.messages[messageId];
+      state.structureVersion += 1;
     },
     
     // Optimized cascade delete (matches backend behavior)
@@ -326,6 +348,7 @@ export default {
           delete state.messages[msgId];
         }
       }
+      state.structureVersion += 1;
     },
     
     // Restore REMOVE_TEMP_THREAD mutation
@@ -337,8 +360,23 @@ export default {
       }
     },
     
-    // New mutation to change selected child
+    // New mutation to change selected child and parent back-pointer for the visible branch
+    SET_BRANCH_LINK(state, { parentId, childId }) {
+      if (parentId && state.messages[parentId]) {
+        state.messages[parentId] = {
+          ...state.messages[parentId],
+          branch_child: childId
+        };
+      }
+      if (childId && state.messages[childId]) {
+        state.messages[childId] = {
+          ...state.messages[childId],
+          branch_parent: parentId
+        };
+      }
+    },
     SET_BRANCH_CHILD(state, { messageId, childId }) {
+      // Deprecated in favor of SET_BRANCH_LINK, but kept for minimal compatibility
       const message = state.messages[messageId];
       if (!message) return;
       
@@ -348,6 +386,7 @@ export default {
       };
     },
     SET_BRANCH_PARENT(state, { messageId, parentId }) {
+      // Deprecated in favor of SET_BRANCH_LINK, but kept for minimal compatibility
       console.log(`[SET_BRANCH_PARENT] ${messageId} -> ${parentId}`);
       const message = state.messages[messageId];
       if (!message) return;
@@ -366,6 +405,7 @@ export default {
           ...parent,
           child_ids: [...(parent.child_ids || []), childId]
         };
+        state.structureVersion += 1;
       }
     },
     
@@ -450,6 +490,44 @@ export default {
     CLEAR_MARKING_AS_READ(state) {
       state.markingAsReadIds = [];
     },
+
+    ADD_STITCH_LINK(state, { messageIdFrom, messageIdTo }) {
+      const source = state.messages[messageIdFrom];
+      if (source) {
+        const nextIds = [...(source.stitch_child_ids || [])];
+        if (!nextIds.includes(messageIdTo)) {
+          nextIds.push(messageIdTo);
+          state.messages[messageIdFrom] = { ...source, stitch_child_ids: nextIds };
+        }
+      }
+      const target = state.messages[messageIdTo];
+      if (target) {
+        const nextIds = [...(target.stitch_parent_ids || [])];
+        if (!nextIds.includes(messageIdFrom)) {
+          nextIds.push(messageIdFrom);
+          state.messages[messageIdTo] = { ...target, stitch_parent_ids: nextIds };
+        }
+      }
+      state.structureVersion += 1;
+    },
+
+    REMOVE_STITCH_LINK(state, { messageIdFrom, messageIdTo }) {
+      const source = state.messages[messageIdFrom];
+      if (source && source.stitch_child_ids) {
+        const nextIds = source.stitch_child_ids.filter(id => id !== messageIdTo);
+        state.messages[messageIdFrom] = { ...source, stitch_child_ids: nextIds };
+      }
+      const target = state.messages[messageIdTo];
+      if (target && target.stitch_parent_ids) {
+        const nextIds = target.stitch_parent_ids.filter(id => id !== messageIdFrom);
+        state.messages[messageIdTo] = { ...target, stitch_parent_ids: nextIds };
+      }
+      state.structureVersion += 1;
+    },
+
+    INCREMENT_STRUCTURE_VERSION(state) {
+      state.structureVersion += 1;
+    }
   },
   
   actions: {
@@ -538,7 +616,6 @@ export default {
     },
     
     // NEW ACTION: Prepare branch path by setting branch_child relationships
-    // This should be called before using getVisibleBranchMessages
     prepareBranchPath({ commit, state }, threadRootId) {
       if (!threadRootId || !state.messages[threadRootId]) {
         return false;
@@ -553,11 +630,19 @@ export default {
       const getParentId = (msg) => (msg.branch_parent !== undefined && msg.branch_parent !== null) ? msg.branch_parent : msg.parent_id;
       
       let currentParentId = getParentId(startingMessage);
+      const visitedUp = new Set([startingMessage.id]);
       
       while (currentParentId && state.messages[currentParentId]) {
+        if (visitedUp.has(currentParentId)) {
+          console.warn('[prepareBranchPath] Circular parent reference detected at:', currentParentId);
+          break;
+        }
+        visitedUp.add(currentParentId);
+
         const parentMessage = state.messages[currentParentId];
-        commit('SET_BRANCH_CHILD', { 
-          messageId: currentParentId, 
+        // Ensure parent points to this child and child points to this parent
+        commit('SET_BRANCH_LINK', { 
+          parentId: currentParentId, 
           childId: childMessage.id 
         });
         
@@ -569,9 +654,16 @@ export default {
       
       // STEP 2: Now follow the branch path down, ensuring each node has branch_child set
       let currentMessage = highestAncestor;
+      const visitedDown = new Set();
       
       // Trace downward, ensuring each node has a branch_child if it has children
-      while (true) {
+      while (currentMessage) {
+        if (visitedDown.has(currentMessage.id)) {
+          console.warn('[prepareBranchPath] Circular child reference detected at:', currentMessage.id);
+          break;
+        }
+        visitedDown.add(currentMessage.id);
+
         // pool of children (replies + stitches)
         const childPool = (currentMessage.child_ids || []).concat(currentMessage.stitch_child_ids || []);
 
@@ -587,8 +679,9 @@ export default {
             // Always use last child (furthest right / newest) from complete pool
             const branchChild = childMessages[childMessages.length - 1];
             
-            commit('SET_BRANCH_CHILD', { 
-              messageId: currentMessage.id, 
+            // Set link in both directions
+            commit('SET_BRANCH_LINK', { 
+              parentId: currentMessage.id, 
               childId: branchChild.id
             });
             
@@ -1120,20 +1213,16 @@ export default {
           firstMessageId: messages[0]?.id || 'none'
         });
         
-        // For modes other than inbox, don't automatically commit to store
-        // (they might want to handle messages differently)
-        if (mode === 'inbox') {
-          if (messages.length > 0) {
-            if (skip === 0) {
-              // First page - replace messages
-              await this.dispatch('messages/clearCache');
-              commit('SET_MESSAGES', messages);
-            } else {
-              // Subsequent pages - append messages
-              commit('SET_MESSAGES', messages);
-            }
-            console.log(`[Store] Store now has ${Object.keys(state.messages).length} total messages`);
+        // Standard behavior: commit all fetched messages to store so they are available in the cache
+        // for any view (Graph, Links, etc.)
+        if (messages.length > 0) {
+          if (mode === 'inbox' && skip === 0) {
+            // Inbox tab specifically replaces the whole list on first page load
+            await this.dispatch('messages/clearCache');
           }
+          // Loop through and commit individually to ensure full merge logic runs
+          messages.forEach(m => commit('SET_MESSAGE', m));
+          console.log(`[Store] ${mode} fetch committed ${messages.length} messages. Store total: ${Object.keys(state.messages).length}`);
         }
         
         return { messages, has_more, total };
@@ -1370,12 +1459,15 @@ export default {
       
       const message = state.messages[messageId];
       
+      // pool of children (replies + stitches)
+      const childPool = (message.child_ids || []).concat(message.stitch_child_ids || []);
+
       // Return early if not a valid child
-      if (!message.child_ids || !message.child_ids.includes(childId)) {
+      if (!childPool.includes(childId)) {
         return false;
       }
       
-      commit('SET_BRANCH_CHILD', { messageId, childId });
+      commit('SET_BRANCH_LINK', { parentId: messageId, childId });
       return true;
     },
     
@@ -1398,8 +1490,8 @@ export default {
       if (currentIndex === -1) {
         // If no valid current child, use last child from ordered list (furthest right)
         if (message.reply_order && Array.isArray(message.reply_order) && message.reply_order.length > 0) {
-          commit('SET_BRANCH_CHILD', { 
-            messageId: messageId, 
+          commit('SET_BRANCH_LINK', { 
+            parentId: messageId, 
             childId: orderedChildIds[orderedChildIds.length - 1]
           });
         } else {
@@ -1413,8 +1505,8 @@ export default {
             childMessages[childMessages.length - 1].id : 
             orderedChildIds[orderedChildIds.length - 1];
           
-          commit('SET_BRANCH_CHILD', { 
-            messageId: messageId, 
+          commit('SET_BRANCH_LINK', { 
+            parentId: messageId, 
             childId: mostRecentChildId
           });
         }
@@ -1454,23 +1546,18 @@ export default {
           }
         }
         
-        // Update the branch child
-        commit('SET_BRANCH_CHILD', { 
-          messageId: messageId, 
+        // Update the branch child and parent
+        commit('SET_BRANCH_LINK', { 
+          parentId: messageId, 
           childId: newChildId 
         });
         
-        // Also update the chosen child's branch_parent to point back to us
-        commit('SET_BRANCH_PARENT', {
-          messageId: newChildId,
-          parentId: messageId
-        });
-
         // Store the navigation direction for animations
         commit('navigation/SET_LAST_SIBLING_NAVIGATION', { 
           targetId: newChildId, 
           direction: direction 
         }, { root: true });
+
         
         // Get current selected message ID
         const selectedMessageId = rootState.navigation?.selectedMessageId;
@@ -1686,11 +1773,7 @@ export default {
         
         if (success) {
           console.log('[Store] Link deleted successfully');
-          
-          // Refresh the appropriate link list
-          // We'll need to refresh the messages for the LinksModal
-          // This will be handled by the component watching for changes
-          
+          commit('REMOVE_STITCH_LINK', { messageIdFrom, messageIdTo });
           return true;
         } else {
           console.error('[Store] Failed to delete link');
@@ -1715,6 +1798,7 @@ export default {
         
         if (success) {
           console.log('[Store] Link created successfully');
+          commit('ADD_STITCH_LINK', { messageIdFrom, messageIdTo });
           return true;
         } else {
           console.error('[Store] Failed to create link');
@@ -1851,7 +1935,15 @@ export default {
     getAncestorPath: (state) => (messageId) => {
       const result = [];
       let currentId = messageId;
+      const visited = new Set();
+      
       while (currentId && state.messages[currentId]) {
+        if (visited.has(currentId)) {
+          console.warn('[getAncestorPath] Circular reference detected at:', currentId);
+          break;
+        }
+        visited.add(currentId);
+
         result.push(state.messages[currentId]);
         const msg = state.messages[currentId];
         currentId = msg.branch_parent !== undefined ? msg.branch_parent : msg.parent_id;
@@ -1880,8 +1972,15 @@ export default {
       const getParentId = (msg) => (msg.branch_parent !== undefined && msg.branch_parent !== null) ? msg.branch_parent : msg.parent_id;
       
       let currentParentId = getParentId(startingMessage);
+      const visitedUp = new Set([startingMessage.id]);
       
       while (currentParentId && state.messages[currentParentId]) {
+        if (visitedUp.has(currentParentId)) {
+          console.warn('[getFullVisibleBranch] Circular reference (up) at:', currentParentId);
+          break;
+        }
+        visitedUp.add(currentParentId);
+
         highestAncestor = state.messages[currentParentId];
         currentParentId = getParentId(highestAncestor);
       }
@@ -1890,8 +1989,15 @@ export default {
       // STEP 2: Now build the chain from highest ancestor down - NO STATE MODIFICATIONS
       result.push(highestAncestor);
       let currentMessage = highestAncestor;
+      const visitedDown = new Set();
       
-      while (true) {
+      while (currentMessage) {
+        if (visitedDown.has(currentMessage.id)) {
+          console.warn('[getFullVisibleBranch] Circular reference (down) at:', currentMessage.id);
+          break;
+        }
+        visitedDown.add(currentMessage.id);
+
         if (!currentMessage.branch_child) break;
         const childId = currentMessage.branch_child;
         if (!state.messages[childId]) break;

@@ -45,6 +45,11 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  // Emit click event instead of navigating
+  emitOnly: {
+    type: Boolean,
+    default: false
+  },
   // Show all links
   showAllLinks: {
     type: Boolean,
@@ -342,6 +347,12 @@ function getReplyCount(message) {
 
 // Navigate to thread view when a thread is clicked
 const viewMessage = (messageId) => {
+  // If emitOnly is true, just emit the click event and return
+  if (props.emitOnly) {
+    emit('messageClicked', messageId);
+    return;
+  }
+  
   // If in selectable mode, handle as selection instead of navigation
   if (props.selectable) {
     handleMessageSelection(messageId);

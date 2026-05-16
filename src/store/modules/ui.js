@@ -10,6 +10,8 @@ export default {
     showDeleteConfirm: false,
     messageToDelete: null,
     loginModalOpen: false,
+    // Hidden demo mode: blur personal info fields in the profile modal.
+    demoBlurPersonalInfo: false,
   },
   
   mutations: {
@@ -46,6 +48,10 @@ export default {
 
     SET_LOGIN_MODAL_OPEN(state, value) {
       state.loginModalOpen = !!value;
+    },
+
+    SET_DEMO_BLUR_PERSONAL_INFO(state, value) {
+      state.demoBlurPersonalInfo = !!value;
     }
   },
   
@@ -84,6 +90,14 @@ export default {
 
     setLoginModalOpen({ commit }, value) {
       commit('SET_LOGIN_MODAL_OPEN', value);
+    },
+
+    toggleDemoBlurPersonalInfo({ state, commit }) {
+      commit('SET_DEMO_BLUR_PERSONAL_INFO', !state.demoBlurPersonalInfo);
+    },
+
+    setDemoBlurPersonalInfo({ commit }, value) {
+      commit('SET_DEMO_BLUR_PERSONAL_INFO', value);
     }
   },
   
@@ -94,5 +108,6 @@ export default {
     showDeleteConfirm: state => state.showDeleteConfirm,
     messageToDelete: state => state.messageToDelete,
     loginModalOpen: state => state.loginModalOpen,
+    demoBlurPersonalInfo: state => state.demoBlurPersonalInfo,
   }
 }

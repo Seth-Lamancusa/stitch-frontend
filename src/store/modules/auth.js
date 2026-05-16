@@ -410,13 +410,13 @@ export default {
       }
     },
 
-    async createManagedUser({ dispatch }, { display_name, user_tag, endpoints, scopes = 'msg.read msg.write ws', private: isPrivate = false }) {
+    async createManagedUser({ dispatch }, { display_name, user_tag, endpoints, scopes = 'msg.read msg.write ws', private: isPrivate = false, is_bot = false }) {
       try {
-        const payload = { display_name, user_tag, scopes, private: !!isPrivate };
+        const payload = { display_name, user_tag, scopes, private: !!isPrivate, is_bot: !!is_bot };
         if (Array.isArray(endpoints)) payload.endpoints = endpoints;
         
         // Log what we're sending
-        console.log('[AUTH] createManagedUser payload:', { display_name, user_tag, scopes, private: !!isPrivate });
+        console.log('[AUTH] createManagedUser payload:', payload);
         const resp = await apiClient.post('/managed/users', payload, {
           headers: { 'Content-Type': 'application/json' }
         });

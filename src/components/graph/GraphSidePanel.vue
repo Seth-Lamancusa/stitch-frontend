@@ -33,7 +33,12 @@
 
       <div class="detail-section">
         <label>Content</label>
-        <div class="message-content">{{ displayedMessage.content }}</div>
+        <formatted-content
+          v-if="displayedMessage.content"
+          class="message-content"
+          :content="displayedMessage.content"
+        />
+        <div v-else class="message-content">—</div>
       </div>
 
       <div class="detail-section" v-if="displayedMessage.id">
@@ -57,6 +62,7 @@
   import { useStore } from 'vuex';
   import { useRouter } from 'vue-router';
   import { format } from 'date-fns';
+  import FormattedContent from '../FormattedContent/index.vue';
 
   const store = useStore();
   const router = useRouter();
@@ -82,7 +88,7 @@ onBeforeUnmount(() => {
 
 // Keep the last resolved message to avoid a white flash when the selector briefly
 // resolves to null during graph refresh/layout updates.
-const displayedMessage = ref(null);
+  const displayedMessage = ref(null);
 
 watch(
   () => message.value,
@@ -300,7 +306,6 @@ const formattedDate = computed(() => {
 }
 
 .message-content {
-  white-space: pre-wrap;
   line-height: 1.5;
   font-size: 0.95rem;
 }

@@ -85,6 +85,10 @@ const { changePassword, requestEmailVerification, verifyEmailWithCode, requestPh
 const notifyPrefs = ref({ email: false, phone: false, endpoint: false });
 const showPhoneConsent = ref(false);
 
+// Hidden demo mode: blur personal info fields (email + phone) from view.
+// Shortcut: Ctrl + Alt + Shift + B
+const demoBlurPersonalInfo = computed(() => store.getters['ui/demoBlurPersonalInfo']);
+
 // Password visibility toggles
 const showCurrentPassword = ref(false);
 const showNewPassword = ref(false);
@@ -144,6 +148,17 @@ function normalizeEndpointForCompare(value) {
 
 // Global keyboard handling (Esc to close with confirm)
 const onGlobalKeydown = (e) => {
+  if (
+    e.ctrlKey &&
+    e.altKey &&
+    e.shiftKey &&
+    (e.key === 'b' || e.key === 'B')
+  ) {
+    e.preventDefault();
+    store.dispatch('ui/toggleDemoBlurPersonalInfo');
+    return;
+  }
+
   if (e.key === 'Escape') {
     e.preventDefault();
     closeModal();
@@ -1365,15 +1380,16 @@ const deleteAccount = async () => {
                   <span v-if="isEmailVerified" class="status-badge ok">Verified</span>
                 </div>
               </div>
-              <input 
-                id="email" 
-                v-model="email" 
-                type="email" 
-                placeholder="you@example.com"
-                :disabled="user?.is_managed"
-                @keydown="handleKeydown"
-                @blur="validateEmail"
-              />
+                <input 
+                  id="email" 
+                  v-model="email" 
+                  type="email" 
+                  placeholder="you@example.com"
+                  :disabled="user?.is_managed"
+                  :class="{ 'demo-blur-personal-info': demoBlurPersonalInfo }"
+                  @keydown="handleKeydown"
+                  @blur="validateEmail"
+                />
               <div class="field-error" v-if="emailError">{{ emailError }}</div>
               <div class="verification-stack warn" v-if="!isEmailVerified && hasSavedEmail">
                 <span class="verify-label">Unverified</span>
@@ -1395,16 +1411,17 @@ const deleteAccount = async () => {
                   <span v-if="isPhoneVerified" class="status-badge ok">Verified</span>
                 </div>
               </div>
-              <div class="input-with-icon">
-                <input 
-                  id="phoneNumber" 
-                  v-model="phoneNumber" 
-                  type="tel" 
-                  placeholder="(555) 123-4567"
-                  :disabled="user?.is_managed"
-                  @keydown="handleKeydown"
-                  @blur="validatePhoneNumber"
-                />
+                <div class="input-with-icon">
+                  <input 
+                    id="phoneNumber" 
+                    v-model="phoneNumber" 
+                    type="tel" 
+                    placeholder="(555) 123-4567"
+                    :disabled="user?.is_managed"
+                    :class="{ 'demo-blur-personal-info': demoBlurPersonalInfo }"
+                    @keydown="handleKeydown"
+                    @blur="validatePhoneNumber"
+                  />
                 <button type="button" class="info-btn" @click="showPhoneConsent = !showPhoneConsent" :aria-pressed="showPhoneConsent ? 'true' : 'false'" title="SMS consent details">ⓘ</button>
               </div>
               <div class="field-error" v-if="phoneNumberError">{{ phoneNumberError }}</div>
@@ -2631,6 +2648,13 @@ const deleteAccount = async () => {
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   font-style: italic;
+}
+
+.demo-blur-personal-info {
+  filter: blur(6px);
+  caret-color: transparent;
+  /* Keep the blur inside the input box */
+  overflow: hidden;
 }
 
 @media (max-width: 900px) {

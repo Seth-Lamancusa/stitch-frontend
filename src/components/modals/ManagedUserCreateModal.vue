@@ -9,6 +9,7 @@ const store = useStore();
 const displayName = ref('');
 const userTag = ref('');
 const endpoints = ref('');
+const isBot = ref(true);
 const isBusy = ref(false);
 const errorMessage = ref('');
 
@@ -17,6 +18,7 @@ watch(() => props.isOpen, (o) => {
     displayName.value = '';
     userTag.value = '';
     endpoints.value = '';
+    isBot.value = true;
     errorMessage.value = '';
     isBusy.value = false;
   }
@@ -37,7 +39,8 @@ const onCreate = async () => {
       user_tag: userTag.value.trim(),
       endpoints: ep,
       scopes: 'msg.read msg.write ws',
-      private: false
+      private: false,
+      is_bot: isBot.value
     });
     try { await store.dispatch('ui/setSuccess', 'Managed user created'); } catch (_) {}
     try {
@@ -94,6 +97,12 @@ const onCreate = async () => {
             <label>Endpoints (optional)</label>
             <input v-model="endpoints" type="text" placeholder="e.g. https://bot.example.com/hook" />
           </div>
+          <div class="field checkbox-field">
+            <label class="checkbox-label">
+              <input v-model="isBot" type="checkbox" />
+              <span>Mark this account as a bot</span>
+            </label>
+          </div>
         </div>
         <div class="footer">
           <div class="error" v-if="errorMessage">{{ errorMessage }}</div>
@@ -115,6 +124,9 @@ const onCreate = async () => {
 .close{ background:transparent; border:1px solid var(--color-border,#2a2a2a); color: var(--color-text,#fff); border-radius:6px; padding: 2px 8px; cursor:pointer; }
 .body{ padding: 14px; display:grid; gap:10px; }
 .field{ display:grid; gap:6px; }
+.checkbox-field{ display:block; padding-top: 4px; }
+.checkbox-label{ display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; }
+.checkbox-label input{ width:auto; margin:0; }
 label{ font-size:12px; color: var(--color-text,#fff); opacity:0.9; }
 input{ background: var(--color-input-background,#000); color: var(--color-text,#fff); border:1px solid var(--color-border,#2a2a2a); border-radius: 8px; padding: 8px 10px; }
 .hint{ font-size: 12px; color: var(--color-text-secondary,#aaa); }

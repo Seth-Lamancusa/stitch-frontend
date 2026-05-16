@@ -65,6 +65,7 @@ const state = {
 
   // Current graph data
   currentMessageId: null,
+  extraSeedIds: [],
   messages: [],
   edges: []
 };
@@ -373,6 +374,16 @@ const mutations = {
     state.messages.push(newMessage);
     // Recalculate edges
     state.edges = calculateEdges(state.messages);
+  },
+
+  ADD_EXTRA_SEED_ID(state, messageId) {
+    if (!state.extraSeedIds.includes(messageId)) {
+      state.extraSeedIds.push(messageId);
+    }
+  },
+
+  CLEAR_EXTRA_SEEDS(state) {
+    state.extraSeedIds = [];
   }
 };
 
@@ -380,6 +391,7 @@ const actions = {
   // Initialize graph view with message data
   async initializeGraph({ commit, dispatch }, { messageId, messages }) {
     commit('SET_CURRENT_MESSAGE_ID', messageId);
+    commit('CLEAR_EXTRA_SEEDS');
     commit('SET_MESSAGES', messages);
     
     // Calculate initial layout

@@ -40,6 +40,15 @@
         </button>
 
         <button
+          @click="showLoadThreadModal = true"
+          class="load-thread-button"
+          title="Load an independent thread into the view"
+        >
+          <span class="load-icon">📂</span>
+          Load Thread
+        </button>
+
+        <button
           @click="startDrawingStitch"
           class="draw-stitch-button"
           title="Connect two messages with a stitch"
@@ -101,6 +110,12 @@
       <!-- Right side panel (message details) -->
       <graph-side-panel />
     </div>
+
+    <load-thread-modal
+      :is-visible="showLoadThreadModal"
+      @close="showLoadThreadModal = false"
+      @select="handleLoadThread"
+    />
   </div>
 </template>
 
@@ -108,6 +123,7 @@
 import { mapState, mapGetters, mapActions } from 'vuex';
 import GraphCanvas from '../../components/graph/GraphCanvas.vue';
 import GraphSidePanel from '../../components/graph/GraphSidePanel.vue';
+import LoadThreadModal from '../../components/modals/LoadThreadModal.vue';
 import UserService from '../../services/UserService.js';
 
 
@@ -115,7 +131,8 @@ export default {
   name: 'GraphView',
   components: {
     GraphCanvas,
-    GraphSidePanel
+    GraphSidePanel,
+    LoadThreadModal
   },
   
   data() {
@@ -128,7 +145,8 @@ export default {
       loadingProgress: '',
       pendingMessagesLoad: null,
       stashedSelectedId: null,
-      isLinking: false
+      isLinking: false,
+      showLoadThreadModal: false
     };
   },
   
@@ -185,9 +203,9 @@ export default {
     this.updateCanvasSize();
     window.addEventListener('resize', this.handleResize);
     
-    // Watch for new messages in store and refresh graph
+    // Watch for structural changes in the messages store and refresh graph
     this.unwatchMessages = this.$store.watch(
-      (state) => Object.keys(state.messages.messages || {}).length,
+      (state) => state.messages.structureVersion,
       () => {
         // Debounce refresh to avoid excessive updates
         if (this.refreshTimeout) {
@@ -223,6 +241,38 @@ export default {
       'cancelStitchDrawing',
       'addStitchLink'
     ]),
+
+    async handleLoadThread(messageId) {
+      console.log('[GraphView] handleLoadThread called with ID:', messageId);
+      const message = this.$store.getters['messages/getMessage'](messageId);
+      if (message) {
+        console.log('[GraphView] Found message in store:', message.id);
+        // Check if message is already in graph
+        if (this.messages.some(m => m.id === message.id)) {
+          console.log('[GraphView] Message already in graph, focusing:', message.id);
+          this.focusMessage(message.id);
+          return;
+        }
+
+        console.log('[GraphView] Adding new extra seed ID to graphView store:', message.id);
+
+        // Add to extra seeds so it persists through refreshes
+        this.$store.commit('graphView/ADD_EXTRA_SEED_ID', message.id);
+        
+        // Refresh graph from store to include the new seed and its local subgraph
+        console.log('[GraphView] Triggering refreshGraphFromStore after adding seed');
+        await this.refreshGraphFromStore();
+        
+        // Focus the new message
+        this.$nextTick(() => {
+          console.log('[GraphView] Focusing new message after refresh:', message.id);
+          this.focusMessage(message.id);
+        });
+      } else {
+        console.error('[GraphView] Message NOT found in store for ID:', messageId);
+      }
+    },
+
 
     startDrawingStitch() {
       // Stash currently selected message ID to restore later
@@ -296,29 +346,49 @@ export default {
 
     // Collect a subgraph from store-only data: from highest in-store ancestor and all in-store descendants
     collectStoreSubgraph(centerId) {
+      console.log('[GraphView] collectStoreSubgraph called with centerId:', centerId);
       const getMsg = (id) => this.$store.getters['messages/getMessage'](id);
-      if (!centerId || !getMsg(centerId)) return [];
+      
+      const seedIds = [];
+      if (centerId && getMsg(centerId)) seedIds.push(centerId);
+      
+      // Add extra seeds from store
+      const extraSeeds = this.$store.state.graphView.extraSeedIds || [];
+      console.log('[GraphView] Found extraSeedIds in store:', extraSeeds);
+      for (const id of extraSeeds) {
+        if (id && getMsg(id) && !seedIds.includes(id)) {
+          seedIds.push(id);
+        }
+      }
 
-      // Find highest ancestor present in store
-      let highest = getMsg(centerId);
-      let p = highest.parent_id;
-      while (p && getMsg(p)) {
-        highest = getMsg(p);
-        p = highest.parent_id;
+      console.log('[GraphView] Final seed IDs for collection:', seedIds);
+      if (seedIds.length === 0) return [];
+
+      const result = new Map();
+      const queue = [];
+
+      // Find highest ancestor for each seed and add to queue
+      for (const id of seedIds) {
+        let highest = getMsg(id);
+        let p = highest.parent_id;
+        while (p && getMsg(p)) {
+          highest = getMsg(p);
+          p = highest.parent_id;
+        }
+        if (!result.has(highest.id)) {
+          console.log('[GraphView] Adding highest ancestor to BFS queue:', highest.id, 'for seed:', id);
+          queue.push(highest.id);
+        }
       }
 
       // BFS across reply-children and stitch-neighbors that already exist in store
-      const result = new Map();
-      const queue = [highest.id];
       while (queue.length) {
         const id = queue.shift();
         const m = getMsg(id);
         if (!m || result.has(id)) continue;
         result.set(id, m);
 
-        // Include reply parents too.
-        // Without this, reply-ancestor expansions for nodes that were reached via stitch links
-        // can be loaded into the store but omitted from the rendered subgraph.
+        // Include reply parents too
         const parentId = m.parent_id;
         if (parentId && getMsg(parentId)) queue.push(parentId);
 
@@ -331,6 +401,7 @@ export default {
         for (const sp of stitchParents) if (getMsg(sp)) queue.push(sp);
       }
 
+      console.log('[GraphView] collectStoreSubgraph returning node count:', result.size);
       return Array.from(result.values());
     },
     
@@ -460,6 +531,8 @@ export default {
         graphState.layout.positions.size > 0;
 
       if (hasSession) {
+        // Refresh with any new data loaded in global store while this view was inactive.
+        await this.refreshGraphFromStore();
         this.clearSelection();
         return;
       }
@@ -790,6 +863,25 @@ export default {
 .load-all-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Load thread button */
+.load-thread-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background-color: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--color-text);
+  font-size: 14px;
+}
+
+.load-thread-button:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
 }
 
 .button-spinner {
