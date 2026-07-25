@@ -1,28 +1,28 @@
 <template>
   <div class="reset-container">
     <h2>Password reset</h2>
-    <div class="card">
-      <label>Email</label>
-      <input v-model="email" type="email" placeholder="you@example.com" />
+    <form @submit.prevent="reset" class="card">
+      <label for="reset-email">Email</label>
+      <input id="reset-email" name="email" v-model="email" type="email" placeholder="you@example.com" autocomplete="email" />
       <div v-if="needsTag" class="tag-row">
-        <label>User tag</label>
-        <input v-model="userTag" @input="onTagInput" type="text" placeholder="your_tag (without @)" />
+        <label for="reset-tag">User tag</label>
+        <input id="reset-tag" name="username" v-model="userTag" @input="onTagInput" type="text" placeholder="your_tag (without @)" autocomplete="username" />
         <p class="hint">Multiple accounts use this email. Enter your @tag to continue.</p>
       </div>
       <div class="row">
         <input v-model="code" type="text" placeholder="6-digit code" />
-        <button class="secondary" :disabled="busy || cooldown>0 || !email || (needsTag && !hasValidTag)" @click="requestCode">
+        <button type="button" class="secondary" :disabled="busy || cooldown>0 || !email || (needsTag && !hasValidTag)" @click="requestCode">
           {{ cooldown>0 ? `Resend in ${cooldown}s` : 'Get code' }}
         </button>
       </div>
-      <label>New password</label>
-      <input v-model="newPassword" type="password" placeholder="••••••••" />
+      <label for="reset-password">New password</label>
+      <input id="reset-password" name="new-password" v-model="newPassword" type="password" placeholder="••••••••" autocomplete="new-password" />
       <p class="hint">Minimum 8 characters, must include a letter and a number.</p>
       <p v-if="error" class="error">{{ error }}</p>
       <div class="actions">
-        <button class="primary" :disabled="busy || (needsTag && !hasValidTag)" @click="reset">Reset password</button>
+        <button type="submit" class="primary" :disabled="busy || (needsTag && !hasValidTag)">Reset password</button>
       </div>
-    </div>
+    </form>
   </div>
 </template>
 

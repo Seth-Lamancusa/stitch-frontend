@@ -69,6 +69,8 @@ export default {
     // Global Speed Dial modal state
     speedDialModalVisible: false,
     speedDialTargetMessageId: null,
+    // Similarity search state
+    similarMessagesSourceId: null,
     // Refresh trigger for message lists
     refreshTrigger: 0, // Timestamp that increments when refresh is requested
     // Selected channel ID for channels tab
@@ -372,6 +374,10 @@ export default {
 
       const timestamp = Date.now();
       state.lastSiblingNavigation = { targetId, direction, timestamp };
+    },
+    
+    SET_SIMILAR_MESSAGES_SOURCE_ID(state, id) {
+      state.similarMessagesSourceId = id;
     },
     
     TRIGGER_REFRESH(state) {

@@ -8,6 +8,11 @@
       </div>
       
       <div class="search-controls">
+        <div v-if="similarToMessage" class="similar-to-row">
+          <span class="preview-label">Similar to:</span>
+          <MessagePreview :message="similarToMessage" displayMode="single-line" />
+          <button class="clear-similar" @click="clearSimilarTo" title="Clear similarity search">✕</button>
+        </div>
         <div class="query-row">
           <input v-model="q" class="query-input" type="text" placeholder="Search content" @keydown.enter="runSearch" />
           <TagDropdown
@@ -39,11 +44,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import TabViewLayout from '../../components/layouts/TabViewLayout.vue';
 import MessageList from '../../components/MessageList.vue';
 import TagDropdown from '../../components/TagDropdown.vue';
+import MessagePreview from '../../components/MessagePreview.vue';
 import MessageService from '../../services/MessageService.js';
+import { useStore } from 'vuex';
+
+const route = useRoute();
+const router = useRouter();
+const store = useStore();
 
 const q = ref('');
 const tags = ref([]);
@@ -51,6 +63,20 @@ const availableTags = ref([]);
 const match = ref('any');
 const results = ref([]);
 const isLoadingTags = ref(false);
+const similarToMessageId = ref(route.query.similar_to || null);
+
+const similarToMessage = computed(() => {
+  if (!similarToMessageId.value) return null;
+  return store.getters['messages/getMessage'](similarToMessageId.value);
+});
+
+const clearSimilarTo = () => {
+  similarToMessageId.value = null;
+  const newQuery = { ...route.query };
+  delete newQuery.similar_to;
+  router.replace({ query: newQuery });
+  runSearch();
+};
 
 const fetchTags = async () => {
   try {
@@ -80,9 +106,19 @@ const removeTag = (i) => {
 
 const runSearch = async () => {
   try {
-    const resp = await MessageService.search({ q: q.value || null, tags: tags.value, match: match.value, skip: 0, limit: 15 });
-    const data = resp?.data || {};
-    results.value = Array.isArray(data.messages) ? data.messages : [];
+    if (similarToMessageId.value) {
+      // 1. Ensure source message is in store for the preview
+      if (!similarToMessage.value) {
+        await store.dispatch('messages/loadMessage', similarToMessageId.value);
+      }
+
+      const resp = await MessageService.getSimilarMessages(similarToMessageId.value, 15);
+      results.value = Array.isArray(resp?.data) ? resp.data : [];
+    } else {
+      const resp = await MessageService.search({ q: q.value || null, tags: tags.value, match: match.value, skip: 0, limit: 15 });
+      const data = resp?.data || {};
+      results.value = Array.isArray(data.messages) ? data.messages : [];
+    }
   } catch (e) {
     console.error('[SearchView] search error', e);
     results.value = [];
@@ -104,7 +140,7 @@ watch(
 <style scoped>
 .search-view { 
   padding: 8px; 
-  max-width: 60%; 
+  max-width: 50%; 
   margin: 0 auto; 
 }
 
@@ -115,7 +151,53 @@ watch(
   }
 }
 
-.search-controls { margin-bottom: 8px; }
+.search-controls { margin-bottom: 16px; width: 100%; }
+
+.similar-to-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.preview-label {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.similar-to-row :deep(.message-preview) {
+  flex: 1;
+  min-width: 0;
+}
+
+.clear-similar {
+  background: var(--color-surface-light);
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.clear-similar:hover {
+  background-color: var(--color-error-light);
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
 .query-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .query-input { flex: 1; min-width: 180px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-text); }
 .search-btn, .match-select { padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-text); cursor: pointer; }

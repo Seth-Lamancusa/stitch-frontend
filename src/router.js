@@ -4,7 +4,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import ThreadView from './views/app_views/ThreadView.vue';
 import NewThreadView from './views/app_views/NewThreadView.vue';
 import GraphView from './views/app_views/GraphView.vue';
-// import SearchView from './views/app_views/SearchView.vue';
+import SearchView from './views/app_views/SearchView.vue';
 import ChannelsView from './views/app_views/ChannelsView.vue';
 import HomeView from './views/info_views/HomeView.vue';
 import AboutView from './views/info_views/AboutView.vue';
@@ -12,6 +12,8 @@ import ArchitectureView from './views/info_views/ArchitectureView.vue';
 import TermsView from './views/info_views/TermsView.vue';
 import HowView from './views/info_views/HowView.vue';
 import StitchBotsView from './views/info_views/StitchBotsView.vue';
+import ChatsView from './views/info_views/ChatsView.vue';
+import FeaturesView from './views/info_views/FeaturesView.vue';
 import MessageListView from './views/app_views/MessageListView.vue';
 import PasswordResetView from './views/app_views/PasswordResetView.vue';
 import ImportView from './views/app_views/ImportView.vue';
@@ -35,12 +37,11 @@ const routes = [
     path: '/',
     redirect: '/home'
   },
-  // Search tab commented out
-  // {
-  //   path: '/search',
-  //   name: 'search',
-  //   component: SearchView
-  // },
+  {
+    path: '/search',
+    name: 'search',
+    component: SearchView
+  },
   {
     path: '/import',
     name: 'import',
@@ -80,6 +81,16 @@ const routes = [
     path: '/bots',
     name: 'bots',
     component: StitchBotsView
+  },
+  {
+    path: '/chats',
+    name: 'chats',
+    component: ChatsView
+  },
+  {
+    path: '/features',
+    name: 'features',
+    component: FeaturesView
   },
   {
     path: '/inbox',

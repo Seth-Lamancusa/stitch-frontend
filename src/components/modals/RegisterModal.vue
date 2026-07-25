@@ -5,6 +5,7 @@
         <h3>Create account</h3>
         <button class="close-button" @click.stop="onClose">×</button>
       </div>
+      <form class="modal-form" @submit.prevent="submit">
       <div class="modal-content">
         <div class="panel">
           <label for="register-email">Email</label>
@@ -54,8 +55,9 @@
             <span>Private account</span>
           </label>
         </div>
-        <button class="primary" :disabled="busy || !canSubmit" :aria-busy="busy ? 'true' : 'false'" @click="submit">{{ busy ? 'Creating account…' : 'Create account' }}</button>
+        <button class="primary" :disabled="busy || !canSubmit" :aria-busy="busy ? 'true' : 'false'" type="submit">{{ busy ? 'Creating account…' : 'Create account' }}</button>
       </div>
+      </form>
     </div>
   </div>
 </template>
@@ -214,6 +216,7 @@ const onTagInput = () => {
   overflow: hidden; animation: modal-appear var(--transition-normal);
   display: flex; flex-direction: column;
 }
+.modal-form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 @keyframes modal-appear { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 .modal-header { padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; }
 .modal-header h3 { margin: 0; font-size: var(--font-size-lg); color: var(--color-text); font-weight: 600; }

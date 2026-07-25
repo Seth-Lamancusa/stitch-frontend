@@ -4,16 +4,26 @@
     :class="{
       compact,
       selected,
-      selectable: isSelectable
+      selectable: isSelectable,
+      'single-line-mode': displayMode === 'single-line'
     }"
     :data-message-id="message.id"
   >
+    <!-- Single line mode layout -->
+    <div v-if="displayMode === 'single-line'" class="single-line-content" @click="handleMessageClick">
+      <span class="author-prefix">{{ authorDisplayName }}:</span>
+      <span class="content-text">{{ truncatedContent }}</span>
+    </div>
+
+    <!-- Standard preview layout -->
     <div
+      v-else
       class="message-preview-content"
       @click="handleMessageClick"
       :class="{ selectable: isSelectable }"
     >
       <div class="message-header">
+...
         <div class="author-section">
           <span
             v-if="message.unread_count_in_thread && message.unread_count_in_thread > 0"
@@ -228,11 +238,12 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  displayMode: {
-    type: String,
-    default: 'preview',
-    validator: (value) => ['preview', 'full'].includes(value)
-  },
+    displayMode: {
+      type: String,
+      default: 'preview',
+      validator: (value) => ['preview', 'full', 'single-line'].includes(value)
+    },
+
   currentTab: {
     type: String,
     default: null
@@ -412,7 +423,7 @@ const truncatedContent = computed(() => {
 
   return memoize((content) => {
     let processedContent = content;
-    if (props.displayMode === 'preview') {
+    if (props.displayMode === 'preview' || props.displayMode === 'single-line') {
       processedContent = stripMarkdown(content);
     }
     return processedContent;
@@ -618,6 +629,44 @@ const formatTimestamp = (timestamp) => {
 .message-preview.selected .message-preview-content {
   border: 2px solid var(--color-primary);
   background-color: var(--color-primary-light);
+}
+
+.message-preview.single-line-mode {
+  max-width: 100%;
+  padding: 0;
+  margin: 0;
+}
+
+.single-line-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  background-color: transparent;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.single-line-content:hover {
+  background-color: var(--color-hover-overlay);
+  color: var(--color-text);
+}
+
+.single-line-content .author-prefix {
+  font-weight: 700;
+  flex-shrink: 0;
+  color: var(--color-primary);
+}
+
+.single-line-content .content-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .message-preview-content {

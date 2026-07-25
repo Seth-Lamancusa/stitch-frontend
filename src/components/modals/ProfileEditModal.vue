@@ -1681,37 +1681,39 @@ const deleteAccount = async () => {
               <h4>Change password</h4>
               <p>Minimum 8 characters, must include a letter and a number.</p>
             </div>
-            <div class="field">
-              <label for="currentPassword">Current password</label>
-              <div class="password-field">
-                <input id="currentPassword" :type="showCurrentPassword ? 'text' : 'password'" v-model="currentPassword" placeholder="••••••••" />
-                <button type="button" class="eye-toggle" @click="showCurrentPassword = !showCurrentPassword" :aria-pressed="showCurrentPassword ? 'true' : 'false'" :title="showCurrentPassword ? 'Hide password' : 'Show password'">{{ showCurrentPassword ? '🙈' : '👁️' }}</button>
-              </div>
-            </div>
-            <div class="field">
-              <label for="newPassword">New password</label>
-              <div class="password-field">
-                <input id="newPassword" :type="showNewPassword ? 'text' : 'password'" v-model="newPassword" placeholder="••••••••" />
-                <button type="button" class="eye-toggle" @click="showNewPassword = !showNewPassword" :aria-pressed="showNewPassword ? 'true' : 'false'" :title="showNewPassword ? 'Hide password' : 'Show password'">{{ showNewPassword ? '🙈' : '👁️' }}</button>
-              </div>
-            </div>
-            <div class="field">
-              <label for="confirmPassword">Confirm new password</label>
-              <div class="password-field">
-                <input id="confirmPassword" :type="showConfirmPassword ? 'text' : 'password'" v-model="confirmPassword" placeholder="••••••••" />
-                <button type="button" class="eye-toggle" @click="showConfirmPassword = !showConfirmPassword" :aria-pressed="showConfirmPassword ? 'true' : 'false'" :title="showConfirmPassword ? 'Hide password' : 'Show password'">{{ showConfirmPassword ? '🙈' : '👁️' }}</button>
-              </div>
-            </div>
-            <div class="field-error" v-if="changePwError">{{ changePwError }}</div>
-            <div class="field-hint" v-if="changePwSuccess" style="color: var(--color-success, #10b981);">{{ changePwSuccess }}</div>
-            <div class="field-actions">
-              <button class="update-btn" @click="submitPasswordChange" :disabled="changePwBusy">
-                <div class="button-inner">
-                  <div v-if="changePwBusy" class="spinner"></div>
-                  {{ changePwBusy ? 'Updating...' : 'Change Password' }}
+            <form @submit.prevent="submitPasswordChange">
+              <div class="field">
+                <label for="currentPassword">Current password</label>
+                <div class="password-field">
+                  <input id="currentPassword" name="current-password" autocomplete="current-password" :type="showCurrentPassword ? 'text' : 'password'" v-model="currentPassword" placeholder="••••••••" />
+                  <button type="button" class="eye-toggle" @click="showCurrentPassword = !showCurrentPassword" :aria-pressed="showCurrentPassword ? 'true' : 'false'" :title="showCurrentPassword ? 'Hide password' : 'Show password'">{{ showCurrentPassword ? '🙈' : '👁️' }}</button>
                 </div>
-              </button>
-            </div>
+              </div>
+              <div class="field">
+                <label for="newPassword">New password</label>
+                <div class="password-field">
+                  <input id="newPassword" name="new-password" autocomplete="new-password" :type="showNewPassword ? 'text' : 'password'" v-model="newPassword" placeholder="••••••••" />
+                  <button type="button" class="eye-toggle" @click="showNewPassword = !showNewPassword" :aria-pressed="showNewPassword ? 'true' : 'false'" :title="showNewPassword ? 'Hide password' : 'Show password'">{{ showNewPassword ? '🙈' : '👁️' }}</button>
+                </div>
+              </div>
+              <div class="field">
+                <label for="confirmPassword">Confirm new password</label>
+                <div class="password-field">
+                  <input id="confirmPassword" name="confirm-password" autocomplete="new-password" :type="showConfirmPassword ? 'text' : 'password'" v-model="confirmPassword" placeholder="••••••••" />
+                  <button type="button" class="eye-toggle" @click="showConfirmPassword = !showConfirmPassword" :aria-pressed="showConfirmPassword ? 'true' : 'false'" :title="showConfirmPassword ? 'Hide password' : 'Show password'">{{ showConfirmPassword ? '🙈' : '👁️' }}</button>
+                </div>
+              </div>
+              <div class="field-error" v-if="changePwError">{{ changePwError }}</div>
+              <div class="field-hint" v-if="changePwSuccess" style="color: var(--color-success, #10b981);">{{ changePwSuccess }}</div>
+              <div class="field-actions">
+                <button class="update-btn" type="submit" :disabled="changePwBusy">
+                  <div class="button-inner">
+                    <div v-if="changePwBusy" class="spinner"></div>
+                    {{ changePwBusy ? 'Updating...' : 'Change Password' }}
+                  </div>
+                </button>
+              </div>
+            </form>
           </section>
 
           <section class="form-section danger-zone">

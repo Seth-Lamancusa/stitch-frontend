@@ -8,11 +8,11 @@
       <form class="modal-form" @submit.prevent="submitPassword" autocomplete="on">
       <div class="modal-content">
         <div class="panel">
-          <label>Tag, Email, or Phone</label>
-          <input v-model="identifier" type="text" placeholder="tag, email, or phone" enterkeyhint="next" />
-          <label>Password</label>
+          <label for="login-identifier">Tag, Email, or Phone</label>
+          <input id="login-identifier" name="username" autocomplete="username" v-model="identifier" type="text" placeholder="tag, email, or phone" enterkeyhint="next" />
+          <label for="login-password">Password</label>
           <div class="password-field">
-            <input :type="showPassword ? 'text' : 'password'" v-model="password" placeholder="••••••••" @keyup.enter="submitPassword" enterkeyhint="go" />
+            <input id="login-password" name="password" autocomplete="current-password" :type="showPassword ? 'text' : 'password'" v-model="password" placeholder="••••••••" @keyup.enter="submitPassword" enterkeyhint="go" />
             <button type="button" class="eye-toggle" @click="showPassword = !showPassword" :aria-pressed="showPassword ? 'true' : 'false'" :title="showPassword ? 'Hide password' : 'Show password'">
               {{ showPassword ? '🙈' : '👁️' }}
             </button>

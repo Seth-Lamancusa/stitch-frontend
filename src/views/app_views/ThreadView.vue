@@ -38,76 +38,97 @@
       />
       
       <!-- Messages container with fixed spacing -->
-      <div 
-        class="messages-container" 
-        ref="messageList" 
-        @click="handleContainerClick" 
-        :style="{ visibility: isContainerVisible ? 'visible' : 'hidden' }"
-      >
-        <!-- Top of thread marker - only show after scroll is complete -->
-        <adaptive-marker
-          v-if="shouldShowMarkers"
-          position="top"
-          :state="topMarkerState"
-          :stitchCount="topStitchCount"
-          class-name="thread-begin-marker"
-          @load-more="loadMoreParents"
-          @load-stitch="handleLoadStitchBoundary('top')"
-          @retry="loadMoreParents"
-          ref="topMarker"
-          :key="`top-marker-${displayedMessages.length > 0 ? displayedMessages[0].id : 'empty'}`"
-        />
-        
-        <!-- Dedicated scroll anchor at top of messages -->
-        <div ref="scrollAnchor" class="scroll-anchor"></div>
-      
-        <!-- Thread messages - showing single branch -->
-        <template v-for="(message, index) in displayedMessages" :key="message.id">
-          <message-node
-            v-if="(message.id === replyingToMessageId && !isReplyMessageLoading || 
-                    message.id !== replyingToMessageId)"
-            :message="message"
-            :active-parent-id="index > 0 ? displayedMessages[index - 1].id : null"
-            :displayMode="'full'"
-            :selectable="true"
-            :selected="isMessageSelected(message.id)"
-            :is-selected="message.id === replyingToMessageId"
-            :indent-level="0"
-            :loaded-replies="getLoadedRepliesCount(message.id)"
-            :total-replies="getTotalRepliesCount(message.id)"
-            :can-reply="canInteract"
-            @reply="setReplyingTo(message.id)"
-            @delete="confirmDeleteMessage"
-            @showLinks="handleShowLinks"
-            @refreshReplies="refreshRepliesForMessage"
-            @center="handleCenterOnMessage"
-            @selectionToggled="handleMessageSelection"
+      <div class="thread-layout-wrapper">
+        <div 
+          class="messages-container" 
+          ref="messageList" 
+          @click="handleContainerClick" 
+          :style="{ visibility: isContainerVisible ? 'visible' : 'hidden' }"
+        >
+          <!-- Top of thread marker - only show after scroll is complete -->
+          <adaptive-marker
+            v-if="shouldShowMarkers"
+            position="top"
+            :state="topMarkerState"
+            :stitchCount="topStitchCount"
+            class-name="thread-begin-marker"
+            @load-more="loadMoreParents"
+            @load-stitch="handleLoadStitchBoundary('top')"
+            @retry="loadMoreParents"
+            ref="topMarker"
+            :key="`top-marker-${displayedMessages.length > 0 ? displayedMessages[0].id : 'empty'}`"
           />
           
-          <!-- Loading indicator for message being replied to -->
-          <div v-if="message.id === replyingToMessageId && isReplyMessageLoading" class="message-loading">
-            <div class="loading-spinner"></div>
-            <div class="loading-text">Loading message...</div>
-          </div>
-        </template>
+          <!-- Dedicated scroll anchor at top of messages -->
+          <div ref="scrollAnchor" class="scroll-anchor"></div>
         
-      <!-- Bottom of thread marker - only show after scroll is complete -->
-      <adaptive-marker
-        v-if="shouldShowMarkers"
-        position="bottom"
-        :state="bottomMarkerState"
-        :stitchCount="bottomStitchCount"
-        class-name="thread-end-marker"
-        @load-more="loadMoreChildren"
-        @load-stitch="handleLoadStitchBoundary('bottom')"
-        @retry="loadMoreChildren"
-        :show-refresh-shortcut="bottomMarkerState === 'end'"
-        :refreshing="isRefreshingLastMessage"
-        @refresh-last="refreshRepliesForLastVisibleMessage"
-        ref="bottomMarker"
-        :key="`bottom-marker-${displayedMessages.length > 0 ? displayedMessages[displayedMessages.length - 1].id : 'empty'}`"
-      />
+          <!-- Thread messages - showing single branch -->
+          <template v-for="(message, index) in displayedMessages" :key="message.id">
+            <message-node
+              v-if="(message.id === replyingToMessageId && !isReplyMessageLoading || 
+                      message.id !== replyingToMessageId)"
+              :message="message"
+              :active-parent-id="index > 0 ? displayedMessages[index - 1].id : null"
+              :displayMode="'full'"
+              :selectable="true"
+              :selected="isMessageSelected(message.id)"
+              :is-selected="message.id === replyingToMessageId"
+              :indent-level="0"
+              :loaded-replies="getLoadedRepliesCount(message.id)"
+              :total-replies="getTotalRepliesCount(message.id)"
+              :can-reply="canInteract"
+              @reply="setReplyingTo(message.id)"
+              @delete="confirmDeleteMessage"
+              @showLinks="handleShowLinks"
+              @refreshReplies="refreshRepliesForMessage"
+              @center="handleCenterOnMessage"
+              @selectionToggled="handleMessageSelection"
+            />
+            
+            <!-- Loading indicator for message being replied to -->
+            <div v-if="message.id === replyingToMessageId && isReplyMessageLoading" class="message-loading">
+              <div class="loading-spinner"></div>
+              <div class="loading-text">Loading message...</div>
+            </div>
+          </template>
+          
+          <!-- Bottom of thread marker - only show after scroll is complete -->
+          <adaptive-marker
+            v-if="shouldShowMarkers"
+            position="bottom"
+            :state="bottomMarkerState"
+            :stitchCount="bottomStitchCount"
+            class-name="thread-end-marker"
+            @load-more="loadMoreChildren"
+            @load-stitch="handleLoadStitchBoundary('bottom')"
+            @retry="loadMoreChildren"
+            :show-refresh-shortcut="bottomMarkerState === 'end'"
+            :refreshing="isRefreshingLastMessage"
+            @refresh-last="refreshRepliesForLastVisibleMessage"
+            ref="bottomMarker"
+            :key="`bottom-marker-${displayedMessages.length > 0 ? displayedMessages[displayedMessages.length - 1].id : 'empty'}`"
+          />
+        </div>
 
+        <div class="navigator-container">
+          <BranchNavigator
+            :messages="displayedMessages"
+            :currentIndex="currentTopIndex"
+            :messagePositions="messagePositions"
+            :originMessageId="messageId"
+            :scrollState="scrollState"
+            :topState="topMarkerState"
+            :bottomState="bottomMarkerState"
+            :topStitchCount="topStitchCount"
+            :bottomStitchCount="bottomStitchCount"
+            @loadMoreTop="loadMoreParents"
+            @loadMoreBottom="loadMoreChildren"
+            @loadStitchTop="handleLoadStitchBoundary('top')"
+            @loadStitchBottom="handleLoadStitchBoundary('bottom')"
+            @navigatorScrollDelta="handleNavigatorScrollDelta"
+            @navigatorJump="handleNavigatorJump"
+          />
+        </div>
       </div>
       
       <!-- Reply box component -->
@@ -222,6 +243,8 @@ import ThreadHeader from '../../components/ThreadHeader.vue';
 import LoginButton from '@buttons/LoginButton.vue'
 import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
 
+import BranchNavigator from '../../components/BranchNavigator.vue';
+
 // Setup store and routing
 const store = useStore();
 const router = useRouter();
@@ -237,6 +260,9 @@ const messageList = ref(null);
 let unsubscribeMessages = null;
 const isDeleting = ref(false);
 const recipientsModalRef = ref(null);
+
+const lastScrollPosition = ref(0);
+const messageBeingRepliedToRect = ref(null);
 
 // Links modal state
 const showLinksModal = ref(false);
@@ -498,10 +524,10 @@ const ensureCorrectScroll = async () => {
   isContainerVisible.value = true;
   shouldShowMarkers.value = true;
 };
- 
-// Navigation
 
 const backToList = async () => {
+
+
   // Get the previous route
   const prevRoute = store.getters['navigation/previousRoute'];
   
@@ -665,67 +691,6 @@ const isRefreshingLastMessage = computed(() => {
   return isRefreshingMessage(lastMessage.id);
 });
 
-const topStitchCount = computed(() => {
-  if (displayedMessages.value.length === 0) return 0;
-  const first = displayedMessages.value[0];
-  const ids = first.stitch_parent_ids || [];
-  // Only count stitches that still need to be loaded.
-  return ids.filter((id) => !store.getters['messages/getMessage'](id)).length;
-});
-
-const bottomStitchCount = computed(() => {
-  if (displayedMessages.value.length === 0) return 0;
-  const last = displayedMessages.value[displayedMessages.value.length - 1];
-  const ids = last.stitch_child_ids || [];
-  // Only count stitches that still need to be loaded.
-  return ids.filter((id) => !store.getters['messages/getMessage'](id)).length;
-});
-
-const handleLoadStitchBoundary = async (position) => {
-  if (displayedMessages.value.length === 0) return;
-  
-  const msg = position === 'top' 
-    ? displayedMessages.value[0] 
-    : displayedMessages.value[displayedMessages.value.length - 1];
-    
-  const stitchIds = position === 'top' 
-    ? (msg.stitch_parent_ids || []) 
-    : (msg.stitch_child_ids || []);
-    
-  if (stitchIds.length === 0) return;
-  
-  // Primary target to switch the branch to
-  const targetId = stitchIds[0];
-  
-  // Load ALL stitch neighbors at this boundary so the LinkSwitcher works immediately for all origins
-  const unloadIds = stitchIds.filter(id => !store.getters['messages/getMessage'](id));
-  if (unloadIds.length > 0) {
-    try {
-      // Load all individual messages first
-      await Promise.all(unloadIds.map(id => store.dispatch('messages/loadMessage', id)));
-      
-      // For the specific target we are switching to, load its radius so the thread has context
-      await store.dispatch('messages/loadMessageRadius', { messageId: targetId, radius: 5 });
-    } catch (err) {
-      console.error(`[ThreadView] Failed to load stitch targets:`, err);
-      return;
-    }
-  }
-  
-  if (position === 'top') {
-    // Set this as our new branch parent and re-path
-    store.commit('messages/SET_BRANCH_PARENT', { messageId: msg.id, parentId: targetId });
-  } else {
-    // Set this as our new branch child and re-path
-    store.commit('messages/SET_BRANCH_CHILD', { messageId: msg.id, childId: targetId });
-  }
-  
-  // Re-path from the boundary message
-  await store.dispatch('messages/prepareBranchPath', msg.id);
-  
-  // Refresh view
-  await renderThread(true, true);
-};
 
 const bottomMarkerState = computed(() => {
   // If no messages or loading thread, use end state
@@ -865,40 +830,83 @@ const updateReplyingToMessagePosition = () => {
   }
 };
 
-// Add scroll tracking to hide reply box when scrolled too far
+// Scroll mapping and navigator state
+const currentTopIndex = ref(0);
+const isUserScrollingMinimap = ref(false);
+const scrollState = ref({ top: 0, viewportHeight: 0, totalHeight: 0 });
+const messagePositions = ref([]); 
+
+const updateMessageDimensions = () => {
+  if (!messageList.value) return;
+  const container = messageList.value;
+  const nodes = container.querySelectorAll('.message-node');
+  
+  const newPositions = [];
+  nodes.forEach((node) => {
+    const id = node.getAttribute('data-message-id');
+    const content = node.querySelector('.message-content') || node;
+    
+    newPositions.push({
+      id,
+      top: node.offsetTop,
+      height: node.offsetHeight,
+      width: content.offsetWidth
+    });
+  });
+  
+  messagePositions.value = newPositions;
+  scrollState.value.totalHeight = container.scrollHeight;
+  scrollState.value.viewportHeight = container.clientHeight;
+};
+
 const handleScroll = () => {
-  if (!messageList.value || !replyingToMessageId.value) return;
+  if (!messageList.value) return;
+  const container = messageList.value;
   
-  // Get current scroll position
-  const currentScrollPosition = messageList.value.scrollTop;
-  
-  // Update the position of the message being replied to
   updateReplyingToMessagePosition();
   
-  // Only proceed if we have a valid message rect
-  if (!messageBeingRepliedToRect.value) {
-    // Store current position for next comparison
-    lastScrollPosition.value = currentScrollPosition;
-    return;
+  scrollState.value.top = container.scrollTop;
+  scrollState.value.viewportHeight = container.clientHeight;
+  scrollState.value.totalHeight = container.scrollHeight;
+
+  if (!isUserScrollingMinimap.value) {
+    const viewportCenter = container.scrollTop + (container.clientHeight / 2);
+    const nodes = container.querySelectorAll('.message-node');
+    for (let i = 0; i < nodes.length; i++) {
+      const nodeTop = nodes[i].offsetTop;
+      const nodeBottom = nodeTop + nodes[i].offsetHeight;
+      if (viewportCenter >= nodeTop && viewportCenter <= nodeBottom) {
+        currentTopIndex.value = i;
+        break;
+      }
+    }
   }
-  
-  // Get viewport dimensions
-  const containerRect = messageList.value.getBoundingClientRect();
-  const messageRect = messageBeingRepliedToRect.value;
-  
-  // Calculate distance from viewport
-  const distanceFromTop = messageRect.bottom - containerRect.top;
-  const distanceFromBottom = containerRect.bottom - messageRect.top;
-  
-  // Hide reply box when message is too far away in either direction
-  if (distanceFromTop < -2400 || distanceFromBottom < -600) {
-    console.log('Message scrolled too far away, hiding reply box');
-    store.dispatch('navigation/clearReplyingTo');
+
+  // Original distance check for reply box
+  if (messageBeingRepliedToRect.value) {
+    const containerRectForReply = messageList.value.getBoundingClientRect();
+    const messageRect = messageBeingRepliedToRect.value;
+    const distanceFromTop = messageRect.bottom - containerRectForReply.top;
+    const distanceFromBottom = containerRectForReply.bottom - messageRect.top;
+    if (distanceFromTop < -2400 || distanceFromBottom < -600) {
+      store.dispatch('navigation/clearReplyingTo');
+    }
   }
-  
-  // Store this position for comparison
-  lastScrollPosition.value = currentScrollPosition;
+  lastScrollPosition.value = container.scrollTop;
 };
+
+
+let heightObserver = null;
+const setupHeightObserver = () => {
+  if (!messageList.value) return;
+  heightObserver = new ResizeObserver(() => {
+    updateMessageDimensions();
+  });
+  heightObserver.observe(messageList.value);
+  const nodes = messageList.value.querySelectorAll('.message-node');
+  nodes.forEach(n => heightObserver.observe(n));
+};
+
 
 // Check if branch has changed and clear replying if so
 const checkBranchChange = () => {
@@ -1404,6 +1412,9 @@ onMounted(async () => {
   
   if (messageId.value) {
     await loadInitialContent(messageId.value);
+    nextTick(() => {
+      setupHeightObserver();
+    });
   }
   
   if (messageList.value) {
@@ -1412,6 +1423,10 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  if (heightObserver) {
+    heightObserver.disconnect();
+    heightObserver = null;
+  }
   store.commit('messages/SET_THREAD_VIEW_MODE', false);
   if (unsubscribeMessages) {
     unsubscribeMessages();
@@ -1479,6 +1494,107 @@ const openProfileModal = () => {
 const closeProfileModal = () => {
   isProfileModalOpen.value = false;
 };
+
+const topStitchCount = computed(() => {
+  if (displayedMessages.value.length === 0) return 0;
+  const first = displayedMessages.value[0];
+  const ids = first.stitch_parent_ids || [];
+  // Only count stitches that still need to be loaded.
+  return ids.filter((id) => !store.getters['messages/getMessage'](id)).length;
+});
+
+const bottomStitchCount = computed(() => {
+  if (displayedMessages.value.length === 0) return 0;
+  const last = displayedMessages.value[displayedMessages.value.length - 1];
+  const ids = last.stitch_child_ids || [];
+  // Only count stitches that still need to be loaded.
+  return ids.filter((id) => !store.getters['messages/getMessage'](id)).length;
+});
+
+const handleLoadStitchBoundary = async (position) => {
+  if (displayedMessages.value.length === 0) return;
+  
+  const msg = position === 'top' 
+    ? displayedMessages.value[0] 
+    : displayedMessages.value[displayedMessages.value.length - 1];
+    
+  const stitchIds = position === 'top' 
+    ? (msg.stitch_parent_ids || []) 
+    : (msg.stitch_child_ids || []);
+    
+  if (stitchIds.length === 0) return;
+  
+  // Primary target to switch the branch to
+  const targetId = stitchIds[0];
+  
+  // Load ALL stitch neighbors at this boundary so the LinkSwitcher works immediately for all origins
+  const unloadIds = stitchIds.filter(id => !store.getters['messages/getMessage'](id));
+  if (unloadIds.length > 0) {
+    try {
+      // Load all individual messages first
+      await Promise.all(unloadIds.map(id => store.dispatch('messages/loadMessage', id)));
+      
+      // For the specific target we are switching to, load its radius so the thread has context
+      await store.dispatch('messages/loadMessageRadius', { messageId: targetId, radius: 5 });
+    } catch (err) {
+      console.error(`[ThreadView] Failed to load stitch targets:`, err);
+      return;
+    }
+  }
+  
+  if (position === 'top') {
+    // Set this as our new branch parent and re-path
+    store.commit('messages/SET_BRANCH_PARENT', { messageId: msg.id, parentId: targetId });
+  } else {
+    // Set this as our new branch child and re-path
+    store.commit('messages/SET_BRANCH_CHILD', { messageId: msg.id, childId: targetId });
+  }
+  
+  // Re-path from the boundary message
+  await store.dispatch('messages/prepareBranchPath', msg.id);
+  
+  // Refresh view
+  await renderThread(true, true);
+};
+
+// Snappy Animator: Custom ease-out scroll for high-performance feel
+const snappyScrollTo = (targetTop, duration = 200) => {
+  if (!messageList.value) return;
+  const container = messageList.value;
+  const start = container.scrollTop;
+  const change = targetTop - start;
+  const startTime = performance.now();
+
+  const animate = (currentTime) => {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Quad Ease Out: progress * (2 - progress)
+    const ease = progress * (2 - progress);
+    container.scrollTop = start + (change * ease);
+
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    }
+  };
+  requestAnimationFrame(animate);
+};
+
+const handleNavigatorScrollDelta = (delta) => {
+  if (!messageList.value) return;
+  const target = messageList.value.scrollTop + delta;
+  snappyScrollTo(target, 150); // Faster duration for wheel micro-scrolls
+};
+
+const handleNavigatorJump = (msgId) => {
+  if (!messageList.value) return;
+  const node = messageList.value.querySelector(`[data-message-id="${msgId}"]`);
+  if (node) {
+    const target = node.offsetTop - 70;
+    snappyScrollTo(target, 250); // Slightly longer for big jumps
+  }
+};
+
 </script>
 
 <style scoped>
@@ -1496,14 +1612,22 @@ const closeProfileModal = () => {
   display: none;
 }
 
-.messages-container {
+.thread-layout-wrapper {
+  display: flex;
   flex: 1;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.messages-container {
+  flex: 0 0 70%;
   display: flex;
   flex-direction: column;
   align-items: center; /* Center MessageNode components horizontally */
-  width: 100%;
-  padding-left: 80px;
-  padding-right: 80px;
+  width: 70%;
+  padding-left: 20px;
+  padding-right: 20px;
   padding-bottom: calc(100px + 25vh); /* Add space at bottom for the reply box plus a screen's worth of scrollable space */
   gap: 20px; /* Consistent gap between elements */
   /* Keep scrollbar width stable so layout doesn't appear to shrink/grow
@@ -1516,14 +1640,25 @@ const closeProfileModal = () => {
   scroll-behavior: auto;
 }
 
+.navigator-container {
+  flex: 0 0 30%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  pointer-events: none; /* Allow clicks through to layout if needed, but navigator children will override */
+  z-index: 5;
+}
+
+.navigator-container > * {
+  pointer-events: auto;
+}
 
 /* On very wide screens, keep the thread content from expanding too much */
 @media (min-width: 1280px) {
   .messages-container {
-    max-width: 1000px;
-    width: 100%;
-    margin-left: auto;
-    margin-right: auto;
+    padding-left: calc((100% - 1000px) / 2);
+    padding-right: 20px;
   }
 }
 
@@ -1757,10 +1892,20 @@ const closeProfileModal = () => {
   100% { transform: rotate(360deg); }
 }
 
-  @media (max-width: 768px) {
+@media (max-width: 1024px) {
   .messages-container {
+    flex: 0 0 100%;
+    width: 100%;
     padding-left: 8px;
     padding-right: 8px;
+  }
+  .navigator-container {
+    display: none;
+  }
+}
+
+  @media (max-width: 768px) {
+  .messages-container {
     padding-bottom: calc(120px + 100vh); /* More space for the reply box on mobile plus a screen's worth of scrollable space */
     gap: 12px; /* Reduce space between messages on small screens */
     align-items: stretch; /* Let MessageNodes fill width on small screens */

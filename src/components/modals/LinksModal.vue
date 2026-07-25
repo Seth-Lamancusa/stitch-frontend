@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import MessageList from '../MessageList.vue';
+import MessagePreview from '../MessagePreview.vue';
 import { useStore } from 'vuex';
 
 const props = defineProps({
@@ -154,6 +155,12 @@ const addSelectedLinks = async () => {
           <button class="close-button" @click.stop="closeModal">×</button>
         </div>
         
+        <!-- Source Message Preview -->
+        <div v-if="message" class="source-message-preview">
+          <span class="preview-label">Source Message:</span>
+          <MessagePreview :message="message" displayMode="single-line" />
+        </div>
+        
         <!-- Tab Navigation - only show when not selecting -->
         <div v-if="!isSelecting" class="tab-navigation">
           <button 
@@ -263,8 +270,8 @@ const addSelectedLinks = async () => {
 .modal-container {
   background-color: var(--color-surface);
   border-radius: var(--radius-md);
-  width: 90%;
-  max-width: 600px;
+  width: 50%;
+  max-width: 800px;
   height: 75vh;
   max-height: 75vh;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
@@ -307,6 +314,28 @@ const addSelectedLinks = async () => {
   color: var(--color-text);
   font-size: var(--font-size-lg);
   font-weight: 600;
+}
+
+.source-message-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px var(--space-lg);
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-surface-light);
+}
+
+.source-message-preview .preview-label {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.source-message-preview :deep(.message-preview) {
+  flex: 1;
+  min-width: 0;
 }
 
 .close-button {

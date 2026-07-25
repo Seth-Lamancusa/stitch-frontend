@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grouped Tree Layout — Stitch Graph View Demo</title>
+<style>
+  :root {
+    --ink: #220C10;
+    --pine: #14342B;
+    --sage: #598958;
+    --sage-soft: rgba(89, 137, 88, 0.14);
+    --page: #fffdfa;
+    --panel: #f9f7ee;
+    --panel-border: rgba(20, 52, 43, 0.14);
+    --text: #220C10;
+    --text-2: #5c4a42;
+    --node-fill: #fffcef;
+    --guide: rgba(56, 29, 22, 0.35);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #1b0e10;
+      --panel: #241417;
+      --panel-border: rgba(137, 178, 136, 0.22);
+      --text: #f2ede1;
+      --text-2: #c4b5a8;
+      --pine: #8fbc8d;
+      --sage: #74a873;
+      --sage-soft: rgba(116, 168, 115, 0.16);
+      --node-fill: #2c1a1d;
+      --guide: rgba(242, 237, 225, 0.35);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--page);
+    color: var(--text);
+    font-family: Georgia, "Times New Roman", serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 2.5rem 1.5rem 4rem;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  .kicker {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--sage);
+    display: block;
+    margin-bottom: 0.4rem;
+  }
+  h1 { font-size: clamp(1.5rem, 4vw, 2rem); line-height: 1.2; margin: 0 0 0.5rem; }
+  .lede { color: var(--text-2); max-width: 64ch; margin: 0 0 1.75rem; }
+  code {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.85em;
+    background: var(--sage-soft);
+    color: var(--pine);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    padding: 1.25rem;
+  }
+  .controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.9rem 1.5rem;
+    margin-bottom: 1.1rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 0.8rem;
+  }
+  .ctl label { display: flex; justify-content: space-between; color: var(--text-2); font-weight: 600; margin-bottom: 0.2rem; }
+  .ctl output { color: var(--pine); font-variant-numeric: tabular-nums; }
+  .ctl input[type="range"] { width: 100%; accent-color: var(--sage); }
+  .stage { overflow-x: auto; }
+  svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+  .legend {
+    display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 0.9rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 0.78rem; color: var(--text-2);
+  }
+  .legend span::before {
+    content: ""; display: inline-block; width: 10px; height: 10px;
+    border-radius: 50%; margin-right: 0.45rem; vertical-align: -1px;
+  }
+  .legend .l-stack::before { background: var(--sage); }
+  .legend .l-branch::before { background: transparent; border: 2px solid var(--pine); width: 7px; height: 7px; }
+  .legend .l-guide::before { background: transparent; border-top: 2px dashed var(--guide); border-radius: 0; height: 0; width: 14px; vertical-align: 3px; }
+  .foot {
+    margin-top: 2rem; font-size: 0.85rem; color: var(--text-2);
+    border-top: 1px solid var(--panel-border); padding-top: 1rem;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="kicker">Stitch · Graph view experiment</span>
+  <h1>Grouped tidy-tree layout</h1>
+  <p class="lede">
+    Live demo of <code>src/utils/graph/groupedTreeLayout.js</code> (bundled inline —
+    this page computes the layout in-browser, it is not precomputed). Structure:
+    A → stacked group {B,&nbsp;C,&nbsp;D} + E, with branches E→F→G→H and E→I→J→K.
+    Drag the sliders to see the contour behavior: the branches tuck under the stack
+    instead of being pushed away from it.
+  </p>
+
+  <div class="panel">
+    <div class="controls">
+      <div class="ctl">
+        <label>Group overlap <output id="o-overlap">50%</output></label>
+        <input type="range" id="c-overlap" min="0" max="0.9" step="0.05" value="0.5">
+      </div>
+      <div class="ctl">
+        <label>Node width <output id="o-nodeWidth">100</output></label>
+        <input type="range" id="c-nodeWidth" min="40" max="160" step="10" value="100">
+      </div>
+      <div class="ctl">
+        <label>Sibling gap <output id="o-siblingGap">40</output></label>
+        <input type="range" id="c-siblingGap" min="0" max="120" step="10" value="40">
+      </div>
+      <div class="ctl">
+        <label>Subtree gap <output id="o-subtreeGap">80</output></label>
+        <input type="range" id="c-subtreeGap" min="0" max="160" step="10" value="80">
+      </div>
+      <div class="ctl">
+        <label>Vertical gap <output id="o-verticalGap">150</output></label>
+        <input type="range" id="c-verticalGap" min="80" max="240" step="10" value="150">
+      </div>
+    </div>
+    <div class="stage"><svg id="graph" role="img" aria-label="Tree layout diagram"></svg></div>
+    <div class="legend">
+      <span class="l-stack">group 0 — overlapping stack</span>
+      <span class="l-branch">branch nodes</span>
+      <span class="l-guide">stack's right edge</span>
+    </div>
+  </div>
+
+  <p class="foot">
+    Node images: each circle carries a <code>&lt;clipPath&gt;</code>; swap the initials
+    for an <code>&lt;image href="…"&gt;</code> inside it when avatars are ready.
+    Open this file directly in a browser — no server or build step needed.
+  </p>
+</div>
+
+<script>
+var GroupedTreeLayout=(()=>{var B=Object.defineProperty;var H=Object.getOwnPropertyDescriptor;var P=Object.getOwnPropertyNames;var V=Object.prototype.hasOwnProperty;var J=(e,t)=>{for(var n in t)B(e,n,{get:t[n],enumerable:!0})},K=(e,t,n,r)=>{if(t&&typeof t=="object"||typeof t=="function")for(let i of P(t))!V.call(e,i)&&i!==n&&B(e,i,{get:()=>t[i],enumerable:!(r=H(t,i))||r.enumerable});return e};var Q=e=>K(B({},"__esModule",{value:!0}),e);var de={};J(de,{calculateGroupedBounds:()=>F,calculateGroupedTreeLayout:()=>ce,curvedEdgePath:()=>he});function Z(e){var t=0,n=e.children,r=n&&n.length;if(!r)t=1;else for(;--r>=0;)t+=n[r].value;e.value=t}function D(){return this.eachAfter(Z)}function N(e,t){let n=-1;for(let r of this)e.call(t,r,++n,this);return this}function Y(e,t){for(var n=this,r=[n],i,u,f=-1;n=r.pop();)if(e.call(t,n,++f,this),i=n.children)for(u=i.length-1;u>=0;--u)r.push(i[u]);return this}function $(e,t){for(var n=this,r=[n],i=[],u,f,h,w=-1;n=r.pop();)if(i.push(n),u=n.children)for(f=0,h=u.length;f<h;++f)r.push(u[f]);for(;n=i.pop();)e.call(t,n,++w,this);return this}function b(e,t){let n=-1;for(let r of this)if(e.call(t,r,++n,this))return r}function O(e){return this.eachAfter(function(t){for(var n=+e(t.data)||0,r=t.children,i=r&&r.length;--i>=0;)n+=r[i].value;t.value=n})}function C(e){return this.eachBefore(function(t){t.children&&t.children.sort(e)})}function T(e){for(var t=this,n=v(t,e),r=[t];t!==n;)t=t.parent,r.push(t);for(var i=r.length;e!==n;)r.splice(i,0,e),e=e.parent;return r}function v(e,t){if(e===t)return e;var n=e.ancestors(),r=t.ancestors(),i=null;for(e=n.pop(),t=r.pop();e===t;)i=e,e=n.pop(),t=r.pop();return i}function L(){for(var e=this,t=[e];e=e.parent;)t.push(e);return t}function R(){return Array.from(this)}function E(){var e=[];return this.eachBefore(function(t){t.children||e.push(t)}),e}function j(){var e=this,t=[];return e.each(function(n){n!==e&&t.push({source:n.parent,target:n})}),t}function*q(){var e=this,t,n=[e],r,i,u;do for(t=n.reverse(),n=[];e=t.pop();)if(yield e,r=e.children)for(i=0,u=r.length;i<u;++i)n.push(r[i]);while(n.length)}function G(e,t){e instanceof Map?(e=[void 0,e],t===void 0&&(t=ne)):t===void 0&&(t=te);for(var n=new z(e),r,i=[n],u,f,h,w;r=i.pop();)if((f=t(r.data))&&(w=(f=Array.from(f)).length))for(r.children=f,h=w-1;h>=0;--h)i.push(u=f[h]=new z(f[h])),u.parent=r,u.depth=r.depth+1;return n.eachBefore(ie)}function ee(){return G(this).eachBefore(re)}function te(e){return e.children}function ne(e){return Array.isArray(e)?e[1]:null}function re(e){e.data.value!==void 0&&(e.value=e.data.value),e.data=e.data.data}function ie(e){var t=0;do e.height=t;while((e=e.parent)&&e.height<++t)}function z(e){this.data=e,this.depth=this.height=0,this.parent=null}z.prototype=G.prototype={constructor:z,count:D,each:N,eachAfter:$,eachBefore:Y,find:b,sum:O,sort:C,path:T,ancestors:L,descendants:R,leaves:E,links:j,copy:ee,[Symbol.iterator]:q};function ae(e,t){return e.parent===t.parent?1:2}function S(e){var t=e.children;return t?t[0]:e.t}function k(e){var t=e.children;return t?t[t.length-1]:e.t}function oe(e,t,n){var r=n/(t.i-e.i);t.c-=r,t.s+=n,e.c+=r,t.z+=n,t.m+=n}function ue(e){for(var t=0,n=0,r=e.children,i=r.length,u;--i>=0;)u=r[i],u.z+=t,u.m+=t,t+=u.s+(n+=u.c)}function fe(e,t,n){return e.a.parent===t.parent?e.a:n}function W(e,t){this._=e,this.parent=null,this.children=null,this.A=null,this.a=this,this.z=0,this.m=0,this.c=0,this.s=0,this.t=null,this.i=t}W.prototype=Object.create(z.prototype);function le(e){for(var t=new W(e,0),n,r=[t],i,u,f,h;n=r.pop();)if(u=n._.children)for(n.children=new Array(h=u.length),f=h-1;f>=0;--f)r.push(i=n.children[f]=new W(u[f],f)),i.parent=n;return(t.parent=new W(null,0)).children=[t],t}function I(){var e=ae,t=1,n=1,r=null;function i(o){var m=le(o);if(m.eachAfter(u),m.parent.m=-m.z,m.eachBefore(f),r)o.eachBefore(w);else{var s=o,c=o,d=o;o.eachBefore(function(l){l.x<s.x&&(s=l),l.x>c.x&&(c=l),l.depth>d.depth&&(d=l)});var p=s===c?1:e(s,c)/2,y=p-s.x,g=t/(c.x+p+y),a=n/(d.depth||1);o.eachBefore(function(l){l.x=(l.x+y)*g,l.y=l.depth*a})}return o}function u(o){var m=o.children,s=o.parent.children,c=o.i?s[o.i-1]:null;if(m){ue(o);var d=(m[0].z+m[m.length-1].z)/2;c?(o.z=c.z+e(o._,c._),o.m=o.z-d):o.z=d}else c&&(o.z=c.z+e(o._,c._));o.parent.A=h(o,c,o.parent.A||s[0])}function f(o){o._.x=o.z+o.parent.m,o.m+=o.parent.m}function h(o,m,s){if(m){for(var c=o,d=o,p=m,y=c.parent.children[0],g=c.m,a=d.m,l=p.m,_=y.m,x;p=k(p),c=S(c),p&&c;)y=S(y),d=k(d),d.a=o,x=p.z+l-c.z-g+e(p._,c._),x>0&&(oe(fe(p,o,s),o,x),g+=x,a+=x),l+=p.m,g+=c.m,_+=y.m,a+=d.m;p&&!k(d)&&(d.t=p,d.m+=l-a),c&&!S(y)&&(y.t=c,y.m+=g-_,s=o)}return s}function w(o){o.x*=t,o.y=o.depth*n}return i.separation=function(o){return arguments.length?(e=o,i):e},i.size=function(o){return arguments.length?(r=!1,t=+o[0],n=+o[1],i):r?null:[t,n]},i.nodeSize=function(o){return arguments.length?(r=!0,t=+o[0],n=+o[1],i):r?[t,n]:null},i}var M={nodeWidth:100,verticalGap:160,siblingGap:40,subtreeGap:80,rootGap:150,groupOverlap:.5,maxWidth:null};function A(e){let t=e?.group??e?.layout?.group;return t??null}function ce(e,t={}){let n={...M,...t};if(!e||e.length===0)return{positions:new Map,bounds:{minX:0,minY:0,maxX:0,maxY:0,width:0,height:0}};let r=new Map(e.map(a=>[a.id,a])),i=new Map,u=[];for(let a of e)a.parent_id&&r.has(a.parent_id)?(i.has(a.parent_id)||i.set(a.parent_id,[]),i.get(a.parent_id).push(a)):u.push(a);let f=(a,l)=>{let _=A(a),x=A(l);if(_!==x){if(_===null)return 1;if(x===null||_<x)return-1;if(_>x)return 1}return new Date(a.timestamp)-new Date(l.timestamp)};for(let a of i.values())a.sort(f);u.sort((a,l)=>new Date(a.timestamp)-new Date(l.timestamp));let h="__virtual_root__",w=G({id:h},a=>a.id===h?u:i.get(a.id)),o=(a,l)=>a.parent===l.parent&&A(a.data)!==null&&A(a.data)===A(l.data),m=(a,l)=>a.parent===l.parent?a.parent?.data?.id===h?1+n.rootGap/n.nodeWidth:o(a,l)?1-n.groupOverlap:1+n.siblingGap/n.nodeWidth:1+n.subtreeGap/n.nodeWidth;I().nodeSize([n.nodeWidth,n.verticalGap]).separation(m)(w);let s=w.descendants().filter(a=>a.data.id!==h),c=1/0,d=-1/0;for(let a of s)a.x<c&&(c=a.x),a.x>d&&(d=a.x);let p=d-c,y=n.maxWidth&&p>n.maxWidth?n.maxWidth/p:1,g=new Map;for(let a of s){let l=A(a.data),_=0,x=1;if(l!==null&&a.parent){let X=a.parent.children.filter(U=>A(U.data)===l);_=X.indexOf(a),x=X.length}g.set(a.data.id,{x:(a.x-c)*y,y:(a.depth-1)*n.verticalGap,layer:a.depth-1,group:l,stackIndex:_,groupSize:x,message:r.get(a.data.id)||a.data})}return{positions:g,bounds:F(g,n)}}function F(e,t=M){if(e.size===0)return{minX:0,minY:0,maxX:0,maxY:0,width:0,height:0};let n=1/0,r=1/0,i=-1/0,u=-1/0;for(let h of e.values())n=Math.min(n,h.x),r=Math.min(r,h.y),i=Math.max(i,h.x),u=Math.max(u,h.y);let f=(t.nodeWidth??M.nodeWidth)/2;return{minX:n-f,minY:r-f,maxX:i+f,maxY:u+f,width:i-n+2*f,height:u-r+2*f}}function he(e,t,n=.5){let r=t.y-e.y,i=e.y+r*n,u=t.y-r*n;return`M ${e.x} ${e.y} C ${e.x} ${i}, ${t.x} ${u}, ${t.x} ${t.y}`}return Q(de);})();
+</script>
+<script>
+  const { calculateGroupedTreeLayout, curvedEdgePath } = GroupedTreeLayout;
+
+  const t = (i) => new Date(2026, 0, 1, 0, i).toISOString();
+  const MESSAGES = [
+    { id: 'A', parent_id: null, timestamp: t(0) },
+    { id: 'B', parent_id: 'A', group: 0, timestamp: t(1) },
+    { id: 'C', parent_id: 'A', group: 0, timestamp: t(2) },
+    { id: 'D', parent_id: 'A', group: 0, timestamp: t(3) },
+    { id: 'E', parent_id: 'A', group: 1, timestamp: t(4) },
+    { id: 'F', parent_id: 'E', timestamp: t(5) },
+    { id: 'G', parent_id: 'F', timestamp: t(6) },
+    { id: 'H', parent_id: 'G', timestamp: t(7) },
+    { id: 'I', parent_id: 'E', timestamp: t(8) },
+    { id: 'J', parent_id: 'I', timestamp: t(9) },
+    { id: 'K', parent_id: 'J', timestamp: t(10) },
+  ];
+  const EDGES = MESSAGES.filter(m => m.parent_id).map(m => [m.parent_id, m.id]);
+  const PAD = 60;
+
+  const ctl = (id) => document.getElementById('c-' + id);
+  const out = (id) => document.getElementById('o-' + id);
+  const KNOBS = ['overlap', 'nodeWidth', 'siblingGap', 'subtreeGap', 'verticalGap'];
+
+  function render() {
+    const config = {
+      groupOverlap: +ctl('overlap').value,
+      nodeWidth: +ctl('nodeWidth').value,
+      siblingGap: +ctl('siblingGap').value,
+      subtreeGap: +ctl('subtreeGap').value,
+      verticalGap: +ctl('verticalGap').value,
+    };
+    out('overlap').textContent = Math.round(config.groupOverlap * 100) + '%';
+    out('nodeWidth').textContent = config.nodeWidth;
+    out('siblingGap').textContent = config.siblingGap;
+    out('subtreeGap').textContent = config.subtreeGap;
+    out('verticalGap').textContent = config.verticalGap;
+
+    const { positions, bounds } = calculateGroupedTreeLayout(MESSAGES, config);
+    const R = config.nodeWidth / 2 - 4;
+    const ox = PAD - bounds.minX, oy = PAD - bounds.minY;
+    const W = bounds.width + PAD * 2, H = bounds.height + PAD * 2;
+
+    const svg = document.getElementById('graph');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('width', W);
+    svg.setAttribute('height', H);
+
+    const stack = [...positions.values()].filter(p => p.group === 0);
+    let guide = '';
+    if (stack.length) {
+      const guideX = Math.max(...stack.map(p => p.x)) + config.nodeWidth / 2 + ox;
+      guide = `<line x1="${guideX}" y1="${stack[0].y + oy - R}" x2="${guideX}" y2="${H - PAD / 2}"
+        stroke="var(--guide)" stroke-width="1.5" stroke-dasharray="6 5"/>`;
+    }
+
+    const edges = EDGES.map(([a, b]) => {
+      const s = positions.get(a), e = positions.get(b);
+      return `<path d="${curvedEdgePath({ x: s.x + ox, y: s.y + oy + R }, { x: e.x + ox, y: e.y + oy - R })}"
+        fill="none" stroke="var(--sage)" stroke-width="2.5" opacity="0.65"/>`;
+    }).join('');
+
+    // Draw in stackIndex order so later group members sit on top.
+    const nodes = [...positions.entries()]
+      .sort((a, b) => a[1].stackIndex - b[1].stackIndex)
+      .map(([id, p]) => {
+        const grouped = p.group === 0;
+        return `<g>
+          <clipPath id="clip-${id}"><circle cx="${p.x + ox}" cy="${p.y + oy}" r="${R - 1}"/></clipPath>
+          <circle cx="${p.x + ox}" cy="${p.y + oy}" r="${R}"
+            fill="var(--node-fill)"
+            stroke="${grouped ? 'var(--sage)' : 'var(--pine)'}"
+            stroke-width="${grouped ? 3 : 2}"/>
+          <text x="${p.x + ox}" y="${p.y + oy + R * 0.22}" text-anchor="middle"
+            font-family="Georgia, serif" font-size="${Math.max(14, R * 0.6)}" fill="var(--pine)">${id}</text>
+        </g>`;
+      }).join('');
+
+    svg.innerHTML = guide + edges + nodes;
+  }
+
+  KNOBS.forEach(k => ctl(k).addEventListener('input', render));
+  render();
+</script>
+</body>
+</html>

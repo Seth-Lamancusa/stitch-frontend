@@ -243,6 +243,15 @@ export default {
     return apiClient.get(`/messages/${messageId}/tree-ids`, { headers })
   },
 
+  // Get similar messages
+  async getSimilarMessages(messageId, limit = 5) {
+    const headers = getAuthHeaders()
+    return apiClient.get(`/messages/similar/${messageId}`, { 
+      headers,
+      params: { limit }
+    })
+  },
+
   // Batch set public flag
   async setMessagesPublic(messageIds, isPublic) {
     const headers = getAuthHeaders()

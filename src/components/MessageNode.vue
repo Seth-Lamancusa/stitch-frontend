@@ -751,6 +751,16 @@ export default {
                  props.message.child_ids && 
                  props.message.child_ids.length > 0;
         }
+      },
+      {
+        id: 'similar',
+        emoji: '🔍',
+        text: 'Similar',
+        desktopVisible: false,
+        mobileVisible: false,
+        adminOnly: false,
+        handler: findSimilarMessages,
+        condition: () => !props.inListView
       }
     ]);
     
@@ -954,6 +964,11 @@ export default {
       store.dispatch('navigation/clearReplyingTo');
       dismissMobileKeyboard();
       store.dispatch('navigation/showSpeedDialModal', { messageId: props.message.id });
+    };
+
+    const findSimilarMessages = () => {
+      store.commit('navigation/SET_SIMILAR_MESSAGES_SOURCE_ID', props.message.id);
+      router.push({ path: '/search', query: { similar_to: props.message.id } });
     };
     
     const isUserRecipient = computed(() => {
