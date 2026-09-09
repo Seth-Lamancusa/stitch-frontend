@@ -1,10 +1,9 @@
-# 1. Code pushed to main (agent or human)
-# 2. GitHub Actions detects the push, rebuilds the image, pushes to Artifact Registry, and deploys to the service VM
+# Production / droplet: SSH in, git pull, docker compose up --build
 
 services:
   stitch-frontend:
     container_name: stitch-frontend
-    image: ${ IMAGE_PATH }
+    build: .
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -12,4 +11,3 @@ services:
       resources:
         limits:
           memory: 2G
- 
