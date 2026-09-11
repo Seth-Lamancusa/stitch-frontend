@@ -54,7 +54,9 @@ export default {
     managedUsers: [],
     activePrincipalUid: null,
     managerUid: null,
-    managerSnapshot: null
+    managerSnapshot: null,
+    // Bumped on logout so keep-alive message lists cannot restore a previous session
+    sessionEpoch: 0
   },
   
   mutations: {
@@ -75,6 +77,9 @@ export default {
     SET_AUTH_READY(state, ready) {
       state.authReady = ready;
     },
+    BUMP_SESSION_EPOCH(state) {
+      state.sessionEpoch += 1;
+    },
     SET_MANAGER_SNAPSHOT(state, snapshot) {
       state.managerSnapshot = snapshot || null;
       try {
@@ -93,7 +98,7 @@ export default {
   
   actions: {
     // Internal helper to consistently clear local auth state
-    _clearLocalAuth({ commit, dispatch }) {
+    async _clearLocalAuth({ commit, dispatch }) {
       try { WebSocketService.cleanup(); } catch (e) {}
       try { TokenManager.clearAuthStorage(); } catch (e) {}
       try { TokenManager.accessToken = null; } catch (e) {}
@@ -106,13 +111,16 @@ export default {
         sessionStorage.removeItem('manager_snapshot_user_tag');
       } catch (_) {}
       commit('SET_USER', null);
+      commit('SET_ACTIVE_AND_MANAGER_UIDS', { activeUid: null, managerUid: null });
+      commit('SET_MANAGED_USERS', []);
       commit('SET_MANAGER_SNAPSHOT', null);
+      commit('BUMP_SESSION_EPOCH');
       commit('SET_AUTH_READY', true);
       // Clear messages and list caches for all in-app tabs so we don't keep showing previous user's data
-      try { dispatch('messages/clearCache', {}, { root: true }); } catch (_) {}
-      try { dispatch('navigation/clearAllListStateForLogout', null, { root: true }); } catch (_) {}
+      try { await dispatch('messages/clearCache', {}, { root: true }); } catch (_) {}
+      try { await dispatch('navigation/clearAllListStateForLogout', null, { root: true }); } catch (_) {}
       // Clear speed dial
-      try { dispatch('speedDial/clearSpeedDial', null, { root: true }); } catch (_) {}
+      try { await dispatch('speedDial/clearSpeedDial', null, { root: true }); } catch (_) {}
     },
     async initAuth({ state, commit, dispatch }) {
       try {
@@ -519,6 +527,7 @@ export default {
     user: state => state.user,
     isAuthenticated: state => state.isAuthenticated,
     authReady: state => state.authReady,
+    sessionEpoch: state => state.sessionEpoch,
     managedUsers: state => state.managedUsers,
     activePrincipalUid: state => state.activePrincipalUid || (state.user && state.user.uid) || null,
     managerUid: state => state.managerUid || (state.user && state.user.uid) || null,

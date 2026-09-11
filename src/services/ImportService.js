@@ -175,9 +175,10 @@ class ImportService {
    * @param {Array} messages - Array of { content, isMe, speakerName }
    * @param {Array} recipients - recipients from the recipients modal
    * @param {boolean} isPublic - conversation public flag
+   * @param {Object} options - Additional options (e.g. sourcePlatform)
    * @returns {Promise<Object>} Import result shape: { success, thread_id, message_count, total_requested, partial_success }
    */
-  async importQuoteConversation(messages, recipients = [], isPublic = true) {
+  async importQuoteConversation(messages, recipients = [], isPublic = true, options = {}) {
     const headers = getAuthHeaders();
     const endpoint = '/messages/import/quote';
 
@@ -201,6 +202,11 @@ class ImportService {
         const rawOriginalTimestamp = (m.originalTimestamp || '').trim();
         if (rawOriginalTimestamp) {
           base.import_info.original_timestamp = rawOriginalTimestamp;
+        }
+
+        const sourcePlatform = (options.sourcePlatform || m.sourcePlatform || '').trim();
+        if (sourcePlatform) {
+          base.import_info.source_platform = sourcePlatform;
         }
       }
 

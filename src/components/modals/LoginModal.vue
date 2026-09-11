@@ -5,14 +5,41 @@
         <h3>Sign in</h3>
         <button class="close-button" @click.stop="onClose">×</button>
       </div>
-      <form class="modal-form" @submit.prevent="submitPassword" autocomplete="on">
+      <form
+        class="modal-form"
+        method="post"
+        action="/login"
+        autocomplete="on"
+        @submit.prevent="submitPassword"
+      >
       <div class="modal-content">
         <div class="panel">
           <label for="login-identifier">Tag, Email, or Phone</label>
-          <input id="login-identifier" name="username" autocomplete="username" v-model="identifier" type="text" placeholder="tag, email, or phone" enterkeyhint="next" />
+          <input
+            id="login-identifier"
+            name="username"
+            autocomplete="username"
+            v-model="identifier"
+            type="text"
+            placeholder="tag, email, or phone"
+            enterkeyhint="next"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
+            required
+          />
           <label for="login-password">Password</label>
           <div class="password-field">
-            <input id="login-password" name="password" autocomplete="current-password" :type="showPassword ? 'text' : 'password'" v-model="password" placeholder="••••••••" @keyup.enter="submitPassword" enterkeyhint="go" />
+            <input
+              id="login-password"
+              name="password"
+              autocomplete="current-password"
+              :type="showPassword ? 'text' : 'password'"
+              v-model="password"
+              placeholder="••••••••"
+              enterkeyhint="go"
+              required
+            />
             <button type="button" class="eye-toggle" @click="showPassword = !showPassword" :aria-pressed="showPassword ? 'true' : 'false'" :title="showPassword ? 'Hide password' : 'Show password'">
               {{ showPassword ? '🙈' : '👁️' }}
             </button>
@@ -88,9 +115,21 @@ watch(() => props.isOpen, (open) => {
 
 const onClose = () => emit('close')
 
+const persistPasswordManagerCredentials = async (id, secret) => {
+  try {
+    if (typeof window === 'undefined' || !window.PasswordCredential || !navigator.credentials?.store) return
+    const credential = new window.PasswordCredential({ id, password: secret, name: id })
+    await navigator.credentials.store(credential)
+  } catch {
+    // Browser declined or does not support Credential Management; form metadata still applies.
+  }
+}
+
 const submitPassword = async () => {
+  if (busy.value) return
   busy.value = true
   error.value = ''
+  showPassword.value = false
   try {
     if (!identifier.value || !password.value) throw new Error('Identifier and password required')
     const trimmed = identifier.value.trim()
@@ -102,7 +141,10 @@ const submitPassword = async () => {
       ? `@${(trimmed.startsWith('@') ? trimmed.slice(1) : trimmed).toLowerCase()}`
       : trimmed
     await signInWithPassword(toSend, password.value)
+    await persistPasswordManagerCredentials(trimmed, password.value)
     emit('success')
+    // Keep the filled form in the DOM briefly so the browser can snapshot it.
+    await new Promise((resolve) => setTimeout(resolve, 250))
     emit('close')
   } catch (e) {
     const msg = e && e.message ? e.message : ''

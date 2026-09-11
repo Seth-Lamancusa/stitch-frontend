@@ -232,6 +232,16 @@
                 <input type="checkbox" v-model="isPublic">
                 Public Conversation
               </label>
+
+              <label class="source-platform-label">
+                Source
+                <input
+                  v-model="sourcePlatform"
+                  class="select-input source-platform-input"
+                  placeholder="Slack, Discord..."
+                  :disabled="isImporting"
+                />
+              </label>
               
               <button class="text-button" @click="showRecipients = true">
                 Manage Recipients ({{ recipients.length }})
@@ -289,6 +299,7 @@ const activeMode = ref('cursor');
 const isImporting = ref(false);
 const importError = ref('');
 const isPublic = ref(false);
+const sourcePlatform = ref('');
 const recipients = ref([]);
 const showRecipients = ref(false);
 
@@ -487,7 +498,8 @@ const importConversation = async () => {
     const result = await ImportService.importQuoteConversation(
       builderMessages,
       recipients.value,
-      isPublic.value
+      isPublic.value,
+      { sourcePlatform: sourcePlatform.value }
     );
     
     if (result.success) {
@@ -742,6 +754,19 @@ const importConversation = async () => {
   display: flex;
   gap: var(--space-lg);
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.source-platform-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.source-platform-input {
+  width: 160px;
 }
 
 .checkbox-label {

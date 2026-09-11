@@ -1,7 +1,7 @@
 <template>
   <TabViewLayout>
     <keep-alive>
-      <MessageList :key="route.path + '::' + (store.getters['auth/activePrincipalUid'] || '')" :mode="mode" />
+      <MessageList :key="route.path + '::' + (store.getters['auth/activePrincipalUid'] || '') + '::' + (store.getters['auth/sessionEpoch'] || 0)" :mode="mode" />
     </keep-alive>
 
     <!-- Global Recipients Modal -->

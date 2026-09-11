@@ -88,7 +88,7 @@
               variant="message"
                :title="isBot ? botVersionTooltip : undefined"
              />
-            <span v-if="isImported" class="imported-badge" :title="'Imported by ' + message.import_info.importer_user_tag">
+            <span v-if="isImported" class="imported-badge" :title="importedBadgeTitle">
               via <UserDisplay 
                 :display-name="message.import_info.importer_user_tag"
                 :user-tag="message.import_info.importer_user_tag"
@@ -566,6 +566,16 @@ export default {
 
     // Import status
     const isImported = computed(() => !!props.message.import_info);
+
+    const importedBadgeTitle = computed(() => {
+      const info = props.message.import_info || {};
+      const importer = info.importer_user_tag || 'user';
+      const platform = typeof info.source_platform === 'string' ? info.source_platform.trim() : '';
+      if (platform) {
+        return `Imported by ${importer} from ${platform}`;
+      }
+      return `Imported by ${importer}`;
+    });
     
     // Subject addition state
     const isAddingSubject = ref(false);
@@ -2033,6 +2043,7 @@ export default {
       isBot,
       botVersionTooltip,
       isImported,
+      importedBadgeTitle,
       authorUid,
       isPublic,
       isAdmin,
@@ -3958,6 +3969,7 @@ export default {
   padding: 1px 6px;
   border-radius: 4px;
   margin-left: 4px;
+  cursor: help;
 }
 
 .import-source-link {

@@ -23,7 +23,6 @@
       :class="{ selectable: isSelectable }"
     >
       <div class="message-header">
-...
         <div class="author-section">
           <span
             v-if="message.unread_count_in_thread && message.unread_count_in_thread > 0"
@@ -68,7 +67,7 @@
             <span
               v-if="isImported"
               class="imported-badge"
-              :title="'Imported by ' + props.message.import_info?.importer_user_tag"
+              :title="importedBadgeTitle"
             >
               via <UserDisplay
                 :display-name="props.message.import_info?.importer_user_tag"
@@ -277,6 +276,16 @@ const canToggleVisibility = computed(() => {
 
 const isImported = computed(() => {
   return !!props.message.import_info?.display_name;
+});
+
+const importedBadgeTitle = computed(() => {
+  const info = props.message.import_info || {};
+  const importer = info.importer_user_tag || 'user';
+  const platform = typeof info.source_platform === 'string' ? info.source_platform.trim() : '';
+  if (platform) {
+    return `Imported by ${importer} from ${platform}`;
+  }
+  return `Imported by ${importer}`;
 });
 
 const authorDisplayName = computed(() => {
@@ -973,6 +982,7 @@ const formatTimestamp = (timestamp) => {
   padding: 1px 6px;
   border-radius: 4px;
   margin-left: 4px;
+  cursor: help;
 }
 
 .import-source-link {

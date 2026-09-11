@@ -3,6 +3,7 @@ import { mockMessages } from '../../utils/mock/stitchMockData.js'
 console.log('[MOCK] mockMessages loaded, count:', Object.keys(mockMessages).length);
 import UserService from '../../services/UserService'
 import WebSocketService from '../../services/ws/WebSocketService'
+import GraphLayoutService from '../../services/GraphLayoutService.js'
 
 // Add a flag to track if initial fetch has been done
 let initialUnreadCountFetched = false;
@@ -33,6 +34,26 @@ function isDescendantOf(state, messageId, ancestorId) {
 // Helper function to check if a message is unread (treats null and false as unread)
 function isMessageUnread(message) {
   return message && (message.is_read === false || message.is_read === null);
+}
+
+function getIncomingMessageAudience(messageData, user) {
+  if (!user || !messageData) {
+    return { isFromCurrentUser: false, isToCurrentUser: false };
+  }
+
+  const authorUid = messageData.author?.uid || messageData.content_author;
+  const authorTag = messageData.author?.user_tag || messageData.author_user_tag;
+  const isFromCurrentUser = authorUid === user.uid || authorTag === user.user_tag;
+
+  const recipients = Array.isArray(messageData.recipients) ? messageData.recipients : [];
+  const isToCurrentUser = recipients.some(r => {
+    if (!r) return false;
+    if (typeof r === 'object') return (r.uid && r.uid === user.uid) || (r.user_tag && r.user_tag === user.user_tag);
+    if (typeof r === 'string') return r === user.uid || r === user.user_tag;
+    return false;
+  });
+
+  return { isFromCurrentUser, isToCurrentUser };
 }
 
 // Helper function to check if a message is read (only true is considered read)
@@ -531,41 +552,31 @@ export default {
   },
   
   actions: {
-    // Handle incoming message from WebSocket (transport-agnostic)
-    async handleIncomingWsMessage({ commit, getters, dispatch, rootState }, messageData) {
+    // Shared ingest for websocket, sibling catch-up, and thread refresh.
+    // Live websocket messages auto-mark when they land on the visible path;
+    // refresh-discovered siblings stay unread (red envelope) like off-path WS arrivals.
+    async ingestIncomingMessage({ commit, getters, dispatch, rootState }, {
+      messageData,
+      writeToStore = true,
+      autoMarkIfInBranch = true,
+      notifyIfOffPath = true,
+    } = {}) {
       try {
         if (!messageData || !messageData.id) return;
 
-        // Add/merge the message into store
-        commit('SET_MESSAGE', messageData);
-
-        // Determine current user for notification/read logic
-        const user = rootState.auth?.user;
-        let isFromCurrentUser = false;
-        let isToCurrentUser = false;
-        if (user) {
-          // Handle nested author object (new format) or flat fields (legacy)
-          const authorUid = messageData.author?.uid || messageData.content_author;
-          const authorTag = messageData.author?.user_tag || messageData.author_user_tag;
-          
-          isFromCurrentUser = authorUid === user.uid || authorTag === user.user_tag;
-          
-          const recipients = Array.isArray(messageData.recipients) ? messageData.recipients : [];
-          isToCurrentUser = recipients.some(r => {
-            if (!r) return false;
-            if (typeof r === 'object') return (r.uid && r.uid === user.uid) || (r.user_tag && r.user_tag === user.user_tag);
-            if (typeof r === 'string') return r === user.uid || r === user.user_tag;
-            return false;
-          });
+        if (writeToStore) {
+          commit('SET_MESSAGE', messageData);
         }
 
-        // Maintain parent-child relationships and branch path
+        const user = rootState.auth?.user;
+        const { isFromCurrentUser, isToCurrentUser } = getIncomingMessageAudience(messageData, user);
+
         const parentId = messageData.parent_id;
         if (parentId) {
           const parentInStore = getters.getMessage(parentId);
           if (parentInStore) {
             commit('ADD_CHILD_TO_PARENT', { parentId, childId: messageData.id });
-            
+
             // If the parent currently has NO branch child selected, auto-select this one.
             // This ensures the first reply to a message appears 'live' in the thread.
             if (!parentInStore.branch_child) {
@@ -575,40 +586,72 @@ export default {
           }
         }
 
-        // Increment unread count for messages to current user (not authored by current user)
         if (isToCurrentUser && !isFromCurrentUser) {
-          dispatch('incrementUnreadCount');
+          const existing = getters.getMessage(messageData.id);
+          const alreadyUnread = isMessageUnread(existing);
+          commit('UPDATE_MESSAGE_READ_STATUS', { messageId: messageData.id, isRead: false });
+          // Websocket arrivals always bump the badge. Refresh catch-up only bumps
+          // when the payload was not already unread, so we don't double-count.
+          if (writeToStore || !alreadyUnread) {
+            dispatch('incrementUnreadCount');
+          }
 
-          // Check if the message is in the active branch path.
-          // If we just established it above, it will be.
           const parent = parentId ? getters.getMessage(parentId) : null;
           const isNextInBranch = parent && parent.branch_child === messageData.id;
 
-          if (isNextInBranch) {
-            // Auto-mark as read if message is part of the current active path
+          if (autoMarkIfInBranch && isNextInBranch) {
             dispatch('batchMarkAsRead', [messageData.id]);
-          } else {
-            // Extract author name from nested object or flat fields
-            const authorName = messageData.author?.display_name || 
-                               messageData.author?.user_tag || 
-                               messageData.author_display_name || 
-                               messageData.author_user_tag || 
+          } else if (notifyIfOffPath && !isNextInBranch) {
+            const authorName = messageData.author?.display_name ||
+                               messageData.author?.user_tag ||
+                               messageData.author_display_name ||
+                               messageData.author_user_tag ||
                                'Someone';
-                               
-            const contentPreview = messageData.content ? (messageData.content.length > 60 ? messageData.content.substring(0, 60) + '...' : messageData.content) : 'New message';
-            const notificationData = {
+
+            const contentPreview = messageData.content
+              ? (messageData.content.length > 60 ? messageData.content.substring(0, 60) + '...' : messageData.content)
+              : 'New message';
+            dispatch('ui/setMessageNotification', {
               id: messageData.id,
               title: `New message from ${authorName}`,
               message: contentPreview,
               messageData,
               timestamp: new Date().toISOString()
-            };
-            // Delegate UI notification to ui module
-            dispatch('ui/setMessageNotification', notificationData, { root: true });
+            }, { root: true });
           }
         }
       } catch (e) {
-        console.error('[messages store] handleIncomingWsMessage error:', e);
+        console.error('[messages store] ingestIncomingMessage error:', e);
+      }
+    },
+
+    // Handle incoming message from WebSocket (transport-agnostic)
+    async handleIncomingWsMessage({ dispatch }, messageData) {
+      return dispatch('ingestIncomingMessage', { messageData });
+    },
+
+    async ingestNewlyDiscoveredMessages({ state, dispatch }, {
+      messages,
+      previouslyKnownIds,
+      autoMarkIfInBranch = false,
+      notifyIfOffPath = false,
+    } = {}) {
+      if (!Array.isArray(messages) || messages.length === 0) return;
+
+      const knownIds = previouslyKnownIds instanceof Set
+        ? previouslyKnownIds
+        : new Set((previouslyKnownIds || []).map(id => String(id)));
+
+      for (const messageData of messages) {
+        if (!messageData?.id) continue;
+        if (knownIds.has(String(messageData.id))) continue;
+
+        await dispatch('ingestIncomingMessage', {
+          messageData,
+          writeToStore: !state.messages[messageData.id],
+          autoMarkIfInBranch,
+          notifyIfOffPath,
+        });
       }
     },
     isTemporaryId(id) {
@@ -1334,6 +1377,10 @@ export default {
         state.messages = {};
         console.log('[Store] Cleared all messages from cache');
       }
+
+      commit('SET_UNREAD_MESSAGE_COUNT', 0);
+      state.structureVersion += 1;
+      try { GraphLayoutService.clearCache(); } catch (_) {}
       
       console.log('[Store] Message count after clear:', Object.keys(state.messages).length);
       return true;

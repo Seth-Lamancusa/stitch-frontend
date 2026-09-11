@@ -711,7 +711,17 @@ onActivated(() => {
     const hasUser = !!user.value;
     const needsAuth = requiresAuth.value;
     const anyMessages = (store.getters['messages/getLoadedMessages'] || []).length > 0;
+    const cached = store.getters['navigation/getListCache'](props.mode);
+    const cacheEmpty = !cached?.messages?.length;
+    if (isLocalMode.value && localMessages.value.length > 0 && cacheEmpty) {
+      // List cache was cleared (e.g. logout) while this instance was keep-alive cached
+      resetListUiState();
+    }
     if (isStoreMode.value && !isLoading.value && !anyMessages && (!needsAuth || hasUser)) {
+      nextTick(() => {
+        loadMessages();
+      });
+    } else if (isLocalMode.value && !isLoading.value && localMessages.value.length === 0 && (!needsAuth || hasUser)) {
       nextTick(() => {
         loadMessages();
       });
@@ -733,17 +743,27 @@ onActivated(() => {
   }
 });
 
-// Watch for user changes to start loading when they log in (inbox mode only)
+const resetListUiState = () => {
+  currentRequestId.value++;
+  localLoadingState.value = false;
+  selectedMessageIds.value.clear();
+  isAllLoaded.value = false;
+  currentSkip.value = 0;
+  restoredFromCache.value = false;
+  if (isLocalMode.value) {
+    localMessages.value = [];
+  }
+};
+
+// Watch for user changes to start loading when they log in, and drop list state on logout
 watch(user, (newUser, oldUser) => {
-  if (requiresAuth.value) {
-    if (newUser && !oldUser) {
+  if (newUser && !oldUser) {
+    if (requiresAuth.value || (isLocalMode.value && localMessages.value.length === 0)) {
       loadMessages();
-    } else if (!newUser && oldUser) {
-      // User logged out - clear cache and reset state
-      isAllLoaded.value = false;
-      currentSkip.value = 0;
-      store.dispatch('navigation/clearListCache');
     }
+  } else if (!newUser && oldUser) {
+    resetListUiState();
+    store.dispatch('navigation/clearListCache');
   }
 });
 
@@ -751,15 +771,7 @@ watch(user, (newUser, oldUser) => {
 watch(activePrincipalUid, async (newUid, oldUid) => {
   try {
     if (newUid === oldUid) return;
-    // Cancel in-flight and reset local state
-    currentRequestId.value++;
-    localLoadingState.value = false;
-    selectedMessageIds.value.clear();
-    isAllLoaded.value = false;
-    currentSkip.value = 0;
-    if (isLocalMode.value) {
-      localMessages.value = [];
-    }
+    resetListUiState();
     // Clear navigation cache since we're switching principals
     store.dispatch('navigation/clearListCache');
     // Trigger fresh load respecting mode/auth

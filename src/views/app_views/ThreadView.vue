@@ -110,6 +110,7 @@
           />
         </div>
 
+        <!-- Hidden for now
         <div class="navigator-container">
           <BranchNavigator
             :messages="displayedMessages"
@@ -129,6 +130,7 @@
             @navigatorJump="handleNavigatorJump"
           />
         </div>
+        -->
       </div>
       
       <!-- Reply box component -->
@@ -243,7 +245,7 @@ import ThreadHeader from '../../components/ThreadHeader.vue';
 import LoginButton from '@buttons/LoginButton.vue'
 import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
 
-import BranchNavigator from '../../components/BranchNavigator.vue';
+// import BranchNavigator from '../../components/BranchNavigator.vue';
 
 // Setup store and routing
 const store = useStore();
@@ -651,12 +653,23 @@ const refreshRepliesForMessage = async (messageId) => {
   refreshingMessageIds.value = { ...refreshingMessageIds.value, [messageId]: true };
   
   try {
-    await store.dispatch('messages/loadTraversal', {
+    const previouslyKnownIds = new Set(
+      Object.keys(store.state.messages.messages || {}).map(id => String(id))
+    );
+
+    const loaded = await store.dispatch('messages/loadTraversal', {
       messageId,
       up_depth: 0,
       down_depth: 1,
       get_replies: true,
       get_children: true,
+    });
+
+    await store.dispatch('messages/ingestNewlyDiscoveredMessages', {
+      messages: loaded,
+      previouslyKnownIds,
+      autoMarkIfInBranch: false,
+      notifyIfOffPath: false,
     });
     
     await renderThread(true, true);
@@ -1621,11 +1634,12 @@ const handleNavigatorJump = (msgId) => {
 }
 
 .messages-container {
-  flex: 0 0 70%;
+  /* Branch navigator hidden: was flex 70% / width 70% */
+  flex: 1 1 100%;
   display: flex;
   flex-direction: column;
   align-items: center; /* Center MessageNode components horizontally */
-  width: 70%;
+  width: 100%;
   padding-left: 20px;
   padding-right: 20px;
   padding-bottom: calc(100px + 25vh); /* Add space at bottom for the reply box plus a screen's worth of scrollable space */
@@ -1640,19 +1654,21 @@ const handleNavigatorJump = (msgId) => {
   scroll-behavior: auto;
 }
 
+/*
 .navigator-container {
   flex: 0 0 30%;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
-  pointer-events: none; /* Allow clicks through to layout if needed, but navigator children will override */
+  pointer-events: none;
   z-index: 5;
 }
 
 .navigator-container > * {
   pointer-events: auto;
 }
+*/
 
 /* On very wide screens, keep the thread content from expanding too much */
 @media (min-width: 1280px) {
