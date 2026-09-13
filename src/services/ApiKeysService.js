@@ -1,34 +1,23 @@
 import apiClient from './apiClient'
-import TokenManager from './TokenManager'
+import authStore from '../auth/store.js'
 
 export default {
   async listKeys() {
-    const token = TokenManager.accessToken
-    if (!token) throw new Error('No authentication token available')
-    const resp = await apiClient.get('/auth/keys', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
+    if (authStore._state.status !== 'authenticated') throw new Error('Not authenticated')
+    const resp = await apiClient.get('/auth/keys')
     return resp.data?.keys || []
   },
 
   async revokeKey(credId) {
     if (!credId) throw new Error('Key id required')
-    const token = TokenManager.accessToken
-    if (!token) throw new Error('No authentication token available')
-    const resp = await apiClient.delete(`/auth/keys/${credId}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
+    if (authStore._state.status !== 'authenticated') throw new Error('Not authenticated')
+    const resp = await apiClient.delete(`/auth/keys/${credId}`)
     return !!resp.data?.revoked
   },
 
   async createKey({ label = '', scopes_cap, assurance, pop, env } = {}) {
-    const token = TokenManager.accessToken
-    if (!token) throw new Error('No authentication token available')
-    const resp = await apiClient.post('/auth/keys/self', { label, scopes_cap, assurance, pop, env }, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
+    if (authStore._state.status !== 'authenticated') throw new Error('Not authenticated')
+    const resp = await apiClient.post('/auth/keys/self', { label, scopes_cap, assurance, pop, env })
     return resp.data // { cred_id, api_key }
   }
 }
-
-

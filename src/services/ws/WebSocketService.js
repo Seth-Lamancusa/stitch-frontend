@@ -1,5 +1,6 @@
 import store from '../../store';
-import TokenManager from '../../services/TokenManager';
+import authStore from '../../auth/store.js';
+import { P } from '../../auth/constants.js';
 import WebSocketClient from './WebSocketClient';
 import IdleManager from './IdleManager';
 import NetworkVisibility from './NetworkVisibility';
@@ -14,9 +15,7 @@ const WebSocketService = {
   userId: null,
   messageListeners: new Set(),
   pingInterval: null,
-  // Removed idle overlay/timer
-  debugMode: false, // Trim logging by default
-  authToken: null,
+  debugMode: false,
   connectionEstablished: false,
 
   // Global state management
@@ -24,8 +23,7 @@ const WebSocketService = {
   unsubscribeFunction: null,
   connectionAttempts: 0,
   maxReconnectAttempts: 5,
-  // Prevent hammering refresh/connect on handshake failures
-  refreshCooldownMs: 2 * 60 * 1000, // 2 minutes
+  refreshCooldownMs: 2 * 60 * 1000,
   lastRefreshAttemptAt: null,
   isConnecting: false,
   
@@ -33,30 +31,27 @@ const WebSocketService = {
   lastActivityReconnectAt: 0,
   activityReconnectCooldownMs: 5000,
   
-  // Token management
-  tokenRefreshInProgress: false,
-  lastTokenRefresh: null,
-  tokenRefreshThreshold: 30 * 60 * 1000, // 30 minutes
+  // Session restore cooldown (replaces token refresh)
+  sessionRestoreInProgress: false,
+  lastSessionRestore: null,
+  sessionRestoreThreshold: 30 * 60 * 1000,
   
   // Connection health monitoring
   lastPingTime: null,
-  pingTimeoutMs: 60000, // 1 minute
-  // Removed idle timeout; rely on activity-based reconnect only
+  pingTimeoutMs: 60000,
   
   // Idle disconnect handling
   idleTimeoutId: null,
-  idleTimeoutMs: 3 * 60 * 1000, // 3 minutes
+  idleTimeoutMs: 3 * 60 * 1000,
   lastActivityAt: null,
   activityListenerRegistered: false,
   idleTimerGeneration: 0,
-  // Expanded activity events to better capture mobile activity
   activityEvents: ['mousemove', 'pointermove', 'touchstart', 'touchmove', 'keydown', 'scroll', 'wheel'],
 
   // Network/visibility robustness
   networkVisibilityListenerRegistered: false,
   isOnline: typeof navigator !== 'undefined' ? !!navigator.onLine : true,
   
-  // Debug logging helper
   log(...messages) {
     if (this.debugMode) {
       try {
@@ -79,23 +74,9 @@ const WebSocketService = {
       if (ss === '1' || ls === '1') this.debugMode = true;
     } catch (_) {}
   },
-  logTokenClaims(token, label = 'token') {
-    try {
-      if (!this.debugMode) return;
-      const claims = TokenManager && TokenManager.decodeJwt ? (TokenManager.decodeJwt(token) || {}) : {};
-      const sub = claims?.sub || null;
-      const actSub = (claims?.act && claims.act.sub) || null;
-      const amr = Array.isArray(claims?.amr) ? claims.amr : (claims?.amr ? [claims.amr] : []);
-      const scope = claims?.scope || null;
-      const exp = claims?.exp ? new Date(claims.exp * 1000).toISOString() : null;
-      this.log('Claims', { label, sub, actSub, amr, scope, exp });
-    } catch (_) {}
+  isAuthenticated() {
+    return authStore._state.status === 'authenticated' && authStore.can(P.REALTIME_CONNECT);
   },
-  // Central token getters to avoid stale closures
-  getToken() {
-    try { return TokenManager.accessToken; } catch (_) { return null; }
-  },
-  getRefreshToken() { return null; },
   
   maybeActivityReconnect() {
     try {
@@ -107,12 +88,11 @@ const WebSocketService = {
       const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
       if (!isOpen) {
         this.log('Activity detected and WS not open; attempting reconnect');
-        const token = this.getToken();
-        if (this.tokenRefreshInProgress) {
-          this.warn('Skipping activity reconnect during token refresh');
+        if (this.sessionRestoreInProgress) {
+          this.warn('Skipping activity reconnect during session restore');
           return;
         }
-        if (token) this.safeConnect(token);
+        if (this.isAuthenticated()) this.safeConnect();
       }
     } catch (e) {
       // no-op
@@ -132,34 +112,16 @@ const WebSocketService = {
       onOnline: async () => {
         this.isOnline = true;
         const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
-        if (!isOpen) {
-          let token = this.getToken();
-          if (!token || this.shouldRefreshToken()) {
-            try {
-              const refreshed = await TokenManager.refreshAccessToken({ initiator: 'ws_checkHealth' });
-              if (refreshed) {
-                this.lastTokenRefresh = Date.now();
-                token = refreshed;
-              }
-            } catch (e) {}
-          }
-          if (token) this.safeConnect(token);
-        }
-        
+        if (!isOpen && this.isAuthenticated()) this.safeConnect();
       },
       onOffline: () => {
         this.isOnline = false;
       },
       onVisible: () => {
         const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
-        if (!isOpen && this.isOnline) {
-          const token = this.getToken();
-          if (token) this.safeConnect(token);
-        }
-        
+        if (!isOpen && this.isOnline && this.isAuthenticated()) this.safeConnect();
       },
       onHidden: () => {
-        // Disconnect when tab becomes hidden, app is minimized, or page is backgrounded
         this.disconnectUser();
       }
     });
@@ -174,28 +136,17 @@ const WebSocketService = {
   },
   handleOnline() {
     this.isOnline = true;
-    // Attempt reconnect when coming online if not connected
     const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
-    if (!isOpen) {
-      const token = this.getToken();
-      if (token) this.safeConnect(token);
-    }
-    
+    if (!isOpen && this.isAuthenticated()) this.safeConnect();
   },
   handleOffline() {
     this.isOnline = false;
-    // No banner handling
   },
   handleVisibilityChange() {
     const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
     if (!isHidden) {
-      // Visible: try to reconnect if needed
       const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
-      if (!isOpen && this.isOnline) {
-        const token = this.getToken();
-        if (token) this.safeConnect(token);
-      }
-      
+      if (!isOpen && this.isOnline && this.isAuthenticated()) this.safeConnect();
     }
   },
   stopPingInterval() {
@@ -214,7 +165,6 @@ const WebSocketService = {
     this.stopPingInterval();
     this.stopIdleTimer();
     this.teardownActivityListeners();
-    
   },
   removeMessageSubscription() {
     if (this.unsubscribeFunction) {
@@ -226,53 +176,61 @@ const WebSocketService = {
   
   async attemptRefreshAndReconnect() {
     if (!this.isOnline) {
-      this.warn('Skipping token refresh while offline');
+      this.warn('Skipping session restore while offline');
       return;
     }
     const now = Date.now();
     if (this.lastRefreshAttemptAt && (now - this.lastRefreshAttemptAt) < this.refreshCooldownMs) {
-      this.warn('Refresh cooldown active; scheduling backoff reconnect instead of refreshing again');
-      const tokenToUse = TokenManager.accessToken;
-      if (!tokenToUse) { this.warn('No token available during refresh cooldown; skipping reconnect'); return; }
-      this.scheduleReconnect(tokenToUse);
+      this.warn('Restore cooldown active; scheduling backoff reconnect');
+      if (!this.isAuthenticated()) return;
+      this.scheduleReconnect();
       return;
     }
-    if (this.tokenRefreshInProgress) {
-      this.warn('Token refresh already in progress; skipping duplicate attempt');
+    if (this.sessionRestoreInProgress) {
+      this.warn('Session restore already in progress; skipping duplicate attempt');
       return;
     }
-    this.tokenRefreshInProgress = true;
+    this.sessionRestoreInProgress = true;
     try {
-      const corrId = `ws_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
-      this.log('Attempting token refresh due to authentication failure', { corrId });
-      // Refresh token is httpOnly; refresh directly via TokenManager
-      const newAccess = await TokenManager.refreshAccessToken({ initiator: 'ws_attemptRefresh', corrId, reason: 'ws_auth_failure' });
-      if (!newAccess) {
-        this.error('Token refresh failed; skipping WS disconnected banner', { corrId });
+      this.log('Restoring session due to WS auth failure');
+      const ok = await authStore.restoreSession();
+      if (!ok || !this.isAuthenticated()) {
+        this.error('Session restore failed; not reconnecting WS');
         return;
       }
-      this.log('Token refresh succeeded, scheduling reconnect with new token', { corrId });
-      this.scheduleReconnect(newAccess);
+      this.log('Session restore succeeded, scheduling reconnect');
+      this.scheduleReconnect();
     } catch (e) {
-      this.error('Error during refresh-and-reconnect:', e);
-    }
-    finally {
-      this.tokenRefreshInProgress = false;
-      this.lastTokenRefresh = Date.now();
+      this.error('Error during restore-and-reconnect:', e);
+    } finally {
+      this.sessionRestoreInProgress = false;
+      this.lastSessionRestore = Date.now();
       this.lastRefreshAttemptAt = Date.now();
     }
   },
 
-  // Centralized backoff-aware reconnect scheduler
-  scheduleReconnect(token) {
+  scheduleReconnect() {
     try {
-      if (!token) { this.warn('scheduleReconnect called without token; skipping'); return; }
-      if (!this.backoff) this.backoff = new ReconnectBackoff({ initialMs: 1000, maxMs: 30000, jitterMs: 500, maxAttempts: this.maxReconnectAttempts });
+      if (!this.isAuthenticated()) {
+        this.warn('scheduleReconnect skipped — not authenticated');
+        return;
+      }
+      if (!this.backoff) {
+        this.backoff = new ReconnectBackoff({
+          initialMs: 1000,
+          maxMs: 30000,
+          jitterMs: 500,
+          maxAttempts: this.maxReconnectAttempts,
+        });
+      }
       const delay = this.backoff.nextDelay();
-      if (delay == null) { this.error(`Max reconnection attempts (${this.maxReconnectAttempts}) exceeded`); return; }
+      if (delay == null) {
+        this.error(`Max reconnection attempts (${this.maxReconnectAttempts}) exceeded`);
+        return;
+      }
       setTimeout(async () => {
         try {
-          await this.connectUser(token);
+          await this.connectUser();
         } catch (err) {
           this.error(`Reconnection attempt failed: ${err.message}`);
         }
@@ -282,83 +240,39 @@ const WebSocketService = {
     }
   },
   
-  
-  
-  /**
-   * Check if token needs refresh
-   * @returns {boolean} True if token should be refreshed
-   */
-  shouldRefreshToken() {
-    if (!this.lastTokenRefresh) return true;
-    return (Date.now() - this.lastTokenRefresh) > this.tokenRefreshThreshold;
-  },
-  
   /**
    * Initialize global WebSocket connection for the authenticated user
-   * Should be called when the application starts and when auth state changes
    */
   async initialize() {
     this.ensureDebugFlag();
-    // Get current auth state
     const user = store.getters['auth/user'];
     
     this.log(`Initialize called - User: ${user ? user.uid : 'none'}`);
     
-    // Clean up existing connection if any
     this.cleanup();
-    
-    // Reset connection attempts
     this.connectionAttempts = 0;
     
-    // Only connect if user is authenticated
-    if (user) {
+    if (user && this.isAuthenticated()) {
       this.log(`Initializing global connection for user ${user.uid}`);
       
       try {
-        // Get token via TokenManager exclusively
-        let authToken = TokenManager.accessToken;
-        if (!authToken || this.shouldRefreshToken()) {
-          try {
-            const refreshed = await TokenManager.refreshAccessToken({ initiator: 'ws_initialize' });
-            if (refreshed) {
-              this.lastTokenRefresh = Date.now();
-              authToken = refreshed;
-            }
-          } catch (e) {}
-        }
-        
-        if (!authToken) {
-          this.log('Failed to get fresh auth token');
-          return;
-        }
-        
-        this.log('Got fresh auth token');
-        this.logTokenClaims(authToken, 'initialize');
-        
-        // Register message handler for store updates via messages store action
-        this.log('Registering message handler');
         this.unsubscribeFunction = this.handleNewMessage((msg) => {
           try { store.dispatch('messages/handleIncomingWsMessage', msg); } catch (e) { this.warn('dispatch handleIncomingWsMessage failed', e?.message || e); }
         });
         
-        // Set up activity listeners and idle timer
         this.setupActivityListeners();
         this.setupNetworkVisibilityListeners();
         this.resetIdleTimer();
 
-        // Connect to WebSocket server (non-blocking)
         this.log(`Connecting to WebSocket server for user ${user.uid}`);
-        this.safeConnect(authToken);
+        this.safeConnect();
         this.isInitialized = true;
         this.log(`Global connection attempt started for user ${user.uid}`);
-        
-        // Activity-based reconnect enabled via global activity handlers
       } catch (error) {
         this.error('Failed to start WebSocket connection:', error);
-        // Do not throw; allow app to continue mounting even if WS fails initially
       }
     } else {
-      this.log('No authenticated user, skipping initialization');
+      this.log('No authenticated user / missing realtime.connect, skipping initialization');
     }
   },
   
@@ -542,42 +456,36 @@ const WebSocketService = {
     }
   },
 
-  // Connection method - returns a promise that resolves when connected
-  async connectUser(token) {
-    this.log(`ConnectUser called with token starting with: ${token ? token.substring(0, 10) + '...' : 'null'}`);
-    this.logTokenClaims(token, 'connectUser');
+  // Connection method — cookie auth; no token in URL
+  async connectUser() {
+    this.log('ConnectUser called (cookie session)');
 
-    // If already connected with the same token, do nothing
-    if (this.client && this.client.isOpen && this.authToken === token) {
-      this.log(`Already connected with token ${token.substring(0, 10)}...`);
+    if (this.client && this.client.isOpen) {
+      this.log('Already connected');
       return Promise.resolve();
     }
 
-    // Prevent overlapping connect attempts with the same token
-    if (this.isConnecting && this.authToken === token && this.connectionPromise) {
+    if (this.isConnecting && this.connectionPromise) {
       this.warn('Connect already in progress; reusing existing promise');
       return this.connectionPromise;
     }
 
-    // Ensure client exists
     if (!this.client) {
       this.client = new WebSocketClient({
-        buildUrl: (t) => {
+        buildUrl: () => {
           const isSecure = window.location.protocol === 'https:';
           const wsProtocol = isSecure ? 'wss:' : 'ws:';
           const host = window.location.host;
-          return `${wsProtocol}//${host}${WS_BASE_URL}?access_token=${encodeURIComponent(t)}`;
+          // Cookie carries auth — never put session token in the query string
+          return `${wsProtocol}//${host}${WS_BASE_URL}`;
         },
         logger: console,
-        // Disable client heartbeat; rely on server pings only
         pingIntervalMs: 0,
         pingTimeoutMs: this.pingTimeoutMs,
       });
 
-      // Wire client events
       this.client.on('open', () => {
         this.connection = this.client.socket;
-        // Ensure activity listeners are active after reconnects
         this.setupActivityListeners();
         this.resetIdleTimer();
         this.connectionAttempts = 0;
@@ -587,7 +495,6 @@ const WebSocketService = {
       });
 
       this.client.on('json', (data) => {
-        // All other data types
         this.log('WebSocket data received:', data);
         
         try {
@@ -598,7 +505,6 @@ const WebSocketService = {
             return;
           }
           
-          // Handle new notification payload structure
           if (data?.type === 'notification') {
             try {
               const payload = data.data || {};
@@ -615,7 +521,6 @@ const WebSocketService = {
                 
                 if (this.messageListeners && this.messageListeners.size > 0) {
                   for (const cb of Array.from(this.messageListeners)) {
-                    // Dispatch each message individually to maintain compatibility
                     for (const msg of messages) {
                       try { cb(msg); } catch (e) { this.error('Error in message listener:', e); }
                     }
@@ -629,7 +534,6 @@ const WebSocketService = {
             return;
           }
 
-          // Legacy format support
           if (data?.type === 'new_message') {
             try {
               if (this.messageListeners && this.messageListeners.size > 0) {
@@ -656,30 +560,16 @@ const WebSocketService = {
         this.connectionEstablished = false;
         this.isConnecting = false;
 
-        
-
         if (event.code === 1008) {
-          this.error('Authentication failed (1008). Attempting refresh and reconnect');
-          this.authToken = null;
+          this.error('Authentication failed (1008). Attempting session restore and reconnect');
           this.attemptRefreshAndReconnect();
-          try {
-            const ap = store.getters['auth/activePrincipalUid'];
-            const mu = store.getters['auth/managerUid'];
-            this.warn('Auth context on 1008', { activePrincipalUid: ap, managerUid: mu });
-          } catch (_) {}
           return;
         }
 
         const likelyHandshakeFailure = !this.connectionEstablished && event.code === 1006;
         if (likelyHandshakeFailure) {
-          this.error('Possible handshake/auth failure (1006). Forcing refresh-and-reconnect');
-          this.authToken = null;
+          this.error('Possible handshake/auth failure (1006). Forcing restore-and-reconnect');
           this.attemptRefreshAndReconnect();
-          try {
-            const ap = store.getters['auth/activePrincipalUid'];
-            const mu = store.getters['auth/managerUid'];
-            this.warn('Auth context on 1006', { activePrincipalUid: ap, managerUid: mu });
-          } catch (_) {}
           return;
         }
 
@@ -690,9 +580,11 @@ const WebSocketService = {
                                this.isOnline;
         if (shouldReconnect) {
           this.connectionAttempts++;
-          const tokenToUse = TokenManager.accessToken;
-          if (!tokenToUse) { this.warn('Reconnect requested but no token available; skipping'); return; }
-          this.scheduleReconnect(tokenToUse);
+          if (!this.isAuthenticated()) {
+            this.warn('Reconnect skipped — not authenticated');
+            return;
+          }
+          this.scheduleReconnect();
         }
       });
 
@@ -701,25 +593,18 @@ const WebSocketService = {
       });
     }
 
-    // Track token and connect
-    this.authToken = token;
     this.connectionAttempts++;
     this.isConnecting = true;
-    this.connectionPromise = this.client.connect(token);
+    this.connectionPromise = this.client.connect();
     return this.connectionPromise;
   },
   
-  // For backward compatibility
   async connectToThread(threadId, messageId) {
-    // deprecated: no-op retained for compatibility
     return Promise.resolve();
   },
   
-  // Disconnect from current thread
   disconnectUser() {
     this.log(`DisconnectUser called`);
-    
-    // No JSON heartbeat to stop
     
     if (this.client && this.client.socket) {
       this.log(`Disconnecting user ${this.userId}`);
@@ -732,63 +617,37 @@ const WebSocketService = {
       
       this.connection = null;
       this.userId = null;
-      this.authToken = null;
       this.connectionEstablished = false;
     } else {
       this.log(`No active connection to disconnect`);
     }
     
-    // Clear timers and activity listeners
     this.clearClientSideHandlers();
-
-    // Clear connection promise
     this.connectionPromise = null;
     this.log(`DisconnectUser completed`);
   },
   
-  // Register callback for new messages
   handleNewMessage(callback) {
     this.log(`HandleNewMessage called with callback: ${callback ? 'provided' : 'null'}`);
     if (callback && typeof callback === 'function') {
       this.messageListeners.add(callback);
     }
-    // Return unsubscribe function
     return () => {
       this.log(`Unsubscribe called for a message listener`);
       try { this.messageListeners.delete(callback); } catch (_) {}
-      // Do not auto-disconnect here; lifecycle is managed by initialize/cleanup
     };
   },
   
-  // For backward compatibility - does nothing now as we subscribe to all messages for the user
   async updateSelectedMessage(messageId) {
-    // deprecated: no-op retained for compatibility
     return;
   },
   
-  /**
-   * Check connection health and reconnect if needed
-   */
   async checkConnectionHealth() {
     if (!this.connection || this.connection.readyState !== WebSocket.OPEN) {
       this.log('Connection not open, attempting to reconnect');
-      
-      const user = store.getters['auth/user'];
-      if (user) {
+      if (this.isAuthenticated()) {
         try {
-          let token = TokenManager.accessToken;
-          if (!token || this.shouldRefreshToken()) {
-            try {
-              const refreshed = await TokenManager.refreshAccessToken({ initiator: 'ws_health_missing_or_stale' });
-              if (refreshed) {
-                this.lastTokenRefresh = Date.now();
-                token = refreshed;
-              }
-            } catch (e) {}
-          }
-          if (token) {
-            await this.connectUser(token);
-          }
+          await this.connectUser();
         } catch (error) {
           this.error('Failed to reconnect:', error);
         }
@@ -796,28 +655,20 @@ const WebSocketService = {
     }
   },
   
-  /**
-   * Get connection status
-   */
   getConnectionStatus() {
-    const status = {
+    return {
       connected: this.connection?.readyState === WebSocket.OPEN,
       established: this.connectionEstablished,
       userId: this.userId,
       connectionAttempts: this.connectionAttempts,
       lastPingTime: this.lastPingTime,
-      hasAuthToken: !!this.authToken,
-      hasRefreshToken: undefined,  // Refresh token is in httpOnly cookie only (not accessible to JS)
-      authTokenPrefix: this.authToken ? this.authToken.slice(0, 10) : null,
+      authenticated: this.isAuthenticated(),
     };
-    
-    return status;
   }
   ,
-  // Internal helper to avoid unhandled promise rejections on fire-and-forget connects
-  safeConnect(token) {
+  safeConnect() {
     try {
-      const p = this.connectUser(token);
+      const p = this.connectUser();
       if (p && typeof p.catch === 'function') {
         p.catch(err => this.warn('connectUser error suppressed', err?.message || err));
       }

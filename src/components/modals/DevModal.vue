@@ -445,8 +445,8 @@ async function setOrRotateSigningSecret() {
                       </div>
                       <div class="field">
                         <label for="newKeyScopes">Scopes cap</label>
-                        <input id="newKeyScopes" placeholder="e.g. msg.read msg.write" v-model="newKeyScopes" />
-                        <div class="field-hint">Leave empty to use default: msg.read msg.write</div>
+                        <input id="newKeyScopes" placeholder="e.g. messages.read messages.write" v-model="newKeyScopes" />
+                        <div class="field-hint">Leave empty to use default: messages.read messages.write</div>
                       </div>
                     </div>
                     <div class="actions">

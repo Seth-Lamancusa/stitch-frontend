@@ -1,171 +1,44 @@
 import axios from 'axios'
-import store from '../store'
-import TokenManager from './TokenManager'
+import { installSessionAuthInterceptor } from '../auth/http.js'
+import authStore from '../auth/store.js'
 import logger from './logger'
 
-// Lightweight correlation id generator (per request)
-function generateCorrelationId() {
-  try { return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`; } catch (_) { return 'req_unknown'; }
-}
-
-// Guard symbol to avoid duplicate interceptor installation during HMR
-const AUTH_INTERCEPTOR_INSTALLED = Symbol.for('stitch.authInterceptorInstalled')
-
-// Track if a logout is in progress to prevent multiple simultaneous logout calls
-let logoutInProgress = false
-
-// Install a 401 -> refresh token -> retry once interceptor on an axios instance.
-export function installAxiosAuthInterceptor(axiosInstance) {
-  if (!axiosInstance || !axiosInstance.interceptors) return;
-  try {
-    if (axiosInstance[AUTH_INTERCEPTOR_INSTALLED]) {
-      return;
-    }
-    // Mark as installed to prevent stacking interceptors in dev/HMR
-    Object.defineProperty(axiosInstance, AUTH_INTERCEPTOR_INSTALLED, {
-      value: true,
-      enumerable: false,
-      configurable: false,
-      writable: false
-    });
-  } catch (_) {}
-
-  // Stamp start time for duration metrics
-  axiosInstance.interceptors.request.use((config) => {
-    try { config.metadata = { start: Date.now() }; } catch (_) {}
-    // Attach per-request correlation id header if not provided
-    try {
-      config.headers = config.headers || {};
-      if (!config.headers['X-Correlation-Id']) {
-        const corrId = config.corrId || generateCorrelationId();
-        config.headers['X-Correlation-Id'] = corrId;
-        config.corrId = corrId;
-      }
-    } catch (_) {}
-    // Attach Authorization header just-in-time from TokenManager unless explicitly skipped
-    try {
-      if (!config._skipAuth) {
-        const token = TokenManager.accessToken;
-        if (token) {
-          config.headers = config.headers || {};
-          if (!config.headers['Authorization']) {
-            config.headers['Authorization'] = `Bearer ${token}`;
-          }
-        }
-      }
-    } catch (_) {}
-    return config;
-  });
-
-  axiosInstance.interceptors.response.use(
-    (response) => {
-      try {
-        const started = response?.config?.metadata?.start || Date.now();
-        const durationMs = Date.now() - started;
-        const method = (response?.config?.method || 'get').toUpperCase();
-        const url = response?.config?.url || '';
-        const status = response?.status;
-        logger.info(`HTTP ${method} ${url} -> ${status} in ${durationMs}ms`);
-      } catch (_) {}
-      return response;
-    },
-    async (error) => {
-      const status = error?.response?.status;
-      const originalRequest = error?.config || {};
-
-      try {
-        const started = originalRequest?.metadata?.start || Date.now();
-        const durationMs = Date.now() - started;
-        const method = (originalRequest?.method || 'get').toUpperCase();
-        const url = originalRequest?.url || '';
-        logger.warn(`HTTP ${method} ${url} -> ${status || 'ERR'} in ${durationMs}ms`);
-      } catch (_) {}
-
-      // If not unauthorized, or already retried, or explicitly disabled, just propagate
-      if (status !== 401 || originalRequest._retry || originalRequest._noRefreshRetry) {
-        return Promise.reject(error);
-      }
-
-      // If user is already logged out or logout is in progress, don't try to refresh
-      try {
-        const isAuthenticated = store?.getters?.['auth/isAuthenticated'];
-        if (!isAuthenticated || logoutInProgress) {
-          try { logger.warn('[AUTH][axios] 401 but already logged out or logout in progress; skipping refresh', { url: originalRequest?.url, isAuthenticated, logoutInProgress }); } catch (_) {}
-          return Promise.reject(error);
-        }
-      } catch (_) {}
-
-      // Mark to avoid infinite loops
-      originalRequest._retry = true;
-
-      // Attempt refresh
-      try {
-        const tokenBefore = TokenManager.accessToken;
-        const corrId = originalRequest?.corrId || `ax_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
-        try { logger.warn('[AUTH][axios] 401 detected; attempting refresh', { url: originalRequest?.url, corrId }); } catch (_) {}
-        const newAccess = await TokenManager.refreshAccessToken({ initiator: 'axios_interceptor', corrId, reason: `401@${originalRequest?.url || ''}` });
-        if (!newAccess) {
-          // If another caller refreshed and rotated tokens, retry with the updated token
-          const tokenAfter = TokenManager.accessToken;
-          if (tokenAfter && tokenAfter !== tokenBefore) {
-            originalRequest.headers = originalRequest.headers || {};
-            originalRequest.headers['Authorization'] = `Bearer ${tokenAfter}`;
-            try { logger.info('[AUTH][axios] retrying after peer refresh', { url: originalRequest?.url, corrId }); } catch (_) {}
-            return axiosInstance.request(originalRequest);
-          }
-          // Coordinate logout to prevent multiple simultaneous logout calls
-          if (!logoutInProgress) {
-            logoutInProgress = true;
-            try {
-              try { logger.error('[AUTH][axios] refresh failed; forcing logout', { url: originalRequest?.url, corrId }); } catch (_) {}
-              await store.dispatch('auth/forceLogoutWithMessage');
-            } finally {
-              // Reset after a delay to allow re-login flow
-              setTimeout(() => { logoutInProgress = false; }, 2000);
-            }
-          } else {
-            try { logger.warn('[AUTH][axios] logout already in progress; skipping duplicate', { url: originalRequest?.url, corrId }); } catch (_) {}
-          }
-          return Promise.reject(error);
-        }
-
-        // Ensure Authorization header is set with the new token
-        originalRequest.headers = originalRequest.headers || {};
-        originalRequest.headers['Authorization'] = `Bearer ${newAccess}`;
-
-        // Retry the original request
-        try { logger.info('[AUTH][axios] retrying request with new token', { url: originalRequest?.url, corrId }); } catch (_) {}
-        return axiosInstance.request(originalRequest);
-      } catch (e) {
-        // Coordinate logout to prevent multiple simultaneous logout calls
-        if (!logoutInProgress) {
-          logoutInProgress = true;
-          try {
-            try { logger.error('[AUTH][axios] error during refresh or retry; forcing logout', { url: originalRequest?.url, message: e?.message }); } catch (_) {}
-            await store.dispatch('auth/forceLogoutWithMessage');
-          } catch (_) {
-          } finally {
-            setTimeout(() => { logoutInProgress = false; }, 2000);
-          }
-        } else {
-          try { logger.warn('[AUTH][axios] logout already in progress; skipping duplicate (catch)', { url: originalRequest?.url }); } catch (_) {}
-        }
-        return Promise.reject(error);
-      }
-    }
-  );
-}
-
-// Centralized Axios client for public SPA
+// Centralized Axios client for public SPA — cookie sessions only
 const apiClient = axios.create({
   baseURL: '/v1',
   timeout: 15000,
   withCredentials: true,
   headers: {
-    'Content-Type': 'application/json'
-  }
+    'Content-Type': 'application/json',
+  },
 })
 
-installAxiosAuthInterceptor(apiClient)
+installSessionAuthInterceptor(apiClient, {
+  logger,
+  onUnauthorized: async () => {
+    try {
+      // Dynamic import to avoid circular init with the Vuex store
+      const store = (await import('../store')).default
+      await store.dispatch('auth/forceLogoutWithMessage')
+    } catch (_) {
+      authStore.clearLocal()
+    }
+  },
+})
+
+// Back-compat export name used by main.js
+export function installAxiosAuthInterceptor(axiosInstance) {
+  installSessionAuthInterceptor(axiosInstance, {
+    logger,
+    onUnauthorized: async () => {
+      try {
+        const store = (await import('../store')).default
+        await store.dispatch('auth/forceLogoutWithMessage')
+      } catch (_) {
+        authStore.clearLocal()
+      }
+    },
+  })
+}
 
 export default apiClient

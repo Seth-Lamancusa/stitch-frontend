@@ -1115,7 +1115,7 @@ export default {
     // Toggle message public flag
     async togglePublicMessage({ commit, state, rootGetters }, { messageId, makePublic }) {
       try {
-        if (!rootGetters['auth/hasScope']('msg.write')) {
+        if (!rootGetters['auth/hasScope']('messages.write')) {
           throw new Error('Write permission required');
         }
         const existing = state.messages[messageId];
@@ -1761,7 +1761,7 @@ export default {
       try {
         console.log('[Store] Deleting link:', { messageIdFrom, messageIdTo, linkType, sourceMessageId });
         // Gate on msg.write
-        if (!rootGetters['auth/hasScope']('msg.write')) {
+        if (!rootGetters['auth/hasScope']('messages.write')) {
           throw new Error('Write permission required');
         }
         
@@ -1786,7 +1786,7 @@ export default {
       try {
         console.log('[Store] Creating link:', { messageIdFrom, messageIdTo });
         // Gate on msg.write
-        if (!rootGetters['auth/hasScope']('msg.write')) {
+        if (!rootGetters['auth/hasScope']('messages.write')) {
           throw new Error('Write permission required');
         }
         

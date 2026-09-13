@@ -1,16 +1,12 @@
 import apiClient from './apiClient'
-import TokenManager from './TokenManager'
 
 const apiBaseUrl = '/v1'
 
 // Default messages to fetch above/below a target when resolving a thread.
 export const LOAD_RADIUS = 20
 
-// Helper function to get auth headers
-const getAuthHeaders = () => {
-  const token = TokenManager.accessToken
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
+// Cookie session — apiClient sends credentials; no Bearer header.
+const getAuthHeaders = () => ({})
 
 export default {
   // Send a message or reply (supports optional tags)

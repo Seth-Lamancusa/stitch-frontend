@@ -411,7 +411,7 @@ const hasImportScope = computed(() => {
 });
 
 const hasChannelCreateScope = computed(() => {
-  return store.getters['auth/hasScope']('channel.create');
+  return store.getters['auth/hasScope']('channels.create');
 });
 
 const shouldShowCreateModal = computed(() => {

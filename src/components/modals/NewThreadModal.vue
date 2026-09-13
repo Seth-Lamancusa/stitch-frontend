@@ -66,7 +66,7 @@ const canImport = computed(() => {
 });
 
 const canCreateChannel = computed(() => {
-  return store.getters['auth/hasScope']('channel.create');
+  return store.getters['auth/hasScope']('channels.create');
 });
 
 const handleCancel = () => {

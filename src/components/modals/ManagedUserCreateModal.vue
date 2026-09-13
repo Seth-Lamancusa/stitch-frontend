@@ -38,7 +38,7 @@ const onCreate = async () => {
       display_name: displayName.value.trim(),
       user_tag: userTag.value.trim(),
       endpoints: ep,
-      scopes: 'msg.read msg.write ws',
+      scopes: 'messages.read messages.write realtime.connect',
       private: false,
       is_bot: isBot.value
     });

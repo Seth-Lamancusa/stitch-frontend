@@ -1,6 +1,5 @@
 // Attachment upload service
 import apiClient from './apiClient'
-import TokenManager from './TokenManager'
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
 const ALLOWED_TYPES = [
@@ -29,10 +28,7 @@ const ALLOWED_TYPES = [
   'audio/x-m4a'
 ]
 
-const getAuthHeaders = () => {
-  const token = TokenManager.accessToken
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
+const getAuthHeaders = () => ({})
 
 // Validate file before upload
 const validateFile = (file) => {
