@@ -1642,6 +1642,7 @@ const handleNavigatorJump = (msgId) => {
 .messages-container {
   /* Branch navigator hidden: was flex 70% / width 70% */
   flex: 1 1 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center; /* Center MessageNode components horizontally */
@@ -1650,10 +1651,6 @@ const handleNavigatorJump = (msgId) => {
   padding-right: 20px;
   padding-bottom: calc(100px + 25vh); /* Add space at bottom for the reply box plus a screen's worth of scrollable space */
   gap: 20px; /* Consistent gap between elements */
-}
-
-.messages-container.compact {
-  gap: 8px;
   /* Keep scrollbar width stable so layout doesn't appear to shrink/grow
      when branch selection changes the amount of content. */
   overflow-y: scroll;
@@ -1662,6 +1659,10 @@ const handleNavigatorJump = (msgId) => {
   position: relative;
   justify-content: flex-start;
   scroll-behavior: auto;
+}
+
+.messages-container.compact {
+  gap: 8px;
 }
 
 /*
