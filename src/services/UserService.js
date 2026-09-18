@@ -171,6 +171,13 @@ export default {
       }
     },
 
+    async getThreadUnreadCounts(messageIds) {
+      const response = await apiClient.post('/users/thread-unread-counts', {
+        message_ids: messageIds,
+      });
+      return response;
+    },
+
     /**
      * Mark a message as read for the current user
      * @param {String} messageId - The message ID to mark as read

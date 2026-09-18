@@ -548,41 +548,28 @@ const getUserDisplayName = (u) => {
   if (!u) return 'Unknown';
   return u.displayName || u.display_name || (u.user_tag ? `@${u.user_tag}` : (u.email || 'Unknown'));
 };
-// Manager row should always reflect the true manager principal (act.sub when acting-as)
-const managerDisplayName = computed(() => {
-  const list = managedUsers.value || [];
-  const manager = managerUid.value;
-  if (!manager) return getUserDisplayName(user.value);
-  if (user.value && user.value.uid === manager) return getUserDisplayName(user.value);
-  const found = list.find(u => (u && (u.uid || u._key || u.id)) === manager);
-  // Fallback to manager snapshot from store if present
-  const snap = store.state.auth && store.state.auth.managerSnapshot;
-  if (found) return getUserDisplayName(found);
-  if (snap) return snap.display_name || (snap.user_tag ? `@${snap.user_tag}` : 'Unknown');
-  return getUserDisplayName(user.value);
-});
-const managerTag = computed(() => {
-  const list = managedUsers.value || [];
-  const manager = managerUid.value;
-  if (!manager) return (user.value && user.value.user_tag) ? user.value.user_tag : null;
-  if (user.value && user.value.uid === manager) return (user.value && user.value.user_tag) ? user.value.user_tag : null;
-  const found = list.find(u => (u && (u.uid || u._key || u.id)) === manager);
-  if (found && found.user_tag) return found.user_tag;
-  const snap = store.state.auth && store.state.auth.managerSnapshot;
-  if (snap && snap.user_tag) return snap.user_tag;
-  return (user.value && user.value.user_tag) ? user.value.user_tag : null;
-});
+// Manager row should always reflect the true manager principal (act.sub when acting-as).
+// Never fall back to the active (delegated) user — that is what made the first row
+// show the bot you are currently acting as.
+const managerSnapshot = computed(() => store.getters['auth/managerSnapshot']);
 const managerPrincipal = computed(() => {
-  const list = managedUsers.value || [];
   const manager = managerUid.value;
   if (!manager) return user.value;
-  const resolvedCurrentUser = resolveUid(user.value);
-  if (resolvedCurrentUser && resolvedCurrentUser === manager) return user.value;
-  const found = list.find(u => resolveUid(u) === manager);
-  if (found) return found;
-  const snap = store.state.auth && store.state.auth.managerSnapshot;
-  if (snap) return snap;
-  return user.value;
+  if (resolveUid(user.value) === manager) return user.value;
+  return managerSnapshot.value || { uid: manager };
+});
+const managerDisplayName = computed(() => {
+  const manager = managerUid.value;
+  if (!manager) return getUserDisplayName(user.value);
+  if (resolveUid(user.value) === manager) return getUserDisplayName(user.value);
+  if (managerSnapshot.value) return getUserDisplayName(managerSnapshot.value);
+  return 'Manager';
+});
+const managerTag = computed(() => {
+  const manager = managerUid.value;
+  if (!manager) return (user.value && user.value.user_tag) ? user.value.user_tag : null;
+  if (resolveUid(user.value) === manager) return (user.value && user.value.user_tag) ? user.value.user_tag : null;
+  return (managerSnapshot.value && managerSnapshot.value.user_tag) ? managerSnapshot.value.user_tag : null;
 });
 // Header: show selected principal name/tag
 const displayedPrincipal = computed(() => {
@@ -611,6 +598,10 @@ const togglePrincipalMenu = async () => {
     try {
       managedLoading.value = true;
       await store.dispatch('auth/fetchManagedUsers');
+      await store.dispatch('auth/ensureManagerSnapshot', {
+        managerUid: managerUid.value,
+        managedUid: activePrincipalUid.value
+      });
     } catch (e) {
       console.warn('[TabViewLayout] fetchManagedUsers failed', e);
     } finally {

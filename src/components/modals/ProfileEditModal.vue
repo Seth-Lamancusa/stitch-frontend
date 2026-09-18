@@ -600,6 +600,9 @@ const updateProfile = async () => {
     if (normalizeEndpointForCompare(endpoint.value) !== normalizeEndpointForCompare(originalEndpoint)) {
       const trimmed = normalizeTrimmed(endpoint.value);
       profileUpdate.endpoint = trimmed || null;
+      if (trimmed && !normalizeTrimmed(originalEndpoint)) {
+        notifyPrefs.value.endpoint = true;
+      }
     }
     if (normalizeTrimmed(bio.value) !== normalizeTrimmed(originalBio)) {
       const trimmedBio = normalizeTrimmed(bio.value);
@@ -645,9 +648,17 @@ const updateProfile = async () => {
     if (notifyPrefsChanged()) {
       profileUpdate.notify = { ...notifyPrefs.value };
     }
-    await store.dispatch('auth/updateProfile', profileUpdate);
+    const result = await store.dispatch('auth/updateProfile', profileUpdate);
     // Keep modal open after successful update; refresh form with saved data
     resetForm();
+    if (Object.prototype.hasOwnProperty.call(profileUpdate, 'endpoint') && profileUpdate.endpoint) {
+      if (result && result.endpoint_verified) {
+        endpointVerificationMessage.value = 'Endpoint verified';
+        notifyPrefs.value.endpoint = true;
+      } else if (result && result.endpoint_verified === false) {
+        endpointVerificationMessage.value = 'Saved. Verification failed — click Verify to retry.';
+      }
+    }
     // Show transient success state on the Update button
     updateSuccess.value = true;
     setTimeout(() => { updateSuccess.value = false; }, 1800);

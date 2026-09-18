@@ -470,12 +470,6 @@ const WebSocketService = {
     
     // Trigger notification for messages to current user (but not from current user)
     if (isToCurrentUser && !isFromCurrentUser) {
-      // Increment unread count for any message to current user (regardless of notifications)
-      this.log('Incrementing unread count for message to current user');
-      store.dispatch('messages/incrementUnreadCount');
-      
-      // Simple branch-based notification logic:
-      // Only skip notification if message is next in the currently visible branch
       const isNextInBranch = this.isNextInVisibleBranch(messageData);
       const shouldNotify = !isNextInBranch;
       
@@ -612,6 +606,10 @@ const WebSocketService = {
               const messages = content.messages || payload.messages || [];
               const notificationType = payload.notification_type || payload.type || 'sent';
               
+              if (typeof payload.unread_total === 'number') {
+                try { store.dispatch('messages/applyUnreadTotal', payload.unread_total); } catch (e) {}
+              }
+
               if (messages.length > 0) {
                 this.log(`Received notification type=${notificationType} with ${messages.length} messages`);
                 
@@ -623,6 +621,7 @@ const WebSocketService = {
                     }
                   }
                 }
+                try { store.dispatch('messages/refreshThreadUnreadCounts'); } catch (e) {}
               }
             } catch (e) {
               this.error('Error handling notification payload:', e);

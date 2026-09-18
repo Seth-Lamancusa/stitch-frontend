@@ -1,5 +1,24 @@
 import { normalizeError } from '../../utils/error.js'
 
+const COMPACT_THREAD_KEY = 'compactThread'
+
+function readCompactThread() {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(COMPACT_THREAD_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function persistCompactThread(value) {
+  try {
+    window.localStorage.setItem(COMPACT_THREAD_KEY, value ? 'true' : 'false')
+  } catch {
+    // Ignore quota / private-mode failures
+  }
+}
+
 export default {
   namespaced: true,
   
@@ -12,6 +31,7 @@ export default {
     loginModalOpen: false,
     // Hidden demo mode: blur personal info fields in the profile modal.
     demoBlurPersonalInfo: false,
+    compactThread: readCompactThread(),
   },
   
   mutations: {
@@ -52,6 +72,11 @@ export default {
 
     SET_DEMO_BLUR_PERSONAL_INFO(state, value) {
       state.demoBlurPersonalInfo = !!value;
+    },
+
+    SET_COMPACT_THREAD(state, value) {
+      state.compactThread = !!value
+      persistCompactThread(state.compactThread)
     }
   },
   
@@ -98,6 +123,14 @@ export default {
 
     setDemoBlurPersonalInfo({ commit }, value) {
       commit('SET_DEMO_BLUR_PERSONAL_INFO', value);
+    },
+
+    setCompactThread({ commit }, value) {
+      commit('SET_COMPACT_THREAD', value)
+    },
+
+    toggleCompactThread({ state, commit }) {
+      commit('SET_COMPACT_THREAD', !state.compactThread)
     }
   },
   
@@ -109,5 +142,6 @@ export default {
     messageToDelete: state => state.messageToDelete,
     loginModalOpen: state => state.loginModalOpen,
     demoBlurPersonalInfo: state => state.demoBlurPersonalInfo,
+    compactThread: state => state.compactThread,
   }
 }

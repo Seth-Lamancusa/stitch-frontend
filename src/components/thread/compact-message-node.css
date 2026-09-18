@@ -1,0 +1,37 @@
+/* Compact thread density. Isolated from list-view compact previews. */
+.message-node.compact:not(.list-view) .message-content {
+  padding: 6px 8px;
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.message-node.compact:not(.list-view):hover .message-content,
+.message-node.compact:not(.list-view).dropdown-open .message-content {
+  background-color: var(--color-hover-overlay, rgba(0, 0, 0, 0.05));
+  border-color: transparent;
+}
+
+.message-node.compact:not(.list-view) .plaintext-content,
+.message-node.compact:not(.list-view) .message-body {
+  font-size: 0.9rem;
+}
+
+.message-node.compact:not(.list-view) .message-author {
+  font-size: var(--font-size-sm);
+}
+
+.message-node.compact:not(.list-view) .author-user-tag,
+.message-node.compact:not(.list-view) .message-timestamp {
+  font-size: calc(var(--font-size-xs) - 1px);
+}
+
+.message-node.compact:not(.list-view) .header-row--author {
+  align-items: center;
+}
+
+.message-node.compact:not(.list-view) .author-info {
+  flex-shrink: 0;
+}
+

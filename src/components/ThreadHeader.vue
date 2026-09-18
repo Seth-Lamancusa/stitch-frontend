@@ -19,6 +19,17 @@
       Graph View
     </button>
 
+    <!-- Compact density toggle -->
+    <button
+      type="button"
+      class="compact-toggle-button"
+      :class="{ active: compactThread }"
+      :title="compactThread ? 'Switch to full thread layout' : 'Switch to compact thread layout'"
+      @click="toggleCompactThread"
+    >
+      Compact
+    </button>
+
     <!-- Conversation options button -->
     <button @click="$emit('openTreeOptions')" class="tree-options-button" title="Conversation">
       <span class="btn-icon" aria-hidden="true">
@@ -76,7 +87,10 @@
 
 <script setup>
 import LoginButton from './buttons/LoginButton.vue';
+import { useCompactThread } from '../composables/useCompactThread.js';
 // Public SPA: no admin link here; a single admin badge exists in the main layout
+
+const { compactThread, toggleCompactThread } = useCompactThread();
 
 defineProps({
   user: { type: Object, default: null },
@@ -118,6 +132,7 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'copyThread', 'exit
 
   .graph-view-button,
   .tree-options-button,
+  .compact-toggle-button,
   .copy-thread-button {
   display: inline-flex;
   align-items: center;
@@ -157,10 +172,17 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'copyThread', 'exit
 
   .graph-view-button:hover,
   .tree-options-button:hover,
+  .compact-toggle-button:hover,
   .copy-thread-button:hover {
     background-color: var(--color-surface-hover);
     border-color: var(--color-border-hover);
   }
+
+.compact-toggle-button.active {
+  background-color: var(--color-primary-light, rgba(0, 123, 255, 0.12));
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
 
 .selection-controls {
   display: flex;

@@ -3,6 +3,9 @@ import TokenManager from './TokenManager'
 
 const apiBaseUrl = '/v1'
 
+// Default messages to fetch above/below a target when resolving a thread.
+export const LOAD_RADIUS = 20
+
 // Helper function to get auth headers
 const getAuthHeaders = () => {
   const token = TokenManager.accessToken
@@ -181,7 +184,7 @@ export default {
   },
 
   // Load messages within a radius of a target message
-  async loadMessageRadius(messageId, radius = 5, get_replies = true, get_children = true) {
+  async loadMessageRadius(messageId, radius = LOAD_RADIUS, get_replies = true, get_children = true) {
     const headers = getAuthHeaders()
     const response = await this.traverseFrom(messageId, { up_depth: radius, down_depth: radius, get_replies, get_children })
     const data = response.data || {}

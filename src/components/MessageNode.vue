@@ -5,13 +5,15 @@
        'list-view': inListView,
        'compact': compact,
        'selected': inListView ? selected : isMessageSelected,
-       'dropdown-open': showActionBar,
+       'dropdown-open': showActionBar || compactToolbarVisible,
        'collapsed': isCollapsed
      }"
     :data-message-id="message.id"
     :data-has-siblings="shouldReserveSiblingNavSpace"
     :data-is-reply-root="isReplyRoot ? 'true' : 'false'"
      ref="messageNodeRef"
+    @mouseenter="onCompactHoverEnter"
+    @mouseleave="onCompactHoverLeave"
    >
     <!-- Mobile sibling navigator is rendered outside the rotating card. -->
     <div v-if="showSiblingNavMobile" class="mobile-sibling-nav-slot">
@@ -100,12 +102,37 @@
                 🔗
               </a>
             </span>
+            <CompactAuthorActions
+              v-if="isCompactThread && !isSelectionMode"
+              :header-actions="compactHeaderActionList"
+              :recipient-count="deduplicatedRecipients.length"
+              :on-recipients="openAddRecipientsModal"
+            />
           </div>
         </div>
         
         <!-- Datetime on the right -->
         <div v-if="!inListView" class="header-row-right">
           <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
+          <template v-if="isCompactThread">
+            <button 
+              v-if="canCollapse"
+              class="collapse-button collapse-button--top"
+              @click.stop="toggleCollapse('top')"
+              :aria-label="isCollapsed ? 'Expand message' : 'Collapse message'"
+              :title="isCollapsed ? 'Expand' : 'Collapse'"
+            >
+              <span class="collapse-icon">{{ isCollapsed ? '▼' : '▲' }}</span>
+            </button>
+            <input 
+              v-if="selectable || !inListView"
+              type="checkbox"
+              :checked="inListView ? selected : isMessageSelected"
+              @change="handleSelectionToggle"
+              @click.stop
+              class="selection-checkbox"
+            />
+          </template>
         </div>
         
         <!-- Mobile-only timestamp below username/buttons -->
@@ -113,7 +140,7 @@
       </div>
       
       <!-- Row 2: Badges + collapse/checkbox -->
-      <div class="header-row header-row--badges">
+      <div v-if="!isCompactThread" class="header-row header-row--badges">
         <div class="badges-row-left">
           <!-- Recipients badge -->
           <button 
@@ -210,7 +237,7 @@
       </div>
       
       <!-- Row 3: Add subject (if applicable) -->
-      <div v-if="!inListView && !message.subject && !isAddingSubject && canAddSubject" class="header-row header-row--subject">
+      <div v-if="!inListView && !isCompactThread && !message.subject && !isAddingSubject && canAddSubject" class="header-row header-row--subject">
         <button 
           @click.stop="startAddingSubject"
           class="add-subject-button"
@@ -256,9 +283,17 @@
       
       <!-- Files -->
       <message-attachments :attachments="message.files" />
+
+      <CompactHoverToolbar
+        v-if="isCompactThread && !isSelectionMode && !isCollapsed"
+        :visible="compactToolbarVisible"
+        :primary-actions="compactToolbarActionList"
+        :more-actions="compactMoreActionList"
+        @more-open-changed="onCompactMoreOpenChanged"
+      />
       
       <!-- Message footer - hidden in list view -->
-      <div v-if="!inListView" class="message-footer">
+      <div v-if="!inListView && !isCompactThread" class="message-footer">
         <div class="reply-count">{{ message.child_ids?.length || 0 }} 💬</div>
         
         <!-- Right side: collapse button + actions -->
@@ -374,7 +409,7 @@
       </teleport>
       
       <!-- Unified mobile action controls -->
-      <div v-if="!inListView && !isSelectionMode" ref="mobileActionControlsRef" class="mobile-action-controls">
+      <div v-if="!inListView && !isSelectionMode && !isCompactThread" ref="mobileActionControlsRef" class="mobile-action-controls">
         
         <!-- Bottom collapse button for mobile -->
         <button 
@@ -463,12 +498,21 @@ import ChannelsModal from './modals/ChannelsModal.vue';
 import ReplyOrderModal from './modals/ReplyOrderModal.vue';
 import MessageAttachments from './MessageAttachments.vue';
 import UserDisplay from './common/UserDisplay.vue';
+import CompactAuthorActions from './thread/CompactAuthorActions.vue';
+import CompactHoverToolbar from './thread/CompactHoverToolbar.vue';
+import {
+  compactHeaderActions,
+  compactToolbarActions,
+  compactOverflowFromMenu,
+  extraCompactMoreActions
+} from './thread/compactActions.js';
+import { useDelayedHover } from '../composables/useDelayedHover.js';
 import ChannelsService from '../services/ChannelsService.js';
 import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch, toRef } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute, useRouter } from 'vue-router';
 import { memoize } from 'lodash-es';
-import MessageService from '../services/MessageService.js';
+import MessageService, { LOAD_RADIUS } from '../services/MessageService.js';
 import UserService from '../services/UserService.js';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 
@@ -484,7 +528,9 @@ export default {
     ChannelsModal,
     ReplyOrderModal,
     MessageAttachments,
-    UserDisplay
+    UserDisplay,
+    CompactAuthorActions,
+    CompactHoverToolbar
   },
   
   props: {
@@ -806,14 +852,57 @@ export default {
     const shouldShowMenuButton = computed(() => 
       menuActions.value.length > 0 && !props.inListView && !isSelectionMode.value
     );
+
+    const isCompactThread = computed(() => props.compact && !props.inListView);
+
+    const compactHeaderActionList = computed(() => compactHeaderActions(messageActions.value));
+    const compactToolbarActionList = computed(() => compactToolbarActions(messageActions.value));
+    const compactMoreActionList = computed(() => [
+      ...compactOverflowFromMenu(menuActions.value),
+      ...extraCompactMoreActions({
+        existingTags: existingTags.value,
+        existingChannels: existingChannels.value,
+        isPublic: isPublic.value,
+        canToggleVisibility: canToggleVisibility.value,
+        isUserRecipient: isUserRecipient.value,
+        isMessageUnread: isMessageUnread.value,
+        isTogglingReadStatus: isTogglingReadStatus.value,
+        isAutoMarkingAsRead: isAutoMarkingAsRead.value,
+        canDelete: canDeleteMessage(props.message) && !isSelectionMode.value,
+        canAddSubject: canAddSubject.value,
+        hasSubject: !!props.message.subject,
+        isAddingSubject: isAddingSubject.value,
+        openTagsModal,
+        openChannelsModal,
+        toggleVisibility,
+        toggleReadStatus,
+        deleteMessage: () => emit('delete', props.message),
+        startAddingSubject
+      })
+    ]);
+
+    const {
+      sticky: compactMoreOpen,
+      visible: compactToolbarVisible,
+      enter: onCompactHoverEnter,
+      leave: onCompactHoverLeave,
+      togglePinned: toggleCompactToolbarPinned
+    } = useDelayedHover();
+
+    const onCompactMoreOpenChanged = (isOpen) => {
+      compactMoreOpen.value = isOpen;
+    };
     
     // Message click handler - only handles navigation in preview mode
     const handleMessageClick = () => {
       if (props.displayMode === 'preview' && !props.selectable) {
         // Preview mode without selection - emit navigation
         emit('navigate', props.message.id);
+        return;
       }
-      // Full mode or selection mode - do nothing (selection only via checkbox)
+      if (isCompactThread.value && isMobile.value && !isSelectionMode.value) {
+        toggleCompactToolbarPinned();
+      }
     };
     
     // Handle checkbox selection changes
@@ -1398,7 +1487,7 @@ export default {
       // If the target parent isn't in the store, load it and its context first
       if (!store.getters['messages/getMessage'](parentId)) {
         try {
-          await store.dispatch('messages/loadMessageRadius', { messageId: parentId, radius: 5 });
+          await store.dispatch('messages/loadMessageRadius', { messageId: parentId, radius: LOAD_RADIUS });
         } catch (err) {
           console.error('[MessageNode] Failed to load alternative origin:', err);
           return;
@@ -2032,6 +2121,14 @@ export default {
       selected: toRef(props, 'selected'),
       inListView: toRef(props, 'inListView'),
       compact: toRef(props, 'compact'),
+      isCompactThread,
+      compactHeaderActionList,
+      compactToolbarActionList,
+      compactMoreActionList,
+      compactToolbarVisible,
+      onCompactHoverEnter,
+      onCompactHoverLeave,
+      onCompactMoreOpenChanged,
       navAnimationClass,
       // Used for desktop sizing / sibling navigator layout
       shouldReserveSiblingNavSpace,
@@ -2862,45 +2959,6 @@ export default {
   font-size: .9rem;
   color: #ffffff; /* Force white text color in list view */
 }
-
-/* Compact mode - smaller font sizes and spacing */
-.message-node.compact .message-content {
-  padding: var(--space-sm) var(--space-md);
-}
-
-.message-node.compact .plaintext-content {
-  font-size: 0.9rem;
-}
-
-.message-node.compact .message-author {
-  font-size: var(--font-size-sm);
-}
-
-.message-node.compact .author-user-tag {
-  font-size: calc(var(--font-size-xs) - 1px);
-}
-
-.message-node.compact .message-timestamp {
-  font-size: calc(var(--font-size-xs) - 1px);
-}
-
-.message-node.compact .visibility-indicator,
-.message-node.compact .recipients-toggle {
-  font-size: calc(var(--font-size-xs) - 1px);
-  padding: 1px 5px;
-  height: 20px;
-}
-
-.message-node.compact .message-actions {
-  gap: 12px;
-}
-
-  .message-node.compact .action-button,
-  .message-node.compact .mobile-action-button,
-  .message-node.compact .desktop-menu-button {
-    font-size: calc(var(--font-size-xs) - 1px);
-    padding: 4px 6px;
-  }
 
 .message-footer {
   display: flex;
@@ -3902,45 +3960,6 @@ export default {
   color: #ffffff; /* Force white text color in list view */
 }
 
-/* Compact mode - smaller font sizes and spacing */
-.message-node.compact .message-content {
-  padding: var(--space-sm) var(--space-md); /* More compact */
-}
-
-.message-node.compact .plaintext-content {
-  font-size: 0.85rem;
-}
-
-.message-node.compact .message-author {
-  font-size: calc(var(--font-size-sm) - 1px);
-}
-
-.message-node.compact .author-user-tag {
-  font-size: calc(var(--font-size-xs) - 2px);
-}
-
-.message-node.compact .message-timestamp {
-  font-size: calc(var(--font-size-xs) - 2px);
-}
-
-.message-node.compact .visibility-indicator,
-.message-node.compact .recipients-toggle {
-  font-size: calc(var(--font-size-xs) - 2px);
-  padding: 1px 4px;
-  height: 18px;
-}
-
-.message-node.compact .message-actions {
-  gap: 8px;
-}
-
-  .message-node.compact .action-button,
-  .message-node.compact .mobile-action-button,
-  .message-node.compact .desktop-menu-button {
-    font-size: calc(var(--font-size-xs) - 2px);
-    padding: 3px 5px;
-  }
-
 .message-footer {
   display: flex;
   align-items: center;
@@ -3983,3 +4002,5 @@ export default {
   opacity: 1;
 }
 </style>
+
+<style src="./thread/compact-message-node.css"></style>

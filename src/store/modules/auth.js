@@ -43,6 +43,21 @@ function mapApiUserToAuthState(userData) {
   };
 }
 
+function toManagerSnapshot(u) {
+  if (!u) return null;
+  const uid = u.uid || u.id || u._key || null;
+  if (!uid) return null;
+  return {
+    uid,
+    display_name: u.display_name || u.displayName || null,
+    user_tag: u.user_tag || u.userTag || ''
+  };
+}
+
+function snapshotUid(snapshot) {
+  return (snapshot && (snapshot.uid || snapshot.id || snapshot._key)) || null;
+}
+
 export default {
   namespaced: true,
   
@@ -214,11 +229,14 @@ export default {
           const managerUid = (claims && claims.act && claims.act.sub) ? claims.act.sub : activeUid;
           commit('SET_ACTIVE_AND_MANAGER_UIDS', { activeUid, managerUid });
           if (activeUid && managerUid && activeUid === managerUid) {
-            commit('SET_MANAGER_SNAPSHOT', { uid: userData && userData.uid, display_name: userData && userData.display_name, user_tag: userData && userData.user_tag });
+            commit('SET_MANAGER_SNAPSHOT', toManagerSnapshot(userData));
+          } else if (activeUid && managerUid && activeUid !== managerUid) {
+            await dispatch('ensureManagerSnapshot', { managerUid, managedUid: activeUid });
           }
         } catch (_) {
-          commit('SET_ACTIVE_AND_MANAGER_UIDS', { activeUid: (userData && userData.uid) || null, managerUid: (userData && userData.uid) || null });
-          commit('SET_MANAGER_SNAPSHOT', { uid: userData && userData.uid, display_name: userData && userData.display_name, user_tag: userData && userData.user_tag });
+          const fallbackUid = (userData && userData.uid) || null;
+          commit('SET_ACTIVE_AND_MANAGER_UIDS', { activeUid: fallbackUid, managerUid: fallbackUid });
+          commit('SET_MANAGER_SNAPSHOT', toManagerSnapshot(userData));
         }
         // Opportunistically refresh managed users list
         try { await dispatch('fetchManagedUsers'); } catch (_) {}
@@ -243,7 +261,8 @@ export default {
         // Capture manager snapshot from current user before switching
         try {
           const cur = this.state.auth.user;
-          if (cur) commit('SET_MANAGER_SNAPSHOT', { uid: cur.uid, display_name: cur.displayName, user_tag: cur.user_tag });
+          const snap = toManagerSnapshot(cur);
+          if (snap) commit('SET_MANAGER_SNAPSHOT', snap);
         } catch (_) {}
         // Manager refresh token sent via httpOnly cookie; backup not available in JS anymore
         WebSocketService.cleanup();
@@ -450,6 +469,33 @@ export default {
       }
     },
 
+    async ensureManagerSnapshot({ state, commit, dispatch }, { managerUid, managedUid } = {}) {
+      const manager = managerUid || state.managerUid;
+      if (!manager) return null;
+      const existing = state.managerSnapshot;
+      const existingUid = snapshotUid(existing);
+      if (existingUid === manager && (existing.display_name || existing.user_tag)) {
+        return existing;
+      }
+      if (existingUid && existingUid !== manager) {
+        commit('SET_MANAGER_SNAPSHOT', null);
+      }
+      const subject = managedUid || (state.user && state.user.uid);
+      if (!subject) return state.managerSnapshot;
+      try {
+        const managers = await dispatch('fetchManagersForUser', subject);
+        const found = (managers || []).find(m => (m && (m.uid || m.id || m._key)) === manager);
+        const snap = toManagerSnapshot(found);
+        if (snap) {
+          commit('SET_MANAGER_SNAPSHOT', snap);
+          return snap;
+        }
+      } catch (e) {
+        console.warn('[AUTH] ensureManagerSnapshot failed', e);
+      }
+      return state.managerSnapshot;
+    },
+
     async fetchManagersForUser({ state }, uid) {
       try {
         const resp = await apiClient.get(`/managed/users/${uid}/managers`);
@@ -531,6 +577,12 @@ export default {
     managedUsers: state => state.managedUsers,
     activePrincipalUid: state => state.activePrincipalUid || (state.user && state.user.uid) || null,
     managerUid: state => state.managerUid || (state.user && state.user.uid) || null,
+    managerSnapshot: (state, getters) => {
+      const snap = state.managerSnapshot;
+      const manager = getters.managerUid;
+      if (!snap || !manager || snapshotUid(snap) !== manager) return null;
+      return snap;
+    },
     // Scopes helpers
     scopesSet: state => parseScopes(state.user ? state.user.scopes : ''),
     hasScope: state => (name) => state.user ? hasPermUtil(state.user, name, TokenManager.accessToken) : false,

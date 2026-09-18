@@ -41,6 +41,7 @@
       <div class="thread-layout-wrapper">
         <div 
           class="messages-container" 
+          :class="{ compact: compactThread }"
           ref="messageList" 
           @click="handleContainerClick" 
           :style="{ visibility: isContainerVisible ? 'visible' : 'hidden' }"
@@ -70,6 +71,7 @@
               :message="message"
               :active-parent-id="index > 0 ? displayedMessages[index - 1].id : null"
               :displayMode="'full'"
+              :compact="compactThread"
               :selectable="true"
               :selected="isMessageSelected(message.id)"
               :is-selected="message.id === replyingToMessageId"
@@ -233,7 +235,7 @@ import MessageNode from '../../components/MessageNode.vue';
 import AdaptiveMarker from '../../components/AdaptiveMarker.vue';
 import ReplyBox from '../../components/ReplyBox.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
-import MessageService from '../../services/MessageService.js';
+import MessageService, { LOAD_RADIUS } from '../../services/MessageService.js';
 import { addRecipientsToAncestorsExcludingAuthoredMessages } from '../../utils/recipientPropagation.js';
 import LinksModal from '../../components/modals/LinksModal.vue';
 import RecipientsModal from '../../components/modals/RecipientsModal.vue';
@@ -243,6 +245,7 @@ import ProfileEditModal from '../../components/modals/ProfileEditModal.vue';
 import { useAuthentication } from '../../composables/useAuthentication';
 import ThreadHeader from '../../components/ThreadHeader.vue';
 import LoginButton from '@buttons/LoginButton.vue'
+import { useCompactThread } from '../../composables/useCompactThread.js';
 import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
 
 // import BranchNavigator from '../../components/BranchNavigator.vue';
@@ -259,6 +262,7 @@ const isProfileModalOpen = ref(false);
 
 // Refs
 const messageList = ref(null);
+const replyBox = ref(null);
 let unsubscribeMessages = null;
 const isDeleting = ref(false);
 const recipientsModalRef = ref(null);
@@ -300,6 +304,7 @@ const user = computed(() => store.getters['auth/user']);
 const isAuthReady = computed(() => store.getters['auth/authReady']);
 const canInteract = computed(() => store.getters['auth/canInteract']);
 const isAdmin = computed(() => store.getters['auth/isAdmin']);
+const { compactThread } = useCompactThread();
 
 // User display properties
 const userDisplayName = computed(() => {
@@ -778,7 +783,7 @@ const loadInitialContent = async (targetMessageId) => {
         }
       }
     };
-    await ensureRadiusInStore(targetMessageId, 5);
+    await ensureRadiusInStore(targetMessageId, LOAD_RADIUS);
     
     // Wait for next tick to ensure store updates are processed
     await nextTick();
@@ -1310,7 +1315,7 @@ const loadMoreParents = async () => {
     // Load more messages
     const loadedMessages = await store.dispatch('messages/loadMessageBranchUp', {
       messageId: firstMessageId,
-      depth: 5
+      depth: LOAD_RADIUS
     });
     
     // Re-align branch path so newly loaded parents point down to the previous root
@@ -1370,7 +1375,7 @@ const loadMoreChildren = async () => {
     // Load more messages
     await store.dispatch('messages/loadMessageBranchDown', {
       messageId: lastMessageId,
-      depth: 5
+      depth: LOAD_RADIUS
     });
     
     
@@ -1485,7 +1490,7 @@ watch(() => store.getters['auth/user'], async (newUser, oldUser) => {
     try {
       await store.dispatch('messages/loadMessageRadius', {
         messageId: messageId.value,
-        radius: 5
+        radius: LOAD_RADIUS
       });
       await store.dispatch('messages/prepareBranchPath', messageId.value);
       await nextTick();
@@ -1548,7 +1553,7 @@ const handleLoadStitchBoundary = async (position) => {
       await Promise.all(unloadIds.map(id => store.dispatch('messages/loadMessage', id)));
       
       // For the specific target we are switching to, load its radius so the thread has context
-      await store.dispatch('messages/loadMessageRadius', { messageId: targetId, radius: 5 });
+      await store.dispatch('messages/loadMessageRadius', { messageId: targetId, radius: LOAD_RADIUS });
     } catch (err) {
       console.error(`[ThreadView] Failed to load stitch targets:`, err);
       return;
@@ -1631,6 +1636,7 @@ const handleNavigatorJump = (msgId) => {
   width: 100%;
   overflow: hidden;
   position: relative;
+  justify-content: center;
 }
 
 .messages-container {
@@ -1644,6 +1650,10 @@ const handleNavigatorJump = (msgId) => {
   padding-right: 20px;
   padding-bottom: calc(100px + 25vh); /* Add space at bottom for the reply box plus a screen's worth of scrollable space */
   gap: 20px; /* Consistent gap between elements */
+}
+
+.messages-container.compact {
+  gap: 8px;
   /* Keep scrollbar width stable so layout doesn't appear to shrink/grow
      when branch selection changes the amount of content. */
   overflow-y: scroll;
@@ -1673,7 +1683,12 @@ const handleNavigatorJump = (msgId) => {
 /* On very wide screens, keep the thread content from expanding too much */
 @media (min-width: 1280px) {
   .messages-container {
-    padding-left: calc((100% - 1000px) / 2);
+    flex: 1 1 auto;
+    max-width: 1000px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 20px;
     padding-right: 20px;
   }
 }
@@ -1925,6 +1940,10 @@ const handleNavigatorJump = (msgId) => {
     padding-bottom: calc(120px + 100vh); /* More space for the reply box on mobile plus a screen's worth of scrollable space */
     gap: 12px; /* Reduce space between messages on small screens */
     align-items: stretch; /* Let MessageNodes fill width on small screens */
+  }
+
+  .messages-container.compact {
+    gap: 6px;
   }
   
     .reply-box-container {

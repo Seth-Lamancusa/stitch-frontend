@@ -66,7 +66,8 @@ const emit = defineEmits(['messageClicked', 'selectionChanged', 'createChannel']
 
 const isAllLoaded = ref(false);
 const currentSkip = ref(0);
-const pageSize = ref(15);
+const PAGE_SIZE_BY_MODE = { history: 6 };
+const pageSize = computed(() => PAGE_SIZE_BY_MODE[props.mode] || 15);
 
 // Local state for non-store modes (like saved mode)
 const localMessages = ref([]);
@@ -83,11 +84,15 @@ const localLoadingState = ref(false);
 
 // Track if we've restored from cache (to prevent immediate watch from clearing it)
 const restoredFromCache = ref(false);
+const skipNextActivateRefresh = ref(false);
 
 // Mode classification helpers
 const isLocalMode = computed(() => ['saved', 'public', 'history', 'timeline', 'incoming-links', 'outgoing-links', 'custom'].includes(props.mode));
 const isStoreMode = computed(() => ['inbox', 'admin'].includes(props.mode));
 const requiresAuth = computed(() => ['inbox', 'saved', 'history', 'timeline'].includes(props.mode));
+// Server-ordered recency lists: restore cache for instant paint, then refetch so
+// order matches the API regardless of whether we entered via mount, keep-alive, or back-from-thread.
+const isServerOrderedMode = computed(() => ['history', 'timeline'].includes(props.mode));
 
 // Store loading state - single source of truth for store-based modes only
 const isLoading = computed(() => {
@@ -537,6 +542,112 @@ function getThreadMessages(threadId) {
   return threadMessages;
 }
 
+const getListScrollContainer = () => messageListRef.value?.closest('.main-content') || null;
+
+const getListScrollTop = () => {
+  const container = getListScrollContainer();
+  if (container && container.scrollTop > 0) return container.scrollTop;
+  return store.getters['navigation/getListScrollPosition'](props.mode) || 0;
+};
+
+const restoreListScroll = (position) => {
+  const container = getListScrollContainer();
+  if (container) container.scrollTop = position;
+};
+
+const persistLocalListCache = () => {
+  if (!isLocalMode.value) return;
+  store.dispatch('navigation/saveListCache', {
+    tab: props.mode,
+    messages: localMessages.value,
+    currentSkip: currentSkip.value,
+    isAllLoaded: isAllLoaded.value
+  });
+};
+
+const applyLastDeletedMessage = (messages) => {
+  const deletedId = store.getters['navigation/lastDeletedMessageId'];
+  if (!deletedId) return messages;
+  store.commit('navigation/SET_LAST_DELETED_MESSAGE_ID', null);
+  return (messages || []).filter(m => String(m.id) !== String(deletedId));
+};
+
+const idsPrefixEqual = (a, b) => {
+  if (a.length !== b.length) return false;
+  return a.every((id, i) => id === b[i]);
+};
+
+const buildFetchParams = ({ skip, limit }) => {
+  const fetchParams = { skip, limit };
+  if (props.sourceMessageId) {
+    fetchParams.sourceMessageId = props.sourceMessageId;
+  }
+  if (props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
+    fetchParams.showAllLinks = props.showAllLinks;
+  }
+  return fetchParams;
+};
+
+const applyFetchedPage = (response, { replace }) => {
+  const messages = response?.messages || [];
+  if (isLocalMode.value) {
+    if (replace || currentSkip.value === 0) {
+      localMessages.value = messages;
+    } else {
+      localMessages.value = [...localMessages.value, ...messages];
+    }
+  }
+  isAllLoaded.value = !response?.has_more;
+  if (response?.has_more && messages.length > 0) {
+    currentSkip.value = replace ? messages.length : currentSkip.value + messages.length;
+  } else if (replace) {
+    currentSkip.value = messages.length;
+  }
+  persistLocalListCache();
+};
+
+// Refetch skip=0 for the currently loaded window so History/Timeline order
+// matches the API after returning from a thread (cache is only for instant paint).
+const ensureFreshServerOrderedList = async () => {
+  if (!isServerOrderedMode.value) return;
+  if (requiresAuth.value && !user.value) return;
+  if (isLoading.value) return;
+
+  const hadMessages = localMessages.value.length > 0;
+  const previousPrefix = localMessages.value.slice(0, pageSize.value).map(m => String(m.id));
+  const savedScroll = hadMessages ? getListScrollTop() : 0;
+  const limit = Math.max(pageSize.value, localMessages.value.length || pageSize.value);
+
+  const requestId = ++currentRequestId.value;
+  localLoadingState.value = true;
+  try {
+    const response = await store.dispatch('messages/fetchMessages', {
+      mode: props.mode,
+      ...buildFetchParams({ skip: 0, limit })
+    });
+    if (requestId !== currentRequestId.value) return;
+    if (!response) return;
+
+    applyFetchedPage(response, { replace: true });
+
+    const newPrefix = (response.messages || []).slice(0, pageSize.value).map(m => String(m.id));
+    const prefixUnchanged = hadMessages && idsPrefixEqual(previousPrefix, newPrefix);
+    await nextTick();
+    if (prefixUnchanged && savedScroll > 0) {
+      restoreListScroll(savedScroll);
+      setTimeout(() => restoreListScroll(savedScroll), 50);
+    } else if (hadMessages && !prefixUnchanged) {
+      restoreListScroll(0);
+    }
+  } catch (error) {
+    console.error(`[MessageList] Error refreshing ${props.mode} messages:`, error);
+  } finally {
+    if (requestId === currentRequestId.value) {
+      localLoadingState.value = false;
+    }
+  }
+};
+
 // Abstract fetch function - delegates to store based on mode
 const loadMessages = async () => {
   // Skip loading if already loading or all loaded
@@ -556,53 +667,13 @@ const loadMessages = async () => {
   // Store modes handle their own loading state in the store
   
   try {
-    let response;
-    
-    // Build fetch parameters based on mode
-    const fetchParams = {
-      skip: currentSkip.value,
-      limit: pageSize.value
-    };
-    
-    // Add mode-specific parameters
-    if (props.sourceMessageId) {
-      fetchParams.sourceMessageId = props.sourceMessageId;
-    }
-    
-    // Add showAllLinks parameter for link modes
-    if (props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
-      fetchParams.showAllLinks = props.showAllLinks;
-    }
-    
-    // Delegate to store based on mode
-    response = await store.dispatch('messages/fetchMessages', {
+    const response = await store.dispatch('messages/fetchMessages', {
       mode: props.mode,
-      ...fetchParams
+      ...buildFetchParams({ skip: currentSkip.value, limit: pageSize.value })
     });
 
     if (response) {
-      
-      
-      // Handle response based on mode
-      if (isLocalMode.value) {
-        // For saved, public, and link modes, use local state
-        if (currentSkip.value === 0) {
-          // First load - replace local messages
-          localMessages.value = response.messages || [];
-        } else {
-          // Subsequent loads - append to local messages          
-          localMessages.value = [...localMessages.value, ...(response.messages || [])];
-        }
-      }
-      // Store modes (inbox/admin) are handled by the store action itself
-      
-      // Update pagination state
-      isAllLoaded.value = !response.has_more;
-      if (response.has_more && response.messages && response.messages.length > 0) {
-        currentSkip.value += response.messages.length;
-      }
-      
-      
+      applyFetchedPage(response, { replace: false });
     }
   } catch (error) {
     
@@ -615,63 +686,55 @@ const loadMessages = async () => {
   }
 };
 
-// Initialize component
-onMounted(async () => {
-  console.log(`[MessageList] onMounted - mode: "${props.mode}", isLocalMode: ${isLocalMode.value}`);
-  
-  // For local modes, try to restore from cache first
-  if (isLocalMode.value) {
-    const cached = store.getters['navigation/getListCache'](props.mode);
-    console.log(`[MessageList] Cache check for "${props.mode}":`, cached ? `${cached.messages?.length} messages` : 'no cache');
-    
-    if (cached && cached.messages && cached.messages.length > 0) {
-      console.log(`[MessageList] Restoring from cache - ${cached.messages.length} messages, skip: ${cached.currentSkip}, allLoaded: ${cached.isAllLoaded}`);
-      // Mark that we're restoring from cache (to prevent watch from clearing)
-      restoredFromCache.value = true;
-      
-      // If we navigated here after deleting a message, exclude it from restored list
-      let messagesToRestore = cached.messages;
-      const deletedId = store.getters['navigation/lastDeletedMessageId'];
-      if (deletedId) {
-        store.commit('navigation/SET_LAST_DELETED_MESSAGE_ID', null);
-        messagesToRestore = cached.messages.filter(m => String(m.id) !== String(deletedId));
-        if (messagesToRestore.length !== cached.messages.length) {
-          store.dispatch('navigation/saveListCache', {
-            tab: props.mode,
-            messages: messagesToRestore,
-            currentSkip: cached.currentSkip,
-            isAllLoaded: cached.isAllLoaded
-          });
-        }
-      }
-      
-      // Restore from cache
-      localMessages.value = messagesToRestore;
-      currentSkip.value = cached.currentSkip;
-      isAllLoaded.value = cached.isAllLoaded;
-      
-      // Restore scroll position after DOM has fully rendered
-      // Use double nextTick + small delay to ensure layout is complete
-      // Note: The actual scroll container is .main-content (parent), not .message-list
+const restoreFromListCache = () => {
+  if (!isLocalMode.value) return false;
+  const cached = store.getters['navigation/getListCache'](props.mode);
+  if (!cached?.messages?.length) return false;
+
+  restoredFromCache.value = true;
+  localMessages.value = applyLastDeletedMessage(cached.messages);
+  currentSkip.value = cached.currentSkip;
+  isAllLoaded.value = cached.isAllLoaded;
+  persistLocalListCache();
+
+  if (!isServerOrderedMode.value) {
+    nextTick(() => {
       nextTick(() => {
-        nextTick(() => {
-          setTimeout(() => {
-            const scrollContainer = messageListRef.value?.closest('.main-content');
-            const savedScrollPosition = store.getters['navigation/getListScrollPosition'](props.mode);
-            console.log(`[MessageList] Restoring scroll position: ${savedScrollPosition}, container scrollHeight: ${scrollContainer?.scrollHeight}`);
-            if (savedScrollPosition > 0 && scrollContainer) {
-              scrollContainer.scrollTop = savedScrollPosition;
-              console.log(`[MessageList] Scroll applied, actual scrollTop: ${scrollContainer.scrollTop}`);
-            }
-          }, 50); // Small delay to ensure layout is complete
-        });
+        setTimeout(() => {
+          const savedScrollPosition = store.getters['navigation/getListScrollPosition'](props.mode);
+          if (savedScrollPosition > 0) restoreListScroll(savedScrollPosition);
+        }, 50);
       });
-      return; // Skip fetching since we restored from cache
-    }
+    });
   }
-  
-  console.log(`[MessageList] No cache found, loading messages...`);
-  // Start loading based on mode
+  return true;
+};
+
+const removeDeletedFromLocalList = () => {
+  const deletedId = store.getters['navigation/lastDeletedMessageId'];
+  if (!deletedId) return;
+  if (!isLocalMode.value) {
+    store.commit('navigation/SET_LAST_DELETED_MESSAGE_ID', null);
+    return;
+  }
+  const filtered = applyLastDeletedMessage(localMessages.value);
+  if (filtered.length !== localMessages.value.length) {
+    localMessages.value = filtered;
+    persistLocalListCache();
+  }
+};
+
+onMounted(() => {
+  const restored = restoreFromListCache();
+
+  if (isServerOrderedMode.value) {
+    skipNextActivateRefresh.value = true;
+    ensureFreshServerOrderedList();
+    return;
+  }
+
+  if (restored) return;
+
   if (props.mode === 'admin') {
     loadMessages();
   } else if (requiresAuth.value && !user.value) {
@@ -681,31 +744,13 @@ onMounted(async () => {
   }
 });
 
-// Add: auto-load when component is re-activated via keep-alive (e.g., switching tabs)
 onActivated(() => {
   try {
-    // If we navigated here after deleting a message, remove it from local list and cache
-    const deletedId = store.getters['navigation/lastDeletedMessageId'];
-    if (deletedId) {
-      store.commit('navigation/SET_LAST_DELETED_MESSAGE_ID', null);
-      if (isLocalMode.value) {
-        const before = localMessages.value.length;
-        localMessages.value = localMessages.value.filter(m => String(m.id) !== String(deletedId));
-        if (localMessages.value.length !== before) {
-          // Update list cache so restored state also excludes the deleted message
-          const cached = store.getters['navigation/getListCache'](props.mode);
-          if (cached?.messages?.length) {
-            const filtered = cached.messages.filter(m => String(m.id) !== String(deletedId));
-            store.dispatch('navigation/saveListCache', {
-              tab: props.mode,
-              messages: filtered,
-              currentSkip: cached.currentSkip,
-              isAllLoaded: cached.isAllLoaded
-            });
-          }
-        }
-      }
-      // Store modes use getLoadedMessages which already had the message removed by REMOVE_MESSAGE_CASCADE
+    removeDeletedFromLocalList();
+
+    if (skipNextActivateRefresh.value) {
+      skipNextActivateRefresh.value = false;
+      return;
     }
 
     const hasUser = !!user.value;
@@ -714,9 +759,16 @@ onActivated(() => {
     const cached = store.getters['navigation/getListCache'](props.mode);
     const cacheEmpty = !cached?.messages?.length;
     if (isLocalMode.value && localMessages.value.length > 0 && cacheEmpty) {
-      // List cache was cleared (e.g. logout) while this instance was keep-alive cached
       resetListUiState();
     }
+
+    if (isServerOrderedMode.value) {
+      nextTick(() => {
+        ensureFreshServerOrderedList();
+      });
+      return;
+    }
+
     if (isStoreMode.value && !isLoading.value && !anyMessages && (!needsAuth || hasUser)) {
       nextTick(() => {
         loadMessages();
@@ -726,16 +778,11 @@ onActivated(() => {
         loadMessages();
       });
     }
-    
-    // Restore scroll position when returning to the list
-    // Note: The actual scroll container is .main-content (parent), not .message-list
+
     const savedScrollPosition = store.getters['navigation/getListScrollPosition'](props.mode);
     if (savedScrollPosition > 0 && messageListRef.value) {
       nextTick(() => {
-        const scrollContainer = messageListRef.value?.closest('.main-content');
-        if (scrollContainer) {
-          scrollContainer.scrollTop = savedScrollPosition;
-        }
+        restoreListScroll(savedScrollPosition);
       });
     }
   } catch (e) {
@@ -776,10 +823,23 @@ watch(activePrincipalUid, async (newUid, oldUid) => {
     store.dispatch('navigation/clearListCache');
     // Trigger fresh load respecting mode/auth
     await nextTick();
-    loadMessages();
+    if (isServerOrderedMode.value) {
+      ensureFreshServerOrderedList();
+    } else {
+      loadMessages();
+    }
   } catch (e) {
     // no-op
   }
+});
+
+watch(selectedChannelId, (next, prev) => {
+  if (next === prev) return;
+  if (!isServerOrderedMode.value) return;
+  resetListUiState();
+  nextTick(() => {
+    ensureFreshServerOrderedList();
+  });
 });
 
 // Watch for refresh trigger from navigation store
