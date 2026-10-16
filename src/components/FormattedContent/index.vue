@@ -3,13 +3,13 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import { applyFormatters } from './formatters';
+import { contentText } from '../../utils/messageCompat.js';
 
 const props = defineProps({
   content: {
-    type: String,
-    required: true,
+    type: [String, Object, Array],
     default: ''
   },
   // Optional configuration object for formatters
@@ -27,19 +27,20 @@ watch(() => props.content, processContent, { immediate: true });
 
 // Process the content through the formatting pipeline
 async function processContent() {
-  if (!props.content || props.content.trim() === '') {
+  const text = contentText(props.content);
+  if (!text || text.trim() === '') {
     renderedContent.value = '';
     return;
   }
   
   try {
     // Apply all registered formatters to the content
-    const formattedContent = await applyFormatters(props.content, props.options);
+    const formattedContent = await applyFormatters(text, props.options);
     renderedContent.value = formattedContent;
   } catch (error) {
     console.error('Error formatting content:', error);
     // Fallback to sanitized plain text if formatting fails
-    renderedContent.value = escapeHtml(props.content);
+    renderedContent.value = escapeHtml(text);
   }
 }
 

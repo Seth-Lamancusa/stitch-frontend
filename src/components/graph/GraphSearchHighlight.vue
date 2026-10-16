@@ -115,6 +115,8 @@
 </template>
 
 <script>
+import { contentText } from '../../utils/messageCompat.js';
+
 export default {
   name: 'GraphSearchHighlight',
   props: {
@@ -254,8 +256,9 @@ export default {
     },
     
     getContentPreview(content) {
-      if (!content) return 'No content';
-      const preview = content.replace(/\s+/g, ' ').trim();
+      const text = contentText(content);
+      if (!text) return 'No content';
+      const preview = text.replace(/\s+/g, ' ').trim();
       return preview.length > 60 ? preview.substring(0, 60) + '...' : preview;
     }
   }

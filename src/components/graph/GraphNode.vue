@@ -116,6 +116,7 @@
 
 <script>
 import { format } from 'date-fns';
+import { contentText } from '../../utils/messageCompat.js';
 
 export default {
   name: 'GraphNode',
@@ -286,7 +287,7 @@ export default {
     },
     
     rawContent() {
-      return (this.message.content || '').replace(/\s+/g, ' ').trim();
+      return contentText(this.message.content).replace(/\s+/g, ' ').trim();
     },
     truncatedContent() {
       const limit = 250;

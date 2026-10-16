@@ -4,6 +4,10 @@ console.log('[MOCK] mockMessages loaded, count:', Object.keys(mockMessages).leng
 import UserService from '../../services/UserService'
 import WebSocketService from '../../services/ws/WebSocketService'
 import GraphLayoutService from '../../services/GraphLayoutService.js'
+import { contentText } from '../../utils/messageCompat.js'
+
+// Latest inbox list fetch. An older response must not commit after a newer one.
+let inboxFetchSerial = 0
 
 // Helper function to check if a message is a descendant of another
 function isDescendantOf(state, messageId, ancestorId) {
@@ -26,6 +30,18 @@ function isDescendantOf(state, messageId, ancestorId) {
   }
   
   return false;
+}
+
+function outgoingChildPool(message) {
+  if (!message) return [];
+  return [...new Set([...(message.child_ids || []), ...(message.stitch_child_ids || [])])];
+}
+
+// default_outgoing initializes branch_child only when it names a current outgoing child.
+function explicitDefaultOutgoing(message) {
+  const id = message && message.default_outgoing;
+  if (!id) return null;
+  return outgoingChildPool(message).includes(id) ? id : null;
 }
 
 // Helper: unread only when the user is a recipient and is_read is explicitly false.
@@ -168,9 +184,12 @@ export default {
           timestamp: nextTimestamp,
         };
         
-        // Default branch_child - always use last child (furthest right) in complete list
+        // default_outgoing fills branch_child only when no selection exists yet.
         const hasChildren = allPotentialChildren.length > 0;
-        if (hasChildren && currentBranchChild === undefined) {
+        const explicitDefault = explicitDefaultOutgoing(mergedMessage);
+        if (hasChildren && currentBranchChild === undefined && explicitDefault) {
+          mergedMessage.branch_child = explicitDefault;
+        } else if (hasChildren && currentBranchChild === undefined) {
           // If reply_order is set, use last child from ordered list
           if (mergedMessage.reply_order && Array.isArray(mergedMessage.reply_order) && mergedMessage.reply_order.length > 0) {
             // Get ordered child IDs (respects reply_order)
@@ -207,6 +226,8 @@ export default {
           const isBranchChildValid = allPotentialChildren.includes(currentBranchChild);
           if (isBranchChildValid) {
             mergedMessage.branch_child = currentBranchChild;
+          } else if (explicitDefault) {
+            mergedMessage.branch_child = explicitDefault;
           } else {
             // Re-select branch_child respecting pool
             const childMessages = allPotentialChildren
@@ -225,10 +246,13 @@ export default {
         state.messages[message.id] = mergedMessage;
         
       } else {
-        // New message, not in store yet
-        // Default branch_child - always use last child (furthest right) in complete list
+        // New message, not in store yet.
+        // default_outgoing wins when it names a current outgoing child; otherwise the previous fallback.
         const hasChildren = message.child_ids && message.child_ids.length > 0;
-        if (hasChildren) {
+        const explicitDefault = explicitDefaultOutgoing(message);
+        if (explicitDefault) {
+          message.branch_child = explicitDefault;
+        } else if (hasChildren) {
           if (message.reply_order && Array.isArray(message.reply_order) && message.reply_order.length > 0) {
             // Use last child from ordered list (last in complete merged list)
             const orderMap = new Map();
@@ -606,8 +630,9 @@ export default {
                                messageData.author_user_tag ||
                                'Someone';
 
-            const contentPreview = messageData.content
-              ? (messageData.content.length > 60 ? messageData.content.substring(0, 60) + '...' : messageData.content)
+            const previewText = contentText(messageData.content)
+            const contentPreview = previewText
+              ? (previewText.length > 60 ? previewText.substring(0, 60) + '...' : previewText)
               : 'New message';
             dispatch('ui/setMessageNotification', {
               id: messageData.id,
@@ -1083,18 +1108,20 @@ export default {
         commit('REMOVE_MESSAGE_CASCADE', messageId);
         
         // If this was the parent's branch_child, set a new one
-        if (wasParentBranchChild && parentMessage && parentMessage.child_ids && parentMessage.child_ids.length > 0) {
+        if (wasParentBranchChild && parentMessage) {
           // Get updated parent after REMOVE_MESSAGE_CASCADE might have modified it
           const updatedParent = state.messages[parentId];
-          
-          // If parent has remaining children, set the last one as branch_child
-          if (updatedParent && updatedParent.child_ids && updatedParent.child_ids.length > 0) {
-            // Use getChildIds to respect reply_order
+          const remaining = outgoingChildPool(updatedParent).filter(id => id !== messageId);
+
+          if (updatedParent && remaining.length > 0) {
+            const explicitDefault = explicitDefaultOutgoing(updatedParent);
             const orderedChildIds = getters.getChildIds(parentId);
-            const newBranchChildId = orderedChildIds.length > 0 ? 
-              orderedChildIds[orderedChildIds.length - 1] : 
-              updatedParent.child_ids[updatedParent.child_ids.length - 1]; // Fallback to array order
-            
+            const newBranchChildId = (explicitDefault && explicitDefault !== messageId)
+              ? explicitDefault
+              : (orderedChildIds.length > 0
+                ? orderedChildIds[orderedChildIds.length - 1]
+                : remaining[remaining.length - 1]);
+
             commit('SET_BRANCH_CHILD', { 
               messageId: parentId, 
               childId: newBranchChildId
@@ -1165,12 +1192,19 @@ export default {
         });
         
         let response;
+        let inboxFetchGen = null;
         
         // Route to appropriate service based on mode
         switch(mode) {
-          case 'inbox':
-            response = await UserService.fetchUserMessages(limit, skip, effectiveChannelId);
+          case 'inbox': {
+            inboxFetchGen = ++inboxFetchSerial;
+            const unreadOnly = rootState.navigation?.inboxUnreadOnly === true;
+            response = await UserService.fetchUserMessages(limit, skip, effectiveChannelId, unreadOnly);
+            if (inboxFetchGen !== inboxFetchSerial) {
+              return { messages: [], has_more: false, stale: true };
+            }
             break;
+          }
           
           case 'public':
             // Import MessageService when needed
@@ -1254,11 +1288,17 @@ export default {
         
         // Standard behavior: commit all fetched messages to store so they are available in the cache
         // for any view (Graph, Links, etc.)
-        if (messages.length > 0) {
-          if (mode === 'inbox' && skip === 0) {
-            // Inbox tab specifically replaces the whole list on first page load
-            await this.dispatch('messages/clearCache');
+        if (mode === 'inbox' && inboxFetchGen !== inboxFetchSerial) {
+          return { messages: [], has_more: false, stale: true };
+        }
+        if (mode === 'inbox' && skip === 0) {
+          // First page replaces the list, including when the filtered result is empty.
+          await this.dispatch('messages/clearCache');
+          if (inboxFetchGen !== inboxFetchSerial) {
+            return { messages: [], has_more: false, stale: true };
           }
+        }
+        if (messages.length > 0) {
           // Loop through and commit individually to ensure full merge logic runs
           messages.forEach(m => commit('SET_MESSAGE', m));
           console.log(`[Store] ${mode} fetch committed ${messages.length} messages. Store total: ${Object.keys(state.messages).length}`);
@@ -1841,65 +1881,35 @@ export default {
     getChildIds: state => parentId => {
       const message = state.messages[parentId];
       if (!message) return [];
-      
+
       const childIds = message.child_ids || [];
       const stitchChildIds = message.stitch_child_ids || [];
-      
-      let orderedReplies = [...childIds];
-      
-      // If reply_order is set, use it to order child_ids
-      if (message.reply_order && Array.isArray(message.reply_order) && message.reply_order.length > 0) {
-        // Create a map for quick lookup
-        const orderMap = new Map();
-        message.reply_order.forEach((id, index) => {
-          orderMap.set(id, index);
-        });
-        
-        // Sort: items not in reply_order first (by timestamp), then items in reply_order (by their order)
-        orderedReplies = [...childIds].sort((a, b) => {
-          const aInOrder = orderMap.has(a);
-          const bInOrder = orderMap.has(b);
-          
-          if (aInOrder && bInOrder) {
-            // Both in order, use reply_order position
-            return orderMap.get(a) - orderMap.get(b);
-          } else if (aInOrder && !bInOrder) {
-            // a in order, b not - b comes first (unordered first)
-            return 1;
-          } else if (!aInOrder && bInOrder) {
-            // b in order, a not - a comes first (unordered first)
-            return -1;
-          } else {
-            // Neither in order, sort by timestamp
-            const msgA = state.messages[a];
-            const msgB = state.messages[b];
-            if (msgA && msgB) {
-              return new Date(msgA.timestamp) - new Date(msgB.timestamp);
-            }
-            return 0;
-          }
-        });
-      } else {
-        // Default sort by timestamp if possible
-        orderedReplies.sort((a, b) => {
-          const msgA = state.messages[a];
-          const msgB = state.messages[b];
-          if (msgA && msgB) {
-            return new Date(msgA.timestamp) - new Date(msgB.timestamp);
-          }
-          return 0;
-        });
+      const replySet = new Set(childIds);
+      const order = Array.isArray(message.reply_order) ? message.reply_order : [];
+      const orderSet = new Set(order);
+
+      const byTime = (a, b) => {
+        const msgA = state.messages[a];
+        const msgB = state.messages[b];
+        if (msgA && msgB) {
+          return new Date(msgA.timestamp) - new Date(msgB.timestamp);
+        }
+        return 0;
+      };
+
+      // Frontend placement: unordered replies, then the partial order, then unordered stitches.
+      const unorderedReplies = childIds.filter(id => !orderSet.has(id)).sort(byTime);
+      const ordered = [];
+      const seen = new Set();
+      for (const id of order) {
+        if (seen.has(id)) continue;
+        if (replySet.has(id) || stitchChildIds.includes(id)) {
+          seen.add(id);
+          ordered.push(id);
+        }
       }
-      
-      const result = [...orderedReplies, ...stitchChildIds];
-      if (parentId.startsWith('msg_')) {
-        console.log(`[SIBLING DETECTION DEBUG][store] getChildIds for ${parentId}:`, {
-          replies: orderedReplies,
-          stitches: stitchChildIds,
-          final: result
-        });
-      }
-      return result;
+      const unorderedStitches = stitchChildIds.filter(id => !orderSet.has(id) && !replySet.has(id));
+      return [...unorderedReplies, ...ordered, ...unorderedStitches];
     },
     
     getParentId: state => childId => {

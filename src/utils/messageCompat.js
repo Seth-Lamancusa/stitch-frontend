@@ -63,6 +63,40 @@ export function isAuthorBot(message) {
 }
 
 /**
+ * Readable text for a message `content` value.
+ * Normal messages are already strings. Function messages are one dictionary.
+ * @param {*} content
+ * @returns {string}
+ */
+export function contentText(content) {
+  if (content == null) return '';
+  if (typeof content === 'string') return content;
+  if (typeof content === 'object') {
+    const name = content.name;
+    const parameters = content.parameters;
+    if (typeof name === 'string' && Array.isArray(parameters)) {
+      const args = parameters.map((param) => JSON.stringify(param)).join(', ');
+      return `${name}(${args})`;
+    }
+    if (Object.prototype.hasOwnProperty.call(content, 'output')) {
+      const output = content.output;
+      if (typeof output === 'string') return output;
+      try {
+        return JSON.stringify(output);
+      } catch {
+        return String(output);
+      }
+    }
+    try {
+      return JSON.stringify(content);
+    } catch {
+      return String(content);
+    }
+  }
+  return String(content);
+}
+
+/**
  * Normalize a message object to have a consistent shape for UI components
  * This is useful when components expect one format but might receive mixed data
  * @param {Object} message - The raw message object

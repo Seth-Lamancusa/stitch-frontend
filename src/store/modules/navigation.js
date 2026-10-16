@@ -75,6 +75,10 @@ export default {
     refreshTrigger: 0, // Timestamp that increments when refresh is requested
     // Selected channel ID for channels tab
     selectedChannelId: null, // Channel ID selected in channels view
+    // Inbox list limited to threads that still have unread messages
+    inboxUnreadOnly: false,
+    // Bumped when a live notification should reload the unread inbox
+    inboxLiveRefresh: 0,
     // When set, message list should remove this id from local list/cache (used after delete + redirect)
     lastDeletedMessageId: null,
 
@@ -361,6 +365,14 @@ export default {
     SET_SELECTED_CHANNEL_ID(state, channelId) {
       state.selectedChannelId = channelId;
     },
+
+    SET_INBOX_UNREAD_ONLY(state, unreadOnly) {
+      state.inboxUnreadOnly = unreadOnly === true;
+    },
+
+    BUMP_INBOX_LIVE_REFRESH(state) {
+      state.inboxLiveRefresh += 1;
+    },
     
     SET_LAST_DELETED_MESSAGE_ID(state, id) {
       state.lastDeletedMessageId = id;
@@ -431,6 +443,8 @@ export default {
     
     // Channel selection getter
     selectedChannelId: state => state.selectedChannelId,
+    inboxUnreadOnly: state => state.inboxUnreadOnly === true,
+    inboxLiveRefresh: state => state.inboxLiveRefresh,
     
     // Selection mode getters
     isSelectionMode: state => state.selectionMode,

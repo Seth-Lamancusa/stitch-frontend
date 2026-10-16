@@ -41,8 +41,7 @@
 <script setup>
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import CompactActionButton from './CompactActionButton.vue'
-
-const VIEWPORT_PAD = 8
+import { clampMenuToMessageList, messageListClipBounds } from '../../utils/menuPlacement.js'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -73,18 +72,23 @@ const placeMoreMenu = () => {
   const menu = moreMenuRef.value
   if (!toolbar || !menu) return
 
-  menu.style.maxHeight = ''
-  menuSide.value = 'above'
-
+  const bounds = messageListClipBounds(toolbar)
   const toolbarRect = toolbar.getBoundingClientRect()
-  const spaceAbove = toolbarRect.top - VIEWPORT_PAD
-  const spaceBelow = window.innerHeight - VIEWPORT_PAD - toolbarRect.bottom
+  const spaceAbove = toolbarRect.top - bounds.top
+  const spaceBelow = bounds.bottom - toolbarRect.bottom
   const needed = menu.scrollHeight
   const openAbove = needed <= spaceAbove || spaceAbove >= spaceBelow
-  const available = openAbove ? spaceAbove : spaceBelow
-
   menuSide.value = openAbove ? 'above' : 'below'
-  menu.style.maxHeight = needed > available ? `${Math.max(available, 0)}px` : ''
+
+  requestAnimationFrame(() => {
+    const menuEl = moreMenuRef.value
+    const anchor = toolbarRef.value
+    if (!menuEl || !anchor || !moreOpen.value) return
+    clampMenuToMessageList(menuEl, anchor, {
+      openingBelow: menuSide.value === 'below',
+      gap: 0
+    })
+  })
 }
 
 const onDocumentPointerDown = (event) => {

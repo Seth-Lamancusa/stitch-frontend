@@ -176,7 +176,7 @@
         <div v-if="message.subject" class="message-subject">{{ message.subject }}</div>
         <formatted-content
           v-if="displayMode === 'full'"
-          :content="message.content"
+          :content="displayContent"
           :options="formattedContentOptions"
         />
         <div v-else-if="!message.subject" class="plaintext-content">{{ truncatedContent }}</div>
@@ -219,6 +219,7 @@ import UserDisplay from './common/UserDisplay.vue';
 import { memoize } from 'lodash-es';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 import ChannelsService from '../services/ChannelsService.js';
+import { contentText } from '../utils/messageCompat.js';
 
 const props = defineProps({
   message: {
@@ -427,8 +428,11 @@ const stripMarkdown = (text) => {
     .trim();
 };
 
+const displayContent = computed(() => contentText(props.message?.content));
+
 const truncatedContent = computed(() => {
-  if (!props.message.content) return '';
+  const text = displayContent.value;
+  if (!text) return '';
 
   return memoize((content) => {
     let processedContent = content;
@@ -436,7 +440,7 @@ const truncatedContent = computed(() => {
       processedContent = stripMarkdown(content);
     }
     return processedContent;
-  })(props.message.content);
+  })(text);
 });
 
 const renderTagSet = computed(() => {

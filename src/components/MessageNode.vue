@@ -113,6 +113,11 @@
         
         <!-- Datetime on the right -->
         <div v-if="!inListView" class="header-row-right">
+          <span
+            v-if="isDefaultOutgoingChild"
+            class="default-outgoing-mark"
+            title="Default outgoing"
+          >🔗</span>
           <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
           <template v-if="isCompactThread">
             <button 
@@ -275,7 +280,7 @@
         </div>
         <formatted-content 
           v-if="displayMode === 'full'" 
-          :content="message.content" 
+          :content="displayContent" 
           :options="formattedContentOptions"
         />
         <div v-else-if="!message.subject" class="plaintext-content">{{ truncatedContent }}</div>
@@ -402,6 +407,7 @@
           :is-visible="showReplyOrderModal"
           :message-id="message?.id"
           :child-ids="message?.child_ids || []"
+          :stitch-child-ids="message?.stitch_child_ids || []"
           :existing-reply-order="message?.reply_order || []"
           @close="closeReplyOrderModal"
           @update="handleReplyOrderUpdate"
@@ -515,6 +521,8 @@ import { memoize } from 'lodash-es';
 import MessageService, { LOAD_RADIUS } from '../services/MessageService.js';
 import UserService from '../services/UserService.js';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
+import { contentText } from '../utils/messageCompat.js';
+import { clampMenuToMessageList, messageListClipBounds } from '../utils/menuPlacement.js';
 
 export default {
   name: 'MessageNode',
@@ -685,6 +693,46 @@ export default {
     const refreshReplies = () => {
       emit('refreshReplies', props.message.id);
     };
+
+    const columnParentId = () => (
+      props.activeParentId !== null && props.activeParentId !== undefined
+        ? props.activeParentId
+        : props.message.parent_id
+    );
+
+    const columnParent = () => {
+      const parentId = columnParentId();
+      if (!parentId) return null;
+      return store.getters['messages/getMessage'](parentId);
+    };
+
+    const isShownDefaultOutgoing = () => {
+      const parent = columnParent();
+      return !!(parent && parent.default_outgoing && parent.default_outgoing === props.message.id);
+    };
+
+    const toggleDefaultOutgoing = async () => {
+      const parentId = columnParentId();
+      const parent = columnParent();
+      if (!parentId || !parent) return;
+      const next = isShownDefaultOutgoing() ? null : props.message.id;
+      try {
+        const response = await MessageService.updateDefaultOutgoing(parentId, next);
+        if (response?.data?.id) {
+          const updated = response.data;
+          const existing = store.getters['messages/getMessage'](parentId) || {};
+          if (updated.parent_id === undefined) updated.parent_id = existing.parent_id;
+          if (!Array.isArray(updated.child_ids)) updated.child_ids = existing.child_ids || [];
+          if (!Array.isArray(updated.stitch_child_ids)) updated.stitch_child_ids = existing.stitch_child_ids || [];
+          store.commit('messages/SET_MESSAGE', updated);
+        }
+      } catch (e) {
+        console.error('[MessageNode] Failed to update default outgoing', e);
+        store.commit('ui/SET_ERROR', 'Failed to update default outgoing');
+      }
+    };
+
+    const isDefaultOutgoingChild = computed(() => isShownDefaultOutgoing());
     
     // Define unified message actions with standardized attributes
     const messageActions = computed(() => [
@@ -801,11 +849,30 @@ export default {
         adminOnly: false,
         handler: openReplyOrderModal,
         condition: () => {
-          // Only show if user can update reply order and message has replies
+          // Only show if user can update reply order and the message has outgoing children
+          const outgoing = [
+            ...(props.message.child_ids || []),
+            ...(props.message.stitch_child_ids || []),
+          ];
           return !props.inListView && 
                  store.getters['auth/canUpdateReplyOrder'](props.message) && 
-                 props.message.child_ids && 
-                 props.message.child_ids.length > 0;
+                 outgoing.length > 0;
+        }
+      },
+      {
+        id: 'set-default-outgoing',
+        emoji: '🔗',
+        text: isShownDefaultOutgoing() ? 'Clear default outgoing' : 'Set default outgoing',
+        desktopVisible: false,
+        mobileVisible: false,
+        adminOnly: false,
+        handler: toggleDefaultOutgoing,
+        condition: () => {
+          if (props.inListView) return false;
+          const parent = columnParent();
+          if (!parent || !store.getters['auth/canUpdateReplyOrder'](parent)) return false;
+          const outgoing = [...(parent.child_ids || []), ...(parent.stitch_child_ids || [])];
+          return outgoing.includes(props.message.id);
         }
       },
       {
@@ -933,10 +1000,12 @@ export default {
     
     // Collapse state
     const isCollapsed = ref(false);
+    const displayContent = computed(() => contentText(props.message?.content));
+
     const canCollapse = computed(() => {
       // Enable collapse for messages with content longer than a threshold
-      const contentLength = props.message?.content?.length || 0;
-      return contentLength > 200 || (props.message?.content?.includes('\n'));
+      const text = displayContent.value;
+      return text.length > 200 || text.includes('\n');
     });
     
     // Toggle collapse with scroll-follow animation
@@ -1618,7 +1687,7 @@ export default {
     const copyMessageText = () => {
       try {
         // Combine header with the message content
-        const fullText = `${props.message.content || ''}`;
+        const fullText = displayContent.value;
         
         navigator.clipboard.writeText(fullText)
           .then(() => {
@@ -1690,7 +1759,8 @@ export default {
     };
     
     const truncatedContent = computed(() => {
-      if (!props.message.content) return '';
+      const text = displayContent.value;
+      if (!text) return '';
       
       // Memoize the truncation logic based on the content
       return memoize((content) => {
@@ -1704,7 +1774,7 @@ export default {
         // For preview mode, return the full processed content
         // Visual truncation is handled by CSS line-clamp
         return processedContent;
-      })(props.message.content);
+      })(text);
     });
 
     const renderTagSet = computed(() => {
@@ -1842,26 +1912,37 @@ export default {
           // Measure the container (button area) position, not the floating bar
           // This way we get the stable position before CSS changes
           const containerRect = mobileActionControlsRef.value.getBoundingClientRect();
-          const viewportTop = 0;
+          const bounds = messageListClipBounds(mobileActionControlsRef.value);
           
-          // Get the floating bar height if available, otherwise estimate
+          // Content height, capped like the stylesheet max-height, so a clamp
+          // doesn't change the decision on the next pass.
+          const viewportMax = window.innerHeight - 60;
           let barHeight = 313; // Default estimate
           if (floatingActionBarRef.value) {
-            const barRect = floatingActionBarRef.value.getBoundingClientRect();
-            if (barRect.height > 0) {
-              barHeight = barRect.height;
-            }
+            const fullHeight = floatingActionBarRef.value.scrollHeight;
+            if (fullHeight > 0) barHeight = Math.min(fullHeight, viewportMax);
           }
           
-          // Calculate where the bar WOULD be positioned above the container
-          const barTopIfAbove = containerRect.top - barHeight - 8; // 8px gap
-          const spaceAbove = containerRect.top - viewportTop;
+          // The bar sits 46px off the controls. Keep that inside the message list,
+          // below the nav, instead of the raw viewport top.
+          const barTopIfAbove = containerRect.bottom - 46 - barHeight;
+          const spaceAbove = containerRect.top - bounds.top;
           const spaceNeeded = barHeight + 8;
           
-          // If the bar would overflow the top, position it below the button instead
-          const wouldOverflowTop = barTopIfAbove < viewportTop || spaceAbove < spaceNeeded;
+          const wouldOverflowTop = barTopIfAbove < bounds.top || spaceAbove < spaceNeeded;
           
           mobileMenuPositionBelow.value = wouldOverflowTop;
+          if (floatingActionBarRef.value) {
+            clampMenuToMessageList(floatingActionBarRef.value, mobileActionControlsRef.value, {
+              openingBelow: mobileMenuPositionBelow.value,
+              viewportMax,
+              naturalTopFor: (anchorRect, height) => (
+                mobileMenuPositionBelow.value
+                  ? anchorRect.top + 46
+                  : anchorRect.bottom - 46 - height
+              )
+            });
+          }
         } catch (e) {
           mobileMenuPositionBelow.value = false;
         }
@@ -1883,24 +1964,25 @@ export default {
       const updatePosition = () => {
         try {
           const containerRect = desktopMenuContainerRef.value.getBoundingClientRect();
-          const viewportHeight = window.innerHeight;
-          const viewportTop = 0;
+          const bounds = messageListClipBounds(desktopMenuContainerRef.value);
           
-          // Get actual menu height if available, otherwise estimate
+          // Use the menu's content height, capped the same way the stylesheet
+          // max-height is. Reading the clamped box height would make the next
+          // pass think a too-tall menu suddenly fits.
+          const viewportMax = window.innerHeight - 20;
           let menuHeight = 200; // Default estimate
           if (desktopActionMenuRef.value) {
-            const menuRect = desktopActionMenuRef.value.getBoundingClientRect();
-            if (menuRect.height > 0) {
-              menuHeight = menuRect.height;
-            }
+            const fullHeight = desktopActionMenuRef.value.scrollHeight;
+            if (fullHeight > 0) menuHeight = Math.min(fullHeight, viewportMax);
           }
           
-          // Calculate available space above and below
-          const spaceAbove = containerRect.top - viewportTop;
-          const spaceBelow = viewportHeight - containerRect.bottom;
+          // Space inside the message list, not the raw viewport. The nav sits
+          // over the top of the viewport, so a viewport check still lets the
+          // menu slide behind it.
+          const spaceAbove = containerRect.top - bounds.top;
+          const spaceBelow = bounds.bottom - containerRect.bottom;
           const spaceNeeded = menuHeight + 8; // 8px gap
           
-          // Check if menu would overflow the top of the viewport
           const wouldOverflowTop = spaceAbove < spaceNeeded;
           const wouldOverflowBottom = spaceBelow < spaceNeeded;
           
@@ -1910,6 +1992,14 @@ export default {
              menuPositionBelow.value = spaceBelow > spaceAbove;
           } else {
              menuPositionBelow.value = wouldOverflowTop;
+          }
+
+          if (desktopActionMenuRef.value) {
+            clampMenuToMessageList(desktopActionMenuRef.value, desktopMenuContainerRef.value, {
+              openingBelow: menuPositionBelow.value,
+              gap: 8,
+              viewportMax
+            });
           }
         } catch (e) {
           // Fallback to default (above) if calculation fails
@@ -2111,6 +2201,7 @@ export default {
     
     return {
       activeParentId: derivedParentId,
+      isDefaultOutgoingChild,
       shouldShowLinkSwitcher,
       handleSwitchParent,
       isCentered,
@@ -2183,6 +2274,7 @@ export default {
       copyMessageJson,
       copyMessageText,
       truncatedContent,
+      displayContent,
       formattedContentOptions,
       // isReformatting,
       // handleReformat,
@@ -2548,6 +2640,11 @@ export default {
   align-items: center;
   gap: var(--space-xs, 6px);
   flex-shrink: 0;
+}
+
+.default-outgoing-mark {
+  font-size: 14px;
+  line-height: 1;
 }
 
 .author-row-left {

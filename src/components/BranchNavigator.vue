@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
+import { contentText } from '../utils/messageCompat.js';
 
 const props = defineProps({
   messages: { type: Array, required: true },
@@ -45,8 +46,9 @@ const getAuthorColor = (message) => {
 };
 
 const getSnippet = (content) => {
-  if (!content) return '';
-  return content.length > 50 ? content.substring(0, 50) + '...' : content;
+  const text = contentText(content);
+  if (!text) return '';
+  return text.length > 50 ? text.substring(0, 50) + '...' : text;
 };
 
 // TRACK POSITIONING

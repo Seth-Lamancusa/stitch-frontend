@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Function messages — UI mock</title>
+  <style>
+    :root {
+      --color-primary: #f5f5f5;
+      --color-error: #dc3545;
+      --color-background: #121212;
+      --color-surface: #1e1e1e;
+      --color-border: #333333;
+      --color-border-hover: #555555;
+      --color-text: #e0e0e0;
+      --color-text-secondary: #aaaaaa;
+      --color-text-inverse: #121212;
+      --color-hover-overlay: rgba(255, 255, 255, 0.05);
+      --color-surface-hover: rgba(255, 255, 255, 0.06);
+      --color-code-background: #252526;
+      --color-code-text: #d4d4d4;
+      --radius-xs: 4px;
+      --radius-sm: 0.25rem;
+      --radius-md: 0.5rem;
+      --font-family-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+      --font-family-code: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Courier New', monospace;
+      --font-size-xs: 0.75rem;
+      --font-size-sm: 0.875rem;
+      --transition-fast: 0.15s ease;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      background: var(--color-background);
+      color: var(--color-text);
+      font-family: var(--font-family-base);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    body {
+      min-height: 100vh;
+      padding: 28px 20px 80px;
+    }
+
+    .page-note {
+      max-width: 800px;
+      margin: 0 auto 18px;
+      color: var(--color-text-secondary);
+      font-size: var(--font-size-xs);
+      letter-spacing: 0.02em;
+    }
+
+    .thread {
+      max-width: 800px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Regular message card — simplified MessageNode */
+    .message-content {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 12px 16px;
+    }
+
+    .message-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .author-info {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .user-display {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0.35rem;
+      min-width: 0;
+    }
+
+    .user-display__name {
+      font-weight: 600;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .user-display__name--current {
+      font-weight: 800;
+      color: var(--color-primary);
+    }
+
+    .user-display__name--imported {
+      font-style: italic;
+      font-weight: 500;
+    }
+
+    .user-display__tag {
+      color: var(--color-text-secondary);
+      font-size: var(--font-size-xs);
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .user-display__badge {
+      font-size: 0.85em;
+      line-height: 1;
+      cursor: help;
+    }
+
+    .imported-badge {
+      font-size: 0.75rem;
+      color: var(--color-text-secondary);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--color-hover-overlay);
+      padding: 1px 6px;
+      border-radius: 4px;
+      margin-left: 4px;
+      cursor: help;
+    }
+
+    .imported-badge .user-display__name {
+      font-size: 0.8rem;
+      font-weight: 500;
+      font-style: normal;
+    }
+
+    .import-source-link {
+      text-decoration: none;
+      font-size: 0.8rem;
+      opacity: 0.7;
+    }
+
+    .import-source-link:hover { opacity: 1; }
+
+    .message-timestamp {
+      font-size: calc(var(--font-size-xs) - 1px);
+      color: var(--color-text-secondary);
+      white-space: nowrap;
+      line-height: 1.2;
+    }
+
+    .message-body {
+      margin-bottom: 12px;
+      font-size: 0.9rem;
+      color: #ffffff;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .message-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .reply-count {
+      font-size: calc(var(--font-size-xs) - 1px);
+      color: var(--color-text-secondary);
+      white-space: nowrap;
+    }
+
+    .footer-right-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .message-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .action-button,
+    .desktop-menu-button {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-xs);
+      padding: 5px 8px;
+      font-size: var(--font-size-xs);
+      font-family: inherit;
+      cursor: pointer;
+      color: var(--color-text-secondary);
+      transition: all var(--transition-fast);
+    }
+
+    .action-button:hover,
+    .desktop-menu-button:hover {
+      background: var(--color-surface-hover);
+      border-color: var(--color-border-hover);
+      color: var(--color-primary);
+    }
+
+    .action-emoji {
+      font-size: var(--font-size-sm);
+      line-height: 1;
+    }
+
+    .desktop-menu-container { position: relative; }
+
+    .desktop-action-menu {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      z-index: 20;
+      min-width: 160px;
+      overflow: hidden;
+    }
+
+    .desktop-action-menu.menu-above {
+      top: auto;
+      bottom: calc(100% + 8px);
+    }
+
+    .desktop-menu-button {
+      width: 100%;
+      justify-content: flex-start;
+      border: none;
+      border-radius: 0;
+      padding: 8px 12px;
+    }
+
+    .desktop-menu-button:hover {
+      background: var(--color-hover-overlay);
+      border: none;
+      color: var(--color-text);
+    }
+
+    .menu-open { position: relative; z-index: 30; }
+
+    .delete-icon-button {
+      background: none;
+      border: none;
+      padding: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--transition-fast);
+      border-radius: var(--radius-xs);
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .delete-icon-button:hover {
+      background: #fff0f0;
+      transform: scale(1.1);
+    }
+
+    .delete-icon {
+      width: 16px;
+      height: 16px;
+      fill: var(--color-error);
+    }
+
+    .delete-icon-button:hover .delete-icon { fill: #d32f2f; }
+
+    /* Function row — a line, not a card */
+    .fn {
+      padding: 2px 16px;
+    }
+
+    .fn-line {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 28px;
+      border-radius: 6px;
+    }
+
+    .fn-line:hover { background: rgba(255, 255, 255, 0.04); }
+
+    .fn-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      background: none;
+      border: none;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+      padding: 2px 0;
+      text-align: left;
+    }
+
+    .chevron {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      color: var(--color-text-secondary);
+      transition: transform var(--transition-fast);
+    }
+
+    .fn.open .chevron { transform: rotate(90deg); }
+
+    .fn-label {
+      font-size: 0.9rem;
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .fn-kind { color: var(--color-text-secondary); }
+    .fn-name { color: var(--color-text); }
+
+    .fn-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .fn-code {
+      margin: 8px 0 2px 20px;
+      background: var(--color-code-background);
+      border: 1px solid var(--color-border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-family: var(--font-family-code);
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--color-code-text);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      max-height: calc(1.45em * 6 + 20px);
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .fn-code:hover { border-color: var(--color-border-hover); }
+
+    .fn-code.fades {
+      -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 2.6em), transparent 100%);
+      mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 2.6em), transparent 100%);
+    }
+
+    /* Full-text modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+      z-index: 1000;
+    }
+
+    .modal-overlay[hidden] { display: none; }
+
+    .code-modal {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      width: min(720px, 100%);
+      max-height: min(70vh, 640px);
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--color-border);
+      flex-shrink: 0;
+    }
+
+    .modal-header h3 {
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 600;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--color-text-secondary);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: var(--radius-xs);
+    }
+
+    .modal-close:hover {
+      background: var(--color-hover-overlay);
+      color: var(--color-text);
+    }
+
+    .modal-body {
+      overflow: auto;
+      min-height: 0;
+      padding: 16px;
+      margin: 0;
+      font-family: var(--font-family-code);
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--color-code-text);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%);
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      color: var(--color-text);
+      font-size: var(--font-size-sm);
+      padding: 8px 14px;
+      border-radius: var(--radius-md);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+      z-index: 1100;
+    }
+
+    .toast[hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <p class="page-note">UI mock — not wired to the app</p>
+  <div class="thread" id="thread"></div>
+
+  <div class="modal-overlay" id="modal" hidden>
+    <div class="code-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-header">
+        <h3 id="modal-title"></h3>
+        <button class="modal-close" id="modal-close" type="button" aria-label="Close">✕</button>
+      </div>
+      <pre class="modal-body" id="modal-body"></pre>
+    </div>
+  </div>
+  <div class="toast" id="toast" hidden></div>
+
+  <script>
+    const DELETE_ICON = '<svg class="delete-icon" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2.5 1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1H3v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4h.5a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1H2.5zm3 4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 .5-.5zM8 5a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7A.5.5 0 0 1 8 5zm3 .5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 1 0z"/></svg>';
+    const CHEVRON = '<svg class="chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 L11 8 L6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+    const MENU = [
+      ['📝', 'Copy'],
+      ['📋', 'Copy link'],
+      ['🔄', 'Refresh replies'],
+      ['🔗', 'Links'],
+      ['🎯', 'Center'],
+      ['🔍', 'Similar']
+    ];
+    const FUNCTION_MENU = [
+      ...MENU,
+      ['🗑️', 'Delete']
+    ];
+
+    const stitch = { name: 'Stitch', tag: 'stitch', bot: true };
+    const seth = { name: 'Seth', tag: 'seth', current: true };
+    const ada = { name: 'Ada Lovelace', tag: 'ada' };
+    const quoted = {
+      name: 'A quoted reply',
+      imported: { via: 'seth', platform: 'a quote', url: 'https://example.com/source' }
+    };
+
+    const messages = [
+      {
+        type: 'message',
+        author: seth,
+        timestamp: 'Oct 14, 6:12 PM',
+        replies: 4,
+        text: 'Check whether function-type-check shows up, then pull the page.'
+      },
+      {
+        type: 'function_invocation',
+        author: stitch,
+        name: 'search_messages',
+        parameters: ['function-type-check', '1'],
+        open: false
+      },
+      {
+        type: 'function_response',
+        author: stitch,
+        name: 'search_messages',
+        output: {
+          ok: true,
+          matches: 3,
+          messages: [
+            { id: '048e673a', preview: 'function-type-check notes from last week' },
+            { id: '19ab20c1', preview: 'invocation stores the dictionary in content' },
+            { id: '77c0de44', preview: 'response output is a string, object, or array' }
+          ]
+        },
+        open: false
+      },
+      {
+        type: 'function_invocation',
+        author: stitch,
+        name: 'fetch_page',
+        parameters: ['https://example.com/function-type-check', 'text'],
+        open: true
+      },
+      {
+        type: 'function_response',
+        author: quoted,
+        name: 'fetch_page',
+        output: [
+          'Function messages',
+          '',
+          'A function message is a normal message whose content is one dictionary.',
+          'The dictionary holds the fields for that type.',
+          '',
+          'An invocation has a name and a list of string parameters.',
+          'A response has an output, which may be a string, an object, or an array.',
+          'Files stay on the message. They are not part of the function dictionary.',
+          '',
+          'Keyword search still uses a readable line. That line is not the stored content.'
+        ].join('\n'),
+        open: false
+      },
+      {
+        type: 'message',
+        author: ada,
+        timestamp: 'Oct 14, 6:18 PM',
+        replies: 0,
+        text: 'That first match is the one. I will reply on it.'
+      }
+    ];
+
+    function esc(value) {
+      return String(value).replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[ch]));
+    }
+
+    function authorHtml(author) {
+      const nameClass = [
+        'user-display__name',
+        author.current ? 'user-display__name--current' : '',
+        author.imported ? 'user-display__name--imported' : ''
+      ].filter(Boolean).join(' ');
+      const badge = author.bot
+        ? '<span class="user-display__badge" role="img" aria-label="Bot" title="Bot">🤖</span>'
+        : '';
+      const tag = !author.imported && author.tag
+        ? `<span class="user-display__tag">@${esc(author.tag)}</span>`
+        : '';
+      let imported = '';
+      if (author.imported) {
+        const info = author.imported;
+        const title = info.platform
+          ? `Imported by ${info.via} from ${info.platform}`
+          : `Imported by ${info.via}`;
+        const link = info.url
+          ? `<a class="import-source-link" href="${esc(info.url)}" target="_blank" rel="noopener noreferrer">🔗</a>`
+          : '';
+        imported = `<span class="imported-badge" title="${esc(title)}">via <span class="user-display__name">${esc(info.via)}</span>${link}</span>`;
+      }
+      return `<span class="user-display">${badge}<span class="${nameClass}">${esc(author.name)}</span>${tag}</span>${imported}`;
+    }
+
+    function deleteButton() {
+      return `<button class="delete-icon-button" type="button" title="Delete this message and all replies" aria-label="Delete this message and all replies">${DELETE_ICON}</button>`;
+    }
+
+    function menuHtml(entries = MENU) {
+      const items = entries.map(([emoji, text]) =>
+        `<button class="desktop-menu-button" type="button" data-menu-item="${esc(text)}"><span class="action-emoji">${emoji}</span><span class="action-text">${esc(text)}</span></button>`
+      ).join('');
+      return `<div class="desktop-menu-container">
+        <button class="action-button menu-button" type="button" title="More actions" aria-label="More actions" aria-expanded="false"><span class="action-emoji">⋯</span></button>
+        <div class="desktop-action-menu" hidden>${items}</div>
+      </div>`;
+    }
+
+    function formatInvocation(name, parameters) {
+      if (!parameters.length) return `${name}()`;
+      const lines = parameters.map((param) => `  ${JSON.stringify(param)}`);
+      return `${name}(\n${lines.join(',\n')}\n)`;
+    }
+
+    function formatResponse(name, output) {
+      if (typeof output === 'string') {
+        const body = output.split('\n').map((line) => `  ${line}`).join('\n');
+        return `${name}(\n${body}\n)`;
+      }
+      return `${name}(${JSON.stringify(output, null, 2)})`;
+    }
+
+    function kindLabel(message) {
+      return message.type === 'function_invocation' ? 'function call' : 'function response';
+    }
+
+    function codeText(message) {
+      if (message.type === 'function_invocation') return formatInvocation(message.name, message.parameters);
+      return formatResponse(message.name, message.output);
+    }
+
+    function renderMessage(message) {
+      return `<article class="message-content">
+        <div class="message-header">
+          <div class="author-info">${authorHtml(message.author)}${deleteButton()}</div>
+          <span class="message-timestamp">${esc(message.timestamp)}</span>
+        </div>
+        <div class="message-body">${esc(message.text)}</div>
+        <div class="message-footer">
+          <div class="reply-count">${message.replies} 💬</div>
+          <div class="footer-right-actions">
+            <div class="message-actions">
+              <button class="action-button" type="button"><span class="action-emoji">↩️</span><span class="action-text">Reply</span></button>
+              <button class="action-button" type="button"><span class="action-emoji">🤖</span><span class="action-text">Prompt</span></button>
+              <button class="action-button" type="button"><span class="action-emoji">🔖</span><span class="action-text">Save</span></button>
+              ${menuHtml()}
+            </div>
+          </div>
+        </div>
+      </article>`;
+    }
+
+    function renderFunction(message) {
+      const kind = kindLabel(message);
+      const label = `${kind}: ${message.name}`;
+      return `<article class="fn${message.open ? ' open' : ''}" data-label="${esc(label)}">
+        <div class="fn-line">
+          <button class="fn-toggle" type="button" aria-expanded="${message.open ? 'true' : 'false'}">
+            ${CHEVRON}
+            <span class="fn-label"><span class="fn-kind">${esc(kind)}:</span> <span class="fn-name">${esc(message.name)}</span></span>
+          </button>
+          <div class="fn-meta">
+            ${authorHtml(message.author)}
+            ${menuHtml(FUNCTION_MENU)}
+          </div>
+        </div>
+        <pre class="fn-code"${message.open ? '' : ' hidden'}></pre>
+      </article>`;
+    }
+
+    const thread = document.getElementById('thread');
+    thread.innerHTML = messages.map((message) =>
+      message.type === 'message' ? renderMessage(message) : renderFunction(message)
+    ).join('');
+
+    thread.querySelectorAll('.fn').forEach((row, index) => {
+      const message = messages.filter((item) => item.type !== 'message')[index];
+      row.querySelector('.fn-code').textContent = codeText(message);
+    });
+
+    function updateFade(block) {
+      if (block.hidden) return;
+      block.classList.remove('fades');
+      block.classList.toggle('fades', block.scrollHeight > block.clientHeight + 1);
+    }
+
+    function updateFades() {
+      thread.querySelectorAll('.fn-code').forEach(updateFade);
+    }
+
+    requestAnimationFrame(updateFades);
+
+    let toastTimer = 0;
+    function toast(text) {
+      const el = document.getElementById('toast');
+      el.textContent = text;
+      el.hidden = false;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { el.hidden = true; }, 1600);
+    }
+
+    function closeMenus() {
+      thread.querySelectorAll('.desktop-action-menu').forEach((menu) => {
+        menu.hidden = true;
+        menu.classList.remove('menu-above');
+      });
+      thread.querySelectorAll('.menu-button').forEach((button) => {
+        button.setAttribute('aria-expanded', 'false');
+      });
+      thread.querySelectorAll('.menu-open').forEach((node) => node.classList.remove('menu-open'));
+    }
+
+    thread.addEventListener('click', (event) => {
+      const menuButton = event.target.closest('.menu-button');
+      if (menuButton) {
+        event.stopPropagation();
+        const menu = menuButton.parentElement.querySelector('.desktop-action-menu');
+        const willOpen = menu.hidden;
+        closeMenus();
+        if (willOpen) {
+          menu.hidden = false;
+          menuButton.setAttribute('aria-expanded', 'true');
+          const host = menuButton.closest('.fn, .message-content');
+          host.classList.add('menu-open');
+          const rect = menu.getBoundingClientRect();
+          if (rect.bottom > window.innerHeight - 12) menu.classList.add('menu-above');
+        }
+        return;
+      }
+
+      const menuItem = event.target.closest('[data-menu-item]');
+      if (menuItem) {
+        toast(menuItem.dataset.menuItem);
+        closeMenus();
+        return;
+      }
+
+      const deleteBtn = event.target.closest('.delete-icon-button');
+      if (deleteBtn) {
+        toast('Delete this message and all replies');
+        return;
+      }
+
+      const code = event.target.closest('.fn-code');
+      if (code) {
+        const row = code.closest('.fn');
+        openModal(row.dataset.label, code.textContent);
+        return;
+      }
+
+      const toggle = event.target.closest('.fn-toggle');
+      if (toggle) {
+        const row = toggle.closest('.fn');
+        const block = row.querySelector('.fn-code');
+        const open = !row.classList.contains('open');
+        row.classList.toggle('open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        block.hidden = !open;
+        if (open) requestAnimationFrame(() => updateFade(block));
+      }
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!event.target.closest('.desktop-menu-container')) closeMenus();
+    });
+
+    const modal = document.getElementById('modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalBody = document.getElementById('modal-body');
+
+    function openModal(title, text) {
+      modalTitle.textContent = title;
+      modalBody.textContent = text;
+      modal.hidden = false;
+      document.getElementById('modal-close').focus();
+    }
+
+    function closeModal() {
+      modal.hidden = true;
+    }
+
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+    modal.addEventListener('click', (event) => {
+      if (event.target === modal) closeModal();
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      if (!modal.hidden) closeModal();
+      else closeMenus();
+    });
+  </script>
+</body>
+</html>

@@ -8,7 +8,7 @@ The backend is the only unread counter. Do not ±1 `unreadMessageCount` or `unre
 ## Two numbers
 
 1. **Tab badge** — Vuex `unreadMessageCount`. Assigned from `unread_total` on login (`TabViewLayout`), websocket `open` / `notification.data.unread_total`, and mark-read / unread / mark-all responses. Fallback: `GET /users/unread-total` via `fetchUnreadMessageCount` / `applyUnreadTotal`.
-2. **Inbox row badge** — `message.unread_count_in_thread` from the inbox query. After a read-state write or live arrival, `refreshThreadUnreadCounts` POSTs those leaf ids to `/users/thread-unread-counts` and replaces the field. Clearing the message cache must not zero the tab badge.
+2. **Inbox row badge** — `message.unread_count_in_thread` from the inbox query. After a read-state write or live arrival, `refreshThreadUnreadCounts` POSTs those leaf ids to `/users/thread-unread-counts` and replaces the field. Clearing the message cache must not zero the tab badge. The inbox Unread toggle sends `unread_only=true` and reloads the list when a notification arrives while that toggle is on.
 
 ## Envelope
 

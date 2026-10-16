@@ -8,7 +8,7 @@
 
       <div class="modal-content">
         <p class="modal-description">
-          Select replies in the order you want them displayed. The last of them will be displayed as the default reply. Unordered replies (including those posted after order was set) will appear before (left of) partial order.
+          Select outgoing messages in the order you want them displayed. Replies you leave out appear before this list. Stitches you leave out appear after it.
         </p>
 
         <!-- Current Order Section -->
@@ -48,11 +48,11 @@
         <!-- Available Replies Section -->
         <div class="available-section">
           <h4 class="section-title">
-            Available Replies
-            <span class="section-subtitle">({{ availableReplies.length }} {{ availableReplies.length === 1 ? 'reply' : 'replies' }})</span>
+            Available
+            <span class="section-subtitle">({{ availableReplies.length }})</span>
           </h4>
           <div v-if="availableReplies.length === 0" class="no-replies">
-            No replies available
+            Nothing left to add
           </div>
           <div v-else class="available-list">
             <button
@@ -99,11 +99,13 @@
 <script setup>
 import { ref, watch, computed, onMounted, nextTick } from 'vue';
 import { useStore } from 'vuex';
+import { contentText } from '../../utils/messageCompat.js';
 
 const props = defineProps({
   isVisible: { type: Boolean, default: false },
   messageId: { type: String, default: null },
   childIds: { type: Array, default: () => [] },
+  stitchChildIds: { type: Array, default: () => [] },
   existingReplyOrder: { type: Array, default: () => [] }
 });
 
@@ -126,13 +128,11 @@ watch(() => props.isVisible, (visible) => {
 
 // Available replies (those not yet in order, or all if none ordered)
 const availableReplies = computed(() => {
-  const childIds = props.childIds || [];
-  if (orderedReplies.value.length === 0) {
-    // If no order set, show all children
-    return childIds;
-  }
-  // Show children that aren't in the order yet
-  return childIds.filter(id => !orderedReplies.value.includes(id));
+  const ordered = new Set(orderedReplies.value);
+  const replies = (props.childIds || []).filter(id => !ordered.has(id));
+  const replySet = new Set(props.childIds || []);
+  const stitches = (props.stitchChildIds || []).filter(id => !ordered.has(id) && !replySet.has(id));
+  return [...replies, ...stitches];
 });
 
 // Check if reply is already in order
@@ -145,7 +145,7 @@ const getReplyPreview = (replyId) => {
   const message = store.getters['messages/getMessage'](replyId);
   if (!message) return 'Loading...';
   
-  const content = message.content || '';
+  const content = contentText(message.content);
   if (content.length <= 50) return content;
   return content.substring(0, 50) + '...';
 };

@@ -4,6 +4,7 @@ import WebSocketClient from './WebSocketClient';
 import IdleManager from './IdleManager';
 import NetworkVisibility from './NetworkVisibility';
 import ReconnectBackoff from './ReconnectBackoff';
+import { contentText } from '../../utils/messageCompat.js';
 
 const WS_BASE_URL = '/ws/v1'
 
@@ -487,10 +488,11 @@ const WebSocketService = {
                           messageData.author_user_tag || 
                           'Someone';
         
-        const contentPreview = messageData.content ? 
-          (messageData.content.length > 60 ? 
-            messageData.content.substring(0, 60) + '...' : 
-            messageData.content) : 
+        const previewText = contentText(messageData.content);
+        const contentPreview = previewText ? 
+          (previewText.length > 60 ? 
+            previewText.substring(0, 60) + '...' : 
+            previewText) : 
           'New message';
         
         const notificationData = {
@@ -622,6 +624,12 @@ const WebSocketService = {
                   }
                 }
                 try { store.dispatch('messages/refreshThreadUnreadCounts'); } catch (e) {}
+                try {
+                  const onInbox = window.location.pathname === '/inbox';
+                  if (onInbox && store.getters['navigation/inboxUnreadOnly']) {
+                    store.commit('navigation/BUMP_INBOX_LIVE_REFRESH');
+                  }
+                } catch (e) {}
               }
             } catch (e) {
               this.error('Error handling notification payload:', e);

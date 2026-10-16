@@ -65,8 +65,19 @@
         
           <!-- Thread messages - showing single branch -->
           <template v-for="(message, index) in displayedMessages" :key="message.id">
+            <function-message-row
+              v-if="isFunctionMessage(message) && (message.id === replyingToMessageId && !isReplyMessageLoading || message.id !== replyingToMessageId)"
+              :message="message"
+              :active-parent-id="index > 0 ? displayedMessages[index - 1].id : null"
+              :compact="compactThread"
+              :is-selected="message.id === replyingToMessageId"
+              @delete="confirmDeleteMessage"
+              @showLinks="handleShowLinks"
+              @refreshReplies="refreshRepliesForMessage"
+              @center="handleCenterOnMessage"
+            />
             <message-node
-              v-if="(message.id === replyingToMessageId && !isReplyMessageLoading || 
+              v-else-if="(message.id === replyingToMessageId && !isReplyMessageLoading || 
                       message.id !== replyingToMessageId)"
               :message="message"
               :active-parent-id="index > 0 ? displayedMessages[index - 1].id : null"
@@ -232,6 +243,8 @@ import { ref, computed, onMounted, watch, onBeforeUnmount, nextTick } from 'vue'
 import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
 import MessageNode from '../../components/MessageNode.vue';
+import FunctionMessageRow from '../../components/FunctionMessageRow.vue';
+import { isFunctionMessage } from '../../utils/functionMessage.js';
 import AdaptiveMarker from '../../components/AdaptiveMarker.vue';
 import ReplyBox from '../../components/ReplyBox.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
@@ -247,6 +260,7 @@ import ThreadHeader from '../../components/ThreadHeader.vue';
 import LoginButton from '@buttons/LoginButton.vue'
 import { useCompactThread } from '../../composables/useCompactThread.js';
 import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
+import { contentText } from '../../utils/messageCompat.js';
 
 // import BranchNavigator from '../../components/BranchNavigator.vue';
 
@@ -382,13 +396,14 @@ const rootMessage = computed(() => {
 });
 
 const threadTitle = computed(() => {
-  if (!rootMessage.value?.content) {
+  const text = contentText(rootMessage.value?.content).trim();
+  if (!text) {
     return 'Untitled Thread';
   }
   
-  const words = rootMessage.value.content.trim().split(/\s+/);
+  const words = text.split(/\s+/);
   if (words.length <= 3) {
-    return rootMessage.value.content;
+    return text;
   }
   
   return words.slice(0, 4).join(' ') + '...';
@@ -1014,7 +1029,7 @@ const exitSelectionMode = () => {
       // Format the current message
       const userTag = message.author_user_tag ? `(@${message.author_user_tag})` : '';
       const header = `${message.author_display_name || 'Unknown'} ${userTag}, ${new Date(message.timestamp).toLocaleString()} (https://stitch.fyi/messages/${message.id})`;
-      const messageText = `${header}\n\n${message.content || ''}`;
+      const messageText = `${header}\n\n${contentText(message.content)}`;
       
       // If this is the first message, just add it
       if (index === 0) {
@@ -1057,7 +1072,7 @@ const exitSelectionMode = () => {
           const userTag = message.author_user_tag || 'unknown';
           const displayName = message.author_display_name || 'Unknown';
           const datetime = new Date(message.timestamp).toLocaleString();
-          const content = message.content || '';
+          const content = contentText(message.content);
           return `[${datetime}] ${displayName} (@${userTag}): ${content}`;
         })
         .join('\n\n');

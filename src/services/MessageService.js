@@ -85,6 +85,12 @@ export default {
     return apiClient.patch(`/messages/${id}/reply_order`, { reply_order: replyOrder }, { headers })
   },
 
+  // Set or clear the default outgoing child. null clears it.
+  async updateDefaultOutgoing(id, defaultOutgoing) {
+    const headers = getAuthHeaders()
+    return apiClient.patch(`/messages/${id}/default_outgoing`, { default_outgoing: defaultOutgoing }, { headers })
+  },
+
   // Unified search: content (q) and tags
   async search({ q = null, tags = [], match = 'any', skip = 0, limit = 15 } = {}) {
     const headers = getAuthHeaders()
@@ -154,9 +160,9 @@ export default {
   },
 
   // Load messages via unified traversal endpoint
-  async traverseFrom(messageId, { up_depth = 2, down_depth = 2, get_replies = true, get_children = false, edge_type = 'replies' } = {}) {
+  async traverseFrom(messageId, { up_depth = 2, down_depth = 2, get_replies = true, get_children = false, edge_type = 'replies', default_path_only = false } = {}) {
     const headers = getAuthHeaders()
-    const url = `/messages/traverse-from/${messageId}?up_depth=${up_depth}&down_depth=${down_depth}&get_replies=${get_replies}&get_children=${get_children}&edge_type=${edge_type}`
+    const url = `/messages/traverse-from/${messageId}?up_depth=${up_depth}&down_depth=${down_depth}&get_replies=${get_replies}&get_children=${get_children}&edge_type=${edge_type}&default_path_only=${default_path_only}`
     const response = await apiClient.get(url, { headers })
     return response
   },

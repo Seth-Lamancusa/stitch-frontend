@@ -67,12 +67,14 @@ export default {
    * @param {Number} limit - Number of messages to return (defaults to 15 on backend)
    * @param {Number} skip - Number of messages to skip (for pagination)
    * @param {String} [channelId] - Optional channel ID to filter to that channel (user must be a member)
+   * @param {Boolean} [unreadOnly] - When true, return only threads that have unread messages
    * @returns {Promise<Object>} - Response with messages and pagination info
    */
-  async fetchUserMessages(limit = 15, skip = 0, channelId = null) {
+  async fetchUserMessages(limit = 15, skip = 0, channelId = null, unreadOnly = false) {
     try {
       const params = { limit, skip };
       if (channelId) params.channel_id = channelId;
+      if (unreadOnly) params.unread_only = true;
       const response = await apiClient.get('/messages/inbox', { params });
       
       

@@ -1,5 +1,6 @@
 import GraphLayoutService from '../../services/GraphLayoutService.js';
 import { calculateTreeLayout, calculateBounds } from '../../utils/graph/layoutAlgorithms.js';
+import { contentText } from '../../utils/messageCompat.js';
 
 /**
  * Vuex store module for graph view state management
@@ -160,7 +161,7 @@ const getters = {
     if (state.filters.searchQuery) {
       const query = state.filters.searchQuery.toLowerCase();
       filtered = filtered.filter(msg => 
-        msg.content && msg.content.toLowerCase().includes(query)
+        contentText(msg.content).toLowerCase().includes(query)
       );
     }
 

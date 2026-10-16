@@ -1,10 +1,12 @@
 import { calculateLayout, optimizeLayout, calculateBounds } from '../utils/graph/layoutAlgorithms.js';
 import { debounce } from 'lodash-es';
+import { contentText } from '../utils/messageCompat.js';
 
 /**
  * Service for managing graph layout calculations and caching
  * Provides optimized layout computation with memoization and Web Worker support
  */
+
 class GraphLayoutService {
   constructor() {
     this.layoutCache = new Map();
@@ -105,7 +107,7 @@ class GraphLayoutService {
         id: msg.id,
         parent_id: msg.parent_id || null,
         timestamp: msg.timestamp,
-        content: msg.content || '',
+        content: contentText(msg.content),
         author: msg.author || {},
         public: msg.public,
         recipients: msg.recipients || [],

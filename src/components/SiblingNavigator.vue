@@ -1,6 +1,6 @@
 <template>
   <!-- Mobile mode - render as inline buttons for footer -->
-  <div v-if="mobileMode" class="mobile-sibling-nav">
+  <div v-if="mobileMode" class="mobile-sibling-nav" :class="{ compact }">
     <button 
       @mouseover="logHover('prev')"
       @click.stop="navigate('prev')" 
@@ -10,7 +10,11 @@
       title="Previous reply"
     >
       <div v-if="isLoading" class="loading-dot"></div>
+      <svg v-else-if="compact" class="line-chevron" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M10 3.5 L5 8 L10 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
       <div v-else class="arrow-icon left-arrow">←</div>
+      <span v-if="defaultMarkSide === 'prev'" class="mobile-default-mark" title="Default outgoing">🔗</span>
     </button>
     
     <button 
@@ -22,12 +26,16 @@
       title="Next reply"
     >
       <div v-if="isLoading" class="loading-dot"></div>
+      <svg v-else-if="compact" class="line-chevron" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M6 3.5 L11 8 L6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
       <div v-else class="arrow-icon right-arrow">→</div>
+      <span v-if="defaultMarkSide === 'next'" class="mobile-default-mark" title="Default outgoing">🔗</span>
     </button>
   </div>
   
   <!-- Desktop mode - original positioning -->
-  <div v-else class="sibling-navigator">
+  <div v-else class="sibling-navigator" :class="{ compact }">
     <button 
       @mouseover="logHover('prev')"
       @click.stop="navigate('prev')" 
@@ -38,7 +46,11 @@
       title="Previous reply"
     >
       <div v-if="isLoading" class="loading-dot"></div>
+      <svg v-else-if="compact" class="line-chevron" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M10 3.5 L5 8 L10 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
       <div v-else class="triangle-icon left-triangle"></div>
+      <span v-if="defaultMarkSide === 'prev'" class="default-outgoing-side-mark" title="Default outgoing">🔗</span>
     </button>
     
     <button 
@@ -51,7 +63,11 @@
       title="Next reply"
     >
       <div v-if="isLoading" class="loading-dot"></div>
+      <svg v-else-if="compact" class="line-chevron" viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M6 3.5 L11 8 L6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+      </svg>
       <div v-else class="triangle-icon right-triangle"></div>
+      <span v-if="defaultMarkSide === 'next'" class="default-outgoing-side-mark" title="Default outgoing">🔗</span>
     </button>
   </div>
 </template>
@@ -70,6 +86,10 @@ const props = defineProps({
     required: true
   },
   mobileMode: {
+    type: Boolean,
+    default: false
+  },
+  compact: {
     type: Boolean,
     default: false
   }
@@ -163,6 +183,17 @@ const siblings = computed(() => {
 });
 
 const totalSiblings = computed(() => siblings.value.length);
+
+// Link under the arrow on the side where the default sits, when this message is not the default.
+const defaultMarkSide = computed(() => {
+  const parent = store.getters['messages/getMessage'](props.parentId);
+  if (!parent || !parent.default_outgoing || parent.default_outgoing === props.messageId) return null;
+  const ids = siblings.value;
+  const currentIndex = ids.indexOf(props.messageId);
+  const defaultIndex = ids.indexOf(parent.default_outgoing);
+  if (currentIndex < 0 || defaultIndex < 0 || currentIndex === defaultIndex) return null;
+  return defaultIndex < currentIndex ? 'prev' : 'next';
+});
 
 // Find current message position in siblings array (0-indexed)
 const currentPosition = computed(() => {
@@ -279,6 +310,13 @@ const navigate = async (direction) => {
   font-size: 14px;
   line-height: 1;
   font-weight: bold;
+}
+
+.mobile-default-mark {
+  display: block;
+  font-size: 10px;
+  line-height: 1;
+  margin-top: 6px;
 }
 
 /* Smaller buttons for very small screens */
@@ -444,6 +482,17 @@ const navigate = async (direction) => {
   border-color: transparent transparent transparent var(--color-primary);
 }
 
+.default-outgoing-side-mark {
+  position: absolute;
+  top: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 2;
+}
+
 /* Disabled state - slightly transparent */
 .nav-button.disabled {
   opacity: 0.5;
@@ -527,6 +576,93 @@ const navigate = async (direction) => {
 
 .sibling-navigator .nav-button.target-is-stitch:hover:not(:disabled) .left-triangle {
   border-color: transparent #ffffff transparent transparent;
+}
+
+/* Function rows: a disclosure-sized chevron, not the full reply rail. */
+.line-chevron {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.sibling-navigator.compact .nav-button {
+  top: 8px;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  color: var(--color-text-secondary);
+}
+
+.sibling-navigator.compact .nav-button::before,
+.sibling-navigator.compact .nav-button::after {
+  content: none;
+}
+
+.sibling-navigator.compact .nav-prev {
+  left: 0;
+}
+
+.sibling-navigator.compact .nav-next {
+  right: 0;
+}
+
+.sibling-navigator.compact .nav-button:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.sibling-navigator.compact .nav-button.disabled {
+  opacity: 0.35;
+}
+
+.sibling-navigator.compact .loading-dot,
+.sibling-navigator.compact .default-outgoing-side-mark {
+  top: 0;
+}
+
+.sibling-navigator.compact .default-outgoing-side-mark {
+  top: 16px;
+  font-size: 9px;
+}
+
+.sibling-navigator.compact .nav-button.target-is-stitch:not(:disabled),
+.sibling-navigator.compact .nav-button.target-is-stitch:hover:not(:disabled) {
+  color: #7dcea0;
+}
+
+.mobile-sibling-nav.compact {
+  gap: 0;
+}
+
+.mobile-sibling-nav.compact .mobile-nav-btn,
+.mobile-sibling-nav.compact .mobile-nav-btn:not(.disabled):not(.loading),
+.mobile-sibling-nav.compact .mobile-nav-btn:hover:not(:disabled) {
+  min-width: 16px;
+  min-height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-text-secondary);
+  transform: none;
+}
+
+.mobile-sibling-nav.compact .mobile-nav-btn:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.mobile-sibling-nav.compact .mobile-nav-btn.disabled {
+  opacity: 0.35;
+}
+
+.mobile-sibling-nav.compact .mobile-nav-btn.target-is-stitch:not(:disabled),
+.mobile-sibling-nav.compact .mobile-nav-btn.target-is-stitch:hover:not(:disabled) {
+  background: transparent;
+  border: none;
+  color: #7dcea0;
+}
+
+.mobile-sibling-nav.compact .loading-dot {
+  top: 0;
 }
 
 .mobile-sibling-nav .mobile-nav-btn.target-is-stitch:not(:disabled) {

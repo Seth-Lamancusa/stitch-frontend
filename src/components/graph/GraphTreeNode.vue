@@ -179,6 +179,7 @@
 
 <script>
 import { format } from 'date-fns';
+import { contentText } from '../../utils/messageCompat.js';
 
 export default {
   name: 'GraphTreeNode',
@@ -302,7 +303,7 @@ export default {
     },
 
     truncatedContent() {
-      const content = (this.message.content || '').replace(/\s+/g, ' ').trim();
+      const content = contentText(this.message.content).replace(/\s+/g, ' ').trim();
       const limit = 60;
       if (content.length <= limit) return content;
       return content.substring(0, limit) + '...';

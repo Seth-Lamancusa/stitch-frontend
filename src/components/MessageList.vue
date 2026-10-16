@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, onUnmounted, nextTick, watch, inject } from 'vue';
+import { computed, onMounted, ref, onUnmounted, nextTick, watch } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
 import MessagePreview from './MessagePreview.vue';
@@ -71,6 +71,8 @@ const pageSize = computed(() => PAGE_SIZE_BY_MODE[props.mode] || 15);
 
 // Local state for non-store modes (like saved mode)
 const localMessages = ref([]);
+// Inbox rows only. The shared store also holds the open thread, which must not flash in this list.
+const inboxMessageIds = ref([]);
 
 // Selection state management
 const selectedMessageIds = ref(new Set());
@@ -92,7 +94,8 @@ const isStoreMode = computed(() => ['inbox', 'admin'].includes(props.mode));
 const requiresAuth = computed(() => ['inbox', 'saved', 'history', 'timeline'].includes(props.mode));
 // Server-ordered recency lists: restore cache for instant paint, then refetch so
 // order matches the API regardless of whether we entered via mount, keep-alive, or back-from-thread.
-const isServerOrderedMode = computed(() => ['history', 'timeline'].includes(props.mode));
+// Saved is included because bookmarking happens on a message, outside this list.
+const isServerOrderedMode = computed(() => ['history', 'timeline', 'saved'].includes(props.mode));
 
 // Store loading state - single source of truth for store-based modes only
 const isLoading = computed(() => {
@@ -109,6 +112,13 @@ const loadingIndicatorRef = ref(null);
 
 // Read active tab from centralized navigation store (synced from TabViewLayout via route)
 const activeTab = computed(() => store.getters['navigation/activeTab'] || 'history');
+
+const isInboxMode = computed(() => props.mode === 'inbox');
+const inboxUnreadOnly = computed(() => store.getters['navigation/inboxUnreadOnly']);
+let inboxLiveTimer = null;
+// Inbox page 1 clears the shared message cache before writing the new page.
+// That dip to zero is not an external reset; ignore it until the response is applied.
+let inboxCacheResetSuppressions = 0;
 
 // NOTE: Inbox "mark all as read" was added but disabled per product decision.
 // Keeping the code here commented so it can be re-enabled later.
@@ -155,57 +165,14 @@ const threads = computed(() => {
     return localMessages.value;
   }
   
-  // Use store for inbox/admin modes
+  if (props.mode === 'inbox') {
+    const byId = store.state.messages.messages;
+    return inboxMessageIds.value.map(id => byId[id]).filter(Boolean);
+  }
+
+  // Admin uses the shared store
   const allMessages = store.getters['messages/getLoadedMessages'] || [];
   return allMessages;
-});
-
-// Register download callback with TabViewLayout so the global Download button
-// can export the list currently populated on this tab.
-const registerDownloadCurrentList = inject('registerDownloadCurrentList', null);
-
-const downloadCurrentList = () => {
-  try {
-    const payload = {
-      exported_at: new Date().toISOString(),
-      mode: props.mode,
-      channelId: selectedChannelId.value || null,
-      currentSkip: currentSkip.value,
-      isAllLoaded: isAllLoaded.value,
-      messages: threads.value,
-    };
-
-    const json = JSON.stringify(payload, (_k, v) => {
-      if (typeof v === 'bigint') return v.toString();
-      if (v instanceof Date) return v.toISOString();
-      return v;
-    }, 2);
-
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const safeMode = (props.mode || 'messages').replace(/[^a-z0-9_-]+/gi, '-');
-    a.download = `message-list-${safeMode}-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  } catch (e) {
-    console.error('[MessageList] Download failed:', e);
-  }
-};
-
-onMounted(() => {
-  if (typeof registerDownloadCurrentList === 'function') {
-    registerDownloadCurrentList(downloadCurrentList);
-  }
-});
-
-onUnmounted(() => {
-  if (typeof registerDownloadCurrentList === 'function') {
-    registerDownloadCurrentList(null);
-  }
 });
 
 // Loading indicator should be visible if we're loading or have more to load
@@ -251,7 +218,9 @@ const modeDescription = computed(() => {
 const emptyStateMessage = computed(() => {
   switch (props.mode) {
     case 'inbox':
-      if (user.value) {
+      if (user.value && inboxUnreadOnly.value) {
+        return 'No unread conversations.';
+      } else if (user.value) {
         return 'No messages in your inbox.';
       } else {
         return 'You must be logged in to view your inbox.';
@@ -597,6 +566,15 @@ const applyFetchedPage = (response, { replace }) => {
       localMessages.value = [...localMessages.value, ...messages];
     }
   }
+  if (props.mode === 'inbox') {
+    const ids = messages.map(message => message?.id).filter(Boolean);
+    if (replace || currentSkip.value === 0) {
+      inboxMessageIds.value = ids;
+    } else {
+      const seen = new Set(inboxMessageIds.value);
+      inboxMessageIds.value = [...inboxMessageIds.value, ...ids.filter(id => !seen.has(id))];
+    }
+  }
   isAllLoaded.value = !response?.has_more;
   if (response?.has_more && messages.length > 0) {
     currentSkip.value = replace ? messages.length : currentSkip.value + messages.length;
@@ -648,6 +626,18 @@ const ensureFreshServerOrderedList = async () => {
   }
 };
 
+const holdInboxCacheReset = async (fn) => {
+  if (props.mode !== 'inbox') return fn();
+  inboxCacheResetSuppressions++;
+  try {
+    return await fn();
+  } finally {
+    // Cover the watcher flush that sees the temporary empty cache.
+    await nextTick();
+    inboxCacheResetSuppressions--;
+  }
+};
+
 // Abstract fetch function - delegates to store based on mode
 const loadMessages = async () => {
   // Skip loading if already loading or all loaded
@@ -667,11 +657,12 @@ const loadMessages = async () => {
   // Store modes handle their own loading state in the store
   
   try {
-    const response = await store.dispatch('messages/fetchMessages', {
+    const response = await holdInboxCacheReset(() => store.dispatch('messages/fetchMessages', {
       mode: props.mode,
       ...buildFetchParams({ skip: currentSkip.value, limit: pageSize.value })
-    });
+    }));
 
+    if (requestId !== currentRequestId.value || response?.stale) return;
     if (response) {
       applyFetchedPage(response, { replace: false });
     }
@@ -800,6 +791,9 @@ const resetListUiState = () => {
   if (isLocalMode.value) {
     localMessages.value = [];
   }
+  if (props.mode === 'inbox') {
+    inboxMessageIds.value = [];
+  }
 };
 
 // Watch for user changes to start loading when they log in, and drop list state on logout
@@ -835,12 +829,51 @@ watch(activePrincipalUid, async (newUid, oldUid) => {
 
 watch(selectedChannelId, (next, prev) => {
   if (next === prev) return;
-  if (!isServerOrderedMode.value) return;
+  // Saved refetches on show, and its contents do not depend on the channel filter.
+  if (!['history', 'timeline'].includes(props.mode)) return;
   resetListUiState();
   nextTick(() => {
     ensureFreshServerOrderedList();
   });
 });
+
+const reloadInboxFromStart = async () => {
+  if (props.mode !== 'inbox') return;
+  const requestId = ++currentRequestId.value;
+  isAllLoaded.value = false;
+  currentSkip.value = 0;
+  try {
+    const response = await holdInboxCacheReset(() => store.dispatch('messages/fetchMessages', {
+      mode: 'inbox',
+      ...buildFetchParams({ skip: 0, limit: pageSize.value })
+    }));
+    if (requestId !== currentRequestId.value || response?.stale) return;
+    if (response) applyFetchedPage(response, { replace: true });
+  } catch (error) {
+    console.error('[MessageList] Error reloading inbox:', error);
+  }
+};
+
+const toggleInboxUnreadOnly = async () => {
+  if (!isInboxMode.value || !user.value) return;
+  store.commit('navigation/SET_INBOX_UNREAD_ONLY', !inboxUnreadOnly.value);
+  const scrollContainer = messageListRef.value?.closest('.main-content');
+  if (scrollContainer) scrollContainer.scrollTop = 0;
+  await reloadInboxFromStart();
+};
+
+watch(
+  () => store.getters['navigation/inboxLiveRefresh'],
+  (next, prev) => {
+    if (next === prev) return;
+    if (props.mode !== 'inbox' || !inboxUnreadOnly.value) return;
+    if (inboxLiveTimer) clearTimeout(inboxLiveTimer);
+    inboxLiveTimer = setTimeout(() => {
+      inboxLiveTimer = null;
+      reloadInboxFromStart();
+    }, 300);
+  }
+);
 
 // Watch for refresh trigger from navigation store
 const refreshTrigger = computed(() => store.getters['navigation/refreshTrigger']);
@@ -874,6 +907,7 @@ watch(refreshTrigger, async (newTrigger) => {
 onUnmounted(() => {
   // Cancel any pending requests to prevent memory leaks
   currentRequestId.value++;
+  if (inboxLiveTimer) clearTimeout(inboxLiveTimer);
   localLoadingState.value = false;
   
   // Clear any open action bars when MessageList is unmounted
@@ -941,6 +975,8 @@ watch(() => store.getters['messages/getLoadedMessages'].length, (newLength, oldL
   console.log(`[MessageList] Message cache length changed: ${oldLength} -> ${newLength}`);
   // If messages were cleared, reset loading states
   if (oldLength > 0 && newLength === 0) {
+    if (props.mode === 'inbox' && inboxCacheResetSuppressions > 0) return;
+
     console.log('[MessageList] Cache was cleared, resetting loading states');
     
     // Cancel any pending requests
@@ -1031,14 +1067,15 @@ watch([() => props.mode, () => props.sourceMessageId, () => props.showAllLinks],
     isAllLoaded.value = false;
     currentSkip.value = 0;
     selectedMessageIds.value.clear();
-    
-    // Only trigger reload if we don't have messages (cache might already be populated)
+    if (props.mode === 'inbox') {
+      inboxMessageIds.value = [];
+    }
+
+    // Inbox keeps its own row list. A warm message store is the open thread, not this page.
     const currentMessages = store.getters['messages/getLoadedMessages'] || [];
-    if (currentMessages.length === 0) {
-      console.log('[MessageList] No messages in store, triggering reload for store-based mode');
-      nextTick(() => {
-        loadMessages();
-      });
+    if (props.mode === 'inbox' || currentMessages.length === 0) {
+      console.log('[MessageList] Triggering reload for store-based mode');
+      loadMessages();
     } else {
       console.log(`[MessageList] Store already has ${currentMessages.length} messages, skipping reload`);
     }
@@ -1140,25 +1177,6 @@ const handleLinkDelete = async (linkData) => {
       </pre>
     </div> -->
 
-    <!-- Message list header -->
-    <div v-if="!hideHeader" class="message-list-header">
-      <div class="header-controls">
-        <!-- Create button is now global in TabViewLayout -->
-
-        <!--
-        <button
-          v-if="isInboxMode"
-          class="mark-all-read-button"
-          :disabled="isMarkingAllAsRead || unreadMessageCount <= 0"
-          @click="markAllAsRead"
-          :title="unreadMessageCount > 0 ? `Mark all ${unreadMessageCount} as read` : 'All caught up'"
-        >
-          {{ isMarkingAllAsRead ? 'Marking...' : `Mark all as read${unreadMessageCount > 0 ? ` (${unreadMessageCount})` : ''}` }}
-        </button>
-        -->
-      </div>
-    </div>
-
     <!-- Mode description (info box) -->
     <div v-if="modeDescription && !hideInfoBox" class="mode-description">
       <span class="info-icon">ℹ</span>
@@ -1167,6 +1185,22 @@ const handleLinkDelete = async (linkData) => {
     <!-- Channel filter indicator: below the info box when a channel is selected -->
     <div v-if="isFilteredByChannel && !hideInfoBox" class="channel-filter-indicator">
       Filtered by channel. Change selection on the Channels tab.
+    </div>
+
+    <div v-if="!hideHeader && isInboxMode && user" class="inbox-list-toolbar">
+      <label class="unread-toggle">
+        <span class="unread-toggle-label">Unread</span>
+        <input
+          type="checkbox"
+          class="unread-toggle-input"
+          :checked="inboxUnreadOnly"
+          aria-label="Show only conversations with unread messages"
+          @change="toggleInboxUnreadOnly"
+        />
+        <span class="unread-toggle-track" aria-hidden="true">
+          <span class="unread-toggle-thumb"></span>
+        </span>
+      </label>
     </div>
 
     <!-- Empty state - only shown when logged in but no messages -->
@@ -1472,7 +1506,7 @@ const handleLinkDelete = async (linkData) => {
   width: 560px;
   max-width: calc(100% - var(--space-md) * 2);
   padding: var(--space-md);
-  margin: 0 auto 0 auto;
+  margin: var(--space-md) auto 0 auto;
   background-color: var(--color-surface);
   border-radius: var(--radius-md);
   box-sizing: border-box;
@@ -1571,6 +1605,87 @@ const handleLinkDelete = async (linkData) => {
 .message-list-header {
   margin: 0px;
   padding: 0px;
+}
+
+.inbox-list-toolbar {
+  width: 100%;
+  max-width: var(--content-max-width, 900px);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 2px;
+  padding-right: 2px;
+  box-sizing: border-box;
+}
+
+.unread-toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0 8px;
+  box-sizing: border-box;
+  cursor: pointer;
+  user-select: none;
+}
+
+.unread-toggle-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.unread-toggle-input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+
+.unread-toggle-track {
+  position: relative;
+  box-sizing: border-box;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--color-surface-light);
+  border: 1px solid var(--color-border);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.unread-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.unread-toggle-input:checked + .unread-toggle-track {
+  background: var(--color-secondary);
+  border-color: var(--color-secondary);
+}
+
+.unread-toggle-input:checked + .unread-toggle-track .unread-toggle-thumb {
+  transform: translateX(18px);
+  background: #fff;
+}
+
+.unread-toggle-input:focus-visible + .unread-toggle-track {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+}
+
+.unread-toggle:has(.unread-toggle-input:checked) .unread-toggle-label {
+  color: var(--color-text);
 }
 
 /*
@@ -1683,6 +1798,10 @@ const handleLinkDelete = async (linkData) => {
   .toggle-button {
     font-size: calc(var(--font-size-sm) - 1px);
   }
+
+  .unread-toggle {
+    padding: 0 5px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1701,8 +1820,14 @@ const handleLinkDelete = async (linkData) => {
   
   .mode-description {
     width: calc(100% - var(--space-md) * 2);
-    margin: 0 auto var(--space-md) auto;
+    margin: var(--space-md) auto var(--space-md) auto;
     padding: var(--space-sm);
+  }
+
+  .inbox-list-toolbar {
+    margin: 0;
+    padding-left: 4px;
+    padding-right: 4px;
   }
   
   .channel-filter-indicator {
