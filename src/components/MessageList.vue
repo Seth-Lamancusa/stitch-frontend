@@ -1,11 +1,12 @@
 <script setup>
-import { computed, onMounted, ref, onUnmounted, nextTick, watch, inject } from 'vue';
+import { computed, onMounted, ref, onUnmounted, nextTick, watch } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
 import MessagePreview from './MessagePreview.vue';
 import DeleteConfirmModal from './modals/DeleteConfirmModal.vue';
 import NewThreadModal from './modals/NewThreadModal.vue';
 import { onActivated } from 'vue';
+import { isCurrentUserAuthor as isMessageAuthor } from '../utils/messageCompat.js';
 
 // Props to support different modes and configurations
 const props = defineProps({
@@ -161,53 +162,14 @@ const threads = computed(() => {
 });
 
 // Register download callback with TabViewLayout so the global Download button
-// can export the list currently populated on this tab.
 const registerDownloadCurrentList = inject('registerDownloadCurrentList', null);
-
 const downloadCurrentList = () => {
-  try {
-    const payload = {
-      exported_at: new Date().toISOString(),
-      mode: props.mode,
-      channelId: selectedChannelId.value || null,
-      currentSkip: currentSkip.value,
-      isAllLoaded: isAllLoaded.value,
-      messages: threads.value,
-    };
-
-    const json = JSON.stringify(payload, (_k, v) => {
-      if (typeof v === 'bigint') return v.toString();
-      if (v instanceof Date) return v.toISOString();
-      return v;
-    }, 2);
-
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const safeMode = (props.mode || 'messages').replace(/[^a-z0-9_-]+/gi, '-');
     a.download = `message-list-${safeMode}-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  } catch (e) {
     console.error('[MessageList] Download failed:', e);
-  }
-};
-
-onMounted(() => {
   if (typeof registerDownloadCurrentList === 'function') {
     registerDownloadCurrentList(downloadCurrentList);
-  }
-});
-
-onUnmounted(() => {
   if (typeof registerDownloadCurrentList === 'function') {
     registerDownloadCurrentList(null);
-  }
-});
-
 // Loading indicator should be visible if we're loading or have more to load
 const shouldShowLoadingIndicator = computed(() => {
   if (requiresAuth.value && !user.value) return false;
@@ -333,12 +295,6 @@ const linkType = computed(() => {
   if (props.mode === 'outgoing-links') return 'outgoing';
   return null;
 });
-
-// Get display version of author for a message
-function getAuthorDisplay(message) {
-  if (message.author?.display_name) return message.author.display_name;
-  return message.author_display_name || '';
-}
 
 // Get reply count from child_ids
 function getReplyCount(message) {
@@ -477,28 +433,7 @@ const handleCreateChannelConfirm = () => {
 
 // Function to check if the author is the current user
 function isCurrentUserAuthor(message) {
-  if (!user.value) return false;
-  
-  // First check by nested author object (preferred)
-  if (message.author?.uid && user.value.uid === message.author.uid) return true;
-  if (message.author?.user_tag && user.value.user_tag === message.author.user_tag) return true;
-  
-  // Fallback: check by author_user_tag if available
-  if (message.author_user_tag && user.value.user_tag === message.author_user_tag) {
-    return true;
-  }
-  
-  // Then check by email
-  if (message.author_email && user.value.email === message.author_email) {
-    return true;
-  }
-  
-  // Finally check content_author for older messages
-  if (message.content_author === user.value.uid) {
-    return true;
-  }
-  
-  return false;
+  return isMessageAuthor(message, user.value);
 }
 
 // Get all messages in a thread (for unread count calculation)

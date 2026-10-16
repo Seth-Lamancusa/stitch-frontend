@@ -159,8 +159,9 @@ watch(
 
 const authorName = computed(() => {
   if (!displayedMessage.value) return 'Unknown';
-  const m = displayedMessage.value;
-  return m.author?.display_name || m.author_display_name || m.author?.user_tag || 'Unknown';
+  const name = getAuthorDisplayName(displayedMessage.value);
+  if (name !== 'Unknown') return name;
+  return getAuthorUserTag(displayedMessage.value) || 'Unknown';
 });
 
 const formattedDate = computed(() => {

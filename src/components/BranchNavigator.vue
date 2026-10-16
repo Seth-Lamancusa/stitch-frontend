@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
+import { getAuthorUid, getAuthorUserTag } from '../utils/messageCompat.js';
 
 const props = defineProps({
   messages: { type: Array, required: true },
@@ -35,7 +36,7 @@ const colorPalette = [
 
 const getAuthorColor = (message) => {
   if (!message) return '#666';
-  const authorId = message.import_info?.display_name || message.content_author || message.author?.uid || message.author?.user_tag || 'unknown';
+  const authorId = message.import_info?.display_name || getAuthorUid(message) || getAuthorUserTag(message) || 'unknown';
   let hash = 0;
   const str = String(authorId);
   for (let i = 0; i < str.length; i++) {
@@ -132,7 +133,7 @@ const jumpToMessage = (msgId) => {
             <!-- Hover Tooltip -->
             <div v-if="hoveredIndex === index" class="tick-tooltip">
               <span class="tooltip-author" :style="{ color: getAuthorColor(messages.find(m => String(m.id) === String(pos.id))) }">
-                @{{ (messages.find(m => String(m.id) === String(pos.id)) || {}).author_user_tag || 'guest' }}
+                @{{ getAuthorUserTag(messages.find(m => String(m.id) === String(pos.id))) || 'guest' }}
               </span>
               <span class="tooltip-snippet">{{ getSnippet((messages.find(m => String(m.id) === String(pos.id)) || {}).content) }}</span>
             </div>

@@ -115,6 +115,7 @@
 </template>
 
 <script>
+import { getAuthorDisplayName } from '../../utils/messageCompat.js';
 export default {
   name: 'GraphSearchHighlight',
   props: {
@@ -249,8 +250,9 @@ export default {
     
     getAuthorName(message) {
       if (message.import_info?.display_name) return message.import_info.display_name;
-      if (!message.author) return 'Unknown';
-      return message.author.display_name || message.author.username || 'User';
+      const name = getAuthorDisplayName(message);
+      if (name !== 'Unknown') return name;
+      return message.author?.username || 'User';
     },
     
     getContentPreview(content) {

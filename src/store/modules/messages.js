@@ -4,6 +4,7 @@ console.log('[MOCK] mockMessages loaded, count:', Object.keys(mockMessages).leng
 import UserService from '../../services/UserService'
 import WebSocketService from '../../services/ws/WebSocketService'
 import GraphLayoutService from '../../services/GraphLayoutService.js'
+import { getAuthorDisplayName, getAuthorUid, getAuthorUserTag } from '../../utils/messageCompat.js'
 
 // Helper function to check if a message is a descendant of another
 function isDescendantOf(state, messageId, ancestorId) {
@@ -46,8 +47,8 @@ function getIncomingMessageAudience(messageData, user) {
     return { isFromCurrentUser: false, isToCurrentUser: false };
   }
 
-  const authorUid = messageData.author?.uid || messageData.content_author;
-  const authorTag = messageData.author?.user_tag || messageData.author_user_tag;
+  const authorUid = getAuthorUid(messageData);
+  const authorTag = getAuthorUserTag(messageData);
   const isFromCurrentUser = authorUid === user.uid || authorTag === user.user_tag;
 
   const recipients = Array.isArray(messageData.recipients) ? messageData.recipients : [];
@@ -600,11 +601,9 @@ export default {
           if (autoMarkIfInBranch && isNextInBranch) {
             dispatch('batchMarkAsRead', [messageData.id]);
           } else if (notifyIfOffPath && !isNextInBranch) {
-            const authorName = messageData.author?.display_name ||
-                               messageData.author?.user_tag ||
-                               messageData.author_display_name ||
-                               messageData.author_user_tag ||
-                               'Someone';
+            const authorName = getAuthorDisplayName(messageData) !== 'Unknown'
+              ? getAuthorDisplayName(messageData)
+              : (getAuthorUserTag(messageData) || 'Someone');
 
             const contentPreview = messageData.content
               ? (messageData.content.length > 60 ? messageData.content.substring(0, 60) + '...' : messageData.content)

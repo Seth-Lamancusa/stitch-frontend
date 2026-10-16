@@ -1,14 +1,12 @@
 import MessageService from '../services/MessageService.js'
 import UserService from '../services/UserService.js'
+import { getAuthorUid, getAuthorUserTag } from './messageCompat.js'
 
-const getMessageAuthorUid = (msg) => {
-  if (!msg) return null
-  return msg.content_author || msg.author?.uid || null
-}
+const getMessageAuthorUid = (msg) => getAuthorUid(msg)
 
 const getMessageAuthorTag = (msg) => {
   if (!msg) return null
-  return normalizeUserTag(msg.author_user_tag || msg.author?.user_tag || msg.author?.userTag)
+  return normalizeUserTag(getAuthorUserTag(msg) || msg.author?.userTag)
 }
 
 const normalizeUserTag = (tag) => {

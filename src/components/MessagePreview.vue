@@ -172,7 +172,6 @@
         </div>
       </div>
 
-      <div class="message-body">
         <div v-if="message.subject" class="message-subject">{{ message.subject }}</div>
         <formatted-content
           v-if="displayMode === 'full'"
@@ -292,24 +291,17 @@ const authorDisplayName = computed(() => {
   if (isImported.value && props.message.import_info?.display_name) {
     return props.message.import_info.display_name;
   }
-  if (props.message.author?.display_name) return props.message.author.display_name;
-  return props.message.author_display_name || '';
+  return getAuthorDisplayName(props.message);
 });
 
 const authorUserTag = computed(() => {
   if (isImported.value) return null;
-  if (props.message.author?.user_tag) return props.message.author.user_tag;
-  return props.message.author_user_tag || null;
+  return getAuthorUserTag(props.message);
 });
 
-const authorUid = computed(() => {
-  if (props.message.author?.uid) return props.message.author.uid;
-  return props.message.content_author || null;
-});
+const authorUid = computed(() => getAuthorUid(props.message));
 
-const isBot = computed(() => {
-  return !!props.message.author?.is_bot;
-});
+const isBot = computed(() => isAuthorBot(props.message));
 
 const isCurrentUser = computed(() => {
   if (!currentUser.value) return false;

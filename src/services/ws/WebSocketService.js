@@ -5,6 +5,7 @@ import WebSocketClient from './WebSocketClient';
 import IdleManager from './IdleManager';
 import NetworkVisibility from './NetworkVisibility';
 import ReconnectBackoff from './ReconnectBackoff';
+import { getAuthorDisplayName, getAuthorUid, getAuthorUserTag } from '../../utils/messageCompat.js';
 
 const WS_BASE_URL = '/ws/v1'
 
@@ -363,8 +364,8 @@ const WebSocketService = {
     if (user) {
       // Check if message is from current user
       // Use nested author object (preferred) or legacy flat field
-      const authorUid = messageData.author?.uid || messageData.content_author;
-      const authorTag = messageData.author?.user_tag || messageData.author_user_tag;
+      const authorUid = getAuthorUid(messageData);
+      const authorTag = getAuthorUserTag(messageData);
       
       isFromCurrentUser = authorUid === user.uid || authorTag === user.user_tag;
       
@@ -395,11 +396,10 @@ const WebSocketService = {
       
       if (shouldNotify) {
         // Extract author name from nested object or flat fields
-        const authorName = messageData.author?.display_name || 
-                          messageData.author?.user_tag || 
-                          messageData.author_display_name || 
-                          messageData.author_user_tag || 
-                          'Someone';
+        const display = getAuthorDisplayName(messageData);
+        const authorName = display !== 'Unknown'
+          ? display
+          : (getAuthorUserTag(messageData) || 'Someone');
         
         const contentPreview = messageData.content ? 
           (messageData.content.length > 60 ? 

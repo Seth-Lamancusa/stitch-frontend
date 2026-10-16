@@ -249,7 +249,6 @@
     </div>
       
       <!-- Message body -->
-      <div class="message-body">
         <div v-if="message.subject" class="message-subject">{{ message.subject }}</div>
         <div v-if="isAddingSubject" class="add-subject-input-container">
           <input
@@ -1129,28 +1128,13 @@ export default {
       });
     });
     
-    // Get author display name
-    const authorDisplayName = computed(() => {
-      if (props.message.author?.display_name) return props.message.author.display_name;
-      return props.message.author_display_name || '';
-    });
+    const authorDisplayName = computed(() => getAuthorDisplayName(props.message));
 
-    // Get author user tag
-    const authorUserTag = computed(() => {
-      if (props.message.author?.user_tag) return props.message.author.user_tag;
-      return props.message.author_user_tag || null;
-    });
+    const authorUserTag = computed(() => getAuthorUserTag(props.message));
     
-    // Get author UID
-    const authorUid = computed(() => {
-      if (props.message.author?.uid) return props.message.author.uid;
-      return props.message.content_author || null;
-    });
+    const authorUid = computed(() => getAuthorUid(props.message));
     
-    // Get bot status
-    const isBot = computed(() => {
-      return !!props.message.author?.is_bot;
-    });
+    const isBot = computed(() => isAuthorBot(props.message));
 
     const authorBotVersionId = computed(() => {
       return props.message.author?.bot_version_id || null;
@@ -1247,15 +1231,11 @@ export default {
     const isUserAuthorOfContent = (recipient) => {
       if (!props.message || !recipient) return false;
       
-      // The message author UID should match the recipient UID
-      if (props.message.content_author && recipient.uid && 
-          props.message.content_author === recipient.uid) {
+      if (authorUid.value && recipient.uid && authorUid.value === recipient.uid) {
         return true;
       }
       
-      // Or the message author user_tag should match the recipient user_tag
-      if (props.message.author_user_tag && recipient.user_tag && 
-          props.message.author_user_tag === recipient.user_tag) {
+      if (authorUserTag.value && recipient.user_tag && authorUserTag.value === recipient.user_tag) {
         return true;
       }
       
@@ -1546,7 +1526,7 @@ export default {
         return true;
       }
       
-      // Then check content_author for UID matching
+      // Then check author UID
       if (authorUid.value === currentUser.value.uid) {
         return true;
       }

@@ -604,12 +604,11 @@ export default {
       const currentUid = state.user.uid
       const currentTag = state.user.user_tag || null
       const isAuthorByUid =
-        (message.content_author && message.content_author === currentUid) ||
         (message.author && message.author.uid && message.author.uid === currentUid)
       const isAuthorByTag =
-        currentTag && message.author_user_tag && message.author_user_tag === currentTag
       if (isAuthorByUid || isAuthorByTag) return true
-      const messageAuthorUid = message.content_author || (message.author && message.author.uid)
+      if (isCurrentUserAuthor(message, state.user)) return true
+      const messageAuthorUid = getAuthorUid(message)
       if (messageAuthorUid && state.managedUsers && Array.isArray(state.managedUsers)) {
         const isManager = state.managedUsers.some((managedUser) => {
           const managedUid = managedUser.uid || managedUser.id || managedUser._key
@@ -625,12 +624,11 @@ export default {
       const currentUid = state.user.uid
       const currentTag = state.user.user_tag || null
       const isAuthorByUid =
-        (message.content_author && message.content_author === currentUid) ||
         (message.author && message.author.uid && message.author.uid === currentUid)
       const isAuthorByTag =
-        currentTag && message.author_user_tag && message.author_user_tag === currentTag
       if (isAuthorByUid || isAuthorByTag) return true
-      const messageAuthorUid = message.content_author || (message.author && message.author.uid)
+      if (isCurrentUserAuthor(message, state.user)) return true
+      const messageAuthorUid = getAuthorUid(message)
       if (messageAuthorUid && state.managedUsers && Array.isArray(state.managedUsers)) {
         const isManager = state.managedUsers.some((managedUser) => {
           const managedUid = managedUser.uid || managedUser.id || managedUser._key
@@ -646,12 +644,11 @@ export default {
       const currentUid = state.user.uid
       const currentTag = state.user.user_tag || null
       const isAuthorByUid =
-        (message.content_author && message.content_author === currentUid) ||
         (message.author && message.author.uid && message.author.uid === currentUid)
       const isAuthorByTag =
-        currentTag && message.author_user_tag && message.author_user_tag === currentTag
       if (isAuthorByUid || isAuthorByTag) return true
-      const messageAuthorUid = message.content_author || (message.author && message.author.uid)
+      if (isCurrentUserAuthor(message, state.user)) return true
+      const messageAuthorUid = getAuthorUid(message)
       if (messageAuthorUid && state.managedUsers && Array.isArray(state.managedUsers)) {
         const isManager = state.managedUsers.some((managedUser) => {
           const managedUid = managedUser.uid || managedUser.id || managedUser._key

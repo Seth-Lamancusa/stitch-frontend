@@ -116,6 +116,7 @@
 
 <script>
 import { format } from 'date-fns';
+import { getAuthorDisplayName, getAuthorUserTag, isCurrentUserAuthor } from '../../utils/messageCompat.js';
 
 export default {
   name: 'GraphNode',
@@ -254,26 +255,24 @@ export default {
     authorName() {
       const importDisplay = this.message.import_info?.display_name;
       if (importDisplay) return importDisplay;
-      // Robust access to display name
-      if (this.message.author?.display_name) return `${this.message.author.display_name} (@${this.message.author.user_tag})`;
-      
-      const display = this.message.author_display_name
-        || this.message.author?.username
-        || this.message.author?.email
-        || 'Unknown';
-      const tag = this.message.author_user_tag ? ` (@${this.message.author_user_tag})` : '';
-      return `${display}${tag}`;
+      const display = getAuthorDisplayName(this.message);
+      const tag = getAuthorUserTag(this.message);
+      if (display !== 'Unknown') {
+        return tag ? `${display} (@${tag})` : display;
+      }
+      const fallback = this.message.author?.username || this.message.author?.email || 'Unknown';
+      return tag ? `${fallback} (@${tag})` : fallback;
     },
     authorDisplay() {
       const importDisplay = this.message.import_info?.display_name;
       if (importDisplay) return importDisplay;
-      if (this.message.author?.display_name) return this.message.author.display_name;
-      return this.message.author_display_name || this.message.author?.username || this.message.author?.email || 'Unknown';
+      const display = getAuthorDisplayName(this.message);
+      if (display !== 'Unknown') return display;
+      return this.message.author?.username || this.message.author?.email || display;
     },
     authorTag() {
       if (this.message.import_info?.display_name) return null;
-      if (this.message.author?.user_tag) return this.message.author.user_tag;
-      return this.message.author_user_tag || null;
+      return getAuthorUserTag(this.message);
     },
     
     formattedTimestamp() {
@@ -303,9 +302,7 @@ export default {
     
     isOwnMessage() {
       if (this.message.import_info?.display_name) return false;
-      const currentUserId = this.$store?.getters['auth/user']?.uid;
-      const authorId = this.message.content_author || this.message.author?.uid;
-      return currentUserId && authorId && currentUserId === authorId;
+      return isCurrentUserAuthor(this.message, this.$store?.getters['auth/user']);
     },
     
     isUnread() {

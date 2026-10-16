@@ -125,6 +125,7 @@ import GraphCanvas from '../../components/graph/GraphCanvas.vue';
 import GraphSidePanel from '../../components/graph/GraphSidePanel.vue';
 import LoadThreadModal from '../../components/modals/LoadThreadModal.vue';
 import UserService from '../../services/UserService.js';
+import { getAuthorDisplayName } from '../../utils/messageCompat.js';
 
 
 export default {
@@ -614,7 +615,7 @@ export default {
         messageCount: messages.length,
         messages: messages.map(msg => ({
           id: msg.id,
-          author: msg.author?.display_name || msg.author?.username || 'Unknown',
+          author: getAuthorDisplayName(msg),
           timestamp: msg.timestamp,
           content: msg.content,
           public: msg.public,

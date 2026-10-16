@@ -1,5 +1,6 @@
 import { hierarchy } from 'd3-hierarchy';
 import { scaleLinear } from 'd3-scale';
+import { getAuthorUid, getAuthorUserTag } from '../messageCompat.js';
 
 /**
  * Core layout algorithms for thread graph visualization
@@ -20,8 +21,8 @@ class TreeNode {
     this.id = message.id;
     this.message = message;
     this.content = (message.content || '').slice(0, 30) + (message.content?.length > 30 ? '...' : '');
-    this.author = message.author_user_tag || message.author?.user_tag || 'unknown';
-    this.contentAuthorUid = message.content_author || message.author?.uid;
+    this.author = getAuthorUserTag(message) || 'unknown';
+    this.contentAuthorUid = getAuthorUid(message);
     this.children = [];
     this.x = 0;
     this.y = 0;
