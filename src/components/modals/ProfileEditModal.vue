@@ -1,8 +1,11 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useStore } from 'vuex';
+import { useRouter } from 'vue-router';
 import { useAuthentication } from '@/composables/useAuthentication';
 import DevModal from '@/components/modals/DevModal.vue';
+import ContextOriginModal from '@/components/modals/ContextOriginModal.vue';
+import MessagePreview from '@/components/MessagePreview.vue';
 import UserDisplay from '../common/UserDisplay.vue';
 
 const props = defineProps({
@@ -12,6 +15,7 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 
 const store = useStore();
+const router = useRouter();
 const user = computed(() => store.getters['auth/user']);
 const isManaged = computed(() => !!(user.value && user.value.is_managed));
 const activePrincipalUid = computed(() => store.getters['auth/activePrincipalUid']);
@@ -98,6 +102,18 @@ const showConfirmPassword = ref(false);
 // API Keys modal state
 const showApiKeysModal = ref(false);
 
+const showContextOriginPicker = ref(false);
+const contextOriginSaving = ref(false);
+const contextOriginError = ref('');
+const contextOriginMessage = ref(null);
+const contextOriginLoading = ref(false);
+const pendingContextNavigation = ref(null);
+const savedIsBot = computed(() => !!(user.value?.is_bot));
+const contextOriginId = computed(() => {
+  const id = user.value?.context_origin_id;
+  return typeof id === 'string' && id.trim() ? id.trim() : null;
+});
+
 // Verification status flags
 const isEmailVerified = computed(() => !!(user.value?.is_email_verified));
 const isPhoneVerified = computed(() => !!(user.value?.is_phone_verified));
@@ -161,6 +177,10 @@ const onGlobalKeydown = (e) => {
 
   if (e.key === 'Escape') {
     e.preventDefault();
+    if (showContextOriginPicker.value) {
+      if (!contextOriginSaving.value) showContextOriginPicker.value = false;
+      return;
+    }
     closeModal();
   }
 };
@@ -863,11 +883,88 @@ const closeModal = () => {
 // Unsaved-changes confirmation state and handlers
 const showUnsavedConfirm = ref(false);
 const confirmClose = () => {
+  const nextId = pendingContextNavigation.value;
   showUnsavedConfirm.value = false;
+  pendingContextNavigation.value = null;
   emit('close');
+  if (nextId) router.push(`/messages/${nextId}`);
 };
 const cancelClose = () => {
   showUnsavedConfirm.value = false;
+  pendingContextNavigation.value = null;
+};
+
+const loadContextOriginPreview = async (id) => {
+  if (!id) {
+    contextOriginMessage.value = null;
+    contextOriginLoading.value = false;
+    return;
+  }
+  const cached = store.getters['messages/getMessage'](id);
+  if (cached) {
+    contextOriginMessage.value = cached;
+    contextOriginLoading.value = false;
+    return;
+  }
+  contextOriginLoading.value = true;
+  try {
+    const loaded = await store.dispatch('messages/loadMessage', id);
+    const fromStore = store.getters['messages/getMessage'](id);
+    const fromResult = Array.isArray(loaded)
+      ? loaded.find((message) => message && (message.id === id || message._key === id))
+      : null;
+    contextOriginMessage.value = fromStore || fromResult || null;
+  } catch (_) {
+    contextOriginMessage.value = null;
+  } finally {
+    contextOriginLoading.value = false;
+  }
+};
+
+watch(
+  () => [props.isOpen, contextOriginId.value],
+  ([open, id]) => {
+    if (!open) return;
+    loadContextOriginPreview(id);
+  },
+  { immediate: true }
+);
+
+const openContextOriginPicker = () => {
+  contextOriginError.value = '';
+  showContextOriginPicker.value = true;
+};
+
+const contextOriginErrorMessage = (error) => {
+  const detail = error?.response?.data?.detail || error?.message;
+  if (detail === 'context_origin_not_visible') return 'That message is not visible from this account.';
+  if (detail === 'bot_fields_require_is_bot') return 'Save the bot setting before choosing a context origin.';
+  if (detail === 'invalid_context_origin_id') return 'Choose a message.';
+  return 'Could not save the context origin.';
+};
+
+const saveContextOrigin = async (originId) => {
+  contextOriginSaving.value = true;
+  contextOriginError.value = '';
+  try {
+    await store.dispatch('auth/updateProfile', { context_origin_id: originId });
+    showContextOriginPicker.value = false;
+  } catch (error) {
+    contextOriginError.value = contextOriginErrorMessage(error);
+  } finally {
+    contextOriginSaving.value = false;
+  }
+};
+
+const openContextOriginThread = (messageId) => {
+  if (!messageId) return;
+  if (hasFormChanges.value) {
+    pendingContextNavigation.value = messageId;
+    showUnsavedConfirm.value = true;
+    return;
+  }
+  emit('close');
+  router.push(`/messages/${messageId}`);
 };
 
 // Convert to managed user state
@@ -1372,6 +1469,31 @@ const deleteAccount = async () => {
                   </div>
                 </div>
               </div>
+            <div class="field context-origin-field">
+              <label>Context origin</label>
+              <div class="field-hint">Cosmetic for now. Clients fetch this origin id and traverse down the default chain themselves to inject it.</div>
+              <template v-if="savedIsBot">
+                <div v-if="contextOriginId" class="context-origin-preview">
+                  <MessagePreview
+                    v-if="contextOriginMessage"
+                    :message="contextOriginMessage"
+                    compact
+                    @navigate="openContextOriginThread"
+                  />
+                  <div v-else-if="contextOriginLoading" class="field-hint">Loading message…</div>
+                  <div v-else class="field-hint">This message is no longer available.</div>
+                  <div class="context-origin-actions">
+                    <button type="button" class="verify-btn" @click="openContextOriginPicker" :disabled="contextOriginSaving">Change</button>
+                    <button type="button" class="verify-btn" @click="saveContextOrigin(null)" :disabled="contextOriginSaving">Remove</button>
+                  </div>
+                </div>
+                <div v-else class="context-origin-actions">
+                  <button type="button" class="verify-btn" @click="openContextOriginPicker" :disabled="contextOriginSaving">Choose message</button>
+                </div>
+              </template>
+              <div v-else class="field-hint">Save the bot setting before choosing a context origin.</div>
+              <div class="field-error" v-if="contextOriginError && !showContextOriginPicker">{{ contextOriginError }}</div>
+            </div>
             <div class="field-error" v-if="botCapabilitiesError">{{ botCapabilitiesError }}</div>
           </section>
 
@@ -1774,6 +1896,13 @@ const deleteAccount = async () => {
           </div>
         </div>
       </div>
+      <ContextOriginModal
+        :isVisible="showContextOriginPicker"
+        :saving="contextOriginSaving"
+        :error="contextOriginError"
+        @close="showContextOriginPicker = false"
+        @select="saveContextOrigin"
+      />
     </div>
   </transition>
 </template>
@@ -2238,6 +2367,20 @@ const deleteAccount = async () => {
 
 .bot-capabilities-section .muted {
   color: var(--color-text-secondary);
+}
+
+.context-origin-field {
+  margin-top: var(--space-md);
+}
+
+.context-origin-preview {
+  margin-top: var(--space-sm);
+}
+
+.context-origin-actions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
 }
 
 .notify-group {

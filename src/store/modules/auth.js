@@ -39,7 +39,8 @@ function mapApiUserToAuthState(userData) {
     input_modalities: typeof data.input_modalities === 'string' ? data.input_modalities : null,
     output_modalities: typeof data.output_modalities === 'string' ? data.output_modalities : null,
     available_versions: Array.isArray(data.available_versions) ? data.available_versions : null,
-    third_party_integrations: typeof data.third_party_integrations === 'string' ? data.third_party_integrations : (typeof data.foundation_provider === 'string' ? data.foundation_provider : null)
+    third_party_integrations: typeof data.third_party_integrations === 'string' ? data.third_party_integrations : (typeof data.foundation_provider === 'string' ? data.foundation_provider : null),
+    context_origin_id: typeof data.context_origin_id === 'string' && data.context_origin_id.trim() ? data.context_origin_id.trim() : null
   };
 }
 
@@ -409,6 +410,7 @@ export default {
               output_modalities: typeof result.profile.output_modalities === 'string' ? result.profile.output_modalities : null,
               available_versions: Array.isArray(result.profile.available_versions) ? result.profile.available_versions : null,
               third_party_integrations: typeof result.profile.third_party_integrations === 'string' ? result.profile.third_party_integrations : null,
+              context_origin_id: typeof result.profile.context_origin_id === 'string' && result.profile.context_origin_id.trim() ? result.profile.context_origin_id.trim() : null,
               contact: null
             });
           }
