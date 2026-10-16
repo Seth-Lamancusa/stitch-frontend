@@ -2,13 +2,8 @@
 export { can as hasPermission, canAny as hasAnyPermission, isAdmin } from '../auth/can.js'
 export { parsePermissions as parseScopes, normalizePermission } from '../auth/constants.js'
 
-export function getEffectivePermissions(user, _accessToken) {
-  if (Array.isArray(user?.permissions) && user.permissions.length) {
-    return new Set(user.permissions)
-  }
-  if (typeof user?.scopes === 'string') {
-    return new Set(user.scopes.split(/\s+/).filter(Boolean))
-  }
+/** @deprecated Authorization is session-only. Prefer `@/auth/can`. */
+export function getEffectivePermissions(_user, _accessToken) {
   return new Set()
 }
 

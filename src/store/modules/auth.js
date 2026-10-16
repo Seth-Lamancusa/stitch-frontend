@@ -24,17 +24,10 @@ function mapApiUserToAuthState(userData) {
       ? primaryPhone.value
       : null
   const isPhoneVerified = !!(primaryPhone && primaryPhone.verified)
-  const permissions = parsePermissions(
-    Array.isArray(data.permissions) && data.permissions.length
-      ? data.permissions
-      : data.scopes || []
-  )
   return {
     uid: data.uid,
     displayName: data.display_name,
     user_tag: data.user_tag || '',
-    scopes: data.scopes || '',
-    permissions,
     contact: null,
     contacts,
     phone_number: primaryPhoneValue,
@@ -235,11 +228,6 @@ export default {
         const userData = response?.data || {}
         const profile = mapApiUserToAuthState(userData)
         authStore.setProfile(profile)
-        // Session is authoritative when it has grants; otherwise use /me (profile in DB).
-        if (!authStore._state.permissions?.length) {
-          authStore.syncPermissionsFromProfile(profile)
-        }
-        // Commit permissions before SET_USER so login re-renders see write immediately.
         commit('SET_PERMISSIONS', vuexPermissionsFromAuthStore())
         commit('SET_USER', profile)
 
@@ -394,10 +382,6 @@ export default {
           if (meResp && meResp.status >= 200 && meResp.status < 300) {
             const profile = mapApiUserToAuthState(meResp.data)
             authStore.setProfile(profile)
-            if (!authStore._state.permissions?.length) {
-              authStore.syncPermissionsFromProfile(profile)
-            }
-            commit('SET_PERMISSIONS', vuexPermissionsFromAuthStore())
             commit('SET_USER', profile)
           }
         } catch (_) {
@@ -607,12 +591,6 @@ export default {
       if (!state.user || !message) return false
       if (getters.hasScope(P.ADMIN)) return true
       if (!getters.hasScope(P.MESSAGES_WRITE)) return false
-      const currentUid = state.user.uid
-      const currentTag = state.user.user_tag || null
-      const isAuthorByUid =
-        (message.author && message.author.uid && message.author.uid === currentUid)
-      const isAuthorByTag =
-      if (isAuthorByUid || isAuthorByTag) return true
       if (isCurrentUserAuthor(message, state.user)) return true
       const messageAuthorUid = getAuthorUid(message)
       if (messageAuthorUid && state.managedUsers && Array.isArray(state.managedUsers)) {
@@ -627,12 +605,6 @@ export default {
     canUpdateReplyOrder: (state, getters) => (message) => {
       if (!state.user || !message) return false
       if (!getters.hasScope(P.MESSAGES_WRITE)) return false
-      const currentUid = state.user.uid
-      const currentTag = state.user.user_tag || null
-      const isAuthorByUid =
-        (message.author && message.author.uid && message.author.uid === currentUid)
-      const isAuthorByTag =
-      if (isAuthorByUid || isAuthorByTag) return true
       if (isCurrentUserAuthor(message, state.user)) return true
       const messageAuthorUid = getAuthorUid(message)
       if (messageAuthorUid && state.managedUsers && Array.isArray(state.managedUsers)) {
@@ -647,12 +619,6 @@ export default {
     canUpdateMessagePublicity: (state, getters) => (message) => {
       if (!state.user || !message) return false
       if (!getters.hasScope(P.MESSAGES_WRITE)) return false
-      const currentUid = state.user.uid
-      const currentTag = state.user.user_tag || null
-      const isAuthorByUid =
-        (message.author && message.author.uid && message.author.uid === currentUid)
-      const isAuthorByTag =
-      if (isAuthorByUid || isAuthorByTag) return true
       if (isCurrentUserAuthor(message, state.user)) return true
       const messageAuthorUid = getAuthorUid(message)
       if (messageAuthorUid && state.managedUsers && Array.isArray(state.managedUsers)) {

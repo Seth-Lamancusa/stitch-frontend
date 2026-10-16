@@ -29,13 +29,7 @@ function mapSessionDto(data) {
   if (!data || typeof data !== 'object') return null
   const actor = data.actor || null
   const subject = data.subject || null
-  const rawPermissions =
-    (Array.isArray(data.permissions) && data.permissions.length)
-      ? data.permissions
-      : (typeof data.permissions === 'string' && data.permissions.trim()
-          ? data.permissions
-          : (data.scope || data.scopes || []))
-  const permissions = parsePermissions(rawPermissions)
+  const permissions = parsePermissions(data.permissions)
   return {
     status: 'authenticated',
     sessionId: data.session_id || null,

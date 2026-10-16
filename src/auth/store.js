@@ -4,7 +4,7 @@
 
 import { reactive, readonly } from 'vue'
 import authClient, { anonymousState } from './client.js'
-import { normalizePermission, parsePermissions } from './constants.js'
+import { normalizePermission } from './constants.js'
 
 const state = reactive({
   status: 'bootstrapping', // bootstrapping | anonymous | authenticated | refreshing
@@ -133,20 +133,6 @@ function clearLocal() {
   applySession(anonymousState())
 }
 
-/** Sync permissions from a profile payload that includes permissions[] / scopes */
-function syncPermissionsFromProfile(profile) {
-  if (!profile) return
-  const fromPermissions = parsePermissions(profile.permissions)
-  if (fromPermissions.length) {
-    state.permissions = fromPermissions
-    return
-  }
-  const fromScopes = parsePermissions(profile.scopes)
-  if (fromScopes.length) {
-    state.permissions = fromScopes
-  }
-}
-
 export const authStore = {
   state: readonly(state),
   /** Mutable view for internal modules that need to patch (prefer methods). */
@@ -163,7 +149,6 @@ export const authStore = {
   refresh,
   setProfile,
   clearLocal,
-  syncPermissionsFromProfile,
   applySession,
 }
 
