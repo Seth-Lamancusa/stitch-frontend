@@ -21,13 +21,15 @@ export default {
     return !!resp.data?.revoked
   },
 
-  async createKey({ label = '', scopes_cap, assurance, pop, env } = {}) {
+  async createKey({ label = '', scopes_cap, assurance, pop, env, expires_at } = {}) {
     const token = TokenManager.accessToken
     if (!token) throw new Error('No authentication token available')
-    const resp = await apiClient.post('/auth/keys/self', { label, scopes_cap, assurance, pop, env }, {
+    const body = { label, scopes_cap, assurance, pop, env }
+    if (expires_at) body.expires_at = expires_at
+    const resp = await apiClient.post('/auth/keys/self', body, {
       headers: { 'Authorization': `Bearer ${token}` }
     })
-    return resp.data // { cred_id, api_key }
+    return resp.data // { cred_id, api_key, expires_at }
   }
 }
 

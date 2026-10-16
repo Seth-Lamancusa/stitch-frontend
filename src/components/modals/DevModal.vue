@@ -21,6 +21,36 @@ const newKeyLabel = ref('');
 const newKeyScopes = ref('');
 const createdKeyToken = ref('');
 
+function utcDateOffset(days) {
+  const now = new Date();
+  const utc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  utc.setUTCDate(utc.getUTCDate() + days);
+  return utc.toISOString().slice(0, 10);
+}
+
+const newKeyExpires = ref(utcDateOffset(90));
+const minExpiryDate = computed(() => utcDateOffset(1));
+const maxExpiryDate = computed(() => utcDateOffset(730));
+
+function formatStamp(iso) {
+  if (!iso) return '—';
+  return String(iso).slice(0, 19).replace('T', ' ');
+}
+
+function isKeyExpired(iso) {
+  if (!iso) return false;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) && t <= Date.now();
+}
+
+function expiryErrorMessage(error) {
+  const detail = error?.response?.data?.detail;
+  if (detail === 'expires_at_in_past') return 'Expiration must be in the future.';
+  if (detail === 'expires_at_too_far') return 'Expiration cannot be more than two years out.';
+  if (detail === 'expires_at_invalid') return 'Expiration date is invalid.';
+  return error?.message || 'Failed to create key';
+}
+
 // Webhook/endpoint state
 const endpoint = ref('');
 const endpointVerificationMessage = ref('');
@@ -208,23 +238,34 @@ watch(isApiAllowed, (allowed) => {
 
 async function createKey() {
   if (!isApiAllowed.value) return;
+  const expiresAt = (newKeyExpires.value || '').trim();
+  if (expiresAt && (expiresAt < minExpiryDate.value || expiresAt > maxExpiryDate.value)) {
+    errorMessage.value = 'Expiration must be between tomorrow and two years from today.';
+    return;
+  }
   try {
     creating.value = true;
     errorMessage.value = '';
     createdKeyToken.value = '';
-    const res = await ApiKeysService.createKey({ label: newKeyLabel.value.trim(), scopes_cap: newKeyScopes.value.trim() || undefined });
+    const res = await ApiKeysService.createKey({
+      label: newKeyLabel.value.trim(),
+      scopes_cap: newKeyScopes.value.trim() || undefined,
+      expires_at: expiresAt || undefined,
+    });
     createdKeyToken.value = res?.api_key || '';
     newKeyLabel.value = '';
     newKeyScopes.value = '';
+    newKeyExpires.value = utcDateOffset(90);
     await loadKeys();
   } catch (e) {
-    errorMessage.value = e?.message || 'Failed to create key';
+    errorMessage.value = expiryErrorMessage(e);
   } finally {
     creating.value = false;
   }
 }
 
 function resetDevForm() {
+  newKeyExpires.value = utcDateOffset(90);
   endpoint.value = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
   endpointVerificationMessage.value = '';
   generatedSecret.value = '';
@@ -433,36 +474,34 @@ async function setOrRotateSigningSecret() {
             <div class="api-section-wrapper" :class="{ 'blocked-state': !isApiAllowed }">
               <div class="modal-content-body" :class="{ 'is-blurred': !isApiAllowed }">
                 <section class="panel">
-                  <div v-if="!isManaged">
-                    <div class="panel-header">
-                      <h4>API keys</h4>
-                      <p>Create keys for programmatic access. New tokens are shown once.</p>
+                  <div class="panel-header">
+                    <h4>API keys</h4>
+                    <p v-if="!isManaged">Create keys for programmatic access. Pick an expiration, up to two years. New tokens are shown once.</p>
+                    <p v-else>Create a key for this account. Leave scopes empty to inherit them from your manager. A cap you set stays within this account's scopes. Pick an expiration, up to two years. The secret is shown once.</p>
+                  </div>
+                  <div class="create-grid">
+                    <div class="field">
+                      <label for="newKeyLabel">Label</label>
+                      <input id="newKeyLabel" placeholder="Optional label" v-model="newKeyLabel" />
                     </div>
-                    <div class="create-grid">
-                      <div class="field">
-                        <label for="newKeyLabel">Label</label>
-                        <input id="newKeyLabel" placeholder="Optional label" v-model="newKeyLabel" />
-                      </div>
-                      <div class="field">
-                        <label for="newKeyScopes">Scopes cap</label>
-                        <input id="newKeyScopes" placeholder="e.g. msg.read msg.write" v-model="newKeyScopes" />
-                        <div class="field-hint">Leave empty to use default: msg.read msg.write</div>
-                      </div>
+                    <div class="field">
+                      <label for="newKeyScopes">Scopes cap</label>
+                      <input id="newKeyScopes" placeholder="e.g. msg.read msg.write" v-model="newKeyScopes" />
+                      <div class="field-hint" v-if="isManaged">Leave empty to inherit your manager's scopes, limited to this account.</div>
+                      <div class="field-hint" v-else>Leave empty to use default: msg.read msg.write</div>
                     </div>
-                    <div class="actions">
-                      <button class="btn primary" type="button" :disabled="creating" @click="createKey">{{ creating ? 'Creating…' : 'Create Key' }}</button>
-                    </div>
-                    <div v-if="createdKeyToken" class="callout success">
-                      <div class="note">Copy your new API key now. It will not be shown again.</div>
-                      <div class="mono token">{{ createdKeyToken }}</div>
+                    <div class="field">
+                      <label for="newKeyExpires">Expires</label>
+                      <input id="newKeyExpires" type="date" v-model="newKeyExpires" :min="minExpiryDate" :max="maxExpiryDate" />
+                      <div class="field-hint">Defaults to 90 days. The latest date is two years out.</div>
                     </div>
                   </div>
-
-                  <div v-else class="managed-delegation-hint">
-                    <div class="panel-header">
-                      <h4>Managed account</h4>
-                      <p>Managed users (bots) cannot create API keys. Ask your manager to delegate for you, then use that token to import messages.</p>
-                    </div>
+                  <div class="actions">
+                    <button class="btn primary" type="button" :disabled="creating" @click="createKey">{{ creating ? 'Creating…' : 'Create Key' }}</button>
+                  </div>
+                  <div v-if="createdKeyToken" class="callout success">
+                    <div class="note">Copy your new API key now. It will not be shown again.</div>
+                    <div class="mono token">{{ createdKeyToken }}</div>
                   </div>
                 </section>
 
@@ -473,6 +512,7 @@ async function setOrRotateSigningSecret() {
                       <div>Scopes</div>
                       <div>Created</div>
                       <div>Last used</div>
+                      <div>Expires</div>
                       <div></div>
                     </div>
                     <div v-if="loading" class="row empty"><div>Loading…</div></div>
@@ -480,8 +520,12 @@ async function setOrRotateSigningSecret() {
                     <div v-else v-for="k in keys" :key="k.cred_id" class="row">
                       <div>{{ k.label || '—' }}</div>
                       <div class="mono">{{ k.scopes_cap || '—' }}</div>
-                      <div class="mono">{{ k.created_at?.slice(0,19).replace('T',' ') }}</div>
-                      <div class="mono">{{ k.last_used_at ? k.last_used_at.slice(0,19).replace('T',' ') : '—' }}</div>
+                      <div class="mono">{{ formatStamp(k.created_at) }}</div>
+                      <div class="mono">{{ k.last_used_at ? formatStamp(k.last_used_at) : '—' }}</div>
+                      <div class="mono" :class="{ expired: isKeyExpired(k.expires_at) }">
+                        {{ formatStamp(k.expires_at) }}
+                        <span v-if="isKeyExpired(k.expires_at)" class="expired-tag">Expired</span>
+                      </div>
                       <div class="actions">
                         <button class="btn danger" type="button" :disabled="loading" @click="revoke(k.cred_id)">Revoke</button>
                       </div>
@@ -692,6 +736,9 @@ async function setOrRotateSigningSecret() {
   font-weight: 500;
   color: var(--color-text-secondary);
 }
+.field input[type="date"] {
+  color-scheme: dark;
+}
 .field input,
 .callout input {
   width: 100%;
@@ -839,7 +886,7 @@ async function setOrRotateSigningSecret() {
 
 .create-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1.2fr 0.9fr;
   gap: var(--space-md);
 }
 .actions { display: flex; }
@@ -856,12 +903,12 @@ async function setOrRotateSigningSecret() {
   background: var(--color-surface-dark);
 }
 .table {
-  min-width: 640px;
+  min-width: 820px;
   display: grid;
 }
 .row {
   display: grid;
-  grid-template-columns: 1.2fr 1.3fr 1fr 1fr auto;
+  grid-template-columns: 1.1fr 1.2fr 0.9fr 0.9fr 1.1fr auto;
   align-items: center;
   gap: var(--space-md);
   padding: 12px var(--space-md);
@@ -883,6 +930,14 @@ async function setOrRotateSigningSecret() {
 }
 .row:not(.header):not(.empty):hover {
   background: var(--color-hover-overlay);
+}
+.expired { color: var(--color-error); }
+.expired-tag {
+  display: block;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .modal-footer {
@@ -958,6 +1013,7 @@ async function setOrRotateSigningSecret() {
     margin: var(--space-md);
   }
   .create-grid { grid-template-columns: 1fr; }
+  .table { min-width: 720px; }
   .field-row { flex-direction: column; align-items: stretch; }
   .btn { width: 100%; }
 }
