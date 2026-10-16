@@ -215,7 +215,7 @@ export default {
   },
 
   // Get user history root messages (auth required). Optional channel_id filters to that channel.
-  async getUserHistory(skip = 0, limit = 6, channelId = null) {
+  async getUserHistory(skip = 0, limit = 15, channelId = null) {
     const headers = await getAuthHeaders()
     const params = new URLSearchParams({ skip: String(skip), limit: String(limit) })
     if (channelId) params.set('channel_id', channelId)

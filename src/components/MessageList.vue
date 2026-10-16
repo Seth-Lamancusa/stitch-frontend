@@ -67,8 +67,7 @@ const emit = defineEmits(['messageClicked', 'selectionChanged', 'createChannel']
 
 const isAllLoaded = ref(false);
 const currentSkip = ref(0);
-const PAGE_SIZE_BY_MODE = { history: 6 };
-const pageSize = computed(() => PAGE_SIZE_BY_MODE[props.mode] || 15);
+const pageSize = ref(15);
 
 // Local state for non-store modes (like saved mode)
 const localMessages = ref([]);
