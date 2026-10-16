@@ -252,37 +252,6 @@
         <span>Verify your email to unlock messaging & notifications.</span>
         <a class="verify-link" href="#" @click.prevent="openProfileModal">Verify now</a>
       </div>
-      <div class="feedback-button-container">
-        <router-link to="/messages/2HhB" class="feedback-button">
-          <span class="button-icon" aria-hidden="true">💬</span>
-          <span class="button-label">Feedback</span>
-        </router-link>
-        <button 
-          @click="handleRefresh"
-          class="refresh-button"
-          :disabled="isRefreshing"
-          title="Refresh message list"
-          aria-label="Refresh message list"
-        >
-          <span v-if="isRefreshing" class="refresh-spinner"></span>
-          <template v-else>
-            <span class="button-icon" aria-hidden="true">↻</span>
-            <span class="button-label">Refresh</span>
-          </template>
-        </button>
-
-        <button
-          v-if="!isChannelsTab"
-          class="download-button"
-          @click="handleDownload"
-          :disabled="!downloadMessageListFn"
-          title="Download current message list"
-          aria-label="Download current message list"
-        >
-          <span class="button-icon" aria-hidden="true">↓</span>
-          <span class="button-label">Download</span>
-        </button>
-      </div>
       <slot></slot>
     </div>
     
@@ -300,6 +269,16 @@
     />
     <GlobalNotifications />
     
+    <router-link
+      to="/messages/a784e721"
+      class="global-feedback-btn"
+      title="Give feedback"
+      aria-label="Give feedback"
+    >
+      <span class="btn-icon" aria-hidden="true">💬</span>
+      <span class="btn-label">Feedback</span>
+    </router-link>
+
     <!-- Global Create Button (floating, appears on all tabs) -->
     <button
       v-if="user && canInteract"
@@ -338,7 +317,7 @@
 </template>
 
 <script setup>
-  import { computed, ref, watch, onMounted, onBeforeUnmount, provide } from 'vue';
+  import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useStore } from 'vuex';
 import { useAuthentication } from '../../composables/useAuthentication';
@@ -377,19 +356,6 @@ const authReady = computed(() => store.getters['auth/authReady']);
   return 'history';
   });
 
-  const isChannelsTab = computed(() => activeTab.value === 'channels');
-
-  // Download support: MessageList.vue registers a callback with this layout.
-  const downloadMessageListFn = ref(null);
-  provide('registerDownloadCurrentList', (fn) => {
-    downloadMessageListFn.value = fn;
-  });
-
-  const handleDownload = () => {
-    if (downloadMessageListFn.value) {
-      downloadMessageListFn.value();
-    }
-  };
 const unreadCount = computed(() => store.getters['messages/getUnreadMessageCount']);
 const isUnreadCountLoading = computed(() => store.getters['messages/isLoading']('fetchingUnreadCount'));
 const isLoggingIn = ref(false);
@@ -401,7 +367,6 @@ const usernameContainerRef = ref(null);
 const switchingPrincipalUid = ref(null);
 const isSwitchingPrincipal = computed(() => !!switchingPrincipalUid.value);
 const isCreateManagedModalOpen = ref(false);
-const isRefreshing = ref(false);
 const showCreateModal = ref(false);
 const showCreateChannelModal = ref(false);
 
@@ -730,19 +695,6 @@ const onManagedDragEnd = () => {
 
 const closeCreateManagedModal = () => {
   isCreateManagedModalOpen.value = false;
-};
-
-const handleRefresh = async () => {
-  if (isRefreshing.value) return;
-  try {
-    isRefreshing.value = true;
-    // Trigger refresh via store action
-    store.dispatch('navigation/triggerRefresh');
-    // Small delay to show the spinner
-    await new Promise(resolve => setTimeout(resolve, 300));
-  } finally {
-    isRefreshing.value = false;
-  }
 };
 
 const onDocumentClick = (e) => {
@@ -1388,133 +1340,6 @@ const handleChannelCreated = async (newChannel) => {
   }
 }
 
-.feedback-button-container {
-  padding: 8px 6px;
-  padding-bottom: 0px;
-  text-align: center;
-  background: var(--color-background, #fff);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-/* Shared base styles for both buttons */
-.feedback-button,
-.refresh-button,
-.download-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-inverse, #fff);
-  text-decoration: none;
-  padding: 8px 14px;
-  border-radius: 7px;
-  font-weight: 600;
-  font-size: 0.85rem;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(8px);
-  margin-top: 6px;
-  cursor: pointer;
-  box-sizing: border-box;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
-  line-height: 1;
-  white-space: nowrap;
-  font-family: inherit;
-  /* Reset button defaults */
-  margin-left: 0;
-  margin-right: 0;
-  margin-bottom: 0;
-  /* Ensure consistent height */
-  min-height: 0;
-  height: auto;
-  gap: 8px;
-}
-
-.button-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 13px;
-  line-height: 1;
-}
-
-.button-label {
-  display: inline-flex;
-  align-items: center;
-}
-
-/* Feedback button - green colors */
-.feedback-button {
-  background: linear-gradient(135deg, rgba(16, 163, 127, 0.8) 0%, rgba(31, 197, 157, 0.7) 100%);
-  border-color: rgba(16, 163, 127, 0.45);
-  box-shadow: 0 10px 24px rgba(16, 163, 127, 0.18);
-}
-
-.feedback-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(16, 163, 127, 0.4);
-  background: linear-gradient(135deg, rgba(16, 163, 127, 0.9) 0%, rgba(31, 197, 157, 0.8) 100%);
-  border-color: rgba(16, 163, 127, 0.5);
-  color: var(--color-text-inverse, #fff);
-}
-
-/* Refresh button - blue colors */
-.refresh-button {
-  background: linear-gradient(135deg, rgba(79, 140, 255, 0.8) 0%, rgba(100, 160, 255, 0.7) 100%);
-  border-color: rgba(79, 140, 255, 0.45);
-  box-shadow: 0 10px 24px rgba(79, 140, 255, 0.18);
-}
-
-/* Download button (subtle purple) */
-.download-button {
-  background: linear-gradient(135deg, rgba(173, 91, 255, 0.75) 0%, rgba(196, 120, 255, 0.65) 100%);
-  border-color: rgba(173, 91, 255, 0.45);
-  box-shadow: 0 10px 24px rgba(173, 91, 255, 0.18);
-}
-
-.download-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(173, 91, 255, 0.35);
-  background: linear-gradient(135deg, rgba(173, 91, 255, 0.88) 0%, rgba(196, 120, 255, 0.78) 100%);
-  border-color: rgba(173, 91, 255, 0.45);
-  color: var(--color-text-inverse, #fff);
-}
-
-.refresh-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(79, 140, 255, 0.4);
-  background: linear-gradient(135deg, rgba(79, 140, 255, 0.9) 0%, rgba(100, 160, 255, 0.8) 100%);
-  border-color: rgba(79, 140, 255, 0.5);
-}
-
-.refresh-button:disabled,
-.download-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.refresh-spinner {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: rgba(255, 255, 255, 0.9);
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
 /* Banner prompting email verification */
 .verify-banner {
   background: rgba(255, 193, 7, 0.12);
@@ -1599,18 +1424,55 @@ const handleChannelCreated = async (newChannel) => {
     white-space: nowrap; /* Prevent text wrapping */
     flex-shrink: 0; /* Never shrink the logout button */
   }
-  
-  .feedback-button-container {
-    padding: 8px 4px; /* Reduced padding on mobile */
-    gap: 8px;
-  }
-  
-  .feedback-button,
-  .refresh-button,
-  .download-button {
-    font-size: 0.85rem; /* Slightly smaller text */
-    padding: 8px 16px; /* Smaller button padding */
-  }
+}
+
+/* Global Feedback Button */
+.global-feedback-btn {
+  position: fixed;
+  bottom: var(--space-xl);
+  left: var(--space-xl);
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: var(--radius-pill, 9999px);
+  background: #1ee0b0;
+  color: #04241c;
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow:
+    0 0 0 3px rgba(30, 224, 176, 0.35),
+    0 10px 28px rgba(16, 211, 168, 0.5);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.global-feedback-btn:hover {
+  transform: translateY(-2px) scale(1.04);
+  background: #3af0c2;
+  color: #04241c;
+  box-shadow:
+    0 0 0 5px rgba(58, 240, 194, 0.4),
+    0 14px 36px rgba(16, 211, 168, 0.62);
+}
+
+.global-feedback-btn:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+
+.global-feedback-btn .btn-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.global-feedback-btn .btn-label {
+  display: inline-flex;
+  align-items: center;
 }
 
 /* Global Create Button */
@@ -1647,7 +1509,7 @@ const handleChannelCreated = async (newChannel) => {
   background-color: var(--color-primary-dark);
 }
 
-/* Mobile responsive for global create button */
+/* Mobile responsive for global create and feedback buttons */
 @media (max-width: 768px) {
   .global-create-btn {
     width: 52px;
@@ -1659,6 +1521,13 @@ const handleChannelCreated = async (newChannel) => {
 
   .global-create-btn .btn-icon {
     transform: translateY(-0.5px);
+  }
+
+  .global-feedback-btn {
+    bottom: 80px;
+    left: var(--space-md);
+    padding: 10px 14px;
+    font-size: 0.85rem;
   }
 }
 
@@ -1709,17 +1578,6 @@ const handleChannelCreated = async (newChannel) => {
     font-size: calc(var(--font-size-xs) - 2px); /* Very small font */
     min-width: 0; /* Allow content to dictate width */
   }
-  
-  .feedback-button-container {
-    padding: 6px 4px; /* Even more reduced padding on smaller screens */
-    gap: 6px;
-  }
-  
-  .feedback-button,
-  .refresh-button {
-    font-size: 0.8rem; /* Smaller text for narrow screens */
-    padding: 6px 12px; /* More compact padding */
-  }
 }
 
 /* Simplified layout on ultra-narrow screens */
@@ -1748,17 +1606,6 @@ const handleChannelCreated = async (newChannel) => {
     min-width: 0;
     padding: 4px 8px;
     font-size: calc(var(--font-size-xs));
-  }
-  
-  .feedback-button-container {
-    padding: 8px 6px;
-    gap: 8px;
-  }
-  
-  .feedback-button,
-  .refresh-button {
-    font-size: 0.85rem;
-    padding: 8px 14px;
   }
 }
 </style>

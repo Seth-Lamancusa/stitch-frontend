@@ -161,15 +161,6 @@ const threads = computed(() => {
   return allMessages;
 });
 
-// Register download callback with TabViewLayout so the global Download button
-const registerDownloadCurrentList = inject('registerDownloadCurrentList', null);
-const downloadCurrentList = () => {
-    a.download = `message-list-${safeMode}-${Date.now()}.json`;
-    console.error('[MessageList] Download failed:', e);
-  if (typeof registerDownloadCurrentList === 'function') {
-    registerDownloadCurrentList(downloadCurrentList);
-  if (typeof registerDownloadCurrentList === 'function') {
-    registerDownloadCurrentList(null);
 // Loading indicator should be visible if we're loading or have more to load
 const shouldShowLoadingIndicator = computed(() => {
   if (requiresAuth.value && !user.value) return false;
