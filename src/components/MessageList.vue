@@ -6,6 +6,7 @@ import MessagePreview from './MessagePreview.vue';
 import DeleteConfirmModal from './modals/DeleteConfirmModal.vue';
 import NewThreadModal from './modals/NewThreadModal.vue';
 import { onActivated } from 'vue';
+import { isCurrentUserAuthor as isMessageAuthor } from '../utils/messageCompat.js';
 
 // Props to support different modes and configurations
 const props = defineProps({
@@ -66,8 +67,7 @@ const emit = defineEmits(['messageClicked', 'selectionChanged', 'createChannel']
 
 const isAllLoaded = ref(false);
 const currentSkip = ref(0);
-const PAGE_SIZE_BY_MODE = { history: 6 };
-const pageSize = computed(() => PAGE_SIZE_BY_MODE[props.mode] || 15);
+const pageSize = ref(15);
 
 // Local state for non-store modes (like saved mode)
 const localMessages = ref([]);
@@ -303,12 +303,6 @@ const linkType = computed(() => {
   return null;
 });
 
-// Get display version of author for a message
-function getAuthorDisplay(message) {
-  if (message.author?.display_name) return message.author.display_name;
-  return message.author_display_name || '';
-}
-
 // Get reply count from child_ids
 function getReplyCount(message) {
   // Use child_ids array if available
@@ -397,7 +391,7 @@ const hasImportScope = computed(() => {
 });
 
 const hasChannelCreateScope = computed(() => {
-  return store.getters['auth/hasScope']('channel.create');
+  return store.getters['auth/hasScope']('channels.create');
 });
 
 const shouldShowModal = computed(() => {
@@ -446,28 +440,7 @@ const handleCreateChannelConfirm = () => {
 
 // Function to check if the author is the current user
 function isCurrentUserAuthor(message) {
-  if (!user.value) return false;
-  
-  // First check by nested author object (preferred)
-  if (message.author?.uid && user.value.uid === message.author.uid) return true;
-  if (message.author?.user_tag && user.value.user_tag === message.author.user_tag) return true;
-  
-  // Fallback: check by author_user_tag if available
-  if (message.author_user_tag && user.value.user_tag === message.author_user_tag) {
-    return true;
-  }
-  
-  // Then check by email
-  if (message.author_email && user.value.email === message.author_email) {
-    return true;
-  }
-  
-  // Finally check content_author for older messages
-  if (message.content_author === user.value.uid) {
-    return true;
-  }
-  
-  return false;
+  return isMessageAuthor(message, user.value);
 }
 
 // Get all messages in a thread (for unread count calculation)

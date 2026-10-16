@@ -1,11 +1,7 @@
 import apiClient from './apiClient'
-import TokenManager from './TokenManager'
 
-// Helper function to get auth headers
-const getAuthHeaders = () => {
-  const token = TokenManager.accessToken
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
+// Cookie session — apiClient sends credentials; no Bearer header.
+const getAuthHeaders = () => ({})
 
 export default {
   /**

@@ -1,14 +1,10 @@
-import axios from 'axios';
-import TokenManager from './TokenManager';
+import apiClient from './apiClient';
 import store from '../store';
 
 const apiBaseUrl = '/v1';
 
-// Helper function to get auth headers
-const getAuthHeaders = () => {
-  const token = TokenManager.accessToken;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
+// Cookie session via apiClient (withCredentials); no Bearer header.
+const getAuthHeaders = () => ({});
 
 class ImportService {
   /**
@@ -138,8 +134,8 @@ class ImportService {
     }
     
     try {
-      const response = await axios.post(
-        `${apiBaseUrl}${endpoint}`,
+      const response = await apiClient.post(
+        `${endpoint}`,
         payload,
         { headers }
       );
@@ -214,7 +210,7 @@ class ImportService {
     });
 
     try {
-      const response = await axios.post(`${apiBaseUrl}${endpoint}`, payload, { headers });
+      const response = await apiClient.post(`${endpoint}`, payload, { headers });
       const results = Array.isArray(response.data) ? response.data : [];
       const successful = results.filter(r => r && r.success && r.message);
       const totalRequested = payload.length;

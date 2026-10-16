@@ -19,8 +19,7 @@ import PasswordResetView from './views/app_views/PasswordResetView.vue';
 import ImportView from './views/app_views/ImportView.vue';
 import AdminMetricsView from './views/app_views/AdminMetricsView.vue';
 import store from './store';
-import { usePermissions } from './composables/usePermissions';
-import TokenManager from './services/TokenManager';
+import { P } from './auth/constants.js';
 
 import StitchPlaygroundView from './views/app_views/StitchPlaygroundView.vue';
 
@@ -130,7 +129,7 @@ const routes = [
   {
     path: '/admin',
     redirect: '/admin/metrics',
-    meta: { requiredPermissions: ['admin'] }
+    meta: { requiredPermissions: [P.ADMIN] }
   },
   {
     path: '/admin/metrics',
@@ -138,7 +137,7 @@ const routes = [
     component: AdminMetricsView,
     meta: {
       title: 'Admin – Messages per day',
-      requiredPermissions: ['admin']
+      requiredPermissions: [P.ADMIN]
     }
   },
   {

@@ -1,24 +1,26 @@
 import { computed } from 'vue'
 import { useStore } from 'vuex'
+import { P } from '../auth/constants.js'
 
-// Centralized permissions composable built on top of auth store getters
-// Usage:
-// const { can, canAny, isAdmin, user, authReady } = usePermissions()
+/**
+ * Centralized permissions composable (UX hints only).
+ * Usage: const { can, canAny, isAdmin, user, authReady, P } = usePermissions()
+ */
 export function usePermissions() {
   const store = useStore()
 
   const user = computed(() => store.getters['auth/user'])
   const authReady = computed(() => store.getters['auth/authReady'])
-  const isAdmin = computed(() => store.getters['auth/isAdmin']) // Kept for logic internal to frontend if needed, but not for API authorization
+  const isAdmin = computed(() => store.getters['auth/isAdmin'])
 
-  const can = (scopeName) => {
-    if (!scopeName) return false
-    return store.getters['auth/hasScope'](scopeName)
+  const can = (permissionName) => {
+    if (!permissionName) return false
+    return store.getters['auth/hasScope'](permissionName)
   }
 
-  const canAny = (scopeNames) => {
-    if (!Array.isArray(scopeNames) || scopeNames.length === 0) return false
-    return store.getters['auth/hasAnyScope'](scopeNames)
+  const canAny = (permissionNames) => {
+    if (!Array.isArray(permissionNames) || permissionNames.length === 0) return false
+    return store.getters['auth/hasAnyScope'](permissionNames)
   }
 
   return {
@@ -27,7 +29,6 @@ export function usePermissions() {
     isAdmin,
     can,
     canAny,
+    P,
   }
 }
-
-

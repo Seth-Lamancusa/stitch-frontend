@@ -1,3 +1,5 @@
+import { getAuthorDisplayName, getAuthorUid, getAuthorUserTag, isAuthorBot, isCurrentUserAuthor } from '../../utils/messageCompat.js';
+
 const TAG_PATTERN = /^[A-Za-z0-9-]{1,32}$/;
 const MAX_DRAFT_TAGS = 20;
 
@@ -415,14 +417,6 @@ export default {
     
     replyTargetId: state => state.replyingToMessageId,
     
-    replyTargetAuthor: (state, getters, rootState, rootGetters) => {
-      const messageId = state.replyingToMessageId;
-      if (!messageId) return '';
-      
-      const message = rootGetters['messages/getMessage'](messageId);
-      return message ? message.content_author : '';
-    },
-    
     isReplyMessageLoading: state => state.isLoadingReplyMessage,
     
     previousRoute: state => {
@@ -709,23 +703,20 @@ export default {
       // 5. Add the original sender (if not current user)
       // Include bots if they are the sender (don't filter them out)
       // This matches bot service: include_original_sender = True
-      const authorUid = message.content_author || message.author?.uid;
-      const authorTag = message.author_user_tag || message.author?.user_tag;
-      const authorIsBot = message.author?.is_bot === true;
+      const authorUid = getAuthorUid(message);
+      const authorTag = getAuthorUserTag(message);
+      const authorIsBot = isAuthorBot(message);
       
       if (authorUid) {
         // Check if not current user
-        const isCurrentUser = currentUser && (
-          authorUid === currentUser.uid ||
-          (authorTag && currentUser.user_tag && authorTag.toLowerCase() === currentUser.user_tag.toLowerCase())
-        );
+        const isCurrentUser = isCurrentUserAuthor(message, currentUser);
         
         if (!isCurrentUser && !addedUids.has(authorUid)) {
           const authorRecipient = {
             uid: authorUid,
-            display_name: message.author_display_name || message.author?.display_name,
+            display_name: getAuthorDisplayName(message),
             user_tag: authorTag,
-            is_bot: !!(message.author?.is_bot ?? message.author?.isBot),
+            is_bot: authorIsBot || !!message.author?.isBot,
             available_versions: message.author?.available_versions ?? message.author?.availableVersions ?? null,
             public: true,
             notify: true

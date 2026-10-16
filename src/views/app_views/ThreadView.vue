@@ -260,7 +260,7 @@ import ThreadHeader from '../../components/ThreadHeader.vue';
 import LoginButton from '@buttons/LoginButton.vue'
 import { useCompactThread } from '../../composables/useCompactThread.js';
 import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
-import { contentText } from '../../utils/messageCompat.js';
+import { contentText, getAuthorDisplayName, getAuthorUserTag } from '../../utils/messageCompat.js';
 
 // import BranchNavigator from '../../components/BranchNavigator.vue';
 
@@ -1027,8 +1027,9 @@ const exitSelectionMode = () => {
     // Format messages for copying with gap detection
     const formattedText = messagesToCopy.reduce((acc, message, index) => {
       // Format the current message
-      const userTag = message.author_user_tag ? `(@${message.author_user_tag})` : '';
-      const header = `${message.author_display_name || 'Unknown'} ${userTag}, ${new Date(message.timestamp).toLocaleString()} (https://stitch.fyi/messages/${message.id})`;
+      const userTag = getAuthorUserTag(message);
+      const tagPart = userTag ? `(@${userTag})` : '';
+      const header = `${getAuthorDisplayName(message)} ${tagPart}, ${new Date(message.timestamp).toLocaleString()} (https://stitch.fyi/messages/${message.id})`;
       const messageText = `${header}\n\n${contentText(message.content)}`;
       
       // If this is the first message, just add it
@@ -1069,8 +1070,8 @@ const exitSelectionMode = () => {
 
       const formattedText = displayedMessages.value
         .map((message) => {
-          const userTag = message.author_user_tag || 'unknown';
-          const displayName = message.author_display_name || 'Unknown';
+          const userTag = getAuthorUserTag(message) || 'unknown';
+          const displayName = getAuthorDisplayName(message);
           const datetime = new Date(message.timestamp).toLocaleString();
           const content = contentText(message.content);
           return `[${datetime}] ${displayName} (@${userTag}): ${content}`;
@@ -1177,14 +1178,6 @@ const handleAddRecipients = async (recipients, addToAncestors = true) => {
         const branchMessages = store.getters['messages/getVisibleBranchMessages'](messageId);
         if (branchMessages && branchMessages.length > 0) {
           context = branchMessages;
-          // console.log(`[ThreadView] Resolved context for ping: ${context.length} messages`);
-          // console.log('[ThreadView] Context messages details:');
-          // context.forEach((m, i) => {
-          //   console.log(`  ${i}: ID=${m.id}, Author=${m.author_user_tag}, Files=${m.files?.length || 0}`);
-          //   if (m.files && m.files.length > 0) {
-          //     m.files.forEach(f => console.log(`    - File: ${f.filename}`));
-          //   }
-          // });
         }
       } catch (contextError) {
         console.warn('[ThreadView] Failed to resolve context for ping:', contextError);

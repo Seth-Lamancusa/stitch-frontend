@@ -52,8 +52,9 @@ export default class WebSocketClient {
   }
 
   async connect(token) {
-    this._token = token;
-    const url = this._safeBuildUrl(token);
+    // token arg ignored — cookie session auth
+    this._token = null;
+    const url = this._safeBuildUrl();
     if (!url) throw new Error('WebSocketClient: failed to build URL');
 
     if (this.socket) {
@@ -67,7 +68,6 @@ export default class WebSocketClient {
         this.socket = socket;
 
         socket.onopen = () => {
-          // Client-side heartbeat disabled when pingIntervalMs <= 0; rely on server pings
           if (this.pingIntervalMs > 0) {
             this._startHeartbeat();
           }
@@ -147,13 +147,13 @@ export default class WebSocketClient {
     }
   }
 
-  _safeBuildUrl(token) {
+  _safeBuildUrl() {
     try {
-      if (typeof this.buildUrl === 'function') return this.buildUrl(token);
+      if (typeof this.buildUrl === 'function') return this.buildUrl();
       const isSecure = window.location.protocol === 'https:';
       const proto = isSecure ? 'wss:' : 'ws:';
       const host = window.location.host;
-      return `${proto}//${host}/ws/v1?access_token=${encodeURIComponent(token)}`;
+      return `${proto}//${host}/ws/v1`;
     } catch (e) {
       this.logger?.error?.('WebSocketClient: buildUrl failed', e);
       return null;

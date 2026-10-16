@@ -346,6 +346,7 @@ import ChannelsModal from './modals/ChannelsModal.vue';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 import MessageService from '../services/MessageService.js';
 import { addRecipientsToAncestorsExcludingAuthoredMessages } from '../utils/recipientPropagation.js';
+import { getAuthorDisplayName, getAuthorUserTag, getAuthorUid } from '../utils/messageCompat.js';
 import AttachmentService from '../services/AttachmentService.js';
 
 const props = defineProps({
@@ -1143,8 +1144,8 @@ const ensureMentionRecipient = (user) => {
   if (props.targetId) {
     const parentMessage = store.getters['messages/getMessage'](props.targetId);
     if (parentMessage) {
-      parentAuthorUid = parentMessage.content_author || parentMessage.author?.uid;
-      parentAuthorTag = parentMessage.author_user_tag || parentMessage.author?.user_tag;
+      parentAuthorUid = getAuthorUid(parentMessage);
+      parentAuthorTag = getAuthorUserTag(parentMessage);
     }
   }
   
@@ -1586,8 +1587,8 @@ const reconcileInlineRecipientsWithContent = (activeMentionSet) => {
     // Get parent message to identify parent author
     const parentMessage = store.getters['messages/getMessage'](props.targetId);
     if (parentMessage) {
-      const parentAuthorUid = parentMessage.content_author || parentMessage.author?.uid;
-      const parentAuthorTag = parentMessage.author_user_tag || parentMessage.author?.user_tag;
+      const parentAuthorUid = getAuthorUid(parentMessage);
+      const parentAuthorTag = getAuthorUserTag(parentMessage);
       
       // Restore parent author's notify flag to true
       const updatedRecipients = filtered.map(recipient => {
@@ -1750,8 +1751,8 @@ const sendReply = async () => {
       // Get parent message to identify parent author
       const parentMessage = store.getters['messages/getMessage'](props.targetId);
       if (parentMessage) {
-        const parentAuthorUid = parentMessage.content_author || parentMessage.author?.uid;
-        const parentAuthorTag = parentMessage.author_user_tag || parentMessage.author?.user_tag;
+        const parentAuthorUid = getAuthorUid(parentMessage);
+        const parentAuthorTag = getAuthorUserTag(parentMessage);
         
         // Update recipients: tagged users get notify: true, parent author gets notify: false
         processedRecipientsForReply = processedRecipientsForReply.map(recipient => {
@@ -1904,42 +1905,6 @@ const sendReply = async () => {
 };
 
 // Bot prompt add moved to global modal
-
-// Helper function to get the best display name for an author
-const getAuthorDisplayName = (message) => {
-  const currentUser = store.getters['auth/user'];
-  
-  // First priority: use nested author object
-  if (message.author?.display_name) {
-    return message.author.display_name;
-  }
-  
-  // Second priority: use database-provided display name
-  if (message.author_display_name) {
-    return message.author_display_name;
-  }
-  
-  // Last resort: use content_author (may be a UUID now)
-  return message.content_author || "Unknown User";
-};
-
-// Helper function to get author user tag
-const getAuthorUserTag = (message) => {
-  
-  // First priority: nested author object
-  if (message.author?.user_tag) {
-    return message.author.user_tag;
-  }
-
-  // Second priority: message's author_user_tag from database
-  if (message.author_user_tag) {
-    // This will handle all users with proper database records
-    return message.author_user_tag;
-  }
-  
-  // Default: no valid tag found
-  return null;
-};
 
 // Toggle recipient selector visibility
 const toggleRecipientSelector = () => {

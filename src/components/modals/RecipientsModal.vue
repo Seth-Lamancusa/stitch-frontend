@@ -519,6 +519,7 @@ import { useStore } from 'vuex';
 import MessageService from '../../services/MessageService.js';
 import BotVersionPicker from '../common/BotVersionPicker.vue';
 import BotVersionIndicator from '../common/BotVersionIndicator.vue';
+import { getAuthorUid } from '../../utils/messageCompat.js';
 // SpeedDialService removed - using Vuex store
 
 const props = defineProps({
@@ -808,7 +809,7 @@ const canRemoveExistingRecipient = computed(() => {
     // For deduplicated recipients, check if current user has any removable edges
     // Either they added the recipient themselves, or they're the message author for original recipients
     const hasRemovableEdge = recipient.added_by_list && recipient.added_by_list.includes(currentUserUid);
-    const isMessageAuthor = currentMessage.value && currentMessage.value.content_author === currentUserUid;
+    const isMessageAuthor = currentMessage.value && getAuthorUid(currentMessage.value) === currentUserUid;
     const hasOriginalRecipient = recipient.timestamp === null; // Has original recipient edge
     
     return hasRemovableEdge || (isMessageAuthor && hasOriginalRecipient);
@@ -1270,14 +1271,6 @@ const pingRecipient = async (recipient) => {
       const branchMessages = store.getters['messages/getVisibleBranchMessages'](props.messageId);
       if (branchMessages && branchMessages.length > 0) {
         context = branchMessages;
-        // console.log(`[RecipientsModal] Resolved context for ping: ${context.length} messages`);
-        // console.log('[RecipientsModal] Context messages details:');
-        // context.forEach((m, i) => {
-        //   console.log(`  ${i}: ID=${m.id}, Author=${m.author_user_tag}, Files=${m.files?.length || 0}`);
-        //   if (m.files && m.files.length > 0) {
-        //     m.files.forEach(f => console.log(`    - File: ${f.filename}`));
-        //   }
-        // });
       }
     } catch (contextError) {
       console.warn('[RecipientsModal] Failed to resolve context for ping:', contextError);

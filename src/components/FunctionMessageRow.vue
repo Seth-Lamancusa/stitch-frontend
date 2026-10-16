@@ -179,6 +179,7 @@ import SiblingNavigator from './SiblingNavigator.vue';
 import UserDisplay from './common/UserDisplay.vue';
 import MessageService, { LOAD_RADIUS } from '../services/MessageService.js';
 import { clampMenuToMessageList, messageListClipBounds } from '../utils/menuPlacement.js';
+import { getAuthorDisplayName, getAuthorUserTag, getAuthorUid, isAuthorBot, isCurrentUserAuthor } from '../utils/messageCompat.js';
 import {
   functionCallName,
   functionCode,
@@ -241,16 +242,12 @@ const displayName = computed(() => (
 const label = computed(() => functionLabel(props.message, parentMessage.value));
 const code = computed(() => functionCode(props.message, parentMessage.value));
 
-const authorDisplayName = computed(() => props.message.author?.display_name || props.message.author_display_name || '');
-const authorUserTag = computed(() => props.message.author?.user_tag || props.message.author_user_tag || null);
-const authorUid = computed(() => props.message.author?.uid || props.message.content_author || null);
-const isBot = computed(() => !!props.message.author?.is_bot);
+const authorDisplayName = computed(() => getAuthorDisplayName(props.message));
+const authorUserTag = computed(() => getAuthorUserTag(props.message));
+const authorUid = computed(() => getAuthorUid(props.message));
+const isBot = computed(() => isAuthorBot(props.message));
 const isImported = computed(() => !!props.message.import_info);
-const isCurrentUser = computed(() => {
-  if (!currentUser.value) return false;
-  if (authorUserTag.value && currentUser.value.user_tag === authorUserTag.value) return true;
-  return authorUid.value === currentUser.value.uid;
-});
+const isCurrentUser = computed(() => isCurrentUserAuthor(props.message, currentUser.value));
 
 const importedBadgeTitle = computed(() => {
   const info = props.message.import_info || {};

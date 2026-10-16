@@ -63,7 +63,7 @@ onMounted(() => {
 <style scoped>
 .formatted-content {
   width: 100%;
-  font-family: var(--font-family-base);
+  font-family: var(--author-font, var(--font-family-base));
   font-size: var(--font-size-md);
   line-height: var(--line-height-normal);
   color: var(--color-text);

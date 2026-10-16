@@ -269,6 +269,16 @@
     />
     <GlobalNotifications />
     
+    <router-link
+      to="/messages/a784e721"
+      class="global-feedback-btn"
+      title="Give feedback"
+      aria-label="Give feedback"
+    >
+      <span class="btn-icon" aria-hidden="true">💬</span>
+      <span class="btn-label">Feedback</span>
+    </router-link>
+
     <!-- Global Create Button (floating, appears on all tabs) -->
     <button
       v-if="user && canInteract"
@@ -297,11 +307,6 @@
     />
     
     <!-- Mobile tab bar - only visible on mobile -->
-    <router-link to="/messages/2HhB" class="feedback-button">
-      <span class="button-icon" aria-hidden="true">💬</span>
-      <span class="button-label">Feedback</span>
-    </router-link>
-
     <MobileTabBar />
     <div
       v-if="isSwitchingPrincipal"
@@ -371,7 +376,7 @@ const hasImportScope = computed(() => {
 });
 
 const hasChannelCreateScope = computed(() => {
-  return store.getters['auth/hasScope']('channel.create');
+  return store.getters['auth/hasScope']('channels.create');
 });
 
 const shouldShowCreateModal = computed(() => {
@@ -1335,61 +1340,6 @@ const handleChannelCreated = async (newChannel) => {
   }
 }
 
-.feedback-button {
-  position: absolute;
-  left: 32px;
-  bottom: 32px;
-  z-index: 20;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 13px;
-  color: #000;
-  text-decoration: none;
-  padding: 13px 27px 13px 17px;
-  border-radius: 999px;
-  font-weight: 600;
-  font-size: 1.42rem;
-  line-height: 1;
-  white-space: nowrap;
-  font-family: inherit;
-  cursor: pointer;
-  box-sizing: border-box;
-  background: linear-gradient(135deg, #2ee6aa 0%, #14c98a 100%);
-  border: 1px solid rgba(180, 255, 225, 0.55);
-  box-shadow:
-    0 0 18px rgba(46, 230, 170, 0.55),
-    0 8px 22px rgba(20, 201, 138, 0.28);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-}
-
-.feedback-button:hover {
-  transform: translateY(-2px);
-  background: linear-gradient(135deg, #4dffc2 0%, #1ed99a 100%);
-  border-color: rgba(210, 255, 235, 0.7);
-  box-shadow:
-    0 0 26px rgba(77, 255, 194, 0.65),
-    0 10px 24px rgba(20, 201, 138, 0.35);
-  color: #000;
-}
-
-.feedback-button .button-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 37px;
-  height: 37px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
-  font-size: 22px;
-  line-height: 1;
-}
-
-.feedback-button .button-label {
-  display: inline-flex;
-  align-items: center;
-}
-
 /* Banner prompting email verification */
 .verify-banner {
   background: rgba(255, 193, 7, 0.12);
@@ -1474,7 +1424,55 @@ const handleChannelCreated = async (newChannel) => {
     white-space: nowrap; /* Prevent text wrapping */
     flex-shrink: 0; /* Never shrink the logout button */
   }
-  
+}
+
+/* Global Feedback Button */
+.global-feedback-btn {
+  position: fixed;
+  bottom: var(--space-xl);
+  left: var(--space-xl);
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: var(--radius-pill, 9999px);
+  background: #1ee0b0;
+  color: #04241c;
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow:
+    0 0 0 3px rgba(30, 224, 176, 0.35),
+    0 10px 28px rgba(16, 211, 168, 0.5);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.global-feedback-btn:hover {
+  transform: translateY(-2px) scale(1.04);
+  background: #3af0c2;
+  color: #04241c;
+  box-shadow:
+    0 0 0 5px rgba(58, 240, 194, 0.4),
+    0 14px 36px rgba(16, 211, 168, 0.62);
+}
+
+.global-feedback-btn:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+}
+
+.global-feedback-btn .btn-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.global-feedback-btn .btn-label {
+  display: inline-flex;
+  align-items: center;
 }
 
 /* Global Create Button */
@@ -1511,13 +1509,8 @@ const handleChannelCreated = async (newChannel) => {
   background-color: var(--color-primary-dark);
 }
 
-/* Mobile responsive for global create button */
+/* Mobile responsive for global create and feedback buttons */
 @media (max-width: 768px) {
-  .feedback-button {
-    left: 26px;
-    bottom: 90px;
-  }
-
   .global-create-btn {
     width: 52px;
     height: 52px;
@@ -1528,6 +1521,13 @@ const handleChannelCreated = async (newChannel) => {
 
   .global-create-btn .btn-icon {
     transform: translateY(-0.5px);
+  }
+
+  .global-feedback-btn {
+    bottom: 80px;
+    left: var(--space-md);
+    padding: 10px 14px;
+    font-size: 0.85rem;
   }
 }
 
@@ -1578,7 +1578,6 @@ const handleChannelCreated = async (newChannel) => {
     font-size: calc(var(--font-size-xs) - 2px); /* Very small font */
     min-width: 0; /* Allow content to dictate width */
   }
-  
 }
 
 /* Simplified layout on ultra-narrow screens */
@@ -1608,7 +1607,6 @@ const handleChannelCreated = async (newChannel) => {
     padding: 4px 8px;
     font-size: calc(var(--font-size-xs));
   }
-  
 }
 </style>
 

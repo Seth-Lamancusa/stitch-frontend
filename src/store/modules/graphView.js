@@ -1,6 +1,6 @@
 import GraphLayoutService from '../../services/GraphLayoutService.js';
 import { calculateTreeLayout, calculateBounds } from '../../utils/graph/layoutAlgorithms.js';
-import { contentText } from '../../utils/messageCompat.js';
+import { contentText, getAuthorUid } from '../../utils/messageCompat.js';
 
 /**
  * Vuex store module for graph view state management
@@ -154,7 +154,7 @@ const getters = {
 
     if (state.filters.authorFilter) {
       filtered = filtered.filter(msg => 
-        msg.author && msg.author.uid === state.filters.authorFilter
+        getAuthorUid(msg) === state.filters.authorFilter
       );
     }
 

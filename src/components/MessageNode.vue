@@ -254,7 +254,7 @@
     </div>
       
       <!-- Message body -->
-      <div class="message-body">
+      <div class="message-body" :style="messageBodyStyle">
         <div v-if="message.subject" class="message-subject">{{ message.subject }}</div>
         <div v-if="isAddingSubject" class="add-subject-input-container">
           <input
@@ -521,7 +521,8 @@ import { memoize } from 'lodash-es';
 import MessageService, { LOAD_RADIUS } from '../services/MessageService.js';
 import UserService from '../services/UserService.js';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
-import { contentText } from '../utils/messageCompat.js';
+import { messageFontStyle } from '../config/fonts.js';
+import { contentText, getAuthorDisplayName, getAuthorUserTag, getAuthorUid, isAuthorBot } from '../utils/messageCompat.js';
 import { clampMenuToMessageList, messageListClipBounds } from '../utils/menuPlacement.js';
 
 export default {
@@ -1198,28 +1199,13 @@ export default {
       });
     });
     
-    // Get author display name
-    const authorDisplayName = computed(() => {
-      if (props.message.author?.display_name) return props.message.author.display_name;
-      return props.message.author_display_name || '';
-    });
+    const authorDisplayName = computed(() => getAuthorDisplayName(props.message));
 
-    // Get author user tag
-    const authorUserTag = computed(() => {
-      if (props.message.author?.user_tag) return props.message.author.user_tag;
-      return props.message.author_user_tag || null;
-    });
+    const authorUserTag = computed(() => getAuthorUserTag(props.message));
     
-    // Get author UID
-    const authorUid = computed(() => {
-      if (props.message.author?.uid) return props.message.author.uid;
-      return props.message.content_author || null;
-    });
+    const authorUid = computed(() => getAuthorUid(props.message));
     
-    // Get bot status
-    const isBot = computed(() => {
-      return !!props.message.author?.is_bot;
-    });
+    const isBot = computed(() => isAuthorBot(props.message));
 
     const authorBotVersionId = computed(() => {
       return props.message.author?.bot_version_id || null;
@@ -1316,15 +1302,11 @@ export default {
     const isUserAuthorOfContent = (recipient) => {
       if (!props.message || !recipient) return false;
       
-      // The message author UID should match the recipient UID
-      if (props.message.content_author && recipient.uid && 
-          props.message.content_author === recipient.uid) {
+      if (authorUid.value && recipient.uid && authorUid.value === recipient.uid) {
         return true;
       }
       
-      // Or the message author user_tag should match the recipient user_tag
-      if (props.message.author_user_tag && recipient.user_tag && 
-          props.message.author_user_tag === recipient.user_tag) {
+      if (authorUserTag.value && recipient.user_tag && authorUserTag.value === recipient.user_tag) {
         return true;
       }
       
@@ -1615,7 +1597,7 @@ export default {
         return true;
       }
       
-      // Then check content_author for UID matching
+      // Then check author UID
       if (authorUid.value === currentUser.value.uid) {
         return true;
       }
@@ -1808,6 +1790,8 @@ export default {
       validMentions: renderMentionSet.value,
       debugMermaid: true
     }));
+
+    const messageBodyStyle = computed(() => messageFontStyle(props.message?.font));
     
     // const handleReformat = async () => {
     //   if (isReformatting.value) return;
@@ -2276,6 +2260,7 @@ export default {
       truncatedContent,
       displayContent,
       formattedContentOptions,
+      messageBodyStyle,
       // isReformatting,
       // handleReformat,
       messageContentRef,
@@ -3044,6 +3029,7 @@ export default {
   color: #ffffff; /* Force white text color */
   transition: max-height 0.3s ease-out, opacity 0.2s ease;
   line-height: 1.5;
+  font-family: var(--author-font, var(--font-family-base));
 }
 
 .message-content p {

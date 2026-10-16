@@ -4,7 +4,7 @@ console.log('[MOCK] mockMessages loaded, count:', Object.keys(mockMessages).leng
 import UserService from '../../services/UserService'
 import WebSocketService from '../../services/ws/WebSocketService'
 import GraphLayoutService from '../../services/GraphLayoutService.js'
-import { contentText } from '../../utils/messageCompat.js'
+import { contentText, getAuthorDisplayName, getAuthorUid, getAuthorUserTag } from '../../utils/messageCompat.js'
 
 // Latest inbox list fetch. An older response must not commit after a newer one.
 let inboxFetchSerial = 0
@@ -62,8 +62,8 @@ function getIncomingMessageAudience(messageData, user) {
     return { isFromCurrentUser: false, isToCurrentUser: false };
   }
 
-  const authorUid = messageData.author?.uid || messageData.content_author;
-  const authorTag = messageData.author?.user_tag || messageData.author_user_tag;
+  const authorUid = getAuthorUid(messageData);
+  const authorTag = getAuthorUserTag(messageData);
   const isFromCurrentUser = authorUid === user.uid || authorTag === user.user_tag;
 
   const recipients = Array.isArray(messageData.recipients) ? messageData.recipients : [];
@@ -624,11 +624,9 @@ export default {
           if (autoMarkIfInBranch && isNextInBranch) {
             dispatch('batchMarkAsRead', [messageData.id]);
           } else if (notifyIfOffPath && !isNextInBranch) {
-            const authorName = messageData.author?.display_name ||
-                               messageData.author?.user_tag ||
-                               messageData.author_display_name ||
-                               messageData.author_user_tag ||
-                               'Someone';
+            const authorName = getAuthorDisplayName(messageData) !== 'Unknown'
+              ? getAuthorDisplayName(messageData)
+              : (getAuthorUserTag(messageData) || 'Someone');
 
             const previewText = contentText(messageData.content)
             const contentPreview = previewText
@@ -1142,7 +1140,7 @@ export default {
     // Toggle message public flag
     async togglePublicMessage({ commit, state, rootGetters }, { messageId, makePublic }) {
       try {
-        if (!rootGetters['auth/hasScope']('msg.write')) {
+        if (!rootGetters['auth/hasScope']('messages.write')) {
           throw new Error('Write permission required');
         }
         const existing = state.messages[messageId];
@@ -1801,7 +1799,7 @@ export default {
       try {
         console.log('[Store] Deleting link:', { messageIdFrom, messageIdTo, linkType, sourceMessageId });
         // Gate on msg.write
-        if (!rootGetters['auth/hasScope']('msg.write')) {
+        if (!rootGetters['auth/hasScope']('messages.write')) {
           throw new Error('Write permission required');
         }
         
@@ -1826,7 +1824,7 @@ export default {
       try {
         console.log('[Store] Creating link:', { messageIdFrom, messageIdTo });
         // Gate on msg.write
-        if (!rootGetters['auth/hasScope']('msg.write')) {
+        if (!rootGetters['auth/hasScope']('messages.write')) {
           throw new Error('Write permission required');
         }
         

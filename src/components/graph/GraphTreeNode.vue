@@ -179,7 +179,7 @@
 
 <script>
 import { format } from 'date-fns';
-import { contentText } from '../../utils/messageCompat.js';
+import { contentText, getAuthorDisplayName, getAuthorUid, isCurrentUserAuthor } from '../../utils/messageCompat.js';
 
 export default {
   name: 'GraphTreeNode',
@@ -243,9 +243,8 @@ export default {
 
     // Get author ID for color mapping
     authorId() {
-      // If imported, color by the imported display identity rather than sender edge.
       if (this.message.import_info?.display_name) return this.message.import_info.display_name;
-      return this.message.content_author || this.message.author?.uid || this.message.author?.user_tag || this.authorDisplay || 'unknown';
+      return getAuthorUid(this.message) || this.authorDisplay || 'unknown';
     },
 
     // Colors based on author - each sender gets a distinct color
@@ -289,8 +288,9 @@ export default {
 
     authorDisplay() {
       if (this.message.import_info?.display_name) return this.message.import_info.display_name;
-      if (this.message.author?.display_name) return this.message.author.display_name;
-      return this.message.author_display_name || this.message.author?.username || this.message.author?.email || 'Unknown';
+      const display = getAuthorDisplayName(this.message);
+      if (display !== 'Unknown') return display;
+      return this.message.author?.username || this.message.author?.email || display;
     },
 
     formattedTimestamp() {
@@ -311,9 +311,7 @@ export default {
 
     isOwnMessage() {
       if (this.message.import_info?.display_name) return false;
-      const currentUserId = this.$store?.getters['auth/user']?.uid;
-      const authorId = this.message.content_author || this.message.author?.uid;
-      return currentUserId && authorId && currentUserId === authorId;
+      return isCurrentUserAuthor(this.message, this.$store?.getters['auth/user']);
     },
 
     isUnread() {

@@ -1,23 +1,20 @@
-import store from '@/store'
+import { can, canAny, canAll } from '@/auth/can.js'
 
 function checkPermission(binding) {
   const { value, modifiers } = binding || {}
   const requireAll = !!(modifiers && modifiers.all)
   if (!value) return true
 
-  const hasScope = (name) => store.getters['auth/hasScope'](name)
-  const hasAny = (names) => store.getters['auth/hasAnyScope'](names)
-
   if (typeof value === 'string') {
-    return hasScope(value)
+    return can(value)
   }
   if (Array.isArray(value)) {
-    return requireAll ? value.every(hasScope) : hasAny(value)
+    return requireAll ? canAll(value) : canAny(value)
   }
   if (typeof value === 'object') {
     const { any, all } = value
-    if (Array.isArray(all) && all.length) return all.every(hasScope)
-    if (Array.isArray(any) && any.length) return hasAny(any)
+    if (Array.isArray(all) && all.length) return canAll(all)
+    if (Array.isArray(any) && any.length) return canAny(any)
   }
   return true
 }
@@ -31,13 +28,9 @@ function applyVisibility(el, allowed) {
 
 export default {
   mounted(el, binding) {
-    const allowed = checkPermission(binding)
-    applyVisibility(el, allowed)
+    applyVisibility(el, checkPermission(binding))
   },
   updated(el, binding) {
-    const allowed = checkPermission(binding)
-    applyVisibility(el, allowed)
+    applyVisibility(el, checkPermission(binding))
   },
 }
-
-

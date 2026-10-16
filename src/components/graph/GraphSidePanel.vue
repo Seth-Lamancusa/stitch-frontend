@@ -36,6 +36,7 @@
         <formatted-content
           v-if="displayedMessage.content"
           class="message-content"
+          :style="messageFontStyle(displayedMessage.font)"
           :content="displayedMessage.content"
         />
         <div v-else class="message-content">—</div>
@@ -63,6 +64,8 @@
   import { useRouter } from 'vue-router';
   import { format } from 'date-fns';
   import FormattedContent from '../FormattedContent/index.vue';
+  import { messageFontStyle } from '../../config/fonts.js';
+  import { getAuthorDisplayName, getAuthorUserTag } from '../../utils/messageCompat.js';
 
   const store = useStore();
   const router = useRouter();
@@ -159,8 +162,9 @@ watch(
 
 const authorName = computed(() => {
   if (!displayedMessage.value) return 'Unknown';
-  const m = displayedMessage.value;
-  return m.author?.display_name || m.author_display_name || m.author?.user_tag || 'Unknown';
+  const name = getAuthorDisplayName(displayedMessage.value);
+  if (name !== 'Unknown') return name;
+  return getAuthorUserTag(displayedMessage.value) || 'Unknown';
 });
 
 const formattedDate = computed(() => {
@@ -308,6 +312,7 @@ const formattedDate = computed(() => {
 .message-content {
   line-height: 1.5;
   font-size: 0.95rem;
+  font-family: var(--author-font, var(--font-family-base));
 }
 
 .side-panel-empty {

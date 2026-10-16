@@ -12,9 +12,9 @@
         <div class="permission-requirements">
           <h3>Required Permissions:</h3>
           <ul class="permission-list">
-            <li :class="{ 'has-permission': can('msg.write') }">
-              <span class="permission-icon">{{ can('msg.write') ? '✓' : '✗' }}</span>
-              <span class="permission-name">msg.write</span>
+            <li :class="{ 'has-permission': can('messages.write') }">
+              <span class="permission-icon">{{ can('messages.write') ? '✓' : '✗' }}</span>
+              <span class="permission-name">messages.write</span>
               <span class="permission-desc">— Write messages</span>
             </li>
           </ul>
@@ -291,7 +291,7 @@ const store = useStore();
 const { can, canAny, isAdmin, user: currentUser } = usePermissions();
 
 const hasImportPermissions = computed(() => {
-  return can('msg.write');
+  return can('messages.write');
 });
 
 // State

@@ -1,16 +1,12 @@
 import apiClient from './apiClient'
-import TokenManager from './TokenManager'
 
 const apiBaseUrl = '/v1'
 
 // Default messages to fetch above/below a target when resolving a thread.
 export const LOAD_RADIUS = 20
 
-// Helper function to get auth headers
-const getAuthHeaders = () => {
-  const token = TokenManager.accessToken
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
+// Cookie session — apiClient sends credentials; no Bearer header.
+const getAuthHeaders = () => ({})
 
 export default {
   // Send a message or reply (supports optional tags)
@@ -225,7 +221,7 @@ export default {
   },
 
   // Get user history root messages (auth required). Optional channel_id filters to that channel.
-  async getUserHistory(skip = 0, limit = 6, channelId = null) {
+  async getUserHistory(skip = 0, limit = 15, channelId = null) {
     const headers = await getAuthHeaders()
     const params = new URLSearchParams({ skip: String(skip), limit: String(limit) })
     if (channelId) params.set('channel_id', channelId)
