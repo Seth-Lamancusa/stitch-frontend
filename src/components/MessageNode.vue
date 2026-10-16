@@ -249,6 +249,7 @@
     </div>
       
       <!-- Message body -->
+      <div class="message-body" :style="messageBodyStyle">
         <div v-if="message.subject" class="message-subject">{{ message.subject }}</div>
         <div v-if="isAddingSubject" class="add-subject-input-container">
           <input
@@ -514,6 +515,8 @@ import { memoize } from 'lodash-es';
 import MessageService, { LOAD_RADIUS } from '../services/MessageService.js';
 import UserService from '../services/UserService.js';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
+import { messageFontStyle } from '../config/fonts.js';
+import { getAuthorDisplayName, getAuthorUserTag, getAuthorUid, isAuthorBot } from '../utils/messageCompat.js';
 
 export default {
   name: 'MessageNode',
@@ -1718,6 +1721,8 @@ export default {
       validMentions: renderMentionSet.value,
       debugMermaid: true
     }));
+
+    const messageBodyStyle = computed(() => messageFontStyle(props.message?.font));
     
     // const handleReformat = async () => {
     //   if (isReformatting.value) return;
@@ -2164,6 +2169,7 @@ export default {
       copyMessageText,
       truncatedContent,
       formattedContentOptions,
+      messageBodyStyle,
       // isReformatting,
       // handleReformat,
       messageContentRef,
@@ -2927,6 +2933,7 @@ export default {
   color: #ffffff; /* Force white text color */
   transition: max-height 0.3s ease-out, opacity 0.2s ease;
   line-height: 1.5;
+  font-family: var(--author-font, var(--font-family-base));
 }
 
 .message-content p {

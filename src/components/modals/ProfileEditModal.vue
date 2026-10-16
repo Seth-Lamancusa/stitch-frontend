@@ -4,6 +4,7 @@ import { useStore } from 'vuex';
 import { useAuthentication } from '@/composables/useAuthentication';
 import DevModal from '@/components/modals/DevModal.vue';
 import UserDisplay from '../common/UserDisplay.vue';
+import { FONT_PRESET_LIST, resolveMessageFont } from '@/config/fonts.js';
 
 const props = defineProps({
   isOpen: Boolean
@@ -33,6 +34,7 @@ const tag = ref('');
 const phoneNumber = ref('');
 const email = ref('');
 const bio = ref('');
+const selectedFont = ref('');
 const endpoint = ref('');
 const isPrivate = ref(false);
 const isBot = ref(false);
@@ -193,6 +195,7 @@ const resetForm = () => {
     phoneNumber.value = user.value?.phone_number || '';
     email.value = user.value?.email || '';
     bio.value = user.value?.bio || '';
+    selectedFont.value = user.value?.font || '';
     endpoint.value = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
     isPrivate.value = !!(user.value?.private);
     isBot.value = !!(user.value?.is_bot);
@@ -406,6 +409,7 @@ const hasFormChanges = computed(() => {
 const originalEndpoint = (user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '';
 const originalPrivate = !!(user.value?.private);
 const originalBio = user.value?.bio || '';
+const originalFont = user.value?.font || '';
 const originalInputModalities = user.value?.input_modalities || '';
 const originalOutputModalities = user.value?.output_modalities || '';
 const originalThirdPartyIntegrations = user.value?.third_party_integrations || '';
@@ -420,6 +424,7 @@ const originalAvailableVersions = user.value?.available_versions ? JSON.stringif
   const endpointChanged = normalizeEndpointForCompare(endpoint.value) !== normalizeEndpointForCompare(originalEndpoint);
 const privateChanged = !!isPrivate.value !== originalPrivate;
 const bioChanged = normalizeTrimmed(bio.value) !== normalizeTrimmed(originalBio);
+const fontChanged = normalizeTrimmed(selectedFont.value) !== normalizeTrimmed(originalFont);
 const botChanged = !!isBot.value !== !!(user.value?.is_bot);
   const inputModalitiesChanged = hasPerVersionCapabilities ? false : normalizeTrimmed(inputModalities.value) !== normalizeTrimmed(originalInputModalities);
   const outputModalitiesChanged = hasPerVersionCapabilities ? false : normalizeTrimmed(outputModalities.value) !== normalizeTrimmed(originalOutputModalities);
@@ -429,7 +434,7 @@ const botChanged = !!isBot.value !== !!(user.value?.is_bot);
     ? normalizeTrimmed(availableVersions.value) !== normalizeTrimmed(originalAvailableVersions)
     : false;
 
-  return displayNameChanged || tagChanged || phoneChanged || emailChanged || endpointChanged || privateChanged || bioChanged || botChanged || inputModalitiesChanged || outputModalitiesChanged || thirdPartyIntegrationsChanged || availableVersionsChanged || notifyPrefsChanged();
+  return displayNameChanged || tagChanged || phoneChanged || emailChanged || endpointChanged || privateChanged || bioChanged || fontChanged || botChanged || inputModalitiesChanged || outputModalitiesChanged || thirdPartyIntegrationsChanged || availableVersionsChanged || notifyPrefsChanged();
 });
 
 // Function to determine if the update button should be enabled
@@ -441,6 +446,8 @@ const canSubmit = computed(() => {
          !bioError.value &&
          !isSubmitting.value;
 });
+
+const selectedFontFamily = computed(() => resolveMessageFont(selectedFont.value) || 'var(--font-family-base)');
 
 const validateForm = () => {
   let isValid = true;
@@ -607,6 +614,10 @@ const updateProfile = async () => {
     if (normalizeTrimmed(bio.value) !== normalizeTrimmed(originalBio)) {
       const trimmedBio = normalizeTrimmed(bio.value);
       profileUpdate.bio = trimmedBio || null;
+    }
+    if (normalizeTrimmed(selectedFont.value) !== normalizeTrimmed(user.value?.font || '')) {
+      const trimmedFont = normalizeTrimmed(selectedFont.value);
+      profileUpdate.font = trimmedFont || null;
     }
     if (!!isPrivate.value !== originalPrivate) {
       profileUpdate.private = !!isPrivate.value;
@@ -1291,6 +1302,26 @@ const deleteAccount = async () => {
               <div class="field-error" v-if="tagError">{{ tagError }}</div>
               <div v-else class="field-hint">A unique identifier (letters, numbers, underscores, or hyphens).</div>
             </div>
+            <div class="field">
+              <label for="messageFont">Message font</label>
+              <select
+                id="messageFont"
+                v-model="selectedFont"
+                class="font-select"
+                :style="{ fontFamily: selectedFontFamily }"
+              >
+                <option value="" :style="{ fontFamily: 'var(--font-family-base)' }">Default</option>
+                <option
+                  v-for="preset in FONT_PRESET_LIST"
+                  :key="preset.id"
+                  :value="preset.id"
+                  :style="{ fontFamily: preset.family }"
+                >
+                  {{ preset.label }}
+                </option>
+              </select>
+              <div class="field-hint">New messages you send will use this font. Existing messages keep the font they were created with.</div>
+            </div>
           </section>
 
           <section class="form-section">
@@ -1933,7 +1964,8 @@ const deleteAccount = async () => {
 }
 
 .field input,
-.field textarea {
+.field textarea,
+.field select {
   width: 100%;
   padding: var(--space-xs) var(--space-md);
   border: 1px solid var(--color-border);
@@ -1952,7 +1984,8 @@ const deleteAccount = async () => {
 }
 
 .field input:focus,
-.field textarea:focus {
+.field textarea:focus,
+.field select:focus {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 2px var(--color-primary-light);
@@ -1963,6 +1996,10 @@ const deleteAccount = async () => {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
+}
+
+.font-select {
+  cursor: pointer;
 }
 
 .password-field input {

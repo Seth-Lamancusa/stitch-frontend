@@ -12,7 +12,7 @@
     <!-- Single line mode layout -->
     <div v-if="displayMode === 'single-line'" class="single-line-content" @click="handleMessageClick">
       <span class="author-prefix">{{ authorDisplayName }}:</span>
-      <span class="content-text">{{ truncatedContent }}</span>
+      <span class="content-text" :style="messageBodyStyle">{{ truncatedContent }}</span>
     </div>
 
     <!-- Standard preview layout -->
@@ -172,6 +172,7 @@
         </div>
       </div>
 
+      <div class="message-body" :style="messageBodyStyle">
         <div v-if="message.subject" class="message-subject">{{ message.subject }}</div>
         <formatted-content
           v-if="displayMode === 'full'"
@@ -218,6 +219,8 @@ import UserDisplay from './common/UserDisplay.vue';
 import { memoize } from 'lodash-es';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 import ChannelsService from '../services/ChannelsService.js';
+import { messageFontStyle } from '../config/fonts.js';
+import { getAuthorDisplayName, getAuthorUserTag, getAuthorUid, isAuthorBot } from '../utils/messageCompat.js';
 
 const props = defineProps({
   message: {
@@ -267,6 +270,8 @@ const isPublic = computed(() => {
   const publicValue = props.message.public;
   return publicValue === 1 || publicValue === true;
 });
+
+const messageBodyStyle = computed(() => messageFontStyle(props.message?.font));
 
 const canToggleVisibility = computed(() => {
   if (!currentUser.value) return false;
@@ -668,6 +673,7 @@ const formatTimestamp = (timestamp) => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-family: var(--author-font, var(--font-family-base));
 }
 
 .message-preview-content {
@@ -786,6 +792,7 @@ const formatTimestamp = (timestamp) => {
   word-wrap: break-word;
   width: 100%;
   color: #ffffff;
+  font-family: var(--author-font, var(--font-family-base));
 }
 
 .message-preview .plaintext-content {

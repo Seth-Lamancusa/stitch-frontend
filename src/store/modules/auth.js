@@ -3,6 +3,8 @@ import apiClient from '../../services/apiClient'
 import authStore from '../../auth/store.js'
 import { P, DEFAULT_MANAGED_PERMISSIONS, parsePermissions } from '../../auth/constants.js'
 import { can as canPerm, canAny as canAnyPerm, isAdmin as isAdminPerm } from '../../auth/can.js'
+import { resolveMessageFont } from '../../config/fonts.js'
+import { getAuthorUid, isCurrentUserAuthor } from '../../utils/messageCompat.js'
 
 /**
  * Helper: normalize API user (/users/me) to the profile shape used by UI.
@@ -44,6 +46,7 @@ function mapApiUserToAuthState(userData) {
     is_managed: !!data.is_managed,
     private: !!data.private,
     bio: typeof data.bio === 'string' ? data.bio : '',
+    font: resolveMessageFont(data.font) ? String(data.font).trim() : null,
     is_bot: !!data.is_bot,
     input_modalities: typeof data.input_modalities === 'string' ? data.input_modalities : null,
     output_modalities: typeof data.output_modalities === 'string' ? data.output_modalities : null,
@@ -407,6 +410,9 @@ export default {
               phone_number: result.profile.phone_number ?? null,
               email: result.profile.email ?? null,
               bio: typeof result.profile.bio === 'string' ? result.profile.bio : '',
+              font: resolveMessageFont(result.profile.font)
+                ? String(result.profile.font).trim()
+                : null,
               is_bot:
                 typeof result.profile.is_bot === 'boolean'
                   ? result.profile.is_bot
