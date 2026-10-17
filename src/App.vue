@@ -1,14 +1,15 @@
 <script setup>
-import { computed, onMounted, onBeforeUnmount } from 'vue';
-import { useStore } from 'vuex';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { useRouter } from 'vue-router';
 import RecipientsModal from './components/modals/RecipientsModal.vue';
 import LinksModal from './components/modals/LinksModal.vue';
 import QuickPromptModal from './components/modals/QuickPromptModal.vue';
+import OnboardingModal from './components/modals/OnboardingModal.vue';
+import SettingsModal from './components/modals/SettingsModal.vue';
 import WebSocketService from '@/services/ws/WebSocketService';
 
-const store = useStore();
-
-const authReady = computed(() => store.getters['auth/authReady']);
+const router = useRouter();
+const ready = ref(false);
 
 // More robust height calculation for the entire app
 const setAppHeight = () => {
@@ -26,7 +27,7 @@ const visibilityHandler = () => {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('resize', setAppHeight);
   setAppHeight();
   window.addEventListener('mousemove', activityHandler);
@@ -34,6 +35,10 @@ onMounted(() => {
   window.addEventListener('click', activityHandler);
   window.addEventListener('touchstart', activityHandler);
   document.addEventListener('visibilitychange', visibilityHandler);
+  try {
+    await router.isReady();
+  } catch (_) {}
+  ready.value = true;
 });
 
 onBeforeUnmount(() => {
@@ -47,10 +52,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div>
-    <div v-if="!authReady" class="loading-screen">
-      <div class="loading-spinner"></div>
-      <p>Loading Stitch...</p>
+  <div class="app-canvas shell">
+    <div v-if="!ready" class="boot" role="status" aria-label="Loading Stitch">
+      <div class="boot-spinner"></div>
     </div>
 
     <main v-else>
@@ -60,6 +64,8 @@ onBeforeUnmount(() => {
     <RecipientsModal />
     <LinksModal />
     <QuickPromptModal />
+    <OnboardingModal />
+    <SettingsModal />
   </div>
 </template>
 
@@ -67,41 +73,6 @@ onBeforeUnmount(() => {
 /* Base application styles */
 :root {
   --app-height: 100vh;
-}
-
-.loading-screen {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  color: #333;
-}
-
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  margin-bottom: 20px;
-  border: 4px solid rgba(0, 0, 0, 0.1);
-  border-left-color: #09f;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-@media (prefers-color-scheme: dark) {
-  .loading-screen {
-    color: #e0e0e0;
-  }
-
-  .loading-spinner {
-    border: 4px solid rgba(255, 255, 255, 0.08);
-    border-left-color: #09f;
-  }
 }
 
 html {
@@ -123,12 +94,13 @@ html, body {
 }
 
 body {
-  background-color: var(--color-background);
   color: var(--color-text);
   font-family: var(--font-family-base);
 }
 
 #app {
+  position: relative;
+  z-index: 1;
   height: 100%;
   overflow: hidden;
   display: flex;
@@ -145,5 +117,33 @@ body {
 main {
   flex: 1;
   min-height: 0;
+}
+
+.shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.boot {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.boot-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(243, 236, 220, 0.15);
+  border-left-color: var(--color-sage, #598958);
+  border-radius: 50%;
+  animation: boot-spin 0.8s linear infinite;
+}
+
+@keyframes boot-spin {
+  to { transform: rotate(360deg); }
 }
 </style>

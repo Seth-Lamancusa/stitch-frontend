@@ -238,11 +238,8 @@
             </div>
           </div>
           
-          <!-- Stacked action buttons (expand toggle) -->
-          <div v-if="!showVerifyCTA" class="stacked-buttons">
-            <!-- Expand/Collapse toggle -->
-            <button 
-              v-if="hasMultipleLines"
+          <div v-if="!showVerifyCTA && hasMultipleLines" class="stacked-buttons">
+            <button
               class="stacked-button expand-btn"
               @click.stop="toggleTextareaExpansion"
               :class="{ 'active': isTextareaExpanded }"
@@ -250,14 +247,6 @@
               title="Toggle textarea height"
             >
               <span class="stacked-btn-icon">↕</span>
-            </button>
-            <button 
-              v-else
-              class="stacked-button expand-btn placeholder"
-              disabled
-              aria-hidden="true"
-            >
-              <span class="stacked-btn-icon">&nbsp;</span>
             </button>
           </div>
           
@@ -276,7 +265,24 @@
           >
             <span v-if="showSendSuccess" class="send-button__icon">✓</span>
             <span v-else-if="isSending" class="send-button__spinner" aria-hidden="true"></span>
-            <span v-else class="send-button__arrow">→</span>
+            <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 11.5 20 4.5 13 20l-2.2-6.3L4.5 11.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M10.8 13.7 20 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+
+        <div v-if="!showVerifyCTA" class="md-controls" aria-label="Formatting">
+          <button type="button" class="md-control" tabindex="-1" aria-label="Bold"><strong>B</strong></button>
+          <button type="button" class="md-control md-control--italic" tabindex="-1" aria-label="Italic"><em>I</em></button>
+          <button type="button" class="md-control md-control--strike" tabindex="-1" aria-label="Strikethrough"><s>S</s></button>
+          <button type="button" class="md-control" tabindex="-1" aria-label="Link">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 13.5a4 4 0 0 0 5.7.2l2.3-2.3a4 4 0 0 0-5.7-5.6L11.5 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M13.5 10.5a4 4 0 0 0-5.7-.2l-2.3 2.3a4 4 0 0 0 5.7 5.6L12.5 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+          <button type="button" class="md-control md-control--code" tabindex="-1" aria-label="Code">&lt;/&gt;</button>
+          <button type="button" class="md-control" tabindex="-1" aria-label="Quote">❝</button>
+          <button type="button" class="md-control" tabindex="-1" aria-label="Bulleted list">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="7" r="1.4" fill="currentColor"/><circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="5" cy="17" r="1.4" fill="currentColor"/><path d="M9 7h10M9 12h10M9 17h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+          <button type="button" class="md-control" tabindex="-1" aria-label="Numbered list">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5.5L6.2 5M4 12h2.4c.6 0 .6 1.2 0 1.6L4 16h2.6M9 7h10M9 12h10M9 17h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
         </div>
       </div>
@@ -2265,13 +2271,15 @@ defineExpose({
   pointer-events: none; /* Allow clicks to pass through */
 }
 
-/* Bottom sheet */
+/* Bottom sheet: dark panel, a step above the canvas, with the same weave */
 .reply-sheet {
   position: fixed;
-  left: 0;
-  right: 0;
+  left: 16px;
+  right: 16px;
   bottom: -20px; /* Position slightly below the viewport */
-  background-color: var(--color-surface);
+  isolation: isolate;
+  background-color: #1c211f;
+  background-image: linear-gradient(180deg, #242a27 0%, #1a1f1d 100%);
   border-top-left-radius: 16px;
   border-top-right-radius: 16px;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.4);
@@ -2284,6 +2292,25 @@ defineExpose({
   height: auto; /* Auto-size to content */
   transform: translateY(100%);
   transition: transform 0.3s ease-out;
+}
+
+.reply-sheet::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: url("/textures/texture.jpeg");
+  background-repeat: repeat;
+  background-size: 420px;
+  opacity: 0.28;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.reply-sheet > * {
+  position: relative;
+  z-index: 1;
 }
 
 .reply-sheet--visible {
@@ -2316,13 +2343,12 @@ defineExpose({
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid #2a312d;
   border-top-left-radius: 16px;
   border-top-right-radius: 16px;
   flex-shrink: 0;
-  background-color: #2A2A2A;
+  background: transparent;
   position: relative;
-  overflow: hidden; /* Ensures any child elements don't spill outside rounded corners */
 }
 
 .reply-sheet__header-left {
@@ -2330,6 +2356,8 @@ defineExpose({
 }
 
 .reply-sheet__title {
+  display: inline-block;
+  margin-top: 6px;
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text);
@@ -2346,10 +2374,11 @@ defineExpose({
 .reply-sheet__toolbar {
   display: flex;
   align-items: center;
-  padding: 6px 16px 6px;
+  margin-bottom: 12px;
+  padding: 8px 16px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--color-border);
-  background-color: #2A2A2A;
+  border-bottom: 1px solid #2a312d;
+  background: transparent;
 }
 
 .toolbar-left {
@@ -2409,26 +2438,28 @@ defineExpose({
   cursor: not-allowed;
 }
 
-/* Uniform ghost pills for toolbar */
+/* Toolbar pills: solid, a step brighter than the panel */
 .meta-pill {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
+  padding: 8px 14px;
+  background: #2c332f;
+  border: 1px solid #3a423d;
+  border-radius: var(--radius-pill);
   color: var(--color-text);
   font-size: var(--font-size-sm);
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
   min-height: 36px;
 }
 
 @media (hover: hover) and (pointer: fine) {
   .meta-pill:hover:not(:disabled) {
-    background-color: var(--color-hover-overlay);
-    border-color: var(--color-border-hover);
+    background-color: #343c37;
+    border-color: #454e48;
+    color: var(--color-text);
   }
 }
 
@@ -2452,9 +2483,9 @@ defineExpose({
 }
 
 .visibility-globe-toggle.active {
-  background-color: var(--color-primary);
-  border-color: var(--color-primary);
-  color: var(--color-text-inverse);
+  background-color: #3c453f;
+  border-color: #4a534c;
+  color: var(--color-text);
 }
 
 .visibility-globe-toggle.active .meta-pill__icon {
@@ -2467,19 +2498,19 @@ defineExpose({
 }
 @media (hover: hover) and (pointer: fine) {
   .visibility-globe-toggle.active:hover {
-    background-color: var(--color-primary);
-    border-color: var(--color-primary);
-    color: var(--color-text-inverse);
+    background-color: #454f48;
+    border-color: #545e56;
+    color: var(--color-text);
   }
 }
 
 /* Textarea container - compact design */
 .reply-sheet__textarea-container {
   flex: none; /* Don't expand to fill space */
-  padding: 6px 12px 24px 12px;
+  padding: 0 12px 24px 12px;
   position: relative;
   min-height: 0;
-  background-color: #2A2A2A;
+  background: transparent;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -2488,7 +2519,7 @@ defineExpose({
 
 .reply-input-row {
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
   gap: 6px;
 }
 
@@ -2503,11 +2534,10 @@ defineExpose({
   flex: 1;
   min-width: 0;
   min-height: 32px;
-  padding: 6px 10px;
-  padding-right: 44px;
-  border: 1px solid var(--color-border);
+  padding: 10px 44px 10px 10px;
+  border: 1px solid #343c38;
   border-radius: 10px;
-  background-color: transparent;
+  background-color: #161815;
   color: var(--color-text);
   font-family: inherit;
   font-size: var(--font-size-sm);
@@ -2518,8 +2548,8 @@ defineExpose({
 
 .reply-sheet__subject-input:focus {
   outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 79, 140, 255), 0.2);
+  border-color: #4a534c;
+  box-shadow: none;
 }
 
 .reply-sheet__subject-input.subject-input--error {
@@ -2585,13 +2615,12 @@ defineExpose({
 
 /* Textarea wrapper - compact design */
 .textarea-wrapper {
-  flex: 1;
   position: relative;
   display: flex;
-  align-items: flex-end;
-  margin-bottom: 6px; /* Reduced space at bottom */
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow: visible;
-  min-width: 0; /* Allow shrinking */
 }
 
 .reply-overlay {
@@ -2600,7 +2629,7 @@ defineExpose({
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 6px 10px;
+  padding: 13px 10px 10px;
   white-space: pre-wrap;
   overflow-wrap: break-word;
   pointer-events: none;
@@ -2617,7 +2646,7 @@ defineExpose({
   box-sizing: border-box;
   z-index: 3;
   border-radius: 10px;
-  min-height: 32px;
+  min-height: 47px;
   border: 1px solid transparent;
 }
 
@@ -2718,13 +2747,16 @@ defineExpose({
 
 .reply-sheet__textarea {
   flex: 1;
-  min-height: 32px; /* Compact single line height */
+  min-height: 47px; /* Fits top and bottom padding without clipping */
   max-height: 40vh;
-  padding: 6px 10px; /* Compact padding */
+  padding-top: 13px;
+  padding-bottom: 10px;
+  padding-left: 10px;
+  padding-right: 10px;
   margin: 0;
-  border: 1px solid var(--color-border);
+  border: 1px solid #343c38;
   border-radius: 10px;
-  background-color: transparent;
+  background-color: #161815;
   color: var(--color-text);
   font-family: inherit;
   font-size: var(--font-size-sm);
@@ -2740,8 +2772,65 @@ defineExpose({
 
 .reply-sheet__textarea:focus {
   outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 79, 140, 255), 0.2);
+  border-color: #4a534c;
+  box-shadow: none;
+}
+
+.reply-sheet__textarea::placeholder {
+  color: var(--color-text-secondary);
+}
+
+/* Placeholder formatting row. Not wired yet. */
+.md-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 8px;
+  margin-bottom: 14px;
+  padding: 0 4px;
+}
+
+.md-control {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  border: 1px solid #3a423d;
+  border-radius: 12px;
+  background: #2c332f;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: default;
+}
+
+.md-control svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.md-control--italic {
+  font-style: italic;
+  font-weight: 500;
+}
+
+.md-control--strike {
+  font-weight: 500;
+}
+
+.md-control--code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
 }
 
 .reply-sheet__textarea.disabled {
@@ -2754,9 +2843,10 @@ defineExpose({
 .stacked-buttons {
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   gap: 2px;
-  align-self: flex-end;
-  margin-bottom: 6px;
+  align-self: stretch;
+  margin-bottom: 0;
   flex-shrink: 0;
 }
 
@@ -2836,25 +2926,28 @@ defineExpose({
   line-height: 1;
 }
 
-/* Textarea send button - compact design */
+/* Send: same chip as the formatting controls, with a send mark */
 .textarea-send-button {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  height: 28px;
-  background: var(--color-primary);
-  color: var(--color-text-inverse);
-  border: none;
-  border-radius: 50%;
+  width: 48px;
+  height: auto;
+  min-height: 100%;
+  padding: 0;
+  background: #3c453f;
+  color: var(--color-text);
+  border: 1px solid #545e56;
+  border-radius: 10px;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition: all var(--transition-fast);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
-  flex-shrink: 0;
-  align-self: flex-end;
-  margin-bottom: 6px;
+  align-self: stretch;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.textarea-send-button svg {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 .textarea-send-button:focus { outline: none; }
@@ -2864,14 +2957,13 @@ defineExpose({
 }
 
 .textarea-send-button:hover:not(:disabled):not(.textarea-send-button--loading):not(.textarea-send-button--success) {
-  background-color: var(--color-primary-light);
-  color: var(--color-surface);
-  transform: translateY(-1px) scale(1.02);
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
+  background-color: #454f48;
+  color: var(--color-text);
+  border-color: #626c64;
 }
 
 .textarea-send-button:active:not(:disabled):not(.textarea-send-button--loading):not(.textarea-send-button--success) {
-  transform: translateY(0) scale(0.98);
+  background-color: #343c37;
 }
 
 .textarea-send-button--disabled {
@@ -2892,7 +2984,7 @@ defineExpose({
 
 .textarea-send-button--success {
   background-color: var(--color-success);
-  transform: scale(1.05);
+  border-color: var(--color-success);
 }
 
 /* Stabilize hover while loading/success */
@@ -2903,16 +2995,6 @@ defineExpose({
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
-.send-button__arrow {
-  font-size: 18px;
-  line-height: 1;
-  transform: rotate(0deg);
-  transition: transform var(--transition-fast);
-}
-
-.textarea-send-button:hover:not(:disabled):not(.textarea-send-button--loading):not(.textarea-send-button--success) .send-button__arrow {
-  transform: rotate(15deg);
-}
 
 
 
@@ -2947,9 +3029,9 @@ defineExpose({
   /* Mobile optimizations */
   
   .reply-sheet {
-    border-radius: 0;
-    border-top-left-radius: 16px;
-    border-top-right-radius: 16px;
+    left: 12px;
+    right: 12px;
+    border-radius: 16px 16px 0 0;
     bottom: -30px; /* Position even further below on mobile */
     max-height: calc(50vh + 30px); /* Account for the extended bottom */
     min-height: auto; /* Let it size to content */
@@ -2970,7 +3052,7 @@ defineExpose({
   
   .reply-sheet__textarea-container {
     flex: none; /* Don't expand to fill space on mobile */
-    padding: 8px 16px 32px 16px; /* Consistent padding on mobile with extra bottom padding */
+    padding: 0 16px 32px 16px;
   }
   
   .toolbar-left {
@@ -3010,9 +3092,7 @@ defineExpose({
   }
   
   .textarea-send-button {
-    min-width: 26px;
-    height: 26px;
-    font-size: 12px;
+    width: 44px;
   }
   
   .stacked-buttons {
@@ -3032,29 +3112,30 @@ defineExpose({
   }
   
   .reply-sheet__textarea {
-    min-height: 40px;
-    padding: 10px;
+    min-height: 47px;
+    padding-top: 13px;
+    padding-bottom: 10px;
   }
 }
 
 /* Desktop optimizations - keep mobile design but improve desktop UX */
 @media (min-width: 769px) {
   .reply-sheet {
-    width: 100%; /* Add width to ensure it doesn't get too wide */
-    left: 50%;
-    transform: translateX(-50%);
-    border-radius: var(--radius-md);
+    left: 40px;
+    right: 40px;
+    width: auto;
+    border-radius: 16px 16px 0 0;
     max-height: 60vh;
-    padding: 0 60px;
+    padding: 0;
   }
   
   .reply-sheet--visible {
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
   }
   
   .reply-sheet--raised {
     /* Use the dynamically calculated keyboard offset on desktop as well */
-    transform: translateX(-50%) translateY(calc(-1 * var(--keyboard-offset, 0px)));
+    transform: translateY(calc(-1 * var(--keyboard-offset, 0px)));
   }
   
   /* Hide mobile touch handle on desktop */
@@ -3761,7 +3842,7 @@ defineExpose({
   padding: 0px 16px;
   padding-top: 8px;
   padding-bottom:0px;
-  background-color: #2A2A2A;
+  background: transparent;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;

@@ -79,6 +79,17 @@
         
         <span v-if="!user" class="guest-badge" title="Not logged in">?</span>
       </div>
+      <button
+        @click="openSettingsModal"
+        class="settings-btn"
+        type="button"
+        title="Settings"
+        aria-label="Open settings"
+      >
+        <svg class="settings-gear-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M12 21a8.985 8.985 0 0 1-1.755-.173 1 1 0 0 1-.791-.813l-.273-1.606a6.933 6.933 0 0 1-1.32-.762l-1.527.566a1 1 0 0 1-1.1-.278 8.977 8.977 0 0 1-1.756-3.041 1 1 0 0 1 .31-1.092l1.254-1.04a6.979 6.979 0 0 1 0-1.524L3.787 10.2a1 1 0 0 1-.31-1.092 8.977 8.977 0 0 1 1.756-3.042 1 1 0 0 1 1.1-.278l1.527.566a6.933 6.933 0 0 1 1.32-.762l.274-1.606a1 1 0 0 1 .791-.813 8.957 8.957 0 0 1 3.51 0 1 1 0 0 1 .791.813l.273 1.606a6.933 6.933 0 0 1 1.32.762l1.527-.566a1 1 0 0 1 1.1.278 8.977 8.977 0 0 1 1.756 3.041 1 1 0 0 1-.31 1.092l-1.254 1.04a6.979 6.979 0 0 1 0 1.524l1.254 1.04a1 1 0 0 1 .31 1.092 8.977 8.977 0 0 1-1.756 3.041 1 1 0 0 1-1.1.278l-1.527-.566a6.933 6.933 0 0 1-1.32.762l-.273 1.606a1 1 0 0 1-.791.813A8.985 8.985 0 0 1 12 21zm-.7-2.035a6.913 6.913 0 0 0 1.393 0l.247-1.451a1 1 0 0 1 .664-.779 4.974 4.974 0 0 0 1.696-.975 1 1 0 0 1 1.008-.186l1.381.512a7.012 7.012 0 0 0 .7-1.206l-1.133-.939a1 1 0 0 1-.343-.964 5.018 5.018 0 0 0 0-1.953 1 1 0 0 1 .343-.964l1.124-.94a7.012 7.012 0 0 0-.7-1.206l-1.38.512a1 1 0 0 1-1-.186 4.974 4.974 0 0 0-1.688-.976 1 1 0 0 1-.664-.779l-.248-1.45a6.913 6.913 0 0 0-1.393 0l-.25 1.45a1 1 0 0 1-.664.779A4.974 4.974 0 0 0 8.7 8.24a1 1 0 0 1-1 .186l-1.385-.512a7.012 7.012 0 0 0-.7 1.206l1.133.939a1 1 0 0 1 .343.964 5.018 5.018 0 0 0 0 1.953 1 1 0 0 1-.343.964l-1.128.94a7.012 7.012 0 0 0 .7 1.206l1.38-.512a1 1 0 0 1 1 .186 4.974 4.974 0 0 0 1.688.976 1 1 0 0 1 .664.779zm.7-3.725a3.24 3.24 0 0 1 0-6.48 3.24 3.24 0 0 1 0 6.48zm0-4.48A1.24 1.24 0 1 0 13.24 12 1.244 1.244 0 0 0 12 10.76z"/>
+        </svg>
+      </button>
       <button v-if="user" @click="$emit('logout')" class="logout-btn">Logout</button>
       <LoginButton v-else />
     </div>
@@ -86,11 +97,17 @@
 </template>
 
 <script setup>
+import { useStore } from 'vuex';
 import LoginButton from './buttons/LoginButton.vue';
 import { useCompactThread } from '../composables/useCompactThread.js';
 // Public SPA: no admin link here; a single admin badge exists in the main layout
 
+const store = useStore();
 const { compactThread, toggleCompactThread } = useCompactThread();
+
+const openSettingsModal = () => {
+  store.dispatch('ui/setSettingsModalOpen', true);
+};
 
 defineProps({
   user: { type: Object, default: null },
@@ -309,7 +326,8 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'copyThread', 'exit
   opacity: 1;
 }
 
-.logout-btn {
+.logout-btn,
+.settings-btn {
   background-color: transparent;
   color: var(--color-text);
   padding: var(--space-xs) var(--space-sm);
@@ -317,9 +335,23 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'copyThread', 'exit
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: var(--font-size-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.logout-btn:hover {
+.settings-btn {
+  padding: var(--space-xs) 8px;
+}
+
+.settings-gear-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.logout-btn:hover,
+.settings-btn:hover {
   background-color: var(--color-hover-overlay);
 }
 
@@ -356,8 +388,9 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'copyThread', 'exit
 
 
 .guest-badge {
-  background-color: var(--color-text-secondary);
+  background-color: var(--color-surface-light);
   color: var(--color-text-inverse);
+  border: 1px solid var(--color-border);
 }
 
 @media (max-width: 768px) {
@@ -395,7 +428,7 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'copyThread', 'exit
     font-size: 10px;
     margin-left: 2px;
   }
-  .logout-btn, .login-btn {
+  .logout-btn, .login-btn, .settings-btn {
     padding: var(--space-xs) var(--space-sm);
     font-size: calc(var(--font-size-xs) - 1px);
     white-space: nowrap;
@@ -420,6 +453,14 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'copyThread', 'exit
     padding: 4px 6px;
     font-size: calc(var(--font-size-xs) - 2px);
     min-width: 50px;
+  }
+  .settings-btn {
+    padding: 4px 6px;
+    min-width: 0;
+  }
+  .settings-gear-icon {
+    width: 14px;
+    height: 14px;
   }
 }
 </style>

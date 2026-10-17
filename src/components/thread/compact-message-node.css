@@ -9,13 +9,13 @@
 
 .message-node.compact:not(.list-view):hover .message-content,
 .message-node.compact:not(.list-view).dropdown-open .message-content {
-  background-color: var(--color-hover-overlay, rgba(0, 0, 0, 0.05));
-  border-color: transparent;
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-surface-hover);
 }
 
 .message-node.compact:not(.list-view) .plaintext-content,
 .message-node.compact:not(.list-view) .message-body {
-  font-size: 0.9rem;
+  font-size: var(--message-font-size-compact, calc(var(--message-font-size, 1.125rem) * 0.9));
 }
 
 .message-node.compact:not(.list-view) .message-author {

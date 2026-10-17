@@ -311,7 +311,7 @@ const formattedDate = computed(() => {
 
 .message-content {
   line-height: 1.5;
-  font-size: 0.95rem;
+  font-size: var(--message-font-size, 1.125rem);
   font-family: var(--author-font, var(--font-family-base));
 }
 

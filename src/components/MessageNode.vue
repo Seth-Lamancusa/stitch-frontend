@@ -109,52 +109,22 @@
               :on-recipients="openAddRecipientsModal"
             />
           </div>
-        </div>
-        
-        <!-- Datetime on the right -->
-        <div v-if="!inListView" class="header-row-right">
-          <span
-            v-if="isDefaultOutgoingChild"
-            class="default-outgoing-mark"
-            title="Default outgoing"
-          >🔗</span>
-          <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
-          <template v-if="isCompactThread">
-            <button 
-              v-if="canCollapse"
-              class="collapse-button collapse-button--top"
-              @click.stop="toggleCollapse('top')"
-              :aria-label="isCollapsed ? 'Expand message' : 'Collapse message'"
-              :title="isCollapsed ? 'Expand' : 'Collapse'"
-            >
-              <span class="collapse-icon">{{ isCollapsed ? '▼' : '▲' }}</span>
-            </button>
-            <input 
-              v-if="selectable || !inListView"
-              type="checkbox"
-              :checked="inListView ? selected : isMessageSelected"
-              @change="handleSelectionToggle"
-              @click.stop
-              class="selection-checkbox"
-            />
-          </template>
-        </div>
-        
-        <!-- Mobile-only timestamp below username/buttons -->
-        <span v-if="inListView" class="message-timestamp mobile-inline-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
-      </div>
-      
-      <!-- Row 2: Badges + collapse/checkbox -->
-      <div v-if="!isCompactThread" class="header-row header-row--badges">
-        <div class="badges-row-left">
+
+            <div v-if="!isCompactThread" class="badges-row-left">
           <!-- Recipients badge -->
           <button 
             v-if="hasRecipients"
             @click.stop="openAddRecipientsModal" 
             class="recipients-toggle author-toggle"
             title="Add recipients to this message"
+            :aria-label="typeof message.recipients === 'string' ? 'Recipients' : `Recipients, ${deduplicatedRecipients.length}`"
           >
-            Recipients {{ typeof message.recipients === 'string' ? '' : `(${deduplicatedRecipients.length})` }}
+            <svg class="badge-icon" viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="5.5" cy="5" r="2" fill="currentColor"/>
+              <circle cx="11" cy="5.6" r="1.5" fill="currentColor"/>
+              <path fill="currentColor" d="M1.4 12.6c.35-2.15 2.15-3.4 4.1-3.4s3.75 1.25 4.1 3.4H1.4zm7.3-1.15c.35-.2.85-.35 1.45-.35 1.45 0 2.7.85 3.15 2.5h-3.4c-.2-.85-.7-1.55-1.2-2.15z"/>
+            </svg>
+            <span v-if="typeof message.recipients !== 'string'" class="badge-count">{{ deduplicatedRecipients.length }}</span>
           </button>
           
           <!-- Tags badge -->
@@ -162,8 +132,10 @@
             @click.stop="openTagsModal"
             class="tags-toggle"
             title="Manage tags for this message"
+            :aria-label="`Tags, ${existingTags.length}`"
           >
-            Tags ({{ existingTags.length }})
+            <span class="badge-hash" aria-hidden="true">#</span>
+            <span class="badge-count">{{ existingTags.length }}</span>
           </button>
           
           <!-- Channels badge -->
@@ -171,8 +143,13 @@
             @click.stop="openChannelsModal"
             class="channels-toggle"
             title="Manage channels for this message"
+            :aria-label="`Channels, ${existingChannels.length}`"
           >
-            Channels ({{ existingChannels.length }})
+            <svg class="badge-icon" viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="3.2" cy="8" r="1.35" fill="currentColor"/>
+              <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M6.1 5.15a4.1 4.1 0 0 1 0 5.7M8.7 3.2a7 7 0 0 1 0 9.6"/>
+            </svg>
+            <span class="badge-count">{{ existingChannels.length }}</span>
           </button>
           
           <!-- Envelope icon for recipients - unread (closed) / read (open) -->
@@ -216,12 +193,17 @@
               <path d="M2.5 1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1H3v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4h.5a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1H2.5zm3 4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 .5-.5zM8 5a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7A.5.5 0 0 1 8 5zm3 .5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 1 0z"/>
             </svg>
           </button>
-        </div>
-        
-        <!-- Right section: collapse button + checkbox -->
+            </div>
+          </div>
+
         <div v-if="!inListView" class="header-row-right">
-          <!-- Top collapse button -->
-          <button 
+          <span
+            v-if="isDefaultOutgoingChild"
+            class="default-outgoing-mark"
+            title="Default outgoing"
+          >🔗</span>
+          <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
+          <button
             v-if="canCollapse"
             class="collapse-button collapse-button--top"
             @click.stop="toggleCollapse('top')"
@@ -230,7 +212,7 @@
           >
             <span class="collapse-icon">{{ isCollapsed ? '▼' : '▲' }}</span>
           </button>
-          <input 
+          <input
             v-if="selectable || !inListView"
             type="checkbox"
             :checked="inListView ? selected : isMessageSelected"
@@ -239,19 +221,10 @@
             class="selection-checkbox"
           />
         </div>
+
+        <span v-if="inListView" class="message-timestamp mobile-inline-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
       </div>
-      
-      <!-- Row 3: Add subject (if applicable) -->
-      <div v-if="!inListView && !isCompactThread && !message.subject && !isAddingSubject && canAddSubject" class="header-row header-row--subject">
-        <button 
-          @click.stop="startAddingSubject"
-          class="add-subject-button"
-          title="Add subject to this message"
-        >
-          + Add Subject
-        </button>
       </div>
-    </div>
       
       <!-- Message body -->
       <div class="message-body" :style="messageBodyStyle">
@@ -290,204 +263,14 @@
       <message-attachments :attachments="message.files" />
 
       <CompactHoverToolbar
-        v-if="isCompactThread && !isSelectionMode && !isCollapsed"
-        :visible="compactToolbarVisible"
+        v-if="!inListView && !isSelectionMode && !isCollapsed"
+        :visible="isMobile || compactToolbarVisible"
         :primary-actions="compactToolbarActionList"
         :more-actions="compactMoreActionList"
+        :reply-count="message.child_ids?.length || 0"
         @more-open-changed="onCompactMoreOpenChanged"
       />
       
-      <!-- Message footer - hidden in list view -->
-      <div v-if="!inListView && !isCompactThread" class="message-footer">
-        <div class="reply-count">{{ message.child_ids?.length || 0 }} 💬</div>
-        
-        <!-- Right side: collapse button + actions -->
-        <div v-if="!isSelectionMode" class="footer-right-actions">
-          <!-- Bottom collapse button for desktop -->
-          <button 
-            v-if="canCollapse"
-            class="collapse-button collapse-button--bottom collapse-button--desktop"
-            @click.stop="toggleCollapse('bottom')"
-            :aria-label="isCollapsed ? 'Expand message' : 'Collapse message'"
-            :title="isCollapsed ? 'Expand' : 'Collapse'"
-          >
-            <span class="collapse-icon">{{ isCollapsed ? '▼' : '▲' }}</span>
-          </button>
-          
-          <!-- Unified message actions - desktop layout -->
-          <div class="message-actions desktop-actions">
-          <!-- Desktop visible actions -->
-          <button 
-            v-for="action in desktopVisibleActions"
-            :key="action.id"
-            @click.stop="action.handler()"
-            class="action-button"
-            :class="[
-              { 
-                'active': action.active?.(),
-                'disabled': action.disabled?.()
-              },
-              action.customClass?.()
-            ]"
-            :disabled="action.disabled?.()"
-            :title="action.text"
-          >
-            <span v-if="action.loading?.()" class="loading-indicator"></span>
-            <span v-else class="action-emoji">{{ action.emoji }}</span>
-            <span class="action-text">{{ action.text }}</span>
-          </button>
-          
-          <!-- Menu button for desktop with relative positioning for menu -->
-          <div v-if="shouldShowMenuButton" ref="desktopMenuContainerRef" class="desktop-menu-container">
-            <button 
-              @click.stop="toggleActionBar"
-              class="action-button menu-button"
-              :class="{ 'active': showActionBar }"
-              title="More actions"
-            >
-              <span class="action-emoji">⋯</span>
-            </button>
-            
-            <!-- Desktop dropdown menu -->
-            <div 
-              v-if="showActionBar && !isMobile"
-              ref="desktopActionMenuRef"
-              class="desktop-action-menu"
-              :class="{ 'menu-below': menuPositionBelow }"
-              @click.stop
-            >
-              <button 
-                v-for="action in menuActions"
-                :key="action.id"
-                @click.stop="action.handler()"
-                class="desktop-menu-button"
-                :class="[
-                  { 'active': action.active?.() },
-                  action.customClass?.()
-                ]"
-                :title="action.text"
-                :disabled="action.disabled?.()"
-              >
-                <span v-if="action.loading?.()" class="loading-indicator"></span>
-                <span v-else class="action-emoji">{{ action.emoji }}</span>
-                <span class="action-text">{{ action.text }}</span>
-              </button>
-            </div>
-          </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Tags Modal (teleported to body to avoid local stacking/highlight issues) -->
-      <teleport to="body">
-        <TagsModal
-          :is-visible="showTagsModal"
-          :is-add-mode="true"
-          :existing-tags="existingTags"
-          :message-id="message?.id"
-          @close="closeTagsModal"
-          @update="handleTagsUpdate"
-          @done="closeTagsModal"
-        />
-        
-        <ChannelsModal
-          :is-visible="showChannelsModal"
-          :is-add-mode="true"
-          :existing-channels="existingChannels"
-          :message-id="message?.id"
-          @close="closeChannelsModal"
-          @update="handleChannelsUpdate"
-          @done="closeChannelsModal"
-        />
-      </teleport>
-      
-      <!-- Reply Order Modal -->
-      <teleport to="body">
-        <ReplyOrderModal
-          :is-visible="showReplyOrderModal"
-          :message-id="message?.id"
-          :child-ids="message?.child_ids || []"
-          :stitch-child-ids="message?.stitch_child_ids || []"
-          :existing-reply-order="message?.reply_order || []"
-          @close="closeReplyOrderModal"
-          @update="handleReplyOrderUpdate"
-        />
-      </teleport>
-      
-      <!-- Unified mobile action controls -->
-      <div v-if="!inListView && !isSelectionMode && !isCompactThread" ref="mobileActionControlsRef" class="mobile-action-controls">
-        
-        <!-- Bottom collapse button for mobile -->
-        <button 
-          v-if="canCollapse"
-          class="collapse-button collapse-button--bottom collapse-button--mobile"
-          @click.stop="toggleCollapse('bottom')"
-          :aria-label="isCollapsed ? 'Expand message' : 'Collapse message'"
-          :title="isCollapsed ? 'Expand' : 'Collapse'"
-        >
-          <span class="collapse-icon">{{ isCollapsed ? '▼' : '▲' }}</span>
-        </button>
-        
-        <!-- Mobile visible actions -->
-        <button 
-          v-for="action in mobileVisibleActions"
-          :key="action.id"
-          @click.stop="action.handler()"
-          class="mobile-action-button"
-          :class="[
-            { 
-              'active': action.active?.(),
-              'disabled': action.disabled?.()
-            },
-            action.customClass?.()
-          ]"
-          :disabled="action.disabled?.()"
-          :title="action.text"
-        >
-          <span v-if="action.loading?.()" class="loading-indicator"></span>
-          <span v-else class="action-emoji">{{ action.emoji }}</span>
-          <span class="action-text">{{ action.text }}</span>
-        </button>
-        
-        <!-- Menu button for mobile -->
-        <button 
-          v-if="shouldShowMenuButton"
-          @click.stop="toggleActionBar"
-          class="mobile-action-button menu-button"
-          :class="{ 'active': showActionBar }"
-          title="More actions"
-        >
-          <span class="action-emoji">⋯</span>
-        </button>
-        
-        <!-- Unified floating action menu -->
-        <div 
-          v-if="shouldShowMenuButton"
-          ref="floatingActionBarRef"
-          class="floating-action-bar" 
-          :class="{ 'active': showActionBar, 'position-below': mobileMenuPositionBelow }"
-          @click.stop
-          @touchstart.stop="handleActionBarTouchStart"
-          @touchmove.stop="handleActionBarTouchMove"
-          @touchend.stop="handleActionBarTouchEnd"
-        >
-          <button 
-            v-for="action in menuActions"
-            :key="action.id"
-            @click.stop="action.handler()"
-            class="fab-button"
-            :class="[
-              { 'active': action.active?.() },
-              action.customClass?.()
-            ]"
-            :title="action.text"
-            :disabled="action.disabled?.()"
-          >
-            <span class="action-emoji">{{ action.emoji }}</span>
-            <span class="action-text">{{ action.text }}</span>
-          </button>
-        </div>
-       </div>
      </div>
    </div>
 
@@ -808,8 +591,8 @@ export default {
       },
       {
         id: 'links',
-        emoji: '🔗',
-        text: 'Links',
+        emoji: '🪡',
+        text: 'Stitch',
         desktopVisible: false,
         mobileVisible: false,
         adminOnly: false,
@@ -885,6 +668,16 @@ export default {
         adminOnly: false,
         handler: findSimilarMessages,
         condition: () => !props.inListView
+      },
+      {
+        id: 'add-subject',
+        emoji: '#',
+        text: 'Add subject',
+        desktopVisible: false,
+        mobileVisible: false,
+        adminOnly: false,
+        handler: () => startAddingSubject(),
+        condition: () => !props.inListView && !props.message.subject && !isAddingSubject.value && canAddSubject.value
       }
     ]);
     
@@ -2499,8 +2292,8 @@ export default {
 }
 
 .message-node.list-view:hover .message-content {
-  background-color: var(--color-hover-overlay, rgba(0, 0, 0, 0.02));
-  border-color: var(--color-primary-light, rgba(0, 123, 255, 0.3));
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-surface-hover);
 }
 
 .message-node.list-view .message-body {
@@ -2514,13 +2307,24 @@ export default {
 .message-content {
   background-color: var(--color-surface);
   border-radius: var(--radius-md);
-  padding: var(--space-sm) var(--space-md); /* Reduced padding: sm/md instead of md/lg */
-  border: 1px solid var(--color-border);
+  padding: var(--space-md) 1.25rem; /* 16px 20px around the message */
+  border: 1px solid var(--color-surface);
   width: 100%;
   position: relative;
   z-index: 1;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast), max-height 0.3s ease-out, padding 0.2s ease;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), max-height 0.3s ease-out, padding 0.2s ease;
   box-sizing: border-box;
+}
+
+/* Thread cards sit on a near-black canvas, so a tight dark lift reads without a heavy halo.
+   Bottom padding keeps the downward shadow inside the node so overflow clipping
+   on the thread scroller cannot shave it off. */
+.message-node:not(.list-view):not(.compact) {
+  padding-bottom: 10px;
+}
+
+.message-node:not(.list-view):not(.compact) .message-content {
+  box-shadow: 4px 6px 6px rgba(10, 11, 10, 0.96);
 }
 
 /* Sibling navigation card animation (message node only) */
@@ -2593,7 +2397,7 @@ export default {
 
 .message-node.selected .message-content {
   border: 2px solid var(--color-primary);
-  background-color: var(--color-primary-light);
+  background-color: var(--color-surface);
 }
 
 .message-header {
@@ -2625,6 +2429,20 @@ export default {
   align-items: center;
   gap: var(--space-xs, 6px);
   flex-shrink: 0;
+  margin-left: auto;
+}
+
+.header-row--author {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.header-row--author .author-info {
+  flex: 0 1 auto;
+}
+
+.header-row--author .badges-row-left {
+  flex: 0 0 auto;
 }
 
 .default-outgoing-mark {
@@ -2730,7 +2548,15 @@ export default {
   align-items: center;
   gap: 4px;
   justify-content: flex-start;
+  flex: 1 1 auto;
   min-width: 0; /* Ensures proper text truncation */
+  overflow: hidden;
+}
+
+.author-info :deep(.user-display) {
+  max-width: 100%;
+  min-width: 0;
+  flex: 0 1 auto;
 }
 
 .message-author {
@@ -2742,7 +2568,7 @@ export default {
 
 .message-author.current-user-name {
   font-weight: 800;
-  color: var(--color-primary);
+  color: var(--color-current-user-name);
 }
 
 .author-user-tag {
@@ -2773,7 +2599,7 @@ export default {
 .recipients-toggle {
   /* Base styling for all recipient toggles */
   font-size: var(--font-size-xs);
-  padding: 2px 6px;
+  padding: 0 6px 0 5px;
   cursor: pointer;
   border-radius: var(--radius-pill);
   transition: all var(--transition-fast);
@@ -2782,44 +2608,67 @@ export default {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 3px;
+}
+
+.badge-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.badge-hash {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.badge-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
 /* Tags toggle (blue tone) */
 .tags-toggle {
   font-size: calc(var(--font-size-xs) - 1px);
-  padding: 1px 5px;
+  padding: 0 6px 0 5px;
   cursor: pointer;
   border-radius: var(--radius-pill);
   transition: all var(--transition-fast);
   margin-left: 0;
-  height: 20px;
+  height: 22px;
+  gap: 2px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  line-height: 1.2;
-  background-color: rgba(79, 140, 255, 0.12);
-  border: 1px solid rgba(79, 140, 255, 0.45);
-  color: #4F8CFF;
+  line-height: 1;
+  background-color: var(--color-secondary-light, rgba(89, 137, 88, 0.2));
+  border: 1px solid rgba(89, 137, 88, 0.5);
+  color: #d8f3d4;
 }
 
 .tags-toggle:hover {
-  background-color: rgba(79, 140, 255, 0.18);
-  border-color: rgba(79, 140, 255, 0.75);
+  background-color: rgba(89, 137, 88, 0.28);
+  border-color: rgba(89, 137, 88, 0.75);
 }
 
 /* Channels toggle (similar to tags but with different color) */
 .channels-toggle {
   font-size: calc(var(--font-size-xs) - 1px);
-  padding: 1px 5px;
+  padding: 0 6px 0 5px;
   cursor: pointer;
   border-radius: var(--radius-pill);
   transition: all var(--transition-fast);
   margin-left: 0;
-  height: 20px;
+  height: 22px;
+  gap: 3px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  line-height: 1.2;
+  line-height: 1;
   background-color: rgba(255, 165, 0, 0.12);
   border: 1px solid rgba(255, 165, 0, 0.45);
   color: #FFA500;
@@ -2920,9 +2769,9 @@ export default {
 }
 
 .recipients-toggle.author-toggle {
-  background-color: var(--color-warning);
-  color: var(--color-text-inverse);
-  border: none;
+  background-color: rgba(212, 146, 58, 0.16);
+  color: #f0c27a;
+  border: 1px solid rgba(212, 146, 58, 0.45);
 }
 
 
@@ -3023,24 +2872,33 @@ export default {
 
 .message-body {
   margin-bottom: var(--space-sm, 12px); /* Increased space before footer */
+  padding: 8px 10px;
   white-space: normal;
   word-wrap: break-word;
   width: 100%;
-  color: #ffffff; /* Force white text color */
+  color: #fcf7e2; /* Between white and cream, closer to cream (#fffcef) */
   transition: max-height 0.3s ease-out, opacity 0.2s ease;
   line-height: 1.5;
-  font-family: var(--author-font, var(--font-family-base));
+  font-size: var(--message-font-size, 1.125rem);
+  font-family: var(--author-font, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+}
+
+.message-body :deep(.formatted-content) {
+  color: #fffdf5;
+  font-family: inherit;
+  font-size: inherit;
 }
 
 .message-content p {
-  color: #ffffff; /* Force white text color */
+  color: #fffdf5;
   margin-bottom: .5rem;
 }
 
 /* Add larger font size when not in list view */
 .message-node .plaintext-content {
-  font-size: .9rem;
-  color: #ffffff; /* Force white text color in list view */
+  font-size: var(--message-font-size, 1.125rem);
+  color: #fffdf5;
+  font-family: var(--author-font, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
 }
 
 .message-footer {
@@ -3090,11 +2948,12 @@ export default {
     flex-wrap: nowrap;
   }
 
-  /* Hide desktop timestamp on mobile - but show it on desktop */
-  @media (max-width: 768px) {
-    .header-row--author .header-row-right {
-      display: none;
-    }
+  .header-row--author {
+    flex-wrap: nowrap;
+  }
+
+  .header-row--author .header-row-right {
+    display: flex;
   }
 
   /* Show mobile timestamp beneath the username/buttons, full width */
@@ -3407,7 +3266,8 @@ export default {
     width: 100%;
     position: relative;
     perspective: 1000px;
-    padding: 0 3px; /* Reduced padding on mobile */
+    padding-left: 3px; /* Reduced side padding on mobile */
+    padding-right: 3px;
   }
 
   /* Reserve space for the overlayed sibling navigator so text doesn't overlap it. */
@@ -3436,15 +3296,19 @@ export default {
     transition: transform 0.02s linear, opacity 0.02s linear;
     z-index: 1;
     background-color: var(--color-surface);
-    padding: var(--space-xxs, 6px) var(--space-sm, 10px); /* More compact padding */
+    padding: 10px 14px;
     margin: 0; /* Remove margins since parent now has padding */
   }
   
+  .message-node:not(.list-view):not(.compact) .message-content {
+    padding-bottom: 48px; /* Keep the last line clear of the action bar */
+  }
+
   .message-body {
     word-break: break-word;
     overflow-wrap: break-word;
     max-width: 100%;
-    font-size: 0.9rem; /* Slightly smaller text on mobile */
+    font-size: calc(var(--message-font-size, 1.125rem) * 0.94); /* Slightly smaller text on mobile */
     line-height: 1.4;
   }
   
@@ -3453,9 +3317,16 @@ export default {
     margin-bottom: 4px;
   }
   
+  .author-row-left {
+    min-width: 0;
+    overflow: hidden;
+    flex: 1 1 auto;
+  }
+
   .author-info {
     flex-wrap: nowrap;
-    max-width: 65%; /* More space for author info */
+    max-width: 100%;
+    min-width: 0;
     gap: 3px;
   }
   
@@ -3500,8 +3371,13 @@ export default {
   
   .visibility-indicator, .recipients-toggle, .tags-toggle, .channels-toggle {
     font-size: calc(var(--font-size-xs) - 2px);
-    padding: 1px 4px;
-    height: 18px;
+    height: 26px;
+    padding: 0 7px 0 6px;
+  }
+
+  .badge-icon {
+    width: 14px;
+    height: 14px;
   }
   
   .envelope-icon-button {
@@ -3547,11 +3423,16 @@ export default {
   .mobile-action-controls {
     display: flex !important; /* Override desktop display: none */
     position: absolute;
-    bottom: 6px;
-    right: 6px;
+    bottom: 8px;
+    right: 8px;
     z-index: 10;
-    gap: 6px;
-    align-items: flex-end;
+    gap: 2px;
+    align-items: center;
+    padding: 3px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
   }
   
   /* Hide desktop collapse button on mobile */
@@ -3600,11 +3481,25 @@ export default {
   
   /* Mobile action button specific styling */
   .mobile-action-button {
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    box-shadow: none;
     z-index: 12;
-    min-height: 32px;
-    padding: 6px 10px;
-    font-size: calc(var(--font-size-xs) - 1px);
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 9px;
+    font-size: 16px;
+  }
+
+  .mobile-action-button .action-text {
+    display: none;
+  }
+
+  .mobile-action-button .action-emoji {
+    font-size: 16px;
+    line-height: 1;
   }
   
   .mobile-action-button:hover {
@@ -3616,10 +3511,12 @@ export default {
   }
   
   .mobile-action-button.menu-button {
-    min-width: 32px;
-    min-height: 32px;
-    padding: 6px;
-    opacity: 0.7;
+    min-width: 36px;
+    min-height: 36px;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    opacity: 0.85;
   }
   
   .mobile-action-button.menu-button:hover {
@@ -3638,16 +3535,17 @@ export default {
   /* Floating Action Bar */
   .floating-action-bar {
     position: absolute;
-    bottom: 46px; /* Position above the reply button */
+    bottom: 48px; /* Position above the action bar */
     right: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 2px;
     padding: 6px;
+    min-width: 176px;
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: 12px;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
     backdrop-filter: blur(10px);
     z-index: 100; /* High z-index to appear above other message nodes */
     max-height: calc(100vh - 60px); /* Prevent overflow beyond viewport */
@@ -3676,20 +3574,28 @@ export default {
   
   /* Floating Action Bar Buttons */
   .fab-button {
-    min-width: 40px;
-    min-height: 40px;
+    min-width: 0;
+    width: 100%;
+    min-height: 36px;
     background-color: transparent;
     color: var(--color-text);
-    font-size: calc(var(--font-size-xs) - 1px);
     border: none;
-    border-radius: 12px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 0 8px;
     cursor: pointer;
     transition: all var(--transition-fast);
-    font-size: 16px;
+    font-size: 13px;
     position: relative;
+  }
+
+  .fab-button .action-text {
+    font-size: 13px;
+    line-height: 1.2;
+    white-space: nowrap;
   }
   
   .fab-button:hover {
@@ -3760,16 +3666,21 @@ export default {
 
 @media (max-width: 480px) {
   .message-node {
-    padding: 0 2px; /* Minimal padding on very small screens */
+    padding-left: 2px; /* Minimal side padding on very small screens */
+    padding-right: 2px;
   }
   
   .message-content {
-    padding: 5px 8px; /* Very compact padding */
+    padding: 8px 12px; /* A bit more room on very small screens */
     margin: 0;
+  }
+
+  .message-node:not(.list-view):not(.compact) .message-content {
+    padding-bottom: 44px;
   }
   
   .message-body {
-    font-size: 0.85rem; /* Smaller text on very small screens */
+    font-size: calc(var(--message-font-size, 1.125rem) * 0.9); /* Smaller text on very small screens */
     line-height: 1.35;
   }
   
@@ -3793,7 +3704,8 @@ export default {
   }
   
   .header-row--author .author-row-left {
-    max-width: 70%; /* Balance between author info and controls */
+    max-width: none;
+    min-width: 0;
   }
   
   .author-info {
@@ -3813,9 +3725,8 @@ export default {
   }
   
   .visibility-indicator, .recipients-toggle, .tags-toggle, .channels-toggle {
-    font-size: calc(var(--font-size-xs) - 3px);
-    padding: 1px 3px;
-    height: 16px;
+    height: 24px;
+    padding: 0 6px 0 5px;
   }
   
   .envelope-icon-button, .delete-icon-button {
@@ -3847,16 +3758,13 @@ export default {
     min-height: 28px;
   }
   
-  .mobile-action-button {
-    padding: 5px 8px;
-    font-size: calc(var(--font-size-xs) - 2px);
-    min-height: 28px;
-  }
-  
+  .mobile-action-button,
   .mobile-action-button.menu-button {
-    padding: 5px;
-    min-width: 28px;
-    min-height: 28px;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    min-height: 34px;
+    padding: 0;
   }
   
   .floating-action-bar {
@@ -4033,14 +3941,15 @@ export default {
 }
 
 .message-content p {
-  color: #ffffff; /* Force white text color */
+  color: #fffdf5;
   margin-bottom: .5rem;
 }
 
 /* Add larger font size when not in list view */
 .message-node .plaintext-content {
-  font-size: .9rem;
-  color: #ffffff; /* Force white text color in list view */
+  font-size: var(--message-font-size, 1.125rem);
+  color: #fffdf5;
+  font-family: var(--author-font, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
 }
 
 .message-footer {

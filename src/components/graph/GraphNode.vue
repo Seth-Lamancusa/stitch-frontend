@@ -498,7 +498,7 @@ export default {
 
 .message-author.current-user-name {
   font-weight: 800;
-  color: var(--color-primary);
+  color: var(--color-current-user-name);
 }
 
 .author-user-tag {

@@ -64,7 +64,7 @@ onMounted(() => {
 .formatted-content {
   width: 100%;
   font-family: var(--author-font, var(--font-family-base));
-  font-size: var(--font-size-md);
+  font-size: var(--message-font-size, 1.125rem);
   line-height: var(--line-height-normal);
   color: var(--color-text);
 }

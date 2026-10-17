@@ -1,5 +1,5 @@
 <template>
-  <div class="app-layout">
+  <div class="app-layout app-canvas">
     <div class="app-header">
       <div class="branding">
         <router-link to="/home" class="logo-link" @click.prevent="onLogoClick">
@@ -218,6 +218,9 @@
                 <div class="menu-item create" role="menuitem" @click="onCreateManagedUser">
                   <span class="menu-item-name">＋ Create new managed user</span>
                 </div>
+                <div class="menu-item" role="menuitem" @click="onOpenOnboarding">
+                  <span class="menu-item-name">✨ Replay onboarding tour</span>
+                </div>
               </div>
             </div>
           </div>
@@ -239,6 +242,17 @@
           title="Developer tools"
           aria-label="Open developer tools"
         >Dev</button>
+        <button
+          @click="openSettingsModal"
+          class="settings-btn"
+          type="button"
+          title="Settings"
+          aria-label="Open settings"
+        >
+          <svg class="settings-gear-icon" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M12 21a8.985 8.985 0 0 1-1.755-.173 1 1 0 0 1-.791-.813l-.273-1.606a6.933 6.933 0 0 1-1.32-.762l-1.527.566a1 1 0 0 1-1.1-.278 8.977 8.977 0 0 1-1.756-3.041 1 1 0 0 1 .31-1.092l1.254-1.04a6.979 6.979 0 0 1 0-1.524L3.787 10.2a1 1 0 0 1-.31-1.092 8.977 8.977 0 0 1 1.756-3.042 1 1 0 0 1 1.1-.278l1.527.566a6.933 6.933 0 0 1 1.32-.762l.274-1.606a1 1 0 0 1 .791-.813 8.957 8.957 0 0 1 3.51 0 1 1 0 0 1 .791.813l.273 1.606a6.933 6.933 0 0 1 1.32.762l1.527-.566a1 1 0 0 1 1.1.278 8.977 8.977 0 0 1 1.756 3.041 1 1 0 0 1-.31 1.092l-1.254 1.04a6.979 6.979 0 0 1 0 1.524l1.254 1.04a1 1 0 0 1 .31 1.092 8.977 8.977 0 0 1-1.756 3.041 1 1 0 0 1-1.1.278l-1.527-.566a6.933 6.933 0 0 1-1.32.762l-.273 1.606a1 1 0 0 1-.791.813A8.985 8.985 0 0 1 12 21zm-.7-2.035a6.913 6.913 0 0 0 1.393 0l.247-1.451a1 1 0 0 1 .664-.779 4.974 4.974 0 0 0 1.696-.975 1 1 0 0 1 1.008-.186l1.381.512a7.012 7.012 0 0 0 .7-1.206l-1.133-.939a1 1 0 0 1-.343-.964 5.018 5.018 0 0 0 0-1.953 1 1 0 0 1 .343-.964l1.124-.94a7.012 7.012 0 0 0-.7-1.206l-1.38.512a1 1 0 0 1-1-.186 4.974 4.974 0 0 0-1.688-.976 1 1 0 0 1-.664-.779l-.248-1.45a6.913 6.913 0 0 0-1.393 0l-.25 1.45a1 1 0 0 1-.664.779A4.974 4.974 0 0 0 8.7 8.24a1 1 0 0 1-1 .186l-1.385-.512a7.012 7.012 0 0 0-.7 1.206l1.133.939a1 1 0 0 1 .343.964 5.018 5.018 0 0 0 0 1.953 1 1 0 0 1-.343.964l-1.128.94a7.012 7.012 0 0 0 .7 1.206l1.38-.512a1 1 0 0 1 1 .186 4.974 4.974 0 0 0 1.688.976 1 1 0 0 1 .664.779zm.7-3.725a3.24 3.24 0 0 1 0-6.48 3.24 3.24 0 0 1 0 6.48zm0-4.48A1.24 1.24 0 1 0 13.24 12 1.244 1.244 0 0 0 12 10.76z"/>
+          </svg>
+        </button>
         <button v-if="user" @click="logout" class="logout-btn">Logout</button>
         <template v-else>
           <LoginButton />
@@ -275,8 +289,9 @@
       title="Give feedback"
       aria-label="Give feedback"
     >
-      <span class="btn-icon" aria-hidden="true">💬</span>
-      <span class="btn-label">Feedback</span>
+      <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="currentColor" d="M4 3.5h16a2.5 2.5 0 0 1 2.5 2.5v8.5a2.5 2.5 0 0 1-2.5 2.5H10.2L4.8 21.2a.9.9 0 0 1-1.4-.7v-3.5H4A2.5 2.5 0 0 1 1.5 14.5V6A2.5 2.5 0 0 1 4 3.5z"/>
+      </svg>
     </router-link>
 
     <!-- Global Create Button (floating, appears on all tabs) -->
@@ -638,6 +653,10 @@ const onSelectPrincipal = async (_uid) => {
   }
 };
 const onCreateManagedUser = () => { closePrincipalMenu(); isCreateManagedModalOpen.value = true; };
+const onOpenOnboarding = () => {
+  closePrincipalMenu();
+  store.dispatch('ui/setOnboardingOpen', true);
+};
 
 // Drag/drop handlers for managed users menu reordering
 const onManagedDragStart = (key, event) => {
@@ -742,6 +761,10 @@ const closeApiKeysModal = () => {
   isApiKeysModalOpen.value = false;
 };
 
+const openSettingsModal = () => {
+  store.dispatch('ui/setSettingsModalOpen', true);
+};
+
 const onLogoClick = (event) => {
   console.log('[TabViewLayout] Stitch logo clicked → navigating to /home');
   try {
@@ -808,7 +831,6 @@ const handleChannelCreated = async (newChannel) => {
   display: grid;
   grid-template-rows: auto 1fr;
   height: var(--app-height, 100vh);
-  background: var(--color-background, #fff);
   position: relative;
 }
 
@@ -819,12 +841,14 @@ const handleChannelCreated = async (newChannel) => {
   padding: 0 24px;
   height: 56px;
   border-bottom: 1px solid var(--color-border, #eee);
-  background: #000;
+  background: var(--color-chrome, #0e0c0d);
   position: sticky;
   top: 0;
   z-index: 100;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   gap: var(--space-lg, 24px);
+  min-width: 0;
+  width: 100%;
 }
 
 .branding {
@@ -961,6 +985,7 @@ const handleChannelCreated = async (newChannel) => {
 
 .principal-menu-wrapper {
   position: relative;
+  flex-shrink: 0;
 }
 
 .principal-dropdown-toggle {
@@ -1057,7 +1082,7 @@ const handleChannelCreated = async (newChannel) => {
 }
 
 .menu-item.drag-over {
-  outline: 1px dashed rgba(79, 140, 255, 0.95);
+  outline: 1px dashed rgba(89, 137, 88, 0.95);
   outline-offset: -2px;
 }
 
@@ -1102,6 +1127,24 @@ const handleChannelCreated = async (newChannel) => {
   padding: 2px 6px;
   border-radius: var(--radius-sm, 4px);
   transition: background-color var(--transition-fast, 0.2s);
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Name lives inside UserDisplay, so truncation has to cross the component boundary. */
+.username-container :deep(.user-display) {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  flex-wrap: nowrap;
+}
+
+.username-container :deep(.user-display__name) {
+  min-width: 0;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .username-container:hover {
@@ -1137,6 +1180,7 @@ const handleChannelCreated = async (newChannel) => {
   font-size: 12px;
   opacity: 0.7;
   color: var(--color-text, #fff);
+  flex-shrink: 0;
 }
 
 .username-container:hover .edit-icon {
@@ -1144,14 +1188,16 @@ const handleChannelCreated = async (newChannel) => {
 }
 
 .acting-chip {
-  background: rgba(79, 140, 255, 0.15);
-  color: var(--color-primary, #4f8cff);
-  border: 1px solid rgba(79, 140, 255, 0.35);
+  background: var(--color-secondary-light, rgba(89, 137, 88, 0.2));
+  color: var(--color-accent-light, #9dcc98);
+  border: 1px solid rgba(89, 137, 88, 0.4);
   border-radius: 6px;
   padding: 0 6px;
   font-size: 11px;
   line-height: 1.4;
   margin-left: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .profile-switch-status {
@@ -1240,8 +1286,9 @@ const handleChannelCreated = async (newChannel) => {
   background-color: var(--color-hover-overlay, #222);
 }
 
-/* Dev button: neutral styling, compact padding */
-.dev-btn {
+/* Dev & Settings buttons: neutral styling, compact padding */
+.dev-btn,
+.settings-btn {
   background-color: transparent;
   color: var(--color-text, #fff);
   padding: 2px 8px;
@@ -1252,19 +1299,41 @@ const handleChannelCreated = async (newChannel) => {
   line-height: 1.1;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-width: 0;
 }
 
-.dev-btn:hover {
+.settings-btn {
+  padding: 4px 6px;
+}
+
+.settings-gear-icon {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
+.dev-btn:hover,
+.settings-btn:hover {
   background-color: var(--color-hover-overlay, #222);
 }
 
-/* Desktop: make dev button match logout button above 852px */
+/* Desktop: make dev & settings buttons match logout button above 852px */
 @media (min-width: 853px) {
   .dev-btn {
     padding: var(--space-xs, 6px) var(--space-sm, 12px);
     font-size: var(--font-size-xs, 0.85rem);
     line-height: normal;
+  }
+
+  .settings-btn {
+    padding: var(--space-xs, 6px) 8px;
+    line-height: normal;
+  }
+
+  .settings-gear-icon {
+    width: 16px;
+    height: 16px;
   }
 }
 
@@ -1291,8 +1360,9 @@ const handleChannelCreated = async (newChannel) => {
 }
 
 .guest-badge {
-  background-color: var(--color-text-secondary, #aaa);
-  color: var(--color-text-inverse, #fff);
+  background-color: var(--color-surface-light, #272a27);
+  color: var(--color-text-inverse, #fffcef);
+  border: 1px solid var(--color-border, #323632);
 }
 
 .auth-loading-badge {
@@ -1374,6 +1444,8 @@ const handleChannelCreated = async (newChannel) => {
   }
   .app-header {
     padding: 0 12px; /* Reduce header padding */
+    gap: 8px;
+    min-width: 0;
   }
   
   .logo-image {
@@ -1382,21 +1454,34 @@ const handleChannelCreated = async (newChannel) => {
   
   .user-controls {
     gap: var(--space-xs, 8px); /* Reduce gap */
-    flex-shrink: 0; /* Never shrink user controls */
+    flex: 1 1 auto;
     min-width: 0;
+    justify-content: flex-end;
   }
   
   .user-info {
     gap: 2px; /* Minimal gap */
-    margin-right: var(--space-xs, 8px); /* Reduce margin */
+    margin-right: 0;
     min-width: 0; /* Allow shrinking */
+    flex: 0 1 auto;
   }
   
   .username-container {
     gap: 2px; /* Reduce gap */
     padding: 1px 4px; /* Smaller padding */
-    max-width: 100px; /* Limit username width */
+    max-width: 100%;
     min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .username-container :deep(.user-display__name) {
+    max-width: none;
+    flex: 1 1 auto;
+    font-size: calc(var(--font-size-xs));
+  }
+
+  .username-container :deep(.user-tag) {
+    display: none; /* Hide user tag on mobile to save space */
   }
   
   .username {
@@ -1408,6 +1493,10 @@ const handleChannelCreated = async (newChannel) => {
     font-size: calc(var(--font-size-xs) - 2px); /* Even smaller tag */
     display: none; /* Hide user tag on mobile to save space */
   }
+
+  .edit-icon {
+    display: none;
+  }
   
   
   .whitelist-badge, .non-whitelist-badge, .guest-badge, .auth-loading-badge {
@@ -1418,7 +1507,7 @@ const handleChannelCreated = async (newChannel) => {
     margin-left: 2px; /* Reduce margin */
   }
   
-  .logout-btn, .login-btn, .dev-btn {
+  .logout-btn, .login-btn, .dev-btn, .settings-btn {
     padding: var(--space-xs, 6px) var(--space-sm, 8px); /* Smaller button padding */
     font-size: calc(var(--font-size-xs) - 1px); /* Smaller font */
     white-space: nowrap; /* Prevent text wrapping */
@@ -1426,87 +1515,86 @@ const handleChannelCreated = async (newChannel) => {
   }
 }
 
-/* Global Feedback Button */
-.global-feedback-btn {
-  position: fixed;
-  bottom: var(--space-xl);
-  left: var(--space-xl);
-  z-index: 10;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 18px;
-  border-radius: var(--radius-pill, 9999px);
-  background: #1ee0b0;
-  color: #04241c;
-  text-decoration: none;
-  font-weight: 800;
-  font-size: 0.95rem;
-  letter-spacing: 0.01em;
-  line-height: 1;
-  white-space: nowrap;
-  box-shadow:
-    0 0 0 3px rgba(30, 224, 176, 0.35),
-    0 10px 28px rgba(16, 211, 168, 0.5);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
-}
-
-.global-feedback-btn:hover {
-  transform: translateY(-2px) scale(1.04);
-  background: #3af0c2;
-  color: #04241c;
-  box-shadow:
-    0 0 0 5px rgba(58, 240, 194, 0.4),
-    0 14px 36px rgba(16, 211, 168, 0.62);
-}
-
-.global-feedback-btn:focus-visible {
-  outline: 3px solid #fff;
-  outline-offset: 3px;
-}
-
-.global-feedback-btn .btn-icon {
-  font-size: 1.15rem;
-  line-height: 1;
-}
-
-.global-feedback-btn .btn-label {
-  display: inline-flex;
-  align-items: center;
-}
-
-/* Global Create Button */
+/* Matched corner controls. Sage fill with the landing herringbone weave. */
+.global-feedback-btn,
 .global-create-btn {
   position: fixed;
   bottom: var(--space-xl);
-  right: var(--space-xl);
-  background-color: var(--color-primary);
-  color: var(--color-text-inverse);
-  border: none;
-  border-radius: 50%;
+  z-index: 10;
+  isolation: isolate;
+  overflow: hidden;
   width: 60px;
   height: 60px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
   display: flex;
   justify-content: center;
   align-items: center;
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  text-decoration: none;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
   cursor: pointer;
   transition: background-color var(--transition-normal);
-  z-index: 10;
+}
+
+.global-feedback-btn {
+  left: var(--space-xl);
+}
+
+.global-create-btn {
+  right: var(--space-xl);
   font-size: 52px;
   line-height: 1;
 }
 
+.global-feedback-btn::before,
+.global-create-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("/textures/tap-texture-2.avif");
+  background-repeat: repeat;
+  background-size: 420px;
+  filter: contrast(1.4) brightness(1.15);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.global-feedback-btn > *,
+.global-create-btn > * {
+  position: relative;
+  z-index: 1;
+}
+
+.global-feedback-btn .btn-icon,
 .global-create-btn .btn-icon {
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
+}
+
+.global-feedback-btn .btn-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.global-create-btn .btn-icon {
   transform: translateY(-1px);
 }
 
+.global-feedback-btn:hover,
 .global-create-btn:hover {
   background-color: var(--color-primary-dark);
+  color: var(--color-text-inverse);
+}
+
+.global-feedback-btn:focus-visible,
+.global-create-btn:focus-visible {
+  outline: 3px solid var(--color-cream);
+  outline-offset: 3px;
 }
 
 /* Mobile responsive for global create and feedback buttons */
@@ -1524,10 +1612,15 @@ const handleChannelCreated = async (newChannel) => {
   }
 
   .global-feedback-btn {
+    width: 52px;
+    height: 52px;
     bottom: 80px;
     left: var(--space-md);
-    padding: 10px 14px;
-    font-size: 0.85rem;
+  }
+
+  .global-feedback-btn .btn-icon {
+    width: 26px;
+    height: 26px;
   }
 }
 
@@ -1539,6 +1632,7 @@ const handleChannelCreated = async (newChannel) => {
   .app-header {
     padding: 0 8px; /* Even less padding on very narrow screens */
     min-height: 56px; /* Ensure minimum height */
+    gap: 6px;
   }
   
   .logo-image {
@@ -1547,21 +1641,22 @@ const handleChannelCreated = async (newChannel) => {
   
   .user-controls {
     gap: 4px; /* Minimal gap */
-    flex-shrink: 0; /* Never shrink */
+    min-width: 0;
   }
   
   .user-info {
-    margin-right: 4px; /* Minimal margin */
+    margin-right: 0;
     min-width: 0;
   }
   
   .username-container {
-    max-width: 80px; /* Even smaller username container */
+    max-width: 100%;
     padding: 1px 2px;
   }
   
-  .username {
-    max-width: 50px; /* Very small username width */
+  .username,
+  .username-container :deep(.user-display__name) {
+    max-width: none;
     font-size: calc(var(--font-size-xs) - 1px);
   }
   
@@ -1573,7 +1668,7 @@ const handleChannelCreated = async (newChannel) => {
     margin-left: 1px;
   }
   
-  .logout-btn, .login-btn, .dev-btn {
+  .logout-btn, .login-btn, .dev-btn, .settings-btn {
     padding: 4px 6px; /* Minimal button padding */
     font-size: calc(var(--font-size-xs) - 2px); /* Very small font */
     min-width: 0; /* Allow content to dictate width */
@@ -1591,18 +1686,20 @@ const handleChannelCreated = async (newChannel) => {
   }
   
   .user-controls {
-    flex-shrink: 0; /* Never shrink */
+    min-width: 0;
   }
   
-  .user-tag {
+  .user-tag,
+  .username-container :deep(.user-tag) {
     display: none; /* Hide user tag for space */
   }
   
-  .username {
-    max-width: 60px;
+  .username,
+  .username-container :deep(.user-display__name) {
+    max-width: none;
   }
   
-  .logout-btn, .login-btn, .dev-btn {
+  .logout-btn, .login-btn, .dev-btn, .settings-btn {
     min-width: 0;
     padding: 4px 8px;
     font-size: calc(var(--font-size-xs));
@@ -1619,7 +1716,7 @@ const handleChannelCreated = async (newChannel) => {
     bottom: 0 !important;
     left: 0 !important;
     right: 0 !important;
-    background: #000 !important;
+    background: var(--color-chrome, #0e0c0d) !important;
     border-top: 1px solid #2a2a2a !important;
     padding: 8px 0 !important;
     z-index: 100 !important;
@@ -1642,7 +1739,7 @@ const handleChannelCreated = async (newChannel) => {
   }
   
   .mobile-tab-bar .mobile-tab.active {
-    background-color: #4f8cff !important;
+    background-color: var(--color-primary, #598958) !important;
     color: #fff !important;
     border-radius: 4px !important;
   }

@@ -214,6 +214,7 @@ onBeforeUnmount(() => {
   top: 0;
   left: 0;
   right: 0;
+  background: var(--background-dark, #121212);
 }
 
 /* Remove all underlines from links */

@@ -310,7 +310,7 @@ const menuActions = computed(() => {
       run: copyLink
     },
     { id: 'refresh-replies', emoji: '🔄', text: 'Refresh replies', close: true, run: () => emit('refreshReplies', props.message.id) },
-    { id: 'links', emoji: '🔗', text: 'Links', close: true, run: openLinks },
+    { id: 'links', emoji: '🪡', text: 'Stitch', close: true, run: openLinks },
     {
       id: 'center',
       emoji: '🎯',
@@ -651,7 +651,7 @@ onBeforeUnmount(() => {
 
 :deep(.user-display__name--current) {
   font-weight: 800;
-  color: var(--color-primary);
+  color: var(--color-current-user-name);
 }
 
 :deep(.author-user-tag) {

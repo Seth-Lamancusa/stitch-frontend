@@ -1,14 +1,17 @@
 <template>
   <div
-    v-show="visible"
     ref="toolbarRef"
     class="compact-hover-toolbar"
+    :class="{ 'is-visible': visible }"
     @click.stop
   >
+    <span class="compact-reply-count" title="Replies">{{ replyCount }} 💬</span>
+
     <CompactActionButton
       v-for="action in primaryActions"
       :key="action.id"
       :action="action"
+      :show-text="false"
     />
 
     <div v-if="moreActions.length" ref="moreWrapRef" class="more-wrap">
@@ -46,7 +49,8 @@ import { clampMenuToMessageList, messageListClipBounds } from '../../utils/menuP
 const props = defineProps({
   visible: { type: Boolean, default: false },
   primaryActions: { type: Array, default: () => [] },
-  moreActions: { type: Array, default: () => [] }
+  moreActions: { type: Array, default: () => [] },
+  replyCount: { type: Number, default: 0 }
 })
 
 const emit = defineEmits(['moreOpenChanged'])
@@ -135,7 +139,7 @@ onBeforeUnmount(() => {
 .compact-hover-toolbar {
   position: absolute;
   right: 8px;
-  bottom: -22px;
+  bottom: -16px;
   z-index: 6;
   display: inline-flex;
   align-items: center;
@@ -145,6 +149,22 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+.compact-hover-toolbar.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.compact-reply-count {
+  padding: 0 6px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .more-wrap {
@@ -178,12 +198,11 @@ onBeforeUnmount(() => {
   position: absolute;
   right: 0;
   z-index: 7;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 2px;
-  min-width: 168px;
-  padding: 4px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  width: 280px;
+  padding: 6px;
   overflow-x: hidden;
   overflow-y: auto;
   background: var(--color-surface);
@@ -204,7 +223,7 @@ onBeforeUnmount(() => {
 
 .more-menu :deep(.compact-action-button) {
   width: 100%;
+  min-width: 0;
   justify-content: flex-start;
-  flex-shrink: 0;
 }
 </style>

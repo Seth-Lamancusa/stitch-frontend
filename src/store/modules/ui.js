@@ -1,6 +1,48 @@
 import { normalizeError } from '../../utils/error.js'
 
 const COMPACT_THREAD_KEY = 'compactThread'
+const MESSAGE_TEXT_SIZE_KEY = 'messageTextSize'
+
+export const DEFAULT_MESSAGE_TEXT_SIZE = 18
+export const MIN_MESSAGE_TEXT_SIZE = 13
+export const MAX_MESSAGE_TEXT_SIZE = 24
+
+export const MESSAGE_TEXT_SIZE_PRESETS = [
+  { id: 'sm', label: 'Small', size: 15 },
+  { id: 'md', label: 'Default', size: 18 },
+  { id: 'lg', label: 'Large', size: 20 },
+  { id: 'xl', label: 'Extra Large', size: 22 },
+]
+
+const PRESET_MAP = {
+  sm: 15,
+  small: 15,
+  md: 18,
+  default: 18,
+  medium: 18,
+  lg: 20,
+  large: 20,
+  xl: 22,
+  'extra-large': 22,
+}
+
+export function normalizeMessageTextSize(value) {
+  if (typeof value === 'string' && PRESET_MAP[value.trim().toLowerCase()] !== undefined) {
+    return PRESET_MAP[value.trim().toLowerCase()]
+  }
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return DEFAULT_MESSAGE_TEXT_SIZE
+  return Math.min(MAX_MESSAGE_TEXT_SIZE, Math.max(MIN_MESSAGE_TEXT_SIZE, Math.round(parsed)))
+}
+
+export function applyMessageTextSizeToDom(sizePx) {
+  if (typeof document === 'undefined' || !document.documentElement) return
+  const normalized = normalizeMessageTextSize(sizePx)
+  const rem = normalized / 16
+  const compactRem = (normalized * 0.9) / 16
+  document.documentElement.style.setProperty('--message-font-size', `${rem}rem`)
+  document.documentElement.style.setProperty('--message-font-size-compact', `${compactRem}rem`)
+}
 
 function readCompactThread() {
   if (typeof window === 'undefined') return false
@@ -19,6 +61,28 @@ function persistCompactThread(value) {
   }
 }
 
+function readMessageTextSize() {
+  if (typeof window === 'undefined') return DEFAULT_MESSAGE_TEXT_SIZE
+  try {
+    const raw = window.localStorage.getItem(MESSAGE_TEXT_SIZE_KEY)
+    if (raw === null || raw === '') return DEFAULT_MESSAGE_TEXT_SIZE
+    return normalizeMessageTextSize(raw)
+  } catch {
+    return DEFAULT_MESSAGE_TEXT_SIZE
+  }
+}
+
+function persistMessageTextSize(sizePx) {
+  try {
+    window.localStorage.setItem(MESSAGE_TEXT_SIZE_KEY, String(sizePx))
+  } catch {
+    // Ignore quota / private-mode failures
+  }
+}
+
+const initialMessageTextSize = readMessageTextSize()
+applyMessageTextSizeToDom(initialMessageTextSize)
+
 export default {
   namespaced: true,
   
@@ -29,9 +93,12 @@ export default {
     showDeleteConfirm: false,
     messageToDelete: null,
     loginModalOpen: false,
+    onboardingOpen: false,
     // Hidden demo mode: blur personal info fields in the profile modal.
     demoBlurPersonalInfo: false,
     compactThread: readCompactThread(),
+    settingsModalOpen: false,
+    messageTextSize: initialMessageTextSize,
   },
   
   mutations: {
@@ -70,6 +137,10 @@ export default {
       state.loginModalOpen = !!value;
     },
 
+    SET_ONBOARDING_OPEN(state, value) {
+      state.onboardingOpen = !!value;
+    },
+
     SET_DEMO_BLUR_PERSONAL_INFO(state, value) {
       state.demoBlurPersonalInfo = !!value;
     },
@@ -77,6 +148,17 @@ export default {
     SET_COMPACT_THREAD(state, value) {
       state.compactThread = !!value
       persistCompactThread(state.compactThread)
+    },
+
+    SET_SETTINGS_MODAL_OPEN(state, value) {
+      state.settingsModalOpen = !!value
+    },
+
+    SET_MESSAGE_TEXT_SIZE(state, value) {
+      const normalized = normalizeMessageTextSize(value)
+      state.messageTextSize = normalized
+      persistMessageTextSize(normalized)
+      applyMessageTextSizeToDom(normalized)
     }
   },
   
@@ -117,6 +199,10 @@ export default {
       commit('SET_LOGIN_MODAL_OPEN', value);
     },
 
+    setOnboardingOpen({ commit }, value) {
+      commit('SET_ONBOARDING_OPEN', value);
+    },
+
     toggleDemoBlurPersonalInfo({ state, commit }) {
       commit('SET_DEMO_BLUR_PERSONAL_INFO', !state.demoBlurPersonalInfo);
     },
@@ -131,6 +217,18 @@ export default {
 
     toggleCompactThread({ state, commit }) {
       commit('SET_COMPACT_THREAD', !state.compactThread)
+    },
+
+    setSettingsModalOpen({ commit }, value) {
+      commit('SET_SETTINGS_MODAL_OPEN', value)
+    },
+
+    setMessageTextSize({ commit }, value) {
+      commit('SET_MESSAGE_TEXT_SIZE', value)
+    },
+
+    resetMessageTextSize({ commit }) {
+      commit('SET_MESSAGE_TEXT_SIZE', DEFAULT_MESSAGE_TEXT_SIZE)
     }
   },
   
@@ -141,7 +239,10 @@ export default {
     showDeleteConfirm: state => state.showDeleteConfirm,
     messageToDelete: state => state.messageToDelete,
     loginModalOpen: state => state.loginModalOpen,
+    onboardingOpen: state => state.onboardingOpen,
     demoBlurPersonalInfo: state => state.demoBlurPersonalInfo,
     compactThread: state => state.compactThread,
+    settingsModalOpen: state => state.settingsModalOpen,
+    messageTextSize: state => state.messageTextSize,
   }
 }

@@ -1,5 +1,5 @@
 <template>
-  <div class="graph-view">
+  <div class="graph-view app-canvas">
     <!-- Header (simplified) -->
     <div class="graph-header" :class="{ 'drawing-mode': ui.isStitchDrawingMode }">
       <div class="header-left" v-if="!ui.isStitchDrawingMode">
@@ -785,7 +785,6 @@ export default {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: var(--color-background);
 }
 
 /* Header */

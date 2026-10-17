@@ -61,7 +61,7 @@
           <!-- Text / Markdown Import Mode -->
           <div v-if="activeMode === 'cursor'" class="mode-container">
             <h3>Import Text / Markdown</h3>
-            <p class="mode-description">
+            <p class="import-mode-description">
               Paste conversation text or upload a markdown file.
             </p>
 
@@ -147,7 +147,7 @@
           <!-- Audio Import Mode -->
           <div v-if="activeMode === 'audio'" class="mode-container">
             <h3>Import Audio Transcript</h3>
-            <p class="mode-description">
+            <p class="import-mode-description">
               Upload an audio file to transcribe and import as a conversation.
             </p>
 

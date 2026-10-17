@@ -515,43 +515,6 @@ watch(userChannels, (channels) => {
   margin: 0 auto;
 }
 
-.mode-description {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-sm);
-  width: 560px;
-  max-width: calc(100% - var(--space-md) * 2);
-  padding: var(--space-md);
-  margin: 0 auto var(--space-md) auto;
-  background-color: var(--color-surface);
-  border-radius: var(--radius-md);
-  box-sizing: border-box;
-}
-
-.mode-description .info-icon {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background-color: var(--color-surface-light);
-  color: var(--color-text-secondary);
-  font-size: 0.875rem;
-  font-weight: 600;
-  font-style: normal;
-  /* Nudge the icon glyph down for visual centering. */
-  transform: translateY(2px);
-}
-
-.mode-description p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  line-height: 1.5;
-}
-
 .channel-selector {
   margin-bottom: var(--space-lg);
 }
@@ -864,11 +827,6 @@ watch(userChannels, (channels) => {
     padding: 8px 4px;
   }
 
-  .mode-description {
-    width: calc(100% - var(--space-md) * 2);
-    padding: var(--space-sm);
-  }
-
   .channel-dropdown {
     padding: 10px 12px;
     font-size: var(--font-size-sm);
@@ -880,13 +838,6 @@ watch(userChannels, (channels) => {
 
   .channel-name {
     font-size: var(--font-size-lg);
-  }
-}
-
-@media (max-width: 480px) {
-  .mode-description {
-    width: 100%;
-    margin: 0 0 var(--space-md) 0;
   }
 }
 

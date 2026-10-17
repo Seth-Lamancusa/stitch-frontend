@@ -138,12 +138,12 @@ const addSelectedLinks = async () => {
       <div class="modal-container">
         <div class="modal-header">
           <div class="header-left">
-            <h3>{{ isSelecting ? `Adding ${linkType} links...` : 'Linked Messages' }}</h3>
+            <h3>{{ isSelecting ? `Adding ${linkType} stitches...` : '🪡 Stitched Messages' }}</h3>
             <!-- Toggle for showing all links vs user's links -->
             <div 
               v-if="!isSelecting"
               class="toggle-container"
-              :title="showAllLinks ? 'Showing all links' : 'Showing only your links'"
+              :title="showAllLinks ? 'Showing all stitches' : 'Showing only your stitches'"
             >
               <span class="toggle-label" :class="{ 'active': !showAllLinks }">Mine</span>
               <div class="toggle-switch" @click.stop="showAllLinks = !showAllLinks">
@@ -185,13 +185,13 @@ const addSelectedLinks = async () => {
             class="add-link-button"
             @click.stop="startAddingLinks(activeTab)"
           >
-            Add {{ activeTab }} links
+            🪡 Stitch {{ activeTab }} messages
           </button>
         </div>
         
         <!-- Add guest message when guest user tries to view links -->
         <div v-if="isGuestUser" class="guest-message">
-          <p>Sign in to create message links</p>
+          <p>Sign in to stitch messages</p>
         </div>
 
         <div class="modal-content">

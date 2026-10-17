@@ -628,7 +628,7 @@ export default {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--color-background);
+  background: transparent;
   position: relative;
 }
 
@@ -644,7 +644,7 @@ export default {
 }
 
 .canvas-background {
-  fill: var(--color-background);
+  fill: transparent;
 }
 
 .graph-content {

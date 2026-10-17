@@ -1,5 +1,5 @@
 <template>
-  <div class="thread-view">
+  <div class="thread-view app-canvas">
     <!-- Loading states -->
     <div v-if="!isAuthReady" class="auth-loading">
       <p>Loading...</p>
@@ -1658,7 +1658,7 @@ const handleNavigatorJump = (msgId) => {
   padding-left: 20px;
   padding-right: 20px;
   padding-bottom: calc(100px + 25vh); /* Add space at bottom for the reply box plus a screen's worth of scrollable space */
-  gap: 20px; /* Consistent gap between elements */
+  gap: 10px; /* Space between messages */
   /* Keep scrollbar width stable so layout doesn't appear to shrink/grow
      when branch selection changes the amount of content. */
   overflow-y: scroll;
@@ -1900,8 +1900,9 @@ const handleNavigatorJump = (msgId) => {
 }
 
 .guest-badge {
-  background-color: var(--color-text-secondary);
+  background-color: var(--color-surface-light);
   color: var(--color-text-inverse);
+  border: 1px solid var(--color-border);
 }
 
 .auth-loading-badge {
@@ -1947,7 +1948,7 @@ const handleNavigatorJump = (msgId) => {
   @media (max-width: 768px) {
   .messages-container {
     padding-bottom: calc(120px + 100vh); /* More space for the reply box on mobile plus a screen's worth of scrollable space */
-    gap: 12px; /* Reduce space between messages on small screens */
+    gap: 8px; /* Tighter space between messages on small screens */
     align-items: stretch; /* Let MessageNodes fill width on small screens */
   }
 

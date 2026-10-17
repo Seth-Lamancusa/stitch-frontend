@@ -5,40 +5,55 @@
  */
 
 :root {
+  /* Landing palette, kept darker than the marketing hero. */
+  --color-ink: #220c10;
+  --color-pine: #14342b;
+  --color-sage: #598958;
+  --color-cream: #fffcef;
+
   /* ===== Core Colors ===== */
-  --color-primary: #f5f5f5;
-  --color-primary-dark: #e0e0e0;
-  --color-primary-light: rgba(245, 245, 245, 0.2);
-  
-  --color-secondary: #4a90e2;
-  --color-secondary-dark: #3a7bc8;
-  --color-secondary-light: rgba(74, 144, 226, 0.2);
-  
-  --color-accent: #10a37f; /* ChatGPT green */
-  --color-accent-light: #0d8c6d;
-  
-  --color-success: #4caf50;
-  --color-warning: #ff9800;
-  --color-error: #dc3545;
-  --color-info: #2196f3;
+  /* Sage is the interactive color: tabs, buttons, selection. */
+  --color-primary: #598958;
+  --color-primary-dark: #3f6e3f;
+  --color-primary-light: rgba(89, 137, 88, 0.22);
+  --color-primary-rgb: 89, 137, 88;
+
+  --color-secondary: #7eae7c;
+  --color-secondary-dark: #4f7a4e;
+  --color-secondary-light: rgba(89, 137, 88, 0.2);
+
+  --color-accent: #598958;
+  --color-accent-light: #9dcc98;
+  --color-current-user-name: #50b84c;
+
+  --color-success: #5c9a5a;
+  --color-warning: #d4923a;
+  --color-error: #c44747;
+  --color-info: #7d9a78;
 
   /* ===== Neutral Colors ===== */
-  --color-background: #121212;
-  --color-surface: #1e1e1e;
-  --color-surface-light: #2a2a2a;
-  --color-surface-dark: #181818;
-  
-  --color-border: #333333;
-  --color-border-light: #444444;
-  --color-border-dark: #222222;
-  
-  --color-divider: #333333;
+  /* Near the old #121212, with a pine-to-ink drift rather than a green field. */
+  --color-background: #121110;
+  --color-surface: #1c1e1c;
+  --color-surface-light: #272a27;
+  --color-surface-dark: #161815;
+  --color-surface-hover: #2c302c;
+
+  --color-border: #2b342b;
+  --color-border-light: #414641;
+  --color-border-dark: #0d0f0d;
+  --color-border-hover: #4d5a4c;
+
+  --color-divider: #323632;
+
+  /* Chrome stays solid and darker than the textured canvas. */
+  --color-chrome: #0e0c0d;
 
   /* ===== Text Colors ===== */
-  --color-text: #e0e0e0;
-  --color-text-secondary: #aaaaaa;
-  --color-text-disabled: #666666;
-  --color-text-inverse: #121212;
+  --color-text: #f3ecdc;
+  --color-text-secondary: #b7b0a0;
+  --color-text-disabled: #6f6a60;
+  --color-text-inverse: #fffcef;
 
   /* ===== Component Colors ===== */  
   --color-card-background: var(--color-surface);
@@ -56,33 +71,33 @@
   --color-active-overlay: rgba(255, 255, 255, 0.1);
   
   --color-scrollbar-track: transparent;
-  --color-scrollbar-thumb: rgba(200, 200, 200, 0.3);
-  --color-scrollbar-thumb-hover: rgba(200, 200, 200, 0.5);
+  --color-scrollbar-thumb: rgba(243, 236, 220, 0.28);
+  --color-scrollbar-thumb-hover: rgba(157, 204, 152, 0.45);
 
   /* ===== Message Colors ===== */
-  --color-user-message-background: var(--color-primary);
-  --color-user-message-text: #333333;
+  --color-user-message-background: #241f1c;
+  --color-user-message-text: var(--color-cream);
   --color-system-message-background: var(--color-surface-light);
   --color-system-message-text: var(--color-text);
 
   /* ===== Formatted Content Colors ===== */
   /* VS Code-like dark editor background with lighter token tints */
-  --color-code-background: #1e1e1e;
-  --color-inline-code-background: #252526;
-  --color-code-text: #d4d4d4;
+  --color-code-background: #161815;
+  --color-inline-code-background: #1e2420;
+  --color-code-text: #e6ecdf;
   
-  --color-table-border: #444444;
-  --color-table-header-background: #2a2a2a;
-  --color-table-row-hover: #333333;
+  --color-table-border: #414641;
+  --color-table-header-background: #272a27;
+  --color-table-row-hover: #323632;
   
-  --color-blockquote-border: #444444;
-  --color-blockquote-text: #aaaaaa;
+  --color-blockquote-border: #4f7a4e;
+  --color-blockquote-text: #b7b0a0;
   
-  --color-link: #4a90e2;
-  --color-link-hover: #3a7bc8;
+  --color-link: #9dcc98;
+  --color-link-hover: #c5e3c2;
   /* Global link state colors */
-  --color-link-unvisited: #8ab4ff; /* lighter blue */
-  --color-link-visited: #ddb7ff;   /* lighter purple */
+  --color-link-unvisited: #9dcc98;
+  --color-link-visited: #cbb892;
   
   --color-heading: var(--color-text);
 
@@ -112,6 +127,10 @@
   --font-size-lg: 1.125rem;  /* 18px */
   --font-size-xl: 1.25rem;   /* 20px */
   --font-size-xxl: 1.5rem;   /* 24px */
+
+  /* Configurable message text size (default 18px / 1.125rem) */
+  --message-font-size: 1.125rem;
+  --message-font-size-compact: calc(var(--message-font-size) * 0.9);
   
   --line-height-tight: 1.2;
   --line-height-normal: 1.5;

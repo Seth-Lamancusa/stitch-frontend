@@ -23,6 +23,14 @@
   margin-bottom: 0;
 }
 
+/* ===== Headings (scale relative to message font size) ===== */
+.formatted-content h1 { font-size: 1.5em; }
+.formatted-content h2 { font-size: 1.3em; }
+.formatted-content h3 { font-size: 1.15em; }
+.formatted-content h4 { font-size: 1em; }
+.formatted-content h5 { font-size: 0.9em; }
+.formatted-content h6 { font-size: 0.85em; }
+
 /* ===== Code Blocks ===== */
 pre {
   background-color: var(--color-code-background);

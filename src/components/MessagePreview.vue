@@ -127,24 +127,37 @@
             @click.stop="openAddRecipientsModal"
             class="recipients-toggle author-toggle"
             title="Add recipients to this message"
+            :aria-label="typeof message.recipients === 'string' ? 'Recipients' : `Recipients, ${deduplicatedRecipients.length}`"
           >
-            Recipients {{ typeof message.recipients === 'string' ? '' : `(${deduplicatedRecipients.length})` }}
+            <svg class="badge-icon" viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="5.5" cy="5" r="2" fill="currentColor"/>
+              <circle cx="11" cy="5.6" r="1.5" fill="currentColor"/>
+              <path fill="currentColor" d="M1.4 12.6c.35-2.15 2.15-3.4 4.1-3.4s3.75 1.25 4.1 3.4H1.4zm7.3-1.15c.35-.2.85-.35 1.45-.35 1.45 0 2.7.85 3.15 2.5h-3.4c-.2-.85-.7-1.55-1.2-2.15z"/>
+            </svg>
+            <span v-if="typeof message.recipients !== 'string'" class="badge-count">{{ deduplicatedRecipients.length }}</span>
           </button>
 
           <button
             @click.stop="openTagsModal"
             class="tags-toggle"
             title="Manage tags for this message"
+            :aria-label="`Tags, ${existingTags.length}`"
           >
-            Tags ({{ existingTags.length }})
+            <span class="badge-hash" aria-hidden="true">#</span>
+            <span class="badge-count">{{ existingTags.length }}</span>
           </button>
 
           <button
             @click.stop="openChannelsModal"
             class="channels-toggle"
             title="Manage channels for this message"
+            :aria-label="`Channels, ${existingChannels.length}`"
           >
-            Channels ({{ existingChannels.length }})
+            <svg class="badge-icon" viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="3.2" cy="8" r="1.35" fill="currentColor"/>
+              <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M6.1 5.15a4.1 4.1 0 0 1 0 5.7M8.7 3.2a7 7 0 0 1 0 9.6"/>
+            </svg>
+            <span class="badge-count">{{ existingChannels.length }}</span>
           </button>
 
           <span
@@ -631,13 +644,13 @@ const formatTimestamp = (timestamp) => {
   max-width: 800px;
   margin-left: auto;
   margin-right: auto;
-  padding: 0 8px;
+  padding: 0 8px 14px;
   transition: box-shadow var(--transition-normal);
 }
 
 .message-preview.selected .message-preview-content {
   border: 2px solid var(--color-primary);
-  background-color: var(--color-primary-light);
+  background-color: var(--color-surface);
 }
 
 .message-preview.single-line-mode {
@@ -681,11 +694,12 @@ const formatTimestamp = (timestamp) => {
 
 .message-preview-content {
   background-color: var(--color-surface);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: var(--space-lg) var(--space-xl);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-surface);
   width: 100%;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  box-shadow: 4px 5px 6px rgba(10, 11, 10, 0.96);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
   cursor: pointer;
 }
 
@@ -694,9 +708,8 @@ const formatTimestamp = (timestamp) => {
 }
 
 .message-preview:hover .message-preview-content {
-  box-shadow: var(--color-card-shadow, 0 4px 6px rgba(0, 0, 0, 0.1));
-  background-color: var(--color-hover-overlay, rgba(0, 0, 0, 0.02));
-  border-color: var(--color-primary-light, rgba(0, 123, 255, 0.3));
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-surface-hover);
 }
 
 .message-header {
@@ -711,12 +724,15 @@ const formatTimestamp = (timestamp) => {
   align-items: center;
   gap: var(--space-xs);
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .author-info {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .message-author {
@@ -725,7 +741,7 @@ const formatTimestamp = (timestamp) => {
 
 .message-author.current-user-name {
   font-weight: 800;
-  color: var(--color-primary);
+  color: var(--color-current-user-name);
 }
 
 .author-user-tag {
@@ -791,10 +807,12 @@ const formatTimestamp = (timestamp) => {
 
 .message-body {
   margin-bottom: var(--space-xs);
+  padding: 8px 10px;
   white-space: normal;
   word-wrap: break-word;
   width: 100%;
   color: #ffffff;
+  font-size: var(--message-font-size, 1.125rem);
   font-family: var(--author-font, var(--font-family-base));
 }
 
@@ -805,7 +823,7 @@ const formatTimestamp = (timestamp) => {
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.5;
-  font-size: 0.9rem;
+  font-size: var(--message-font-size, 1.125rem);
   color: #ffffff;
 }
 
@@ -828,38 +846,62 @@ const formatTimestamp = (timestamp) => {
 .recipients-toggle,
 .tags-toggle,
 .channels-toggle {
-  font-size: var(--font-size-xs);
-  padding: 2px 6px;
+  font-size: calc(var(--font-size-xs) - 1px);
+  padding: 0 6px 0 5px;
   border-radius: var(--radius-pill);
   height: 22px;
+  gap: 3px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  line-height: 1;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
+.badge-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.badge-hash {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.badge-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
 .recipients-toggle {
+  font-size: var(--font-size-xs);
   background-color: transparent;
   border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
 }
 
 .recipients-toggle.author-toggle {
-  background-color: var(--color-warning);
-  color: var(--color-text-inverse);
-  border: none;
+  background-color: rgba(212, 146, 58, 0.16);
+  color: #f0c27a;
+  border: 1px solid rgba(212, 146, 58, 0.45);
 }
 
 .tags-toggle {
-  background-color: rgba(79, 140, 255, 0.12);
-  border: 1px solid rgba(79, 140, 255, 0.45);
-  color: #4f8cff;
+  gap: 2px;
+  background-color: var(--color-secondary-light, rgba(89, 137, 88, 0.2));
+  border: 1px solid rgba(89, 137, 88, 0.5);
+  color: #d8f3d4;
 }
 
 .tags-toggle:hover {
-  background-color: rgba(79, 140, 255, 0.18);
-  border-color: rgba(79, 140, 255, 0.75);
+  background-color: rgba(89, 137, 88, 0.28);
+  border-color: rgba(89, 137, 88, 0.75);
 }
 
 .channels-toggle {
@@ -959,7 +1001,7 @@ const formatTimestamp = (timestamp) => {
 }
 
 .message-preview.compact .plaintext-content {
-  font-size: 0.85rem;
+  font-size: var(--message-font-size-compact, calc(var(--message-font-size, 1.125rem) * 0.9));
 }
 
 .message-preview.compact .message-author {
@@ -1002,7 +1044,7 @@ const formatTimestamp = (timestamp) => {
 .message-preview.compact .tags-toggle,
 .message-preview.compact .channels-toggle {
   font-size: calc(var(--font-size-xs) - 1px);
-  padding: 1px 5px;
+  padding: 0 5px 0 4px;
   height: 20px;
 }
 
@@ -1024,6 +1066,19 @@ const formatTimestamp = (timestamp) => {
     flex: 1;
     min-width: 0;
   }
+
+  .recipients-toggle,
+  .tags-toggle,
+  .channels-toggle {
+    font-size: calc(var(--font-size-xs) - 2px);
+    height: 26px;
+    padding: 0 7px 0 6px;
+  }
+
+  .badge-icon {
+    width: 14px;
+    height: 14px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1042,6 +1097,13 @@ const formatTimestamp = (timestamp) => {
 
   .author-user-tag {
     font-size: calc(var(--font-size-xs) - 1px);
+  }
+
+  .recipients-toggle,
+  .tags-toggle,
+  .channels-toggle {
+    height: 24px;
+    padding: 0 6px 0 5px;
   }
 }
 </style>

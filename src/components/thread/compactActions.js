@@ -9,13 +9,13 @@ export function visibleAction(action) {
 }
 
 export function compactHeaderActions(actions) {
-  return ['save', 'copy-text']
+  return ['copy-text']
     .map((id) => actionById(actions, id))
     .filter(visibleAction)
 }
 
 export function compactToolbarActions(actions) {
-  return ['reply', 'prompt']
+  return ['reply', 'prompt', 'save']
     .map((id) => actionById(actions, id))
     .filter(visibleAction)
 }

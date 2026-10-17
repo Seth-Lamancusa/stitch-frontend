@@ -326,6 +326,7 @@ const tagClasses = computed(() => [
   line-height: 1;
   cursor: help;
   outline: none;
+  flex-shrink: 0;
 }
 
 .user-display__badge:focus {
@@ -334,7 +335,7 @@ const tagClasses = computed(() => [
 }
 
 .user-display__name--current {
-  color: var(--color-primary);
+  color: var(--color-current-user-name);
 }
 
 .user-display__name--imported {
@@ -362,8 +363,25 @@ const tagClasses = computed(() => [
 }
 
 
+.user-display--variant-message {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  justify-content: flex-start;
+}
+
 .user-display--variant-message .user-display__name {
   font-weight: 600;
+  min-width: 0;
+  flex: 0 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-display--variant-message .user-display__tag {
+  flex: 0 1 auto;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
