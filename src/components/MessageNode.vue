@@ -305,6 +305,7 @@ import MessageService, { LOAD_RADIUS } from '../services/MessageService.js';
 import UserService from '../services/UserService.js';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 import { messageFontStyle } from '../config/fonts.js';
+import { messageUrl } from '../config/appConfig.js';
 import { contentText, getAuthorDisplayName, getAuthorUserTag, getAuthorUid, isAuthorBot } from '../utils/messageCompat.js';
 import { clampMenuToMessageList, messageListClipBounds } from '../utils/menuPlacement.js';
 
@@ -1483,7 +1484,7 @@ export default {
     // Copy public message link (hide numeric id in UI)
     const copyMessageLink = () => {
       try {
-        const link = `stitch.fyi/messages/${props.message.id}`;
+        const link = messageUrl(props.message.id);
         navigator.clipboard.writeText(link)
           .then(() => {
             isLinkCopied.value = true;

@@ -37,7 +37,7 @@
           <div class="coming-soon-icon">📐</div>
           <h2>Architecture Documentation Coming Soon</h2>
           <p>Our detailed technical architecture documentation is being prepared and will be available soon.</p>
-          <router-link to="/inbox" class="btn primary-btn">Go to Stitch App</router-link>
+          <a href="https://app.stitch.fyi/history" class="btn primary-btn">Go to Stitch App</a>
         </div>
       </div>
     </section> -->

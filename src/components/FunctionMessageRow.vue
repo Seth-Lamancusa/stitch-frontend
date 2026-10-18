@@ -180,6 +180,7 @@ import UserDisplay from './common/UserDisplay.vue';
 import MessageService, { LOAD_RADIUS } from '../services/MessageService.js';
 import { clampMenuToMessageList, messageListClipBounds } from '../utils/menuPlacement.js';
 import { getAuthorDisplayName, getAuthorUserTag, getAuthorUid, isAuthorBot, isCurrentUserAuthor } from '../utils/messageCompat.js';
+import { messageUrl } from '../config/appConfig.js';
 import {
   functionCallName,
   functionCode,
@@ -369,7 +370,7 @@ function copyText() {
 }
 
 function copyLink() {
-  navigator.clipboard.writeText(`stitch.fyi/messages/${props.message.id}`).then(() => flash(linkCopied)).catch(() => {});
+  navigator.clipboard.writeText(messageUrl(props.message.id)).then(() => flash(linkCopied)).catch(() => {});
 }
 
 function copyJson() {

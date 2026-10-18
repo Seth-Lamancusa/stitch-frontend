@@ -17,7 +17,7 @@
            <!--<li><router-link to="/chats" :class="{ active: currentRoute === '/chats' }">Stitch Chats</router-link></li>-->
            <li><router-link to="/bots" :class="{ active: currentRoute === '/bots' }">Stitch Bots</router-link></li>
            <li><router-link to="/terms" :class="{ active: currentRoute === '/terms' }">Terms</router-link></li>
-           <li><router-link to="/history" class="login-btn">Go to Stitch</router-link></li>
+           <li><a :href="appUrl('/history')" class="login-btn">Go to Stitch</a></li>
          </ul>
         <div class="hamburger" @click="toggleMenu" :class="{ active: isMenuOpen }">
           <span></span>
@@ -78,6 +78,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute } from 'vue-router';
 import GlobalNotifications from '../GlobalNotifications.vue';
+import { appUrl } from '../../config/appConfig.js';
 
 // Props for customization
 const props = defineProps({

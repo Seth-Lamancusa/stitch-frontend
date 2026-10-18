@@ -261,6 +261,7 @@ import LoginButton from '@buttons/LoginButton.vue'
 import { useCompactThread } from '../../composables/useCompactThread.js';
 import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
 import { contentText, getAuthorDisplayName, getAuthorUserTag } from '../../utils/messageCompat.js';
+import { messageUrl } from '../../config/appConfig.js';
 
 // import BranchNavigator from '../../components/BranchNavigator.vue';
 
@@ -1029,7 +1030,7 @@ const exitSelectionMode = () => {
       // Format the current message
       const userTag = getAuthorUserTag(message);
       const tagPart = userTag ? `(@${userTag})` : '';
-      const header = `${getAuthorDisplayName(message)} ${tagPart}, ${new Date(message.timestamp).toLocaleString()} (https://stitch.fyi/messages/${message.id})`;
+      const header = `${getAuthorDisplayName(message)} ${tagPart}, ${new Date(message.timestamp).toLocaleString()} (${messageUrl(message.id)})`;
       const messageText = `${header}\n\n${contentText(message.content)}`;
       
       // If this is the first message, just add it

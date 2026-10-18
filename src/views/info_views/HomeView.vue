@@ -40,42 +40,42 @@
     <template #betaBannerText>
       <div class="banner-group">
         <div class="banner-buttons">
-          <router-link to="/new-thread" class="banner-btn">
+          <a :href="appUrl('/new-thread')" class="banner-btn">
             <span class="btn-icon">🗣</span>
             <div class="btn-text-content">
               <span class="btn-title">Start a thread</span>
             </div>
-          </router-link>
-          <router-link to="/inbox" class="banner-btn">
+          </a>
+          <a :href="appUrl('/inbox')" class="banner-btn">
             <span class="btn-icon">📨</span>
             <div class="btn-text-content">
               <span class="btn-title">My inbox</span>
             </div>
-          </router-link>
-          <router-link to="/history" class="banner-btn">
+          </a>
+          <a :href="appUrl('/history')" class="banner-btn">
             <span class="btn-icon">📜</span>
             <div class="btn-text-content">
               <span class="btn-title">My thread history</span>
             </div>
-          </router-link>
+          </a>
           <router-link to="/how?tab=docs" class="banner-btn">
             <span class="btn-icon">📚</span>
             <div class="btn-text-content">
               <span class="btn-title">API docs</span>
             </div>
           </router-link>
-          <router-link to="/search" class="banner-btn">
+          <a :href="appUrl('/search')" class="banner-btn">
             <span class="btn-icon">🔍</span>
             <div class="btn-text-content">
               <span class="btn-title">Search on Stitch</span>
             </div>
-          </router-link>
-          <router-link to="/messages/2HhB" class="banner-btn">
+          </a>
+          <a :href="messageUrl('2HhB')" class="banner-btn">
             <span class="btn-icon">💭</span>
             <div class="btn-text-content">
               <span class="btn-title">Give feedback</span>
             </div>
-          </router-link>
+          </a>
         </div>
       </div>
     </template>
@@ -118,6 +118,7 @@
 
 <script setup>
 import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
+import { appUrl, messageUrl } from '../../config/appConfig.js';
 </script>
 
 <style>
