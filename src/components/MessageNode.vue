@@ -65,6 +65,7 @@
                   :display-name="participant.displayName"
                   :user-tag="participant.userTag"
                   :show-tag="false"
+                  :is-current-user="participant.isCurrentUser"
                   :is-bot="participant.isBot"
                   name-class="message-author"
                   variant="message"
@@ -309,7 +310,7 @@ import UserService from '../services/UserService.js';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 import { messageFontStyle } from '../config/fonts.js';
 import { messageUrl } from '../config/appConfig.js';
-import { contentText, getAuthorDisplayName, getAuthorUserTag, getAuthorUid, isAuthorBot } from '../utils/messageCompat.js';
+import { contentText, getAuthorDisplayName, getAuthorUserTag, getAuthorUid, isAuthorBot, isCurrentUserIdentity } from '../utils/messageCompat.js';
 import { clampMenuToMessageList, messageListClipBounds } from '../utils/menuPlacement.js';
 
 export default {
@@ -1044,7 +1045,7 @@ export default {
 
       const items = [];
       const seen = new Set();
-      const addParticipant = ({ displayName, userTag = null, isBot = false }) => {
+      const addParticipant = ({ displayName, userTag = null, isBot = false, isCurrentUser: participantIsCurrentUser = false }) => {
         const keySource = displayName || userTag || '';
         const key = String(keySource).trim().toLowerCase();
         if (!key) return;
@@ -1054,7 +1055,8 @@ export default {
           key: `${key}-${items.length}`,
           displayName: displayName || userTag || 'Unknown',
           userTag,
-          isBot: !!isBot
+          isBot: !!isBot,
+          isCurrentUser: !!participantIsCurrentUser
         });
       };
 
@@ -1063,7 +1065,8 @@ export default {
         addParticipant({
           displayName: authorName || authorUserTag.value || '',
           userTag: authorUserTag.value,
-          isBot: isBot.value
+          isBot: isBot.value,
+          isCurrentUser: !isImported.value && isCurrentUserIdentity(authorUid.value, authorUserTag.value, currentUser.value)
         });
       }
 
@@ -1073,7 +1076,8 @@ export default {
           addParticipant({
             displayName: name,
             userTag: recipient.user_tag || null,
-            isBot: recipient.is_bot
+            isBot: recipient.is_bot,
+            isCurrentUser: isCurrentUserIdentity(recipient.uid, recipient.user_tag, currentUser.value)
           });
         });
       }
@@ -2329,7 +2333,7 @@ export default {
 }
 
 .message-node:not(.list-view):not(.compact) .message-content {
-  box-shadow: 4px 6px 6px rgba(10, 11, 10, 0.96);
+  box-shadow: 4px 4px 6px rgba(10, 11, 10, 0.614);
 }
 
 /* Sibling navigation card animation (message node only) */
@@ -2878,7 +2882,7 @@ export default {
 }
 
 .message-body {
-  margin-bottom: var(--space-sm, 12px); /* Increased space before footer */
+  margin-bottom: 0;
   padding: 8px 10px;
   white-space: normal;
   word-wrap: break-word;

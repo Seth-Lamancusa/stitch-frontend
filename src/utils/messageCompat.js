@@ -57,11 +57,16 @@ export function contentText(content) {
   return String(content);
 }
 
+export function isCurrentUserIdentity(uid, userTag, user) {
+  if (!user) return false;
+  if (uid && user.uid && uid === user.uid) return true;
+  const tag = userTag == null ? '' : String(userTag).trim();
+  const mine = user.user_tag == null ? '' : String(user.user_tag).trim();
+  if (tag && mine && tag.toLowerCase() === mine.toLowerCase()) return true;
+  return false;
+}
+
 export function isCurrentUserAuthor(message, user) {
   if (!message || !user) return false;
-  const uid = getAuthorUid(message);
-  const tag = getAuthorUserTag(message);
-  if (uid && user.uid && uid === user.uid) return true;
-  if (tag && user.user_tag && tag.toLowerCase() === String(user.user_tag).toLowerCase()) return true;
-  return false;
+  return isCurrentUserIdentity(getAuthorUid(message), getAuthorUserTag(message), user);
 }

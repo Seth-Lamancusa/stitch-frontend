@@ -11,7 +11,7 @@
   >
     <!-- Single line mode layout -->
     <div v-if="displayMode === 'single-line'" class="single-line-content" @click="handleMessageClick">
-      <span class="author-prefix">{{ authorDisplayName }}:</span>
+      <span class="author-prefix" :class="{ 'current-user-name': highlightAuthorName }">{{ authorDisplayName }}:</span>
       <span class="content-text" :style="messageBodyStyle">{{ truncatedContent }}</span>
     </div>
 
@@ -33,23 +33,59 @@
 
           <div class="author-info">
             <template v-if="showParticipantsLabel">
-              <template v-for="(participant, index) in participantItems" :key="participant.key">
-                <UserDisplay
-                  :display-name="participant.displayName"
-                  :user-tag="participant.userTag"
-                  :show-tag="false"
-                  :is-bot="participant.isBot"
-                  :is-imported="participant.isImported"
-                  name-class="message-author"
-                  variant="message"
-                />
-                <span
-                  v-if="index < participantItems.length - 1"
-                  class="participants-separator"
+              <div class="participants" ref="participantsRef">
+                <div
+                  v-if="visibleParticipantItems.length"
+                  class="participants-line"
+                  :class="{ 'is-truncated': singleNameTruncated }"
                 >
-                  ,&nbsp;
+                  <template v-for="(participant, index) in visibleParticipantItems" :key="participant.key">
+                    <UserDisplay
+                      :display-name="participant.displayName"
+                      :user-tag="participant.userTag"
+                      :show-tag="false"
+                      :is-current-user="participant.isCurrentUser"
+                      :is-bot="participant.isBot"
+                      :is-imported="participant.isImported"
+                      name-class="message-author"
+                      variant="message"
+                    />
+                    <span
+                      v-if="index < visibleParticipantItems.length - 1"
+                      class="participants-separator"
+                    >
+                      ,&nbsp;
+                    </span>
+                  </template>
+                </div>
+                <span
+                  v-if="participantsSuffix"
+                  class="participants-more"
+                  :title="participantsSuffixTitle"
+                >
+                  {{ participantsSuffix }}
                 </span>
-              </template>
+                <div class="participants-measure" aria-hidden="true" inert ref="participantsMeasureRef">
+                <span
+                  v-for="participant in participantItems"
+                  :key="`measure-${participant.key}`"
+                  class="participant-unit"
+                >
+                  <UserDisplay
+                    :display-name="participant.displayName"
+                    :user-tag="participant.userTag"
+                    :show-tag="false"
+                    :is-current-user="participant.isCurrentUser"
+                    :is-bot="participant.isBot"
+                    :is-imported="participant.isImported"
+                    name-class="message-author"
+                    variant="message"
+                  />
+                </span>
+                <span ref="separatorMeasureRef" class="participants-separator">,&nbsp;</span>
+                  <span ref="moreMeasureRef" class="participants-more"></span>
+                </div>
+              </div>
             </template>
             <UserDisplay
               v-else
@@ -222,7 +258,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useStore } from 'vuex';
 import FormattedContent from './FormattedContent/index.vue';
 import TagsModal from './modals/TagsModal.vue';
@@ -233,7 +269,7 @@ import { memoize } from 'lodash-es';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 import ChannelsService from '../services/ChannelsService.js';
 import { messageFontStyle } from '../config/fonts.js';
-import { contentText, getAuthorDisplayName, getAuthorUserTag, getAuthorUid, isAuthorBot } from '../utils/messageCompat.js';
+import { contentText, getAuthorDisplayName, getAuthorUserTag, getAuthorUid, isAuthorBot, isCurrentUserIdentity } from '../utils/messageCompat.js';
 
 const props = defineProps({
   message: {
@@ -322,12 +358,11 @@ const authorUid = computed(() => getAuthorUid(props.message));
 const isBot = computed(() => isAuthorBot(props.message));
 
 const isCurrentUser = computed(() => {
-  if (!currentUser.value) return false;
-  if (authorUserTag.value && currentUser.value.user_tag === authorUserTag.value) {
-    return true;
-  }
-  return authorUid.value === currentUser.value.uid;
+  if (isImported.value) return false;
+  return isCurrentUserIdentity(authorUid.value, authorUserTag.value, currentUser.value);
 });
+
+const highlightAuthorName = computed(() => isCurrentUser.value);
 
 const isUserRecipient = computed(() => {
   if (!currentUser.value) return false;
@@ -377,7 +412,8 @@ const participantItems = computed(() => {
     displayName,
     userTag = null,
     isBot = false,
-    isImported: participantIsImported = false
+    isImported: participantIsImported = false,
+    isCurrentUser: participantIsCurrentUser = false
   }) => {
     const keySource = displayName || userTag || '';
     const key = String(keySource).trim().toLowerCase();
@@ -389,7 +425,8 @@ const participantItems = computed(() => {
       displayName: displayName || userTag || 'Unknown',
       userTag,
       isBot: !!isBot,
-      isImported: !!participantIsImported
+      isImported: !!participantIsImported,
+      isCurrentUser: !!participantIsCurrentUser
     });
   };
 
@@ -399,7 +436,8 @@ const participantItems = computed(() => {
       displayName: authorName || authorUserTag.value || '',
       userTag: authorUserTag.value,
       isBot: isBot.value,
-      isImported: isImported.value
+      isImported: isImported.value,
+      isCurrentUser: highlightAuthorName.value
     });
   }
 
@@ -409,12 +447,169 @@ const participantItems = computed(() => {
       addParticipant({
         displayName: name,
         userTag: recipient.user_tag || null,
-        isBot: recipient.is_bot
+        isBot: recipient.is_bot,
+        isCurrentUser: isCurrentUserIdentity(recipient.uid, recipient.user_tag, currentUser.value)
       });
     });
   }
 
   return items;
+});
+
+const MIN_VISIBLE_NAME_CHARS = 6;
+
+const participantsRef = ref(null);
+const participantsMeasureRef = ref(null);
+const separatorMeasureRef = ref(null);
+const moreMeasureRef = ref(null);
+const visibleParticipantCount = ref(Number.POSITIVE_INFINITY);
+const singleNameTruncated = ref(false);
+const showRecipientsSummary = ref(false);
+let participantsResizeObserver = null;
+
+const nameFitsMinimum = (unit, available) => {
+  const nameEl = unit?.querySelector('.user-display__name');
+  if (!nameEl) return false;
+  const chars = Array.from(nameEl.textContent || '');
+  if (chars.length < MIN_VISIBLE_NAME_CHARS) return false;
+  const original = nameEl.textContent;
+  nameEl.textContent = `${chars.slice(0, MIN_VISIBLE_NAME_CHARS).join('')}…`;
+  const width = unit.offsetWidth;
+  nameEl.textContent = original;
+  return width <= available + 1;
+};
+
+const countFittingParticipants = (widths, separatorWidth, available, moreWidthFor, moreGap) => {
+  const total = widths.length;
+  for (let count = total; count >= 0; count -= 1) {
+    let width = 0;
+    for (let i = 0; i < count; i += 1) {
+      if (i > 0) width += separatorWidth;
+      width += widths[i];
+    }
+    const hidden = total - count;
+    if (hidden > 0) {
+      if (count > 0) width += moreGap;
+      width += moreWidthFor(hidden);
+    }
+    if (width <= available + 1) return count;
+  }
+  return 0;
+};
+
+const updateVisibleParticipants = () => {
+  if (!showParticipantsLabel.value) return;
+  const info = participantsRef.value;
+  const measure = participantsMeasureRef.value;
+  const separatorEl = separatorMeasureRef.value;
+  const moreEl = moreMeasureRef.value;
+  if (!info || !measure || !separatorEl || !moreEl) return;
+
+  const available = info.clientWidth;
+  if (available <= 0) {
+    if (!info.getClientRects().length) return;
+    singleNameTruncated.value = false;
+    showRecipientsSummary.value = participantItems.value.length > 0;
+    if (visibleParticipantCount.value !== 0) visibleParticipantCount.value = 0;
+    return;
+  }
+
+  const units = Array.from(measure.querySelectorAll('.participant-unit'));
+  const widths = units.map((el) => el.offsetWidth);
+  const separatorWidth = separatorEl.offsetWidth;
+  const infoStyles = getComputedStyle(info);
+  const moreGap = parseFloat(infoStyles.columnGap || infoStyles.gap) || 0;
+  const next = countFittingParticipants(
+    widths,
+    separatorWidth,
+    available,
+    (hidden) => {
+      moreEl.textContent = `and ${hidden} more`;
+      return moreEl.offsetWidth;
+    },
+    moreGap
+  );
+
+  let truncate = false;
+  let recipientsSummary = false;
+  let visibleCount = next;
+  if (next === 0 && widths.length > 0) {
+    if (widths.length === 1 && nameFitsMinimum(units[0], available)) {
+      truncate = true;
+      visibleCount = 1;
+    } else {
+      recipientsSummary = true;
+      visibleCount = 0;
+    }
+  }
+
+  singleNameTruncated.value = truncate;
+  showRecipientsSummary.value = recipientsSummary;
+  if (visibleParticipantCount.value !== visibleCount) {
+    visibleParticipantCount.value = visibleCount;
+  }
+};
+
+const scheduleVisibleParticipants = () => {
+  nextTick(updateVisibleParticipants);
+};
+
+const visibleParticipantItems = computed(() => (
+  participantItems.value.slice(0, visibleParticipantCount.value)
+));
+
+const hiddenParticipantItems = computed(() => (
+  participantItems.value.slice(visibleParticipantCount.value)
+));
+
+const hiddenParticipantCount = computed(() => hiddenParticipantItems.value.length);
+
+const participantsSuffix = computed(() => {
+  if (showRecipientsSummary.value) {
+    const count = participantItems.value.length;
+    return `${count} recipient${count === 1 ? '' : 's'}`;
+  }
+  if (hiddenParticipantCount.value > 0) {
+    return `and ${hiddenParticipantCount.value} more`;
+  }
+  return '';
+});
+
+const participantsSuffixTitle = computed(() => {
+  const names = showRecipientsSummary.value
+    ? participantItems.value
+    : hiddenParticipantItems.value;
+  return names.map((participant) => participant.displayName).join(', ');
+});
+
+watch(participantItems, scheduleVisibleParticipants);
+watch(() => props.compact, scheduleVisibleParticipants);
+
+watch(participantsRef, (el, previous) => {
+  if (!participantsResizeObserver) return;
+  if (previous) participantsResizeObserver.unobserve(previous);
+  if (el) {
+    participantsResizeObserver.observe(el);
+    scheduleVisibleParticipants();
+  }
+});
+
+onMounted(() => {
+  participantsResizeObserver = new ResizeObserver(() => {
+    updateVisibleParticipants();
+  });
+  if (participantsRef.value) {
+    participantsResizeObserver.observe(participantsRef.value);
+  }
+  scheduleVisibleParticipants();
+  document.fonts?.ready?.then(() => {
+    updateVisibleParticipants();
+  });
+});
+
+onBeforeUnmount(() => {
+  participantsResizeObserver?.disconnect();
+  participantsResizeObserver = null;
 });
 
 const stripMarkdown = (text) => {
@@ -684,6 +879,10 @@ const formatTimestamp = (timestamp) => {
   color: var(--color-primary);
 }
 
+.single-line-content .author-prefix.current-user-name {
+  color: var(--color-current-user-name);
+}
+
 .single-line-content .content-text {
   flex: 1;
   white-space: nowrap;
@@ -695,10 +894,10 @@ const formatTimestamp = (timestamp) => {
 .message-preview-content {
   background-color: var(--color-surface);
   border-radius: var(--radius-lg);
-  padding: var(--space-lg) var(--space-xl);
+  padding: calc(var(--space-lg) / 2) calc(var(--space-xl) / 2);
   border: 1px solid var(--color-surface);
   width: 100%;
-  box-shadow: 4px 5px 6px rgba(10, 11, 10, 0.96);
+  box-shadow: 4px 4px 6px rgba(10, 11, 10, 0.614);
   transition: background-color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
   cursor: pointer;
 }
@@ -723,16 +922,113 @@ const formatTimestamp = (timestamp) => {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
-  flex-wrap: wrap;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
   min-width: 0;
 }
 
+.author-section > .unread-thread-badge,
+.author-section > .envelope-icon-button,
+.author-section > .recipients-toggle,
+.author-section > .tags-toggle,
+.author-section > .channels-toggle,
+.author-section > .globe-emoji {
+  flex-shrink: 0;
+}
+
 .author-info {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
+  flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
+  overflow: hidden;
+}
+
+.participants {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.participants-line {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.participants-line.is-truncated {
+  flex: 1 1 auto;
+}
+
+.participants-line.is-truncated :deep(.user-display--variant-message) {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  flex: 1 1 auto;
+}
+
+.participants-line.is-truncated :deep(.user-display--variant-message .user-display__name) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.participants-line :deep(.user-display--variant-message),
+.participants-measure :deep(.user-display--variant-message) {
+  max-width: none;
+  overflow: visible;
+  flex: 0 0 auto;
+}
+
+.participants-line :deep(.user-display--variant-message .user-display__name),
+.participants-measure :deep(.user-display--variant-message .user-display__name) {
+  overflow: visible;
+  text-overflow: clip;
+  flex: 0 0 auto;
+  max-width: none;
+}
+
+.participants-separator {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.participants-more {
+  flex: 0 0 auto;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.participants-measure {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  width: max-content;
+  white-space: nowrap;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.participant-unit {
+  display: inline-flex;
+  flex: 0 0 auto;
 }
 
 .message-author {
@@ -753,6 +1049,7 @@ const formatTimestamp = (timestamp) => {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  flex-shrink: 0;
 }
 
 .message-timestamp {
@@ -997,7 +1294,7 @@ const formatTimestamp = (timestamp) => {
 }
 
 .message-preview.compact .message-preview-content {
-  padding: var(--space-md) var(--space-lg);
+  padding: calc(var(--space-md) / 2) calc(var(--space-lg) / 2);
 }
 
 .message-preview.compact .plaintext-content {
@@ -1054,7 +1351,7 @@ const formatTimestamp = (timestamp) => {
   }
 
   .message-preview-content {
-    padding: var(--space-xs) var(--space-md);
+    padding: calc(var(--space-xs) / 2) calc(var(--space-md) / 2);
   }
 
   .header-right .message-timestamp {
@@ -1083,7 +1380,7 @@ const formatTimestamp = (timestamp) => {
 
 @media (max-width: 480px) {
   .message-preview-content {
-    padding: var(--space-xs) var(--space-sm);
+    padding: calc(var(--space-xs) / 2) calc(var(--space-sm) / 2);
     margin: 0 2px;
   }
 
