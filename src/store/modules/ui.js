@@ -45,12 +45,10 @@ export function applyMessageTextSizeToDom(sizePx) {
 }
 
 function readCompactThread() {
-  if (typeof window === 'undefined') return false
-  try {
-    return window.localStorage.getItem(COMPACT_THREAD_KEY) === 'true'
-  } catch {
-    return false
-  }
+  // Compact thread layout is deferred. Clear any saved preference and
+  // always use the regular layout until the toggle comes back.
+  persistCompactThread(false)
+  return false
 }
 
 function persistCompactThread(value) {
