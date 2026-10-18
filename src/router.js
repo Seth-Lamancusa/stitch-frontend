@@ -20,6 +20,7 @@ import ImportView from './views/app_views/ImportView.vue';
 import AdminMetricsView from './views/app_views/AdminMetricsView.vue';
 import store from './store';
 import { P } from './auth/constants.js';
+import { APP_HOST } from './config/appConfig.js';
 
 import StitchPlaygroundView from './views/app_views/StitchPlaygroundView.vue';
 
@@ -34,7 +35,7 @@ const routes = [
   },
   {
     path: '/',
-    redirect: '/home'
+    redirect: () => (window.location.hostname === APP_HOST ? '/history' : '/home')
   },
   {
     path: '/search',
