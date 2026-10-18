@@ -52,36 +52,58 @@
             :class="`phase-${currentPhase.id}`"
             @click.capture="onNodeStageClick"
           >
-            <!-- Active Mock Parent Above -->
-            <div v-if="activeParentMessage" class="mock-parent-preview">
+            <div v-if="parentMessage" class="mock-parent">
               <div class="mock-parent-header">
-                <span class="mock-parent-author">@{{ activeParentMessage.author?.user_tag }}</span>
-                <span class="mock-parent-kind">
-                  {{ activeParentId === activeChildMessage?.parent_id ? 'Reply parent' : '🪡 Stitched parent' }}
-                </span>
+                <span class="mock-parent-name">{{ parentMessage.author?.display_name }}</span>
+                <span class="mock-parent-tag">@{{ parentMessage.author?.user_tag }}</span>
               </div>
-              <div class="mock-parent-body">{{ activeParentMessage.content }}</div>
+              <p class="mock-parent-body">{{ parentMessage.content }}</p>
             </div>
 
-            <!-- Actual MessageNode Component -->
             <MessageNode
               v-if="activeChildMessage"
               :key="activeChildMessage.id"
               :message="activeChildMessage"
-              :active-parent-id="activeParentId"
+              :active-parent-id="DEMO_REPLY_PARENT_ID"
               display-mode="full"
               :compact="false"
               :selectable="true"
               :selected="false"
               :in-list-view="false"
+              reveal-toolbar
+              :reveal-menu="currentPhase.id === 'menu'"
             />
           </div>
 
           <!-- Simple Phase Description -->
           <div class="phase-info">
-            <span class="phase-counter">
-              {{ currentPhaseIndex + 1 }} / {{ phases.length }}
-            </span>
+            <div class="phase-counter-row">
+              <button
+                type="button"
+                class="phase-chevron"
+                aria-label="Previous step"
+                :disabled="currentPhaseIndex === 0"
+                @click="setPhase(currentPhaseIndex - 1)"
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M10 3.5 L5 8 L10 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+              <span class="phase-counter">
+                {{ currentPhaseIndex + 1 }} / {{ phases.length }}
+              </span>
+              <button
+                type="button"
+                class="phase-chevron"
+                aria-label="Next step"
+                :disabled="currentPhaseIndex >= phases.length - 1"
+                @click="setPhase(currentPhaseIndex + 1)"
+              >
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M6 3.5 L11 8 L6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+            </div>
             <h2 id="onboarding-title">{{ currentPhase.title }}</h2>
             <p class="phase-description">{{ currentPhase.description }}</p>
           </div>
@@ -94,13 +116,13 @@
             Say hello or test out branching in the community introduction thread.
           </p>
 
-          <router-link
-            :to="introThreadRoute"
+          <a
+            :href="appUrl(introThreadRoute)"
             class="message-link"
             @click="dismissOnboarding"
           >
-            stitch.fyi{{ introThreadRoute }} →
-          </router-link>
+            {{ appUrl(introThreadRoute) }} →
+          </a>
         </div>
 
         <!-- ==================== FOOTER ==================== -->
@@ -149,17 +171,16 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useStore } from 'vuex';
 import { useRoute } from 'vue-router';
 import MessageNode from '../MessageNode.vue';
+import { appUrl } from '../../config/appConfig.js';
 
 const ONBOARDING_STORAGE_KEY = 'stitch_onboarding_completed_v1';
 const THEME_STORAGE_KEY = 'stitch_theme';
 const INTRO_THREAD_MESSAGE_ID = '579d38c3';
 
-// Two mock messages (siblings), each with two mock parents (one reply parent + one stitched parent)
+// Two sibling replies under one parent. Sibling rails switch between them.
 const DEMO_NODE_1 = 'onboarding_demo_node_1';
 const DEMO_NODE_2 = 'onboarding_demo_node_2';
 const DEMO_REPLY_PARENT_ID = 'onboarding_demo_reply_parent';
-const DEMO_STITCH_PARENT_1_ID = 'onboarding_demo_stitch_parent_1';
-const DEMO_STITCH_PARENT_2_ID = 'onboarding_demo_stitch_parent_2';
 
 const store = useStore();
 const route = useRoute();
@@ -172,19 +193,13 @@ const onboardingOpen = computed(() => store.getters['ui/onboardingOpen']);
 const currentModal = ref(1);
 const currentPhaseIndex = ref(0);
 
-// Track which of the 2 mock messages is shown and which of its 2 parents is active
+const PARENT_COPY = 'I think Stitch is a really cool platform!';
+const REPLY_ONE_COPY = 'I agree! It\'s a great place for multiple people to weigh in with different responses.';
+const REPLY_TWO_COPY = 'No it\'s not, Stitch sucks!';
+
 const activeChildId = ref(DEMO_NODE_1);
-const activeOriginByChild = ref({
-  [DEMO_NODE_1]: DEMO_REPLY_PARENT_ID,
-  [DEMO_NODE_2]: DEMO_REPLY_PARENT_ID
-});
-
-const activeParentId = computed(() => {
-  return activeOriginByChild.value[activeChildId.value] || DEMO_REPLY_PARENT_ID;
-});
-
 const activeChildMessage = computed(() => store.getters['messages/getMessage'](activeChildId.value));
-const activeParentMessage = computed(() => store.getters['messages/getMessage'](activeParentId.value));
+const parentMessage = computed(() => store.getters['messages/getMessage'](DEMO_REPLY_PARENT_ID));
 
 const introThreadRoute = `/messages/${INTRO_THREAD_MESSAGE_ID}`;
 
@@ -205,7 +220,7 @@ const phases = [
     id: 'controls',
     title: 'Default Mark, Collapse & Select',
     description:
-      'The link icon marks the default outgoing branch. Use the arrow to collapse long messages or check the box to select multiple nodes to copy.'
+      'The star marks the default outgoing branch. Use the arrow to collapse long messages or check the box to select multiple nodes to copy.'
   },
   {
     id: 'actions',
@@ -221,9 +236,9 @@ const phases = [
   },
   {
     id: 'navigation',
-    title: 'Branch & Origin Navigation',
+    title: 'Sibling Replies',
     description:
-      'Try clicking the top origin switcher arrows to swap between each message’s 2 parents, or click the left/right sibling triangles to flip between the 2 sibling messages.'
+      'Use the left and right rails to move between sibling replies on this branch.'
   }
 ];
 
@@ -234,10 +249,9 @@ const seedDemoMessages = () => {
   const tag = user.value?.user_tag || 'you';
   const name = user.value?.displayName || user.value?.display_name || tag;
 
-  // Shared Reply Parent (has both DEMO_NODE_1 and DEMO_NODE_2 as children)
   store.commit('messages/SET_MESSAGE', {
     id: DEMO_REPLY_PARENT_ID,
-    content: 'Parent A (Reply Parent): "How should we design the multi-agent architecture?"',
+    content: PARENT_COPY,
     author: { uid: 'demo_alice', user_tag: 'alice', display_name: 'Alice' },
     public: true,
     parent_id: null,
@@ -249,47 +263,15 @@ const seedDemoMessages = () => {
     timestamp: '2026-10-16T20:00:00Z'
   });
 
-  // Stitched Parent for Message 1 (also lists both children so sibling nav stays active)
-  store.commit('messages/SET_MESSAGE', {
-    id: DEMO_STITCH_PARENT_1_ID,
-    content: 'Parent B1 (Stitched Origin for Message 1): Notes from last week’s graph routing brainstorm.',
-    author: { uid: 'demo_bob', user_tag: 'bob', display_name: 'Bob' },
-    public: true,
-    parent_id: null,
-    child_ids: [],
-    stitch_parent_ids: [],
-    stitch_child_ids: [DEMO_NODE_1, DEMO_NODE_2],
-    reply_order: [DEMO_NODE_1, DEMO_NODE_2],
-    default_outgoing: DEMO_NODE_1,
-    timestamp: '2026-10-16T20:01:00Z'
-  });
-
-  // Stitched Parent for Message 2
-  store.commit('messages/SET_MESSAGE', {
-    id: DEMO_STITCH_PARENT_2_ID,
-    content: 'Parent B2 (Stitched Origin for Message 2): Benchmark comparison thread from @claude.',
-    author: { uid: 'bot_claude', user_tag: 'claude', display_name: 'Claude', is_bot: true },
-    public: true,
-    parent_id: null,
-    child_ids: [],
-    stitch_parent_ids: [],
-    stitch_child_ids: [DEMO_NODE_1, DEMO_NODE_2],
-    reply_order: [DEMO_NODE_1, DEMO_NODE_2],
-    default_outgoing: DEMO_NODE_1,
-    timestamp: '2026-10-16T20:02:00Z'
-  });
-
-  // Mock Message 1 (Sibling 1 of 2)
   store.commit('messages/SET_MESSAGE', {
     id: DEMO_NODE_1,
-    content:
-      'Message 1 of 2: We can route each prompt down its own branch and 🪡 stitch related conclusions together. Try the ▶ rail on the right or the origin switcher above!',
-    author: { uid, user_tag: tag, display_name: name },
+    content: REPLY_ONE_COPY,
+    author: { uid: 'demo_seth', user_tag: 'seth', display_name: 'seth' },
     public: true,
     is_read: false,
     parent_id: DEMO_REPLY_PARENT_ID,
-    child_ids: [DEMO_NODE_2],
-    stitch_parent_ids: [DEMO_STITCH_PARENT_1_ID],
+    child_ids: [],
+    stitch_parent_ids: [],
     stitch_child_ids: [],
     tags: ['architecture', 'branch-1'],
     channels: ['general'],
@@ -300,17 +282,15 @@ const seedDemoMessages = () => {
     timestamp: '2026-10-16T20:05:00Z'
   });
 
-  // Mock Message 2 (Sibling 2 of 2)
   store.commit('messages/SET_MESSAGE', {
     id: DEMO_NODE_2,
-    content:
-      'Message 2 of 2: Alternative sibling branch! Notice this message has its own unique content and its own second stitched parent above. Click ◀ on the left to go back.',
-    author: { uid, user_tag: tag, display_name: name },
+    content: REPLY_TWO_COPY,
+    author: { uid: 'demo_olivia', user_tag: 'olivia', display_name: 'Olivia' },
     public: true,
     is_read: false,
     parent_id: DEMO_REPLY_PARENT_ID,
-    child_ids: [DEMO_NODE_1],
-    stitch_parent_ids: [DEMO_STITCH_PARENT_2_ID],
+    child_ids: [],
+    stitch_parent_ids: [],
     stitch_child_ids: [],
     tags: ['benchmarks', 'branch-2'],
     channels: ['general'],
@@ -322,40 +302,24 @@ const seedDemoMessages = () => {
   });
 
   activeChildId.value = DEMO_NODE_1;
-  activeOriginByChild.value = {
-    [DEMO_NODE_1]: DEMO_REPLY_PARENT_ID,
-    [DEMO_NODE_2]: DEMO_REPLY_PARENT_ID
-  };
 
   store.commit('messages/SET_BRANCH_LINK', {
     parentId: DEMO_REPLY_PARENT_ID,
     childId: DEMO_NODE_1
   });
-  store.commit('messages/SET_BRANCH_LINK', {
-    parentId: DEMO_STITCH_PARENT_1_ID,
-    childId: DEMO_NODE_1
-  });
-  store.commit('messages/SET_BRANCH_LINK', {
-    parentId: DEMO_STITCH_PARENT_2_ID,
-    childId: DEMO_NODE_1
-  });
 };
 
-const syncMenuForPhase = (phaseId) => {
+const syncMenuForPhase = () => {
   nextTick(() => {
-    if (phaseId === 'menu') {
-      store.dispatch('navigation/showActionBar', activeChildId.value);
-    } else {
-      store.dispatch('navigation/hideActionBar', DEMO_NODE_1);
-      store.dispatch('navigation/hideActionBar', DEMO_NODE_2);
-    }
+    store.dispatch('navigation/hideActionBar', DEMO_NODE_1);
+    store.dispatch('navigation/hideActionBar', DEMO_NODE_2);
   });
 };
 
 const setPhase = (idx) => {
   const clamped = Math.max(0, Math.min(phases.length - 1, idx));
   currentPhaseIndex.value = clamped;
-  syncMenuForPhase(phases[clamped].id);
+  syncMenuForPhase();
 };
 
 const selectPhaseById = (id) => {
@@ -365,45 +329,21 @@ const selectPhaseById = (id) => {
 
 const switchDemoSibling = (targetId, direction) => {
   activeChildId.value = targetId;
-  [DEMO_REPLY_PARENT_ID, DEMO_STITCH_PARENT_1_ID, DEMO_STITCH_PARENT_2_ID].forEach((pid) => {
-    store.commit('messages/SET_BRANCH_LINK', { parentId: pid, childId: targetId });
+  store.commit('messages/SET_BRANCH_LINK', {
+    parentId: DEMO_REPLY_PARENT_ID,
+    childId: targetId
   });
   store.commit('navigation/SET_LAST_SIBLING_NAVIGATION', {
     targetId,
     direction
   });
-  syncMenuForPhase(currentPhase.value.id);
+  syncMenuForPhase();
 };
 
-const toggleDemoOriginForCurrentChild = (dir) => {
-  const child = activeChildMessage.value;
-  if (!child) return;
-  const parents = [child.parent_id, ...(child.stitch_parent_ids || [])].filter(Boolean);
-  const currentIdx = parents.indexOf(activeParentId.value);
-  const nextIdx = currentIdx + dir;
-  if (nextIdx >= 0 && nextIdx < parents.length) {
-    activeOriginByChild.value = {
-      ...activeOriginByChild.value,
-      [activeChildId.value]: parents[nextIdx]
-    };
-  }
-};
-
-// Intercept clicks on the real MessageNode so sibling & origin navigation work inside the modal without navigating the app router
+// Intercept clicks on the real MessageNode so sibling navigation works inside the modal without navigating the app router
 const onNodeStageClick = (e) => {
   const el = e.target;
   if (!el || typeof el.closest !== 'function') return;
-
-  // Allow real origin switcher prev/next clicks without router navigation
-  const switcherPrev = el.closest('.link-switcher-container .switcher-btn.prev');
-  const switcherNext = el.closest('.link-switcher-container .switcher-btn.next');
-  if (switcherPrev || switcherNext) {
-    e.stopPropagation();
-    e.preventDefault();
-    selectPhaseById('navigation');
-    toggleDemoOriginForCurrentChild(switcherPrev ? -1 : 1);
-    return;
-  }
 
   // Allow real sibling navigator prev/next clicks
   const sibPrev = el.closest('.sibling-navigator .nav-prev, .mobile-sibling-nav .mobile-nav-prev');
@@ -411,7 +351,6 @@ const onNodeStageClick = (e) => {
   if (sibPrev || sibNext) {
     e.stopPropagation();
     e.preventDefault();
-    selectPhaseById('navigation');
     if (sibPrev && activeChildId.value === DEMO_NODE_2) {
       switchDemoSibling(DEMO_NODE_1, 'prev');
     } else if (sibNext && activeChildId.value === DEMO_NODE_1) {
@@ -440,15 +379,11 @@ const onNodeStageClick = (e) => {
     el.closest('.selection-checkbox')
   ) {
     selectPhaseById('controls');
-  } else if (el.closest('.desktop-menu-container') || el.closest('.desktop-action-menu')) {
+  } else if (el.closest('.more-button') || el.closest('.more-menu')) {
     selectPhaseById('menu');
-  } else if (el.closest('.message-actions')) {
+  } else if (el.closest('.compact-hover-toolbar') || el.closest('.message-actions')) {
     selectPhaseById('actions');
-  } else if (
-    el.closest('.link-switcher-container') ||
-    el.closest('.sibling-navigator') ||
-    el.closest('.reply-count')
-  ) {
+  } else if (el.closest('.reply-count') || el.closest('.compact-reply-count')) {
     selectPhaseById('navigation');
   }
 };
@@ -712,43 +647,42 @@ onBeforeUnmount(() => {
 .real-node-stage {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 8px 4px;
+  gap: 14px;
+  padding: 8px 4px 20px;
 }
 
-/* Compact parent preview card above the MessageNode so origin switching is visibly live */
-.mock-parent-preview {
-  margin: 0 38px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: var(--app-surface-2, #232623);
-  border: 1px dashed var(--border-color, #2f332f);
-  font-size: 13px;
-  color: var(--app-text-secondary, #b2aa99);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.mock-parent {
+  width: calc(100% - 64px);
+  margin: 0 auto;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--color-surface, #232623);
+  text-align: left;
 }
 
 .mock-parent-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 11.5px;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
-.mock-parent-author {
+.mock-parent-name {
+  font-size: 14px;
   font-weight: 600;
   color: var(--app-text-primary, #f3ecdc);
 }
 
-.mock-parent-kind {
-  color: var(--primary-color, #8fbf9f);
+.mock-parent-tag {
+  font-size: 12px;
+  color: var(--app-text-secondary, #b2aa99);
 }
 
 .mock-parent-body {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
   color: var(--app-text-primary, #f3ecdc);
-  opacity: 0.9;
 }
 
 .phase-info {
@@ -757,7 +691,42 @@ onBeforeUnmount(() => {
   align-items: center;
   text-align: center;
   gap: 10px;
-  min-height: 92px;
+  min-height: 168px;
+}
+
+.phase-counter-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.phase-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--primary-color, #8fbf9f);
+  cursor: pointer;
+}
+
+.phase-chevron svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.phase-chevron:hover:not(:disabled) {
+  background: rgba(143, 191, 159, 0.14);
+}
+
+.phase-chevron:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 
 .phase-counter {
@@ -765,6 +734,7 @@ onBeforeUnmount(() => {
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--primary-color, #8fbf9f);
+  min-width: 2.6em;
 }
 
 .phase-description {
@@ -773,14 +743,19 @@ onBeforeUnmount(() => {
   line-height: 1.55;
   color: var(--app-text-secondary, #b2aa99);
   max-width: 540px;
+  min-height: 4.65em;
 }
 
-/* Keep the real MessageNode's desktop subcontext menu nicely anchored inside the modal */
-.real-node-stage :deep(.desktop-action-menu) {
-  position: absolute !important;
+/* Keep the reply toolbar and its menu visible without hovering the node. */
+.real-node-stage :deep(.compact-hover-toolbar) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.real-node-stage :deep(.more-menu) {
   right: 0 !important;
   left: auto !important;
-  bottom: calc(100% + 8px) !important;
+  bottom: calc(100% + 4px) !important;
   top: auto !important;
   z-index: 40 !important;
 }
@@ -796,13 +771,51 @@ onBeforeUnmount(() => {
 .real-node-stage :deep(.default-outgoing-mark),
 .real-node-stage :deep(.collapse-button),
 .real-node-stage :deep(.selection-checkbox),
-.real-node-stage :deep(.desktop-actions > .action-button),
-.real-node-stage :deep(.desktop-menu-container .menu-button),
-.real-node-stage :deep(.link-switcher-container .switchable-state),
-.real-node-stage :deep(.sibling-navigator .nav-button),
+.real-node-stage :deep(.compact-hover-toolbar .compact-action-button),
 .real-node-stage :deep(.reply-count) {
   opacity: 0.3;
   transition: opacity 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+/* Demo authors stay the normal text color, including a name that matches the viewer. */
+.real-node-stage :deep(.user-display__name--current),
+.real-node-stage :deep(.message-author.current-user-name) {
+  color: var(--color-text, #f3ecdc);
+  font-weight: 600;
+}
+
+/* Rails follow clickability, not the phase spotlight. The blanket dim above was
+   keeping clickable .nav-button rails at 30% and leaving the chevron green. */
+.real-node-stage :deep(.sibling-navigator .nav-button),
+.real-node-stage :deep(.mobile-sibling-nav .mobile-nav-btn) {
+  transition: opacity 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.real-node-stage :deep(.sibling-navigator .nav-button.disabled),
+.real-node-stage :deep(.sibling-navigator .nav-button:disabled),
+.real-node-stage :deep(.mobile-sibling-nav .mobile-nav-btn.disabled),
+.real-node-stage :deep(.mobile-sibling-nav .mobile-nav-btn:disabled) {
+  opacity: 0.3;
+}
+
+.real-node-stage :deep(.sibling-navigator .nav-button:not(.disabled):not(:disabled)),
+.real-node-stage :deep(.mobile-sibling-nav .mobile-nav-btn:not(.disabled):not(:disabled)) {
+  opacity: 1;
+  filter: none;
+}
+
+.real-node-stage :deep(.sibling-navigator .nav-button.nav-prev:not(.disabled):not(:disabled) .left-triangle) {
+  opacity: 1;
+  border-right-color: var(--color-text) !important;
+}
+
+.real-node-stage :deep(.sibling-navigator .nav-button.nav-next:not(.disabled):not(:disabled) .right-triangle) {
+  opacity: 1;
+  border-left-color: var(--color-text) !important;
+}
+
+.real-node-stage :deep(.mobile-sibling-nav .mobile-nav-btn:not(.disabled):not(:disabled)) {
+  color: var(--color-text);
 }
 
 /* Phase 1: Recipients & Read */
@@ -834,25 +847,34 @@ onBeforeUnmount(() => {
 }
 
 /* Phase 4: Reply, Prompt & Save */
-.real-node-stage.phase-actions :deep(.desktop-actions > .action-button) {
+.real-node-stage.phase-actions :deep(.compact-hover-toolbar .compact-action-button:not(.more-button)) {
   opacity: 1;
   box-shadow: 0 0 0 2px var(--primary-color, #8fbf9f), 0 0 16px rgba(143, 191, 159, 0.35);
+  border-radius: 6px;
 }
 
 /* Phase 5: Subcontextual Menu */
-.real-node-stage.phase-menu :deep(.desktop-menu-container .menu-button),
-.real-node-stage.phase-menu :deep(.desktop-action-menu) {
+.real-node-stage.phase-menu :deep(.compact-hover-toolbar .more-button),
+.real-node-stage.phase-menu :deep(.more-menu) {
   opacity: 1;
   box-shadow: 0 0 0 2px var(--primary-color, #8fbf9f), 0 0 20px rgba(143, 191, 159, 0.35);
 }
 
-/* Phase 6: Branch & Origin Navigation — no box border around origin switcher or sibling nav */
-.real-node-stage.phase-navigation :deep(.link-switcher-container .switchable-state),
-.real-node-stage.phase-navigation :deep(.sibling-navigator .nav-button),
-.real-node-stage.phase-navigation :deep(.reply-count) {
+.real-node-stage.phase-menu :deep(.more-menu .compact-action-button) {
   opacity: 1;
   box-shadow: none;
-  filter: drop-shadow(0 0 8px rgba(143, 191, 159, 0.55));
+}
+
+/* Phase 6: spotlight border on the rail that can be clicked. */
+.real-node-stage.phase-navigation :deep(.sibling-navigator .nav-button:not(.disabled):not(:disabled)::before) {
+  display: block;
+  border: 2px solid var(--primary-color, #8fbf9f);
+  box-sizing: border-box;
+}
+
+.real-node-stage.phase-navigation :deep(.mobile-sibling-nav .mobile-nav-btn:not(.disabled):not(:disabled)) {
+  border: 2px solid var(--primary-color, #8fbf9f);
+  box-shadow: none;
 }
 
 /* ==================== STEP 3: MESSAGE LINK ==================== */
@@ -922,6 +944,12 @@ onBeforeUnmount(() => {
 .onboarding-fade-enter-from,
 .onboarding-fade-leave-to {
   opacity: 0;
+}
+
+@media (max-width: 768px) {
+  .mock-parent {
+    width: 100%;
+  }
 }
 
 @media (max-width: 640px) {

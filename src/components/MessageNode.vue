@@ -267,7 +267,8 @@
 
       <CompactHoverToolbar
         v-if="!inListView && !isSelectionMode && !isCollapsed"
-        :visible="isMobile || compactToolbarVisible"
+        :visible="isMobile || compactToolbarVisible || revealToolbar"
+        :menu-open="revealMenu"
         :primary-actions="compactToolbarActionList"
         :more-actions="compactMoreActionList"
         :reply-count="message.child_ids?.length || 0"
@@ -371,6 +372,15 @@ export default {
     activeParentId: {
       type: String,
       default: null
+    },
+    // Onboarding keeps the hover toolbar and its menu up without a pointer.
+    revealToolbar: {
+      type: Boolean,
+      default: false
+    },
+    revealMenu: {
+      type: Boolean,
+      default: false
     }
   },
   

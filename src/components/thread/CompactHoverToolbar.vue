@@ -50,7 +50,8 @@ const props = defineProps({
   visible: { type: Boolean, default: false },
   primaryActions: { type: Array, default: () => [] },
   moreActions: { type: Array, default: () => [] },
-  replyCount: { type: Number, default: 0 }
+  replyCount: { type: Number, default: 0 },
+  menuOpen: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['moreOpenChanged'])
@@ -96,7 +97,7 @@ const placeMoreMenu = () => {
 }
 
 const onDocumentPointerDown = (event) => {
-  if (!moreOpen.value) return
+  if (!moreOpen.value || props.menuOpen) return
   const wrap = moreWrapRef.value
   const menu = moreMenuRef.value
   if (wrap?.contains(event.target) || menu?.contains(event.target)) return
@@ -124,8 +125,16 @@ watch(moreOpen, async (isOpen) => {
 watch(
   () => props.visible,
   (isVisible) => {
-    if (!isVisible) setMoreOpen(false)
+    if (!isVisible && !props.menuOpen) setMoreOpen(false)
   }
+)
+
+watch(
+  () => props.menuOpen,
+  (open) => {
+    setMoreOpen(!!open)
+  },
+  { immediate: true }
 )
 
 onBeforeUnmount(() => {
