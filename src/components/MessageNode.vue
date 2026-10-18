@@ -201,7 +201,9 @@
             v-if="isDefaultOutgoingChild"
             class="default-outgoing-mark"
             title="Default outgoing"
-          >🔗</span>
+          >
+            <DefaultOutgoingStar />
+          </span>
           <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
           <button
             v-if="canCollapse"
@@ -278,6 +280,7 @@
 
 <script>
 import AdaptiveMarker from './AdaptiveMarker.vue';
+import DefaultOutgoingStar from './DefaultOutgoingStar.vue';
 import LinkSwitcher from './LinkSwitcher.vue';
 import SiblingNavigator from './SiblingNavigator.vue';
 import FormattedContent from './FormattedContent/index.vue';
@@ -314,6 +317,7 @@ export default {
   
   components: {
     AdaptiveMarker,
+    DefaultOutgoingStar,
     LinkSwitcher,
     SiblingNavigator,
     FormattedContent,
@@ -646,7 +650,7 @@ export default {
       },
       {
         id: 'set-default-outgoing',
-        emoji: '🔗',
+        emoji: '⭐',
         text: isShownDefaultOutgoing() ? 'Clear default outgoing' : 'Set default outgoing',
         desktopVisible: false,
         mobileVisible: false,
@@ -2447,8 +2451,10 @@ export default {
 }
 
 .default-outgoing-mark {
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
   line-height: 1;
+  color: var(--color-text-secondary);
 }
 
 .author-row-left {

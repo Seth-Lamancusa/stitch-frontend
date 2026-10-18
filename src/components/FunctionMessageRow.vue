@@ -81,7 +81,9 @@
             v-if="isDefaultOutgoing"
             class="default-outgoing-mark"
             title="Default outgoing"
-          >🔗</span>
+          >
+            <DefaultOutgoingStar />
+          </span>
 
           <input
             v-if="isSelectionMode"
@@ -172,6 +174,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useStore } from 'vuex';
+import DefaultOutgoingStar from './DefaultOutgoingStar.vue';
 import LinkSwitcher from './LinkSwitcher.vue';
 import MessageAttachments from './MessageAttachments.vue';
 import ReplyOrderModal from './modals/ReplyOrderModal.vue';
@@ -342,7 +345,7 @@ const menuActions = computed(() => {
   if (canSetDefaultOutgoing.value) {
     items.splice(items.length - 1, 0, {
       id: 'set-default-outgoing',
-      emoji: '🔗',
+      emoji: '⭐',
       text: isDefaultOutgoing.value ? 'Clear default outgoing' : 'Set default outgoing',
       close: true,
       run: toggleDefaultOutgoing
@@ -621,8 +624,10 @@ onBeforeUnmount(() => {
 }
 
 .default-outgoing-mark {
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
   line-height: 1;
+  color: var(--color-text-secondary);
 }
 
 .imported-badge {

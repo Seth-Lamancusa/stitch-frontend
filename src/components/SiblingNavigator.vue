@@ -14,7 +14,9 @@
         <path d="M10 3.5 L5 8 L10 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
       <div v-else class="arrow-icon left-arrow">←</div>
-      <span v-if="defaultMarkSide === 'prev'" class="mobile-default-mark" title="Default outgoing">🔗</span>
+      <span v-if="defaultMarkSide === 'prev'" class="mobile-default-mark" title="Default outgoing">
+        <DefaultOutgoingStar :size="9" />
+      </span>
     </button>
     
     <button 
@@ -30,7 +32,9 @@
         <path d="M6 3.5 L11 8 L6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
       <div v-else class="arrow-icon right-arrow">→</div>
-      <span v-if="defaultMarkSide === 'next'" class="mobile-default-mark" title="Default outgoing">🔗</span>
+      <span v-if="defaultMarkSide === 'next'" class="mobile-default-mark" title="Default outgoing">
+        <DefaultOutgoingStar :size="9" />
+      </span>
     </button>
   </div>
   
@@ -50,7 +54,9 @@
         <path d="M10 3.5 L5 8 L10 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
       <div v-else class="triangle-icon left-triangle"></div>
-      <span v-if="defaultMarkSide === 'prev'" class="default-outgoing-side-mark" title="Default outgoing">🔗</span>
+      <span v-if="defaultMarkSide === 'prev'" class="default-outgoing-side-mark" title="Default outgoing">
+        <DefaultOutgoingStar :size="9" />
+      </span>
     </button>
     
     <button 
@@ -67,7 +73,9 @@
         <path d="M6 3.5 L11 8 L6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
       <div v-else class="triangle-icon right-triangle"></div>
-      <span v-if="defaultMarkSide === 'next'" class="default-outgoing-side-mark" title="Default outgoing">🔗</span>
+      <span v-if="defaultMarkSide === 'next'" class="default-outgoing-side-mark" title="Default outgoing">
+        <DefaultOutgoingStar :size="9" />
+      </span>
     </button>
   </div>
 </template>
@@ -75,6 +83,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { useStore } from 'vuex';
+import DefaultOutgoingStar from './DefaultOutgoingStar.vue';
 
 const props = defineProps({
   messageId: {
