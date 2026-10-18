@@ -23,52 +23,52 @@
           -->
           <router-link 
             to="/history" 
-            class="nav-tab"
+            class="nav-tab has-glyph"
             :class="{ 'active': activeTab === 'history' }"
             role="tab"
             :aria-selected="activeTab === 'history'"
           >
-            <span class="tab-emoji" aria-hidden="true">🕘</span>
+            <TabGlyph name="history" :size="36" />
             <span class="tab-label">History</span>
           </router-link>
           <router-link 
             to="/timeline" 
-            class="nav-tab"
+            class="nav-tab has-glyph"
             :class="{ 'active': activeTab === 'timeline' }"
             role="tab"
             :aria-selected="activeTab === 'timeline'"
           >
-            <span class="tab-emoji" aria-hidden="true">📜</span>
+            <TabGlyph name="timeline" :size="36" />
             <span class="tab-label">Timeline</span>
           </router-link>
           <router-link 
             to="/saved" 
-            class="nav-tab"
+            class="nav-tab has-glyph"
             :class="{ 'active': activeTab === 'saved' }"
             role="tab"
             :aria-selected="activeTab === 'saved'"
           >
-            <span class="tab-emoji" aria-hidden="true">🔖</span>
+            <TabGlyph name="saved" :size="36" />
             <span class="tab-label">Saved</span>
           </router-link>
           <router-link 
             to="/channels" 
-            class="nav-tab"
+            class="nav-tab has-glyph"
             :class="{ 'active': activeTab === 'channels' }"
             role="tab"
             :aria-selected="activeTab === 'channels'"
           >
-            <span class="tab-emoji" aria-hidden="true">📢</span>
+            <TabGlyph name="channels" :size="36" />
             <span class="tab-label">Channels</span>
           </router-link>
           <router-link 
             to="/inbox" 
-            class="nav-tab"
+            class="nav-tab has-glyph"
             :class="{ 'active': activeTab === 'inbox' }"
             role="tab"
             :aria-selected="activeTab === 'inbox'"
           >
-            <span class="tab-emoji" aria-hidden="true">📥</span>
+            <TabGlyph name="inbox" :size="36" />
             <span class="tab-label">Inbox</span>
             <span v-if="isUnreadCountLoading" class="unread-inline-badge">
               <span class="loading-spinner"></span>
@@ -343,6 +343,7 @@ import DevModal from '../modals/DevModal.vue';
 import ManagedUserCreateModal from '../modals/ManagedUserCreateModal.vue';
 import GlobalNotifications from '../GlobalNotifications.vue';
 import MobileTabBar from './MobileTabBar.vue';
+import TabGlyph from './TabGlyph.vue';
 import UserDisplay from '../common/UserDisplay.vue';
 import NewThreadModal from '../modals/NewThreadModal.vue';
 import CreateChannelModal from '../modals/CreateChannelModal.vue';
@@ -849,6 +850,8 @@ const handleChannelCreated = async (newChannel) => {
   gap: var(--space-lg, 24px);
   min-width: 0;
   width: 100%;
+  container-type: inline-size;
+  container-name: app-header;
 }
 
 .branding {
@@ -917,8 +920,27 @@ const handleChannelCreated = async (newChannel) => {
 }
 
 .nav-tab.active {
-  background-color: var(--color-primary, #4f8cff);
-  color: var(--color-text-inverse, #fff);
+  background-color: var(--color-primary, #598958);
+  color: var(--color-text-inverse, #fffcef);
+}
+
+.nav-tab :deep(.tab-glyph) {
+  opacity: 0.45;
+}
+
+.nav-tab.has-glyph.active {
+  background-color: transparent;
+}
+
+.nav-tab.active :deep(.tab-glyph) {
+  opacity: 1;
+}
+
+/* Names stay beside the icons while the header row has room. */
+@container app-header (max-width: 1200px) {
+  .navigation-tabs .tab-label {
+    display: none;
+  }
 }
 
 .unread-inline-badge {
@@ -1406,7 +1428,7 @@ const handleChannelCreated = async (newChannel) => {
 /* Add bottom padding on mobile to account for mobile tab bar */
 @media (max-width: 768px) {
   .main-content {
-    padding-bottom: 70px; /* Height of mobile tab bar + some spacing */
+    padding-bottom: 104px; /* Height of the mobile tab bar plus a little clearance */
   }
 }
 
@@ -1515,7 +1537,7 @@ const handleChannelCreated = async (newChannel) => {
   }
 }
 
-/* Matched corner controls. Sage fill with the landing herringbone weave. */
+/* Matched corner controls. Sage fill with a matte wood grain. */
 .global-feedback-btn,
 .global-create-btn {
   position: fixed;
@@ -1523,8 +1545,8 @@ const handleChannelCreated = async (newChannel) => {
   z-index: 10;
   isolation: isolate;
   overflow: hidden;
-  width: 60px;
-  height: 60px;
+  width: 84px;
+  height: 84px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -1532,6 +1554,10 @@ const handleChannelCreated = async (newChannel) => {
   justify-content: center;
   align-items: center;
   background-color: var(--color-primary);
+  background-image: url("/textures/wood-matte-contrast.png");
+  background-repeat: repeat;
+  background-size: 168px;
+  background-blend-mode: overlay;
   color: var(--color-text-inverse);
   text-decoration: none;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
@@ -1545,27 +1571,7 @@ const handleChannelCreated = async (newChannel) => {
 
 .global-create-btn {
   right: var(--space-xl);
-  font-size: 52px;
   line-height: 1;
-}
-
-.global-feedback-btn::before,
-.global-create-btn::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: url("/textures/tap-texture-2.avif");
-  background-repeat: repeat;
-  background-size: 420px;
-  filter: contrast(1.4) brightness(1.15);
-  mix-blend-mode: multiply;
-  pointer-events: none;
-}
-
-.global-feedback-btn > *,
-.global-create-btn > * {
-  position: relative;
-  z-index: 1;
 }
 
 .global-feedback-btn .btn-icon,
@@ -1577,12 +1583,15 @@ const handleChannelCreated = async (newChannel) => {
 }
 
 .global-feedback-btn .btn-icon {
-  width: 30px;
-  height: 30px;
+  width: 42px;
+  height: 42px;
 }
 
 .global-create-btn .btn-icon {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  font-size: 80px;
+  width: auto;
+  height: auto;
 }
 
 .global-feedback-btn:hover,
@@ -1599,16 +1608,21 @@ const handleChannelCreated = async (newChannel) => {
 
 /* Mobile responsive for global create and feedback buttons */
 @media (max-width: 768px) {
+  .global-feedback-btn,
+  .global-create-btn {
+    background-size: 64px;
+  }
+
   .global-create-btn {
     width: 52px;
     height: 52px;
-    font-size: 44px;
     bottom: 80px; /* Move up to avoid mobile tab bar */
     right: var(--space-md);
   }
 
   .global-create-btn .btn-icon {
-    transform: translateY(-0.5px);
+    transform: translateY(-1px);
+    font-size: 48px;
   }
 
   .global-feedback-btn {
@@ -1716,42 +1730,52 @@ const handleChannelCreated = async (newChannel) => {
     bottom: 0 !important;
     left: 0 !important;
     right: 0 !important;
+    transform: none !important;
+    width: 100% !important;
+    max-width: none !important;
     background: var(--color-chrome, #0e0c0d) !important;
     border-top: 1px solid #2a2a2a !important;
-    padding: 8px 0 !important;
+    padding: 16px 0 calc(16px + env(safe-area-inset-bottom)) !important;
     z-index: 100 !important;
     justify-content: space-around !important;
     align-items: center !important;
-    width: 100% !important;
-    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3) !important;
+    gap: 0 !important;
+    box-shadow: none !important;
   }
   
   .mobile-tab-bar .mobile-tab {
     display: flex !important;
+    flex: 1 1 0 !important;
     flex-direction: column !important;
     align-items: center !important;
+    justify-content: center !important;
     text-decoration: none !important;
     color: #aaa !important;
-    padding: 4px 8px !important;
-    flex: 1 !important;
-    max-width: 80px !important;
-    gap: 2px !important;
+    padding: 4px 0 !important;
+    max-width: none !important;
+    gap: 0 !important;
+    background: transparent !important;
+    border-radius: 0 !important;
   }
   
   .mobile-tab-bar .mobile-tab.active {
-    background-color: var(--color-primary, #598958) !important;
-    color: #fff !important;
-    border-radius: 4px !important;
+    background-color: transparent !important;
+    color: inherit !important;
+    border-radius: 0 !important;
   }
-  
-  .mobile-tab-bar .tab-emoji {
-    font-size: 20px !important;
-    line-height: 1 !important;
+
+  .mobile-tab-bar .tab-glyph {
+    width: 40px !important;
+    height: 40px !important;
+    opacity: 0.45;
+  }
+
+  .mobile-tab-bar .mobile-tab.active .tab-glyph {
+    opacity: 1 !important;
   }
   
   .mobile-tab-bar .tab-label {
-    font-size: 10px !important;
-    font-weight: 500 !important;
+    display: none !important;
   }
 }
 </style> 

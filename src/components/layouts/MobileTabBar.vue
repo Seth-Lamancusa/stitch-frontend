@@ -22,8 +22,7 @@
       :aria-selected="activeTab === 'history'"
       aria-label="History"
     >
-      <span class="tab-emoji" aria-hidden="true">🕘</span>
-      <span class="tab-label">History</span>
+      <TabGlyph name="history" :size="40" />
     </router-link>
     
     <router-link 
@@ -34,8 +33,7 @@
       :aria-selected="activeTab === 'timeline'"
       aria-label="Timeline"
     >
-      <span class="tab-emoji" aria-hidden="true">📜</span>
-      <span class="tab-label">Timeline</span>
+      <TabGlyph name="timeline" :size="40" />
     </router-link>
     
     <router-link 
@@ -46,8 +44,7 @@
       :aria-selected="activeTab === 'saved'"
       aria-label="Saved"
     >
-      <span class="tab-emoji" aria-hidden="true">🔖</span>
-      <span class="tab-label">Saved</span>
+      <TabGlyph name="saved" :size="40" />
     </router-link>
     
     <router-link 
@@ -58,8 +55,7 @@
       :aria-selected="activeTab === 'channels'"
       aria-label="Channels"
     >
-      <span class="tab-emoji" aria-hidden="true">📢</span>
-      <span class="tab-label">Channels</span>
+      <TabGlyph name="channels" :size="40" />
     </router-link>
     
     <router-link 
@@ -70,12 +66,13 @@
       :aria-selected="activeTab === 'inbox'"
       aria-label="Inbox"
     >
-      <span class="tab-emoji" aria-hidden="true">📥</span>
-      <span class="tab-label">Inbox</span>
-      <span v-if="isUnreadCountLoading" class="unread-badge">
-        <span class="loading-spinner"></span>
+      <span class="tab-glyph-wrap">
+        <TabGlyph name="inbox" :size="40" />
+        <span v-if="isUnreadCountLoading" class="unread-badge">
+          <span class="loading-spinner"></span>
+        </span>
+        <span v-else-if="unreadCount > 0" class="unread-badge">{{ unreadCount }}</span>
       </span>
-      <span v-else-if="unreadCount > 0" class="unread-badge">{{ unreadCount }}</span>
     </router-link>
   </nav>
 </template>
@@ -84,6 +81,7 @@
 import { computed } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute } from 'vue-router';
+import TabGlyph from './TabGlyph.vue';
 
 const store = useStore();
 const route = useRoute();
@@ -110,58 +108,55 @@ const isUnreadCountLoading = computed(() => store.getters['messages/isLoading'](
   bottom: 0;
   left: 0;
   right: 0;
-  background: #000;
+  width: 100%;
+  background: var(--color-chrome, #0e0c0d);
   border-top: 1px solid var(--color-border, #2a2a2a);
-  padding: 8px 0;
+  padding: 16px 0 calc(16px + env(safe-area-inset-bottom));
   z-index: 100;
   justify-content: space-around;
   align-items: center;
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3);
-  width: 100%;
   box-sizing: border-box;
 }
 
 .mobile-tab {
   display: flex !important;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 4px 8px;
+  justify-content: center;
+  padding: 4px 0;
   text-decoration: none !important;
   color: var(--color-text-secondary, #aaa);
-  border-radius: var(--radius-sm, 4px);
-  transition: all var(--transition-fast, 0.2s);
+  background: transparent;
+  border-radius: 0;
   position: relative;
   flex: 1;
-  max-width: 80px;
-  min-width: 50px;
 }
 
 .mobile-tab:hover {
-  background-color: var(--color-hover-overlay, #222);
-  color: var(--color-text, #fff);
+  background-color: transparent;
 }
 
 .mobile-tab.active {
-  background-color: var(--color-primary, #4f8cff);
-  color: var(--color-text-inverse, #fff);
+  background-color: transparent;
+  color: inherit;
 }
 
-.tab-emoji {
-  font-size: 20px;
-  line-height: 1;
+.tab-glyph-wrap {
+  position: relative;
+  display: inline-flex;
 }
 
-.tab-label {
-  font-size: 10px;
-  font-weight: 500;
-  white-space: nowrap;
+.mobile-tab :deep(.tab-glyph) {
+  opacity: 0.45;
+}
+
+.mobile-tab.active :deep(.tab-glyph) {
+  opacity: 1;
 }
 
 .unread-badge {
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: -4px;
+  right: -10px;
   background-color: #dc2626;
   color: white;
   border-radius: 10px;
