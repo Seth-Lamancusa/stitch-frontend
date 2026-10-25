@@ -57,7 +57,6 @@
             @load-stitch="handleLoadStitchBoundary('top')"
             @retry="loadMoreParents"
             ref="topMarker"
-            :key="`top-marker-${displayedMessages.length > 0 ? displayedMessages[0].id : 'empty'}`"
           />
           
           <!-- Dedicated scroll anchor at top of messages -->
@@ -119,7 +118,6 @@
             :refreshing="isRefreshingLastMessage"
             @refresh-last="refreshRepliesForLastVisibleMessage"
             ref="bottomMarker"
-            :key="`bottom-marker-${displayedMessages.length > 0 ? displayedMessages[displayedMessages.length - 1].id : 'empty'}`"
           />
         </div>
 
@@ -182,7 +180,8 @@
       />
 
       <div class="not-found">
-        Message not found.
+        <p>Message not found.</p>
+        <pre v-if="loadReportText" class="not-found-trace">{{ loadReportText }}</pre>
       </div>
     </div>
 
@@ -296,8 +295,13 @@ const linksModalMessage = ref(null);
 
 // Consolidated loading state - single source of truth
 const isLoadingThread = ref(true); // Main loading state for all thread operations
-const isLoadingParents = ref(false); // Keep for incremental parent loading
-const isLoadingChildren = ref(false); // Keep for incremental child loading
+
+// Page boundary for one direction. phase changes when a page fetch for edgeId
+// finishes, or when that edge moves. Cache writes do not recompute it.
+// idle → scroll for more, loading → in flight, exhausted → end of thread, error → retry.
+const topBoundary = ref({ edgeId: null, phase: 'exhausted' });
+const bottomBoundary = ref({ edgeId: null, phase: 'exhausted' });
+let pageGeneration = 0;
 
 // Scroll anchor ref
 const scrollAnchor = ref(null);
@@ -599,28 +603,66 @@ const centerOnMessageInUrl = async (newMessageId, options = { replace: true }) =
   }
 };
 
-// Simplified marker states
-const topMarkerState = computed(() => {
-  // If no messages or loading thread, use end state
-  if (displayedMessages.value.length === 0 || isLoadingThread.value) return 'end';
-  
-  // If currently loading parents, show loading state
-  if (isLoadingParents.value) return 'loading';
-  
-  // Get first message in the branch
-  const firstMessage = displayedMessages.value[0];
-  
-  // If first message doesn't have a parent_id at all, we're at the top
-  if (!firstMessage.parent_id) {
-    return 'end';
+const storedMessage = (id) => {
+  if (id == null) return null;
+  return store.getters['messages/getMessage'](id)
+    || store.getters['messages/getMessage'](String(id));
+};
+
+const sameEdgeId = (a, b) => a != null && b != null && String(a) === String(b);
+
+const phaseToMarkerState = (phase) => {
+  if (phase === 'idle') return 'waiting';
+  if (phase === 'loading') return 'loading';
+  if (phase === 'error') return 'error';
+  return 'end';
+};
+
+// One look at the edge after it moves. Not a live subscription to the cache.
+const snapshotUp = (messages) => {
+  const head = messages[0];
+  if (!head) return { edgeId: null, phase: 'exhausted' };
+  if (!head.parent_id || storedMessage(head.parent_id)) {
+    return { edgeId: head.id, phase: 'exhausted' };
   }
-  
-  // Check if parent is already loaded in the store
-  const parentMessage = store.getters['messages/getMessage'](firstMessage.parent_id);
-  
-  // If parent_id exists but parent message isn't in store, we need to load more (waiting state)
-  return parentMessage ? 'end' : 'waiting';
-});
+  return { edgeId: head.id, phase: 'idle' };
+};
+
+const snapshotDown = (messages) => {
+  const tail = messages[messages.length - 1];
+  if (!tail) return { edgeId: null, phase: 'exhausted' };
+  const missingReply = (tail.child_ids || []).some(id => id != null && !storedMessage(id));
+  return { edgeId: tail.id, phase: missingReply ? 'idle' : 'exhausted' };
+};
+
+// The page moved the visible edge, or it did not. A missing id on the same
+// edge is not another page — that is what made the marker reload itself.
+const settleUp = (requestedEdgeId) => {
+  const messages = displayedMessages.value;
+  const head = messages[0];
+  if (!head || sameEdgeId(head.id, requestedEdgeId)) {
+    return { edgeId: head?.id ?? requestedEdgeId, phase: 'exhausted' };
+  }
+  return snapshotUp(messages);
+};
+
+const settleDown = (requestedEdgeId) => {
+  const messages = displayedMessages.value;
+  const tail = messages[messages.length - 1];
+  if (!tail || sameEdgeId(tail.id, requestedEdgeId)) {
+    return { edgeId: tail?.id ?? requestedEdgeId, phase: 'exhausted' };
+  }
+  return snapshotDown(messages);
+};
+
+const beginPageSession = () => {
+  pageGeneration += 1;
+  topBoundary.value = { edgeId: null, phase: 'exhausted' };
+  bottomBoundary.value = { edgeId: null, phase: 'exhausted' };
+};
+
+const topMarkerState = computed(() => phaseToMarkerState(topBoundary.value.phase));
+const bottomMarkerState = computed(() => phaseToMarkerState(bottomBoundary.value.phase));
 
 // Handle center event from MessageNode
 const handleCenterOnMessage = async (targetId) => {
@@ -789,105 +831,142 @@ const isRefreshingLastMessage = computed(() => {
 });
 
 
-const bottomMarkerState = computed(() => {
-  // If no messages or loading thread, use end state
-  if (displayedMessages.value.length === 0 || isLoadingThread.value) return 'end';
-  
-  // If currently loading children, show loading state
-  if (isLoadingChildren.value) return 'loading';
-  
-  // Get last message in the branch
-  const lastMessage = displayedMessages.value[displayedMessages.value.length - 1];
-  
-  // If it has no children at all, we're at the bottom
-  if (!lastMessage.child_ids || lastMessage.child_ids.length === 0) {
-    return 'end';
+const loadReport = ref(null);
+
+const sameMessageId = (message, id) => message && String(message.id) === String(id);
+
+const missingRadiusIds = (centerId, radius) => {
+  const getMsg = (id) => store.getters['messages/getMessage'](id);
+  const visited = new Set();
+  const queue = [{ id: centerId, depthUp: 0, depthDown: 0 }];
+  const neededIds = new Set([centerId]);
+  while (queue.length) {
+    const { id, depthUp, depthDown } = queue.shift();
+    if (!id || visited.has(id)) continue;
+    visited.add(id);
+    const msg = getMsg(id);
+    if (!msg) continue;
+    if (depthUp < radius && msg.parent_id) {
+      neededIds.add(msg.parent_id);
+      queue.push({ id: msg.parent_id, depthUp: depthUp + 1, depthDown });
+    }
+    if (depthDown < radius && Array.isArray(msg.child_ids)) {
+      for (const childId of msg.child_ids) {
+        neededIds.add(childId);
+        queue.push({ id: childId, depthUp, depthDown: depthDown + 1 });
+      }
+    }
   }
-  
-  // Check if any child isn't loaded yet
-  const unloadedChildExists = lastMessage.child_ids.some(childId => 
-    !store.getters['messages/getMessage'](childId)
-  );
-  
-  // If any child_id exists but isn't in store, we need to load more (waiting state)
-  return unloadedChildExists ? 'waiting' : 'end';
+  return [...neededIds].filter(id => !getMsg(id));
+};
+
+const summarizeTraversal = (report, id) => ({
+  ok: !!report?.ok,
+  status: report?.status || 0,
+  detail: report?.detail || null,
+  count: Array.isArray(report?.messages) ? report.messages.length : 0,
+  hasCenter: Array.isArray(report?.messages) && report.messages.some(message => sameMessageId(message, id)),
 });
 
-const loadInitialContent = async (targetMessageId) => {
-  console.log('[ThreadView] loadInitialContent', targetMessageId);
+const describeRequest = (label, request) => {
+  if (!request) return `${label}: not requested`;
+  if (request.skipped) return `${label}: skipped (${request.reason})`;
+  const center = request.hasCenter ? 'includes this message' : 'does not include this message';
+  const status = request.ok ? `ok ${request.status}` : `failed ${request.status || 'network'}`;
+  const detail = request.detail ? ` — ${request.detail}` : '';
+  return `${label}: ${status}, ${request.count} messages, ${center}${detail}`;
+};
+
+const formatLoadReport = (trace) => [
+  `open: ${trace.reason}`,
+  `navigation: ${trace.navigation}`,
+  `id: ${trace.id}`,
+  `viewer: ${trace.uid || 'anonymous'}`,
+  `cached before request: ${trace.cached ? 'yes' : 'no'}`,
+  describeRequest('radius', trace.radius),
+  describeRequest('direct', trace.direct),
+  `in store after: ${trace.inStore ? 'yes' : 'no'}`,
+  `visible branch: ${trace.branchLength} (contains id: ${trace.branchHasCenter ? 'yes' : 'no'})`,
+  trace.error ? `error: ${trace.error}` : null,
+].filter(Boolean).join('\n');
+
+const loadReportText = computed(() => loadReport.value ? formatLoadReport(loadReport.value) : '');
+
+const loadInitialContent = async (targetMessageId, reason = 'mount') => {
   if (!targetMessageId) {
     console.error('[ThreadView] Cannot load initial content: No target message ID provided');
     return;
   }
-  
+
+  const navigationEntry = performance.getEntriesByType?.('navigation')?.[0];
+  const trace = {
+    reason,
+    navigation: reason === 'route' ? 'client' : (navigationEntry?.type || 'unknown'),
+    id: String(targetMessageId),
+    uid: store.getters['auth/user']?.uid || null,
+    cached: !!store.getters['messages/getMessage'](targetMessageId),
+    radius: null,
+    direct: null,
+    inStore: false,
+    branchLength: 0,
+    branchHasCenter: false,
+    error: null,
+  };
+
   try {
-    // Hide container and markers immediately at start of loading
+    beginPageSession();
     isContainerVisible.value = false;
     shouldShowMarkers.value = false;
-    
-    // Set single loading state
     isLoadingThread.value = true;
     hasInitiallyScrolled.value = false;
-      
-    // Only load if required messages for radius are not already in store
-    const ensureRadiusInStore = async (centerId, radius) => {
-      const visited = new Set();
-      const queue = [{ id: centerId, depthUp: 0, depthDown: 0 }];
-      const neededIds = new Set([centerId]);
-      const getMsg = (id) => store.getters['messages/getMessage'](id);
-      while (queue.length) {
-        const { id, depthUp, depthDown } = queue.shift();
-        if (!id || visited.has(id)) continue;
-        visited.add(id);
-        const msg = getMsg(id);
-        if (!msg) continue;
-        // Upward traversal
-        if (depthUp < radius && msg.parent_id) {
-          neededIds.add(msg.parent_id);
-          queue.push({ id: msg.parent_id, depthUp: depthUp + 1, depthDown });
-        }
-        // Downward traversal
-        if (depthDown < radius && Array.isArray(msg.child_ids)) {
-          for (const childId of msg.child_ids) {
-            neededIds.add(childId);
-            queue.push({ id: childId, depthUp, depthDown: depthDown + 1 });
-          }
-        }
-      }
-      // If any needed message is missing, fetch radius once
-      let fetched = false;
-      for (const id of neededIds) {
-        if (!getMsg(id)) {
-          fetched = true;
-          await store.dispatch('messages/loadMessageRadius', { messageId: centerId, radius });
-          break;
-        }
-      }
-      return fetched;
-    };
-    const fetchedRadius = await ensureRadiusInStore(targetMessageId, LOAD_RADIUS);
-    
-    // Wait for next tick to ensure store updates are processed
+
+    const missing = missingRadiusIds(targetMessageId, LOAD_RADIUS);
+    let radiusOk = false;
+    if (missing.length === 0) {
+      trace.radius = { skipped: true, reason: 'cached radius already in the store' };
+      radiusOk = true;
+    } else {
+      const radius = await store.dispatch('messages/loadTraversalReport', {
+        messageId: targetMessageId,
+        up_depth: LOAD_RADIUS,
+        down_depth: LOAD_RADIUS,
+        get_replies: true,
+        get_children: true,
+      });
+      trace.radius = summarizeTraversal(radius, targetMessageId);
+      radiusOk = trace.radius.ok;
+    }
+
+    if (!store.getters['messages/getMessage'](targetMessageId)) {
+      const direct = await store.dispatch('messages/loadTraversalReport', {
+        messageId: targetMessageId,
+        up_depth: 0,
+        down_depth: 0,
+        get_replies: true,
+        get_children: true,
+      });
+      trace.direct = summarizeTraversal(direct, targetMessageId);
+    }
+
     await nextTick();
-    
-    // CRITICAL: Prepare branch path so target message is in visible branch
-    // This must happen before ensureCorrectScroll to ensure correct branch selection
     await store.dispatch('messages/prepareBranchPath', targetMessageId);
 
-    // Cached radius is not a refresh: child_ids can be stale. Ask the server to
-    // walk the loaded reply chain before the thread is shown. A fresh radius
-    // fetch already has current replies.
-    if (!fetchedRadius) {
+    if (!radiusOk && store.getters['messages/getMessage'](targetMessageId)) {
       await refreshVisibleReplyChain({ rerender: false });
     }
-    
   } catch (error) {
+    trace.error = error?.message || String(error);
     console.error('[ThreadView] Error loading initial content:', error);
     store.commit('ui/SET_ERROR', 'Failed to load thread.');
-    // Show container even on error so user can see the error state
     isContainerVisible.value = true;
   } finally {
-    // Clear loading state - this will trigger displayedMessages to show content.
+    const branch = store.getters['messages/getFullVisibleBranch'](targetMessageId) || [];
+    trace.inStore = !!store.getters['messages/getMessage'](targetMessageId);
+    trace.branchLength = branch.length;
+    trace.branchHasCenter = branch.some(message => sameMessageId(message, targetMessageId));
+    loadReport.value = trace;
+    console.log('[ThreadView] load\n' + formatLoadReport(trace));
+
     // Stamp before the first await so a visibility event during scroll setup
     // does not start a second walk of a thread that just loaded.
     isLoadingThread.value = false;
@@ -1029,7 +1108,7 @@ const checkBranchChange = () => {
       currentFirstMessageId && 
       lastBranchFirstMessageId.value !== currentFirstMessageId) {
     // Only clear replying state when branch changes if we're not loading more messages
-    if (!isLoadingParents.value && !isLoadingChildren.value) {
+    if (topBoundary.value.phase !== 'loading' && bottomBoundary.value.phase !== 'loading') {
       store.dispatch('navigation/clearReplyingTo');
     }
   }
@@ -1042,6 +1121,27 @@ const checkBranchChange = () => {
 watch(displayedMessages, () => {
   checkBranchChange();
 }, { deep: true });
+
+// The edge moved (page, sibling, or a reply appended onto a dead-end). Take one
+// new snapshot. A fetch in flight owns the record until it settles.
+watch(
+  () => {
+    const messages = displayedMessages.value;
+    return [
+      messages[0]?.id ?? null,
+      messages.length ? messages[messages.length - 1].id : null,
+    ];
+  },
+  ([head, tail], previous) => {
+    const [previousHead, previousTail] = previous || [null, null];
+    if (head != null && !sameEdgeId(head, previousHead) && topBoundary.value.phase !== 'loading') {
+      topBoundary.value = snapshotUp(displayedMessages.value);
+    }
+    if (tail != null && !sameEdgeId(tail, previousTail) && bottomBoundary.value.phase !== 'loading') {
+      bottomBoundary.value = snapshotDown(displayedMessages.value);
+    }
+  }
+);
 
 // Watch for direct message refresh trigger (for sent messages)
 watch(() => store.state.messages.directMessagesLastUpdated, (newVal, oldVal) => {
@@ -1367,7 +1467,12 @@ const getTotalRepliesCount = (parentId) => {
 
 // Update loadMoreParents function to maintain scroll position relative to existing content
 const loadMoreParents = async () => {
-  isLoadingParents.value = true;
+  const boundary = topBoundary.value;
+  if (boundary.phase !== 'idle' && boundary.phase !== 'error') return;
+  const requestedEdgeId = boundary.edgeId ?? displayedMessages.value[0]?.id;
+  if (requestedEdgeId == null) return;
+  const generation = pageGeneration;
+  topBoundary.value = { edgeId: requestedEdgeId, phase: 'loading' };
   try {
     // We need to find a reference message that's currently visible
     // to maintain its position after new content is loaded
@@ -1394,12 +1499,10 @@ const loadMoreParents = async () => {
       
     }
     
-    // Get first message before loading
-    const firstMessageId = displayedMessages.value.length > 0 ? displayedMessages.value[0].id : null;
-    
-    // Load more messages
-    const loadedMessages = await store.dispatch('messages/loadMessageBranchUp', {
-      messageId: firstMessageId,
+    const firstMessageId = requestedEdgeId;
+
+    await store.dispatch('messages/loadMessageBranchUp', {
+      messageId: requestedEdgeId,
       depth: LOAD_RADIUS
     });
     
@@ -1440,26 +1543,31 @@ const loadMoreParents = async () => {
         }
       }
     }
-  } finally {
-    isLoadingParents.value = false;
+    if (generation !== pageGeneration) return;
+    topBoundary.value = settleUp(requestedEdgeId);
+  } catch (error) {
+    console.error('[ThreadView] Failed to load earlier messages:', error);
+    if (generation !== pageGeneration) return;
+    topBoundary.value = { edgeId: requestedEdgeId, phase: 'error' };
   }
 };
 
 // Update loadMoreChildren function to mark messages as read
 const loadMoreChildren = async () => {
-  isLoadingChildren.value = true;
+  const boundary = bottomBoundary.value;
+  if (boundary.phase !== 'idle' && boundary.phase !== 'error') return;
+  const messages = displayedMessages.value;
+  const requestedEdgeId = boundary.edgeId ?? (messages.length ? messages[messages.length - 1].id : null);
+  if (requestedEdgeId == null) return;
+  const generation = pageGeneration;
+  bottomBoundary.value = { edgeId: requestedEdgeId, phase: 'loading' };
   try {
     // Capture current scroll position
     const scrollPosition = messageList.value ? messageList.value.scrollTop : 0;
-    
-    // Get last message before loading
-    const lastMessageId = displayedMessages.value.length > 0 
-      ? displayedMessages.value[displayedMessages.value.length - 1].id 
-      : null;
-    
-    // Load more messages
+    const lastMessageId = requestedEdgeId;
+
     await store.dispatch('messages/loadMessageBranchDown', {
-      messageId: lastMessageId,
+      messageId: requestedEdgeId,
       depth: LOAD_RADIUS
     });
     
@@ -1477,8 +1585,12 @@ const loadMoreChildren = async () => {
     if (messageList.value) {
       messageList.value.scrollTop = scrollPosition;
     }
-  } finally {
-    isLoadingChildren.value = false;
+    if (generation !== pageGeneration) return;
+    bottomBoundary.value = settleDown(requestedEdgeId);
+  } catch (error) {
+    console.error('[ThreadView] Failed to load later messages:', error);
+    if (generation !== pageGeneration) return;
+    bottomBoundary.value = { edgeId: requestedEdgeId, phase: 'error' };
   }
 };
 
@@ -1518,7 +1630,7 @@ onMounted(async () => {
   }
   
   if (messageId.value) {
-    await loadInitialContent(messageId.value);
+    await loadInitialContent(messageId.value, 'mount');
     nextTick(() => {
       setupHeightObserver();
     });
@@ -1559,6 +1671,7 @@ watch(messageId, async (newId, oldId) => {
   if (newId) {
     if (suppressRouteReload.value) {
       suppressRouteReload.value = false;
+      console.log('[ThreadView] load skipped', { reason: 'route', id: String(newId), from: oldId ? String(oldId) : null, suppressRouteReload: true });
       return;
     }
     if (isSelectionMode.value) {
@@ -1566,7 +1679,7 @@ watch(messageId, async (newId, oldId) => {
     }
     isContainerVisible.value = false;
     shouldShowMarkers.value = false;
-    await loadInitialContent(newId);
+    await loadInitialContent(newId, 'route');
   }
 });
 
@@ -1800,6 +1913,22 @@ const handleNavigatorJump = (msgId) => {
   color: var(--color-text-secondary);
   text-align: center;
   gap: var(--space-sm);
+}
+
+.not-found {
+  height: auto;
+  min-height: 200px;
+  padding: 24px 16px;
+}
+
+.not-found-trace {
+  margin: 0;
+  max-width: 40rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  text-align: left;
 }
 
 

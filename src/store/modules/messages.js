@@ -859,8 +859,33 @@ export default {
     
     // REMOVED setBranchPath - no longer needed since in_branch_path flags are unused
     
+    // Network traversal with the HTTP result kept intact.
+    // loadTraversal still returns the message array for older callers.
+    async loadTraversalReport({ commit }, { messageId, up_depth = 0, down_depth = 0, get_replies = true, get_children = false, edge_type = 'replies' } = {}) {
+      if (!messageId) {
+        return { messages: [], ok: false, status: 0, detail: 'missing message id' };
+      }
+      try {
+        const response = await MessageService.traverseFrom(messageId, { up_depth, down_depth, get_replies, get_children, edge_type });
+        const data = response?.data || {};
+        const messages = [];
+        if (data.origin) messages.push(data.origin);
+        if (Array.isArray(data.messages)) messages.push(...data.messages);
+        if (messages.length > 0) {
+          commit('SET_MESSAGES', messages);
+        }
+        return { messages, ok: true, status: response?.status || 200, detail: null };
+      } catch (error) {
+        const status = error?.response?.status || 0;
+        const raw = error?.response?.data?.detail || error?.message || 'request failed';
+        const detail = typeof raw === 'string' ? raw : JSON.stringify(raw);
+        console.error('[messages store] traverse-from failed', { messageId, up_depth, down_depth, status, detail });
+        return { messages: [], ok: false, status, detail };
+      }
+    },
+
     // Unified traversal loader
-    async loadTraversal({ commit, state }, { messageId, up_depth = 0, down_depth = 0, get_replies = true, get_children = false, edge_type = 'replies' }) {
+    async loadTraversal({ commit, dispatch }, { messageId, up_depth = 0, down_depth = 0, get_replies = true, get_children = false, edge_type = 'replies' }) {
       if (String(messageId).startsWith('msg_')) {
         console.log(`[MOCK] loadTraversal ${messageId} up:${up_depth} down:${down_depth} type:${edge_type}`);
         
@@ -903,21 +928,8 @@ export default {
         results.forEach(m => commit('SET_MESSAGE', m));
         return results;
       }
-      if (!messageId) return [];
-      try {
-        const response = await MessageService.traverseFrom(messageId, { up_depth, down_depth, get_replies, get_children, edge_type });
-        const data = response?.data || {};
-        const combined = [];
-        if (data.origin) combined.push(data.origin);
-        if (Array.isArray(data.messages)) combined.push(...data.messages);
-        if (combined.length > 0) {
-          commit('SET_MESSAGES', combined);
-        }
-        return combined;
-      } catch (error) {
-        console.error('[messages store] loadTraversal error:', error);
-        return [];
-      }
+      const report = await dispatch('loadTraversalReport', { messageId, up_depth, down_depth, get_replies, get_children, edge_type });
+      return report.messages;
     },
 
     // Load a single message
