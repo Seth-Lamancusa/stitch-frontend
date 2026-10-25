@@ -499,6 +499,18 @@ const WebSocketService = {
         this.log('WebSocket data received:', data);
         
         try {
+          if (data?.type === 'cue') {
+            const author = data.author
+            const targetMessageId = data.target_message_id
+            if (!author?.uid || !targetMessageId || typeof data.typing !== 'boolean') return
+            store.dispatch('typing/apply', {
+              author,
+              targetMessageId,
+              typing: data.typing
+            })
+            return
+          }
+
           if (data?.type === 'connection_established') {
             this.userId = data.user_id;
             this.connectionEstablished = true;
@@ -512,28 +524,31 @@ const WebSocketService = {
               const content = payload.content || {};
               const messages = content.messages || payload.messages || [];
               const notificationType = payload.notification_type || payload.type || 'sent';
+              const silent = payload.silent === true;
               
-              if (typeof payload.unread_total === 'number') {
+              if (!silent && typeof payload.unread_total === 'number') {
                 try { store.dispatch('messages/applyUnreadTotal', payload.unread_total); } catch (e) {}
               }
 
               if (messages.length > 0) {
-                this.log(`Received notification type=${notificationType} with ${messages.length} messages`);
+                this.log(`Received notification type=${notificationType} silent=${silent} with ${messages.length} messages`);
                 
                 if (this.messageListeners && this.messageListeners.size > 0) {
                   for (const cb of Array.from(this.messageListeners)) {
                     for (const msg of messages) {
-                      try { cb(msg); } catch (e) { this.error('Error in message listener:', e); }
+                      try { cb(silent ? { ...msg, silent: true } : msg); } catch (e) { this.error('Error in message listener:', e); }
                     }
                   }
                 }
-                try { store.dispatch('messages/refreshThreadUnreadCounts'); } catch (e) {}
-                try {
-                  const onInbox = window.location.pathname === '/inbox';
-                  if (onInbox && store.getters['navigation/inboxUnreadOnly']) {
-                    store.commit('navigation/BUMP_INBOX_LIVE_REFRESH');
-                  }
-                } catch (e) {}
+                if (!silent) {
+                  try { store.dispatch('messages/refreshThreadUnreadCounts'); } catch (e) {}
+                  try {
+                    const onInbox = window.location.pathname === '/inbox';
+                    if (onInbox && store.getters['navigation/inboxUnreadOnly']) {
+                      store.commit('navigation/BUMP_INBOX_LIVE_REFRESH');
+                    }
+                  } catch (e) {}
+                }
               }
             } catch (e) {
               this.error('Error handling notification payload:', e);

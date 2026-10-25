@@ -194,6 +194,7 @@
               :placeholder="placeholderText" 
               class="reply-sheet__textarea"
               ref="replyTextarea"
+              :maxlength="MAX_MESSAGE_CONTENT_LENGTH"
               @keydown="handleTextareaKeyDown"
               @keyup="handleTextareaKeyUp"
               @click="handleTextareaClick"
@@ -238,18 +239,6 @@
             </div>
           </div>
           
-          <div v-if="!showVerifyCTA && hasMultipleLines" class="stacked-buttons">
-            <button
-              class="stacked-button expand-btn"
-              @click.stop="toggleTextareaExpansion"
-              :class="{ 'active': isTextareaExpanded }"
-              :aria-label="isTextareaExpanded ? 'Collapse to single line' : 'Expand to full height'"
-              title="Toggle textarea height"
-            >
-              <span class="stacked-btn-icon">↕</span>
-            </button>
-          </div>
-          
           <!-- Send button -->
           <button 
             v-if="!showVerifyCTA"
@@ -270,20 +259,25 @@
         </div>
 
         <div v-if="!showVerifyCTA" class="md-controls" aria-label="Formatting">
-          <button type="button" class="md-control" tabindex="-1" aria-label="Bold"><strong>B</strong></button>
-          <button type="button" class="md-control md-control--italic" tabindex="-1" aria-label="Italic"><em>I</em></button>
-          <button type="button" class="md-control md-control--strike" tabindex="-1" aria-label="Strikethrough"><s>S</s></button>
-          <button type="button" class="md-control" tabindex="-1" aria-label="Link">
+          <button type="button" class="md-control" aria-label="Bold" :disabled="!canInteract" @mousedown.prevent @click="applyFormatting('bold')"><strong>B</strong></button>
+          <button type="button" class="md-control md-control--italic" aria-label="Italic" :disabled="!canInteract" @mousedown.prevent @click="applyFormatting('italic')"><em>I</em></button>
+          <button type="button" class="md-control" aria-label="Link" :disabled="!canInteract" @mousedown.prevent @click="applyFormatting('link')">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 13.5a4 4 0 0 0 5.7.2l2.3-2.3a4 4 0 0 0-5.7-5.6L11.5 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M13.5 10.5a4 4 0 0 0-5.7-.2l-2.3 2.3a4 4 0 0 0 5.7 5.6L12.5 17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           </button>
-          <button type="button" class="md-control md-control--code" tabindex="-1" aria-label="Code">&lt;/&gt;</button>
-          <button type="button" class="md-control" tabindex="-1" aria-label="Quote">❝</button>
-          <button type="button" class="md-control" tabindex="-1" aria-label="Bulleted list">
+          <button type="button" class="md-control md-control--code" aria-label="Code" :disabled="!canInteract" @mousedown.prevent @click="applyFormatting('code')">&lt;/&gt;</button>
+          <button type="button" class="md-control" aria-label="Quote" :disabled="!canInteract" @mousedown.prevent @click="applyFormatting('quote')">❝</button>
+          <button type="button" class="md-control" aria-label="Bulleted list" :disabled="!canInteract" @mousedown.prevent @click="applyFormatting('bullet')">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="7" r="1.4" fill="currentColor"/><circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="5" cy="17" r="1.4" fill="currentColor"/><path d="M9 7h10M9 12h10M9 17h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
           </button>
-          <button type="button" class="md-control" tabindex="-1" aria-label="Numbered list">
+          <button type="button" class="md-control" aria-label="Numbered list" :disabled="!canInteract" @mousedown.prevent @click="applyFormatting('number')">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5.5L6.2 5M4 12h2.4c.6 0 .6 1.2 0 1.6L4 16h2.6M9 7h10M9 12h10M9 17h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
+          <span
+            class="content-char-count"
+            :class="{ 'content-char-count--error': content.length > MAX_MESSAGE_CONTENT_LENGTH }"
+          >
+            {{ content.length }}/{{ MAX_MESSAGE_CONTENT_LENGTH }}
+          </span>
         </div>
       </div>
       
@@ -391,6 +385,7 @@ const TAG_TOKEN_RE = /(^|[\s([{])#([A-Za-z0-9-]{1,32})(?![A-Za-z0-9-])/gm;
 const MENTION_TOKEN_RE = /(^|[\s([{])@([A-Za-z0-9-]{2,24})(?![A-Za-z0-9-])(?=[^\w@.]|$)/gm;
 const BOUNDARY_REGEX = /[\s.,!?;:)\]}'"`]/;
 const MAX_DRAFT_TAGS = 20;
+const MAX_MESSAGE_CONTENT_LENGTH = 10000;
 
 // Refs
 const replyTextarea = ref(null);
@@ -432,11 +427,6 @@ const showChannelsModal = ref(false);
 // Channels state
 const replyChannels = ref([]);
 const replyChannelIds = computed(() => replyChannels.value.map(ch => ch.id).filter(Boolean));
-
-// Textarea expansion state
-const isTextareaExpanded = ref(false);
-const hasMultipleLines = ref(false);
-const userHasManuallyToggled = ref(false);
 
 // Featured bots for prompt modal
 // Prompt bot response moved to global modal; remove local states
@@ -509,8 +499,9 @@ let suppressNextMentionDetection = false;
 // Centralized validation logic
 const canSendReply = computed(() => {
   const subjectValid = !subject.value || subject.value.length <= 72;
+  const contentValid = content.value.length <= MAX_MESSAGE_CONTENT_LENGTH;
   const hasFiles = Array.isArray(attachments.value) && attachments.value.length > 0;
-  return props.canInteract && (content.value.trim() !== '' || hasFiles) && subjectValid && !isSending.value && !uploading.value;
+  return props.canInteract && (content.value.trim() !== '' || hasFiles) && subjectValid && contentValid && !isSending.value && !uploading.value;
 });
 
 // Generate placeholder text
@@ -656,6 +647,59 @@ const focusTextarea = () => {
     }
   }, delay);
 };
+
+const TYPING_HEARTBEAT_MS = 7000
+let typingTargetId = null
+let typingTimer = null
+
+const postTypingCue = (targetMessageId, typing) => {
+  if (!targetMessageId) return
+  MessageService.postTypingCue(targetMessageId, typing).catch(() => {})
+}
+
+const stopTypingCue = () => {
+  if (typingTimer != null) {
+    clearInterval(typingTimer)
+    typingTimer = null
+  }
+  const target = typingTargetId
+  typingTargetId = null
+  if (target) postTypingCue(target, false)
+}
+
+const typingCueShouldRun = () => (
+  !!props.targetId
+  && isReplying.value
+  && !isAddRecipientsMode.value
+  && !isSending.value
+  && String(content.value || '').trim().length > 0
+)
+
+const syncTypingCue = () => {
+  if (!typingCueShouldRun()) {
+    stopTypingCue()
+    return
+  }
+  const target = props.targetId
+  if (typingTargetId === target) return
+  if (typingTargetId) stopTypingCue()
+  typingTargetId = target
+  postTypingCue(target, true)
+  typingTimer = setInterval(() => {
+    if (typingTargetId) postTypingCue(typingTargetId, true)
+  }, TYPING_HEARTBEAT_MS)
+}
+
+watch(
+  () => [
+    props.targetId,
+    isReplying.value,
+    isAddRecipientsMode.value,
+    isSending.value,
+    content.value,
+  ],
+  () => syncTypingCue(),
+)
 
 const hideBottomSheet = () => {
   // In new thread view the reply box cannot be closed (no X, no outside click)
@@ -897,10 +941,6 @@ const autoResizeTextarea = () => {
   const hasContent = content.value.trim().length > 0; 
   
   if (!hasContent) {
-    // No content - reset everything
-    hasMultipleLines.value = false;
-    isTextareaExpanded.value = false;
-    userHasManuallyToggled.value = false;
     textarea.style.height = '32px';
     textarea.style.overflowY = 'hidden';
     return;
@@ -912,37 +952,12 @@ const autoResizeTextarea = () => {
   const minHeight = 32; // Compact single line
   const maxHeight = window.innerHeight * 0.4; // 40vh
   const naturalHeight = textarea.scrollHeight;
-  
-  // More precise multi-line detection - now with accurate measurements
-  const hasNewlines = content.value.includes('\n');
-  // With compact padding (6px top + 6px bottom = 12px), single line should be around 32-38px
-  const singleLineThreshold = 42; // Allow some buffer for line-height
-  const heightExceedsMinimum = naturalHeight > singleLineThreshold;
-  
-  // Only consider it multi-line if there are actual newlines OR significant height difference
-  hasMultipleLines.value = hasNewlines || heightExceedsMinimum;
-  
-  // Auto-expand when multi-line is detected (unless user has manually toggled)
-  if (hasMultipleLines.value && !isTextareaExpanded.value && !userHasManuallyToggled.value) {
-    isTextareaExpanded.value = true;
-  } else if (!hasMultipleLines.value && isTextareaExpanded.value) {
-    isTextareaExpanded.value = false;
-    userHasManuallyToggled.value = false; // Reset manual toggle when content becomes single line
-  }
-  
-  let newHeight;
-  if (isTextareaExpanded.value) {
-    // Expanded mode: use natural height up to max
-    newHeight = Math.min(Math.max(naturalHeight, minHeight), maxHeight);
-  } else {
-    // Collapsed mode: single line only
-    newHeight = minHeight;
-  }
+  const newHeight = Math.min(Math.max(naturalHeight, minHeight), maxHeight);
   
   textarea.style.height = `${newHeight}px`;
   
   // Show scrollbar only when content actually overflows
-  if (isTextareaExpanded.value && newHeight >= maxHeight) {
+  if (newHeight >= maxHeight) {
     textarea.style.overflowY = 'auto';
   } else {
     textarea.style.overflowY = 'hidden';
@@ -953,17 +968,6 @@ const autoResizeTextarea = () => {
     updateMentionDropdownPosition(mentionDropdown.anchorEnd ?? replyTextarea.value?.selectionStart ?? 0);
   }
 };
-
-// Toggle textarea expansion
-const toggleTextareaExpansion = () => {
-  isTextareaExpanded.value = !isTextareaExpanded.value;
-  userHasManuallyToggled.value = true;
-  // Trigger resize after state change
-  nextTick(() => {
-    autoResizeTextarea();
-  });
-};
-
 
 const calculateCaretCoordinates = (selectionEnd) => {
   const textarea = replyTextarea.value;
@@ -1216,6 +1220,117 @@ const ensureMentionRecipient = (user) => {
   }
 };
 
+// A single * next to the selection is italic. ** is bold, so don't treat one of those stars as an italic wrap.
+const selectionIsWrapped = (text, start, end, open, close) => {
+  if (start < open.length || end + close.length > text.length) return false;
+  if (text.slice(start - open.length, start) !== open) return false;
+  if (text.slice(end, end + close.length) !== close) return false;
+  if (open.length === 1 && start - open.length > 0 && text[start - open.length - 1] === open) return false;
+  if (close.length === 1 && end + close.length < text.length && text[end + close.length] === close) return false;
+  return true;
+};
+
+const applyWrap = (text, start, end, open, close) => {
+  const selected = text.slice(start, end);
+  if (selected && selectionIsWrapped(text, start, end, open, close)) {
+    const next = text.slice(0, start - open.length) + selected + text.slice(end + close.length);
+    const selStart = start - open.length;
+    return { text: next, selStart, selEnd: selStart + selected.length };
+  }
+  const next = text.slice(0, start) + open + selected + close + text.slice(end);
+  const selStart = start + open.length;
+  return { text: next, selStart, selEnd: selStart + selected.length };
+};
+
+const applyLink = (text, start, end) => {
+  const label = text.slice(start, end) || 'text';
+  const url = 'url';
+  const next = `${text.slice(0, start)}[${label}](${url})${text.slice(end)}`;
+  const urlStart = start + label.length + 3;
+  return { text: next, selStart: urlStart, selEnd: urlStart + url.length };
+};
+
+const applyCode = (text, start, end) => {
+  const selected = text.slice(start, end);
+  if (!selected.includes('\n')) {
+    return applyWrap(text, start, end, '`', '`');
+  }
+  const open = '```\n';
+  const close = '\n```';
+  if (selected && selectionIsWrapped(text, start, end, open, close)) {
+    const next = text.slice(0, start - open.length) + selected + text.slice(end + close.length);
+    const selStart = start - open.length;
+    return { text: next, selStart, selEnd: selStart + selected.length };
+  }
+  const next = text.slice(0, start) + open + selected + close + text.slice(end);
+  const selStart = start + open.length;
+  return { text: next, selStart, selEnd: selStart + selected.length };
+};
+
+const lineRange = (text, start, end) => {
+  const from = text.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+  let probe = end;
+  if (probe > start && text[probe - 1] === '\n') probe -= 1;
+  const newline = text.indexOf('\n', probe);
+  return { from, to: newline === -1 ? text.length : newline };
+};
+
+const applyFixedPrefix = (text, start, end, prefix) => {
+  const { from, to } = lineRange(text, start, end);
+  const lines = text.slice(from, to).split('\n');
+  const allPrefixed = lines.every((line) => line.startsWith(prefix));
+  const nextLines = allPrefixed
+    ? lines.map((line) => line.slice(prefix.length))
+    : lines.map((line) => (line.startsWith(prefix) ? line : prefix + line));
+  const block = nextLines.join('\n');
+  return { text: text.slice(0, from) + block + text.slice(to), selStart: from, selEnd: from + block.length };
+};
+
+const applyNumbered = (text, start, end) => {
+  const { from, to } = lineRange(text, start, end);
+  const numbered = /^\d+\. /;
+  const lines = text.slice(from, to).split('\n');
+  const allNumbered = lines.every((line) => numbered.test(line));
+  const nextLines = allNumbered
+    ? lines.map((line) => line.replace(numbered, ''))
+    : lines.map((line, index) => (numbered.test(line) ? line : `${index + 1}. ${line}`));
+  const block = nextLines.join('\n');
+  return { text: text.slice(0, from) + block + text.slice(to), selStart: from, selEnd: from + block.length };
+};
+
+const applyFormatting = (kind) => {
+  if (!props.canInteract) return;
+  const textarea = replyTextarea.value;
+  if (!textarea) return;
+  const start = textarea.selectionStart ?? 0;
+  const end = textarea.selectionEnd ?? start;
+  const value = content.value || '';
+  let result = null;
+  if (kind === 'bold') result = applyWrap(value, start, end, '**', '**');
+  else if (kind === 'italic') result = applyWrap(value, start, end, '*', '*');
+  else if (kind === 'link') result = applyLink(value, start, end);
+  else if (kind === 'code') result = applyCode(value, start, end);
+  else if (kind === 'quote') result = applyFixedPrefix(value, start, end, '> ');
+  else if (kind === 'bullet') result = applyFixedPrefix(value, start, end, '- ');
+  else if (kind === 'number') result = applyNumbered(value, start, end);
+  if (!result || result.text === value) return;
+  if (result.text.length > MAX_MESSAGE_CONTENT_LENGTH) {
+    store.commit('ui/SET_ERROR', `Message must be ${MAX_MESSAGE_CONTENT_LENGTH} characters or less.`);
+    return;
+  }
+  content.value = result.text;
+  nextTick(() => {
+    const el = replyTextarea.value;
+    if (el) {
+      el.focus();
+      el.setSelectionRange(result.selStart, result.selEnd);
+      detectMentionTrigger(el);
+    }
+    autoResizeTextarea();
+    updateOverlayHtml();
+  });
+};
+
 const insertMentionResult = (user) => {
   const textarea = replyTextarea.value;
   if (!textarea || mentionDropdown.anchorStart === null) return;
@@ -1225,7 +1340,13 @@ const insertMentionResult = (user) => {
   const before = content.value.slice(0, start);
   const after = content.value.slice(end);
   const insertion = `${mentionText} `;
-  content.value = `${before}${insertion}${after}`;
+  const nextContent = `${before}${insertion}${after}`;
+  if (nextContent.length > MAX_MESSAGE_CONTENT_LENGTH) {
+    store.commit('ui/SET_ERROR', `Message must be ${MAX_MESSAGE_CONTENT_LENGTH} characters or less.`);
+    closeMentionDropdown();
+    return;
+  }
+  content.value = nextContent;
   nextTick(() => {
     const caretPosition = before.length + insertion.length;
     if (replyTextarea.value) {
@@ -1659,6 +1780,11 @@ const sendReply = async () => {
     store.commit('ui/SET_ERROR', 'Subject line must be 72 characters or less.');
     return;
   }
+
+  if (content.value.length > MAX_MESSAGE_CONTENT_LENGTH) {
+    store.commit('ui/SET_ERROR', `Message must be ${MAX_MESSAGE_CONTENT_LENGTH} characters or less.`);
+    return;
+  }
   
   autoStageTagsFromContent(true);
   
@@ -1671,6 +1797,7 @@ const sendReply = async () => {
   
   try {
     isSending.value = true;
+    stopTypingCue();
     
     // Handle add recipients mode
     if (isAddRecipientsMode.value) {
@@ -1816,11 +1943,6 @@ const sendReply = async () => {
     inlineTrackedTags.value = new Set();
     inlineTrackedRecipients.value = new Set();
     
-    // Reset expansion state
-    isTextareaExpanded.value = false;
-    hasMultipleLines.value = false;
-    userHasManuallyToggled.value = false;
-    
     // Resize the textarea
     autoResizeTextarea();
     
@@ -1907,6 +2029,7 @@ const sendReply = async () => {
     throw error;
   } finally {
     isSending.value = false;
+    syncTypingCue();
   }
 };
 
@@ -2153,6 +2276,7 @@ watch(() => store.getters['navigation/replyChannelIds'], (channelIds) => {
 }, { deep: true });
 
 onBeforeUnmount(() => {
+  stopTypingCue();
   document.removeEventListener('click', handleClickOutsideSearch);
   document.removeEventListener('click', handleClickOutside);
   if (mentionSearchTimeout) {
@@ -2243,9 +2367,6 @@ defineExpose({
   clear: () => {
     content.value = '';
     subject.value = '';
-    isTextareaExpanded.value = false;
-    hasMultipleLines.value = false;
-    userHasManuallyToggled.value = false;
     nextTick(() => {
       autoResizeTextarea();
     });
@@ -2780,7 +2901,6 @@ defineExpose({
   color: var(--color-text-secondary);
 }
 
-/* Placeholder formatting row. Not wired yet. */
 .md-controls {
   display: flex;
   align-items: center;
@@ -2790,6 +2910,17 @@ defineExpose({
   margin-top: 8px;
   margin-bottom: 14px;
   padding: 0 4px;
+}
+
+.content-char-count {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  pointer-events: none;
+}
+
+.content-char-count--error {
+  color: var(--color-error);
 }
 
 .md-control {
@@ -2808,7 +2939,26 @@ defineExpose({
   font-size: 18px;
   font-weight: 600;
   line-height: 1;
-  cursor: default;
+  cursor: pointer;
+}
+
+.md-control:hover:not(:disabled) {
+  background: #3a423d;
+  border-color: #545e56;
+}
+
+.md-control:focus {
+  outline: none;
+}
+
+.md-control:focus-visible {
+  box-shadow: 0 0 0 2px rgba(var(--color-primary-rgb, 79, 140, 255), 0.35);
+}
+
+.md-control:disabled {
+  background: var(--color-surface-light);
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
 }
 
 .md-control svg {
@@ -2819,10 +2969,6 @@ defineExpose({
 
 .md-control--italic {
   font-style: italic;
-  font-weight: 500;
-}
-
-.md-control--strike {
   font-weight: 500;
 }
 
@@ -2837,93 +2983,6 @@ defineExpose({
   background-color: var(--color-surface-light);
   color: var(--color-text-disabled);
   cursor: not-allowed;
-}
-
-/* Stacked buttons container - sits between textarea and send button */
-.stacked-buttons {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 2px;
-  align-self: stretch;
-  margin-bottom: 0;
-  flex-shrink: 0;
-}
-
-/* Stacked button base style */
-.stacked-button {
-  width: 24px;
-  height: 12px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 9px;
-  color: var(--color-text-secondary);
-  transition: all 0.15s ease;
-  padding: 0;
-  position: relative;
-}
-
-.stacked-button:hover:not(:disabled) {
-  background: var(--color-hover-overlay);
-  border-color: var(--color-border-hover);
-  color: var(--color-text);
-}
-
-.stacked-button:disabled {
-  cursor: default;
-  opacity: 0.3;
-}
-
-.stacked-button.placeholder {
-  visibility: hidden;
-}
-
-.stacked-button.active {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: var(--color-text-inverse);
-}
-
-.stacked-button.has-attachments {
-  background: var(--color-primary-light);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-.stacked-btn-icon {
-  font-size: 10px;
-  line-height: 1;
-}
-
-.stacked-btn-spinner {
-  width: 8px;
-  height: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-top: 1px solid currentColor;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.attachment-count {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  background: var(--color-primary);
-  color: var(--color-text-inverse);
-  font-size: 8px;
-  font-weight: 600;
-  min-width: 12px;
-  height: 12px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
 }
 
 /* Send: same chip as the formatting controls, with a send mark */
@@ -3093,16 +3152,6 @@ defineExpose({
   
   .textarea-send-button {
     width: 44px;
-  }
-  
-  .stacked-buttons {
-    gap: 1px;
-  }
-  
-  .stacked-button {
-    width: 24px;
-    height: 12px;
-    font-size: 9px;
   }
   
   .reply-sheet__close-button {
@@ -3839,9 +3888,8 @@ defineExpose({
 
 /* Attachment preview */
 .attachment-preview {
-  padding: 0px 16px;
-  padding-top: 8px;
-  padding-bottom:0px;
+  padding: 0 16px 6px;
+  margin-top: -4px;
   background: transparent;
   display: flex;
   flex-wrap: wrap;

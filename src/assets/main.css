@@ -259,3 +259,39 @@ h6 { font-size: var(--font-size-xs); }
     --font-size-xxl: 1.625rem; /* 26px */
   }
 }
+
+.typing-cue {
+  position: absolute;
+  right: 8px;
+  bottom: -16px;
+  z-index: 5;
+  margin: 0;
+  padding: 4px 8px;
+  background: var(--color-surface-light);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.3;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  animation: typing-cue-pulse 1.4s ease-in-out infinite;
+}
+
+.typing-cue--inset {
+  bottom: 8px;
+}
+
+@keyframes typing-cue-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typing-cue {
+    animation: none;
+    opacity: 0.8;
+  }
+}

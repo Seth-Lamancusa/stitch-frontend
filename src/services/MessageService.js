@@ -2,6 +2,20 @@ import apiClient from './apiClient'
 
 const apiBaseUrl = '/v1'
 
+function browserTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  } catch (e) {
+    return 'UTC'
+  }
+}
+
+function appendDateRange(params, from, to) {
+  if (from) params.set('from', from)
+  if (to) params.set('to', to)
+  if (from || to) params.set('tz', browserTimeZone())
+}
+
 // Default messages to fetch above/below a target when resolving a thread.
 export const LOAD_RADIUS = 20
 
@@ -88,12 +102,13 @@ export default {
   },
 
   // Unified search: content (q) and tags
-  async search({ q = null, tags = [], match = 'any', skip = 0, limit = 15 } = {}) {
+  async search({ q = null, tags = [], match = 'any', skip = 0, limit = 15, from = null, to = null } = {}) {
     const headers = getAuthHeaders()
     const params = new URLSearchParams()
     if (q) params.set('q', q)
     if (Array.isArray(tags) && tags.length > 0) params.set('tags', tags.join(','))
     if (match) params.set('match', match)
+    appendDateRange(params, from, to)
     params.set('skip', String(skip))
     params.set('limit', String(limit))
     const url = `/messages/search?${params.toString()}`
@@ -248,19 +263,31 @@ export default {
     return apiClient.get(`/messages/${messageId}/tree-ids`, { headers })
   },
 
-  // Get similar messages
-  async getSimilarMessages(messageId, limit = 5) {
+  // Rank messages by BM25 overlap with messageId. tags may mix #tags and @users.
+  async getSimilarMessages(messageId, { tags = [], match = 'any', skip = 0, limit = 15, from = null, to = null } = {}) {
     const headers = getAuthHeaders()
-    return apiClient.get(`/messages/similar/${messageId}`, { 
-      headers,
-      params: { limit }
-    })
+    const params = new URLSearchParams()
+    if (Array.isArray(tags) && tags.length > 0) params.set('tags', tags.join(','))
+    if (match) params.set('match', match)
+    appendDateRange(params, from, to)
+    params.set('skip', String(skip))
+    params.set('limit', String(limit))
+    return apiClient.get(`/messages/similar/${messageId}?${params.toString()}`, { headers })
   },
 
   // Batch set public flag
   async setMessagesPublic(messageIds, isPublic) {
     const headers = getAuthHeaders()
     return apiClient.patch(`/messages/public/batch`, { message_ids: messageIds, public: !!isPublic }, { headers })
+  },
+
+  // Ephemeral typing cue for a reply. Not stored.
+  async postTypingCue(targetMessageId, typing) {
+    const headers = getAuthHeaders()
+    return apiClient.post('/cues', {
+      target_message_id: targetMessageId,
+      typing: !!typing,
+    }, { headers })
   },
 
   // Ping recipients of a message

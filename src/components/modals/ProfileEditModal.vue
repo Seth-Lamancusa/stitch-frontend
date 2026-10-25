@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter } from 'vue-router';
 import { useAuthentication } from '@/composables/useAuthentication';
@@ -8,6 +8,7 @@ import ContextOriginModal from '@/components/modals/ContextOriginModal.vue';
 import MessagePreview from '@/components/MessagePreview.vue';
 import UserDisplay from '../common/UserDisplay.vue';
 import { FONT_PRESET_LIST, resolveMessageFont } from '@/config/fonts.js';
+import AttachmentService from '@/services/AttachmentService.js';
 
 const props = defineProps({
   isOpen: Boolean
@@ -33,8 +34,26 @@ const isDelegatedToManagedUser = computed(() => {
 
 const BIO_MAX_LENGTH = 500;
 
+const ICON_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+const ICON_MAX_BYTES = 5 * 1024 * 1024;
+const ICON_PREVIEW_PX = 88;
+const ICON_EXPORT_PX = 512;
+
 const displayName = ref('');
 const tag = ref('');
+const iconPreviewUrl = ref('');
+const iconAction = ref(null);
+const iconDraftPath = ref(null);
+const iconUploading = ref(false);
+const iconError = ref('');
+const iconFileInput = ref(null);
+const iconCropActive = ref(false);
+const iconCropUrl = ref('');
+const iconZoom = ref(1);
+const iconOffset = ref({ x: 0, y: 0 });
+const iconNatural = ref({ w: 0, h: 0, type: '' });
+let iconImageEl = null;
+let cropDrag = null;
 const phoneNumber = ref('');
 const email = ref('');
 const bio = ref('');
@@ -45,6 +64,8 @@ const isBot = ref(false);
 const inputModalities = ref('');
 const outputModalities = ref('');
 const thirdPartyIntegrations = ref('');
+const functionsText = ref('');
+const functionsInput = ref(null);
 const availableVersions = ref('');
 const availableVersionsDraft = ref([]);
 const selectedAvailableVersionId = ref('');
@@ -56,6 +77,7 @@ const displayNameError = ref('');
 const phoneNumberError = ref('');
 const emailError = ref('');
 const bioError = ref('');
+const functionsError = ref('');
 const botCapabilitiesError = ref('');
 const noChangesMessage = ref('');
 const updateSuccess = ref(false);
@@ -146,6 +168,37 @@ function normalizePhoneForCompare(value) {
   return digits; // fallback: compare raw digits
 }
 
+function storedFunctions(source) {
+  return Array.isArray(source?.functions) ? source.functions : [];
+}
+
+function parseFunctionsText(text) {
+  const lines = String(text ?? '').split(/\r?\n/);
+  const functions = [];
+  for (const line of lines) {
+    if (!line) continue;
+    if (/\s/.test(line)) {
+      return { ok: false, functions: [] };
+    }
+    functions.push(line);
+  }
+  return { ok: true, functions };
+}
+
+function functionsListsEqual(left, right) {
+  if (left.length !== right.length) return false;
+  return left.every((item, index) => item === right[index]);
+}
+
+function resizeFunctionsInput() {
+  const el = functionsInput.value;
+  if (!el) return;
+  el.style.height = 'auto';
+  const style = window.getComputedStyle(el);
+  const border = (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.borderBottomWidth) || 0);
+  el.style.height = `${el.scrollHeight + border}px`;
+}
+
 function normalizeEndpointForCompare(value) {
   const v = normalizeTrimmed(value);
   if (!v) return '';
@@ -212,6 +265,11 @@ const resetForm = () => {
 
     displayName.value = user.value?.displayName || '';
     tag.value = user.value?.user_tag || '';
+    exitIconCrop();
+    iconPreviewUrl.value = typeof user.value?.icon === 'string' ? user.value.icon : '';
+    iconAction.value = null;
+    iconDraftPath.value = null;
+    iconError.value = '';
     phoneNumber.value = user.value?.phone_number || '';
     email.value = user.value?.email || '';
     bio.value = user.value?.bio || '';
@@ -220,6 +278,7 @@ const resetForm = () => {
     isPrivate.value = !!(user.value?.private);
     isBot.value = !!(user.value?.is_bot);
     thirdPartyIntegrations.value = user.value?.third_party_integrations || '';
+    functionsText.value = storedFunctions(user.value).join('\n');
 
     const rawAv = Array.isArray(user.value?.available_versions) ? user.value.available_versions : [];
     // Clone so UI edits don't mutate store state / originals.
@@ -253,6 +312,7 @@ const resetForm = () => {
   phoneNumberError.value = '';
   emailError.value = '';
   bioError.value = '';
+  functionsError.value = '';
   botCapabilitiesError.value = '';
   noChangesMessage.value = '';
   emailCode.value = '';
@@ -297,6 +357,7 @@ const resetForm = () => {
     if (addManagerSearchTimeout) { clearTimeout(addManagerSearchTimeout); addManagerSearchTimeout = null; }
 
     isInitializingBotCapabilities.value = false;
+    nextTick(resizeFunctionsInput);
   };
 
 onMounted(() => {
@@ -305,6 +366,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  exitIconCrop();
   if (emailCooldownTimerId) clearInterval(emailCooldownTimerId);
   if (phoneCooldownTimerId) clearInterval(phoneCooldownTimerId);
   if (managerSearchTimeout) clearTimeout(managerSearchTimeout);
@@ -322,7 +384,15 @@ watch(phoneNumber, (v) => {
 watch(isBot, (value) => {
   if (!value) {
     botCapabilitiesError.value = '';
+    functionsError.value = '';
+    return;
   }
+  nextTick(resizeFunctionsInput);
+});
+
+watch(functionsText, () => {
+  if (functionsError.value) validateFunctions();
+  nextTick(resizeFunctionsInput);
 });
 
 watch(selectedAvailableVersionId, (newId) => {
@@ -433,6 +503,7 @@ const originalFont = user.value?.font || '';
 const originalInputModalities = user.value?.input_modalities || '';
 const originalOutputModalities = user.value?.output_modalities || '';
 const originalThirdPartyIntegrations = user.value?.third_party_integrations || '';
+const originalFunctions = storedFunctions(user.value);
 const originalAvailableVersions = user.value?.available_versions ? JSON.stringify(user.value.available_versions, null, 2) : '';
 
   const hasPerVersionCapabilities = availableVersionsDraft.value.length > 0;
@@ -449,12 +520,16 @@ const botChanged = !!isBot.value !== !!(user.value?.is_bot);
   const inputModalitiesChanged = hasPerVersionCapabilities ? false : normalizeTrimmed(inputModalities.value) !== normalizeTrimmed(originalInputModalities);
   const outputModalitiesChanged = hasPerVersionCapabilities ? false : normalizeTrimmed(outputModalities.value) !== normalizeTrimmed(originalOutputModalities);
   const thirdPartyIntegrationsChanged = normalizeTrimmed(thirdPartyIntegrations.value) !== normalizeTrimmed(originalThirdPartyIntegrations);
+  const parsedFunctions = parseFunctionsText(functionsText.value);
+  const functionsChanged = !parsedFunctions.ok || !functionsListsEqual(parsedFunctions.functions, originalFunctions);
 
   const availableVersionsChanged = hasPerVersionCapabilities
     ? normalizeTrimmed(availableVersions.value) !== normalizeTrimmed(originalAvailableVersions)
     : false;
 
-  return displayNameChanged || tagChanged || phoneChanged || emailChanged || endpointChanged || privateChanged || bioChanged || fontChanged || botChanged || inputModalitiesChanged || outputModalitiesChanged || thirdPartyIntegrationsChanged || availableVersionsChanged || notifyPrefsChanged();
+  const iconChanged = iconAction.value !== null;
+
+  return displayNameChanged || tagChanged || phoneChanged || emailChanged || endpointChanged || privateChanged || bioChanged || fontChanged || botChanged || inputModalitiesChanged || outputModalitiesChanged || thirdPartyIntegrationsChanged || functionsChanged || availableVersionsChanged || iconChanged || notifyPrefsChanged();
 });
 
 // Function to determine if the update button should be enabled
@@ -464,10 +539,204 @@ const canSubmit = computed(() => {
          !phoneNumberError.value &&
          !emailError.value &&
          !bioError.value &&
+         !functionsError.value &&
+         !iconError.value &&
+         !iconUploading.value &&
          !isSubmitting.value;
 });
 
+const canClearIcon = computed(() => iconCropActive.value || iconAction.value === 'set' || (!!iconPreviewUrl.value && iconAction.value !== 'clear'));
+
+const iconCoverScale = () => {
+  const { w, h } = iconNatural.value;
+  if (!w || !h) return 1;
+  return Math.max(ICON_PREVIEW_PX / w, ICON_PREVIEW_PX / h);
+};
+
+const clampIconOffset = () => {
+  const base = iconCoverScale();
+  const dw = iconNatural.value.w * base * iconZoom.value;
+  const dh = iconNatural.value.h * base * iconZoom.value;
+  const maxX = Math.max(0, (dw - ICON_PREVIEW_PX) / 2);
+  const maxY = Math.max(0, (dh - ICON_PREVIEW_PX) / 2);
+  iconOffset.value = {
+    x: Math.min(maxX, Math.max(-maxX, iconOffset.value.x)),
+    y: Math.min(maxY, Math.max(-maxY, iconOffset.value.y)),
+  };
+};
+
+watch(iconZoom, () => {
+  if (iconCropActive.value) clampIconOffset();
+});
+
+const cropImageStyle = computed(() => {
+  const base = iconCoverScale();
+  const dw = iconNatural.value.w * base * iconZoom.value;
+  const dh = iconNatural.value.h * base * iconZoom.value;
+  const x = (ICON_PREVIEW_PX - dw) / 2 + iconOffset.value.x;
+  const y = (ICON_PREVIEW_PX - dh) / 2 + iconOffset.value.y;
+  return {
+    position: 'absolute',
+    width: `${dw}px`,
+    height: `${dh}px`,
+    left: `${x}px`,
+    top: `${y}px`,
+    maxWidth: 'none',
+  };
+});
+
+const exitIconCrop = () => {
+  if (iconCropUrl.value) URL.revokeObjectURL(iconCropUrl.value);
+  iconCropUrl.value = '';
+  iconImageEl = null;
+  iconCropActive.value = false;
+  iconZoom.value = 1;
+  iconOffset.value = { x: 0, y: 0 };
+  iconNatural.value = { w: 0, h: 0, type: '' };
+  cropDrag = null;
+};
+
+const pickIcon = () => {
+  iconFileInput.value?.click();
+};
+
+const clearIcon = () => {
+  iconError.value = '';
+  const replacingSaved = iconCropActive.value && !!iconPreviewUrl.value;
+  exitIconCrop();
+  iconDraftPath.value = null;
+  if (replacingSaved) {
+    iconAction.value = null;
+    return;
+  }
+  if (!iconPreviewUrl.value) {
+    iconAction.value = null;
+    return;
+  }
+  iconPreviewUrl.value = '';
+  iconAction.value = 'clear';
+};
+
+const onIconPicked = (event) => {
+  const file = event?.target?.files?.[0];
+  if (event?.target) event.target.value = '';
+  if (!file) return;
+  iconError.value = '';
+  const type = String(file.type || '').toLowerCase();
+  if (!ICON_TYPES.includes(type)) {
+    iconError.value = 'Use a JPEG, PNG, GIF, or WebP image';
+    return;
+  }
+  if (file.size > ICON_MAX_BYTES) {
+    iconError.value = 'Image must be 5MB or smaller';
+    return;
+  }
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    exitIconCrop();
+    iconImageEl = img;
+    iconCropUrl.value = url;
+    iconNatural.value = { w: img.naturalWidth, h: img.naturalHeight, type };
+    iconZoom.value = 1;
+    iconOffset.value = { x: 0, y: 0 };
+    iconCropActive.value = true;
+    iconAction.value = 'set';
+    iconDraftPath.value = null;
+  };
+  img.onerror = () => {
+    URL.revokeObjectURL(url);
+    iconError.value = 'Could not read that image';
+  };
+  img.src = url;
+};
+
+const onCropPointerDown = (event) => {
+  if (!iconCropActive.value) return;
+  event.currentTarget?.setPointerCapture?.(event.pointerId);
+  cropDrag = {
+    id: event.pointerId,
+    x: event.clientX,
+    y: event.clientY,
+    ox: iconOffset.value.x,
+    oy: iconOffset.value.y,
+  };
+};
+
+const onCropPointerMove = (event) => {
+  if (!cropDrag || cropDrag.id !== event.pointerId) return;
+  iconOffset.value = {
+    x: cropDrag.ox + (event.clientX - cropDrag.x),
+    y: cropDrag.oy + (event.clientY - cropDrag.y),
+  };
+  clampIconOffset();
+};
+
+const onCropPointerUp = (event) => {
+  if (cropDrag && cropDrag.id === event.pointerId) cropDrag = null;
+};
+
+const onCropWheel = (event) => {
+  if (!iconCropActive.value) return;
+  const next = iconZoom.value + (event.deltaY < 0 ? 0.08 : -0.08);
+  iconZoom.value = Math.min(3, Math.max(1, Math.round(next * 100) / 100));
+};
+
+const exportCroppedIcon = () => new Promise((resolve, reject) => {
+  if (!iconImageEl) {
+    reject(new Error('Could not read that image'));
+    return;
+  }
+  const scale = ICON_EXPORT_PX / ICON_PREVIEW_PX;
+  const base = iconCoverScale();
+  const dw = iconNatural.value.w * base * iconZoom.value * scale;
+  const dh = iconNatural.value.h * base * iconZoom.value * scale;
+  const x = (ICON_EXPORT_PX - dw) / 2 + iconOffset.value.x * scale;
+  const y = (ICON_EXPORT_PX - dh) / 2 + iconOffset.value.y * scale;
+  const canvas = document.createElement('canvas');
+  canvas.width = ICON_EXPORT_PX;
+  canvas.height = ICON_EXPORT_PX;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    reject(new Error('Could not crop that image'));
+    return;
+  }
+  ctx.drawImage(iconImageEl, x, y, dw, dh);
+  const type = iconNatural.value.type === 'image/png' ? 'image/png' : 'image/jpeg';
+  canvas.toBlob((blob) => {
+    if (!blob) {
+      reject(new Error('Could not crop that image'));
+      return;
+    }
+    const ext = type === 'image/png' ? 'png' : 'jpg';
+    resolve(new File([blob], `icon.${ext}`, { type }));
+  }, type, 0.92);
+});
+
+const uploadCroppedIcon = async () => {
+  iconUploading.value = true;
+  try {
+    const file = await exportCroppedIcon();
+    const metadata = await AttachmentService.uploadFile(file);
+    if (!metadata?.gcs_path) throw new Error('Upload did not return a file');
+    iconDraftPath.value = metadata.gcs_path;
+  } finally {
+    iconUploading.value = false;
+  }
+};
+
 const selectedFontFamily = computed(() => resolveMessageFont(selectedFont.value) || 'var(--font-family-base)');
+
+const validateFunctions = () => {
+  functionsError.value = '';
+  if (!isBot.value) return true;
+  const parsedFunctions = parseFunctionsText(functionsText.value);
+  if (!parsedFunctions.ok) {
+    functionsError.value = 'Each function must be one word with no whitespace';
+    return false;
+  }
+  return true;
+};
 
 const validateForm = () => {
   let isValid = true;
@@ -475,6 +744,7 @@ const validateForm = () => {
   phoneNumberError.value = '';
   emailError.value = '';
   bioError.value = '';
+  functionsError.value = '';
   botCapabilitiesError.value = '';
   noChangesMessage.value = '';
   if (!hasFormChanges.value) {
@@ -486,7 +756,10 @@ const validateForm = () => {
   const originalBio = user.value?.bio || '';
   const bioChanged = normalizeTrimmed(bio.value) !== normalizeTrimmed(originalBio);
   const botChanged = !!isBot.value !== !!(user.value?.is_bot);
-  if (!displayName.value.trim() && !tag.value.trim() && !phoneNumber.value.trim() && !email.value.trim() && !bio.value.trim() && !isPhoneNumberBeingCleared && !bioChanged && !botChanged) {
+  const parsedFunctions = parseFunctionsText(functionsText.value);
+  const functionsChanged = isBot.value && (!parsedFunctions.ok || !functionsListsEqual(parsedFunctions.functions, storedFunctions(user.value)));
+  const iconChanged = iconAction.value !== null;
+  if (!displayName.value.trim() && !tag.value.trim() && !phoneNumber.value.trim() && !email.value.trim() && !bio.value.trim() && !isPhoneNumberBeingCleared && !bioChanged && !botChanged && !functionsChanged && !iconChanged) {
     errorMessage.value = 'Please fill at least one field';
     return false;
   }
@@ -515,8 +788,11 @@ const validateForm = () => {
       isValid = false;
     }
   }
-    const hasCapabilityValues = !!(normalizeTrimmed(inputModalities.value) || normalizeTrimmed(outputModalities.value) || normalizeTrimmed(thirdPartyIntegrations.value));
-    if (!isBot.value && hasCapabilityValues) {
+  if (!validateFunctions()) {
+    isValid = false;
+  }
+  const hasCapabilityValues = !!(normalizeTrimmed(inputModalities.value) || normalizeTrimmed(outputModalities.value) || normalizeTrimmed(thirdPartyIntegrations.value));
+  if (!isBot.value && hasCapabilityValues) {
     botCapabilitiesError.value = 'Enable the bot toggle to describe capabilities.';
     isValid = false;
   }
@@ -598,6 +874,15 @@ const updateProfile = async () => {
     isSubmitting.value = true;
     errorMessage.value = '';
     noChangesMessage.value = '';
+    if (iconCropActive.value) {
+      try {
+        await uploadCroppedIcon();
+      } catch (e) {
+        iconError.value = e?.message || 'Failed to upload icon';
+        isSubmitting.value = false;
+        return;
+      }
+    }
     profileUpdate = {};
     const originalPhoneNumber = user.value?.phone_number || '';
     const originalEmail = user.value?.email || '';
@@ -607,6 +892,7 @@ const updateProfile = async () => {
     const originalInputModalities = user.value?.input_modalities || '';
     const originalOutputModalities = user.value?.output_modalities || '';
     const originalThirdPartyIntegrations = user.value?.third_party_integrations || '';
+    const originalFunctions = storedFunctions(user.value);
     const originalAvailableVersions = user.value?.available_versions ? JSON.stringify(user.value.available_versions, null, 2) : '';
 
     // Only include changed fields (normalized)
@@ -645,6 +931,11 @@ const updateProfile = async () => {
     if (!!isBot.value !== !!(user.value?.is_bot)) {
       profileUpdate.is_bot = !!isBot.value;
     }
+    if (iconAction.value === 'set' && iconDraftPath.value) {
+      profileUpdate.icon = iconDraftPath.value;
+    } else if (iconAction.value === 'clear') {
+      profileUpdate.icon = null;
+    }
     // When per-version data exists, modalities editing is stored in available_versions[].
     // When there are no available versions, fall back to global input/output modalities.
     if (!availableVersionsDraft.value.length) {
@@ -660,6 +951,16 @@ const updateProfile = async () => {
     if (normalizeTrimmed(thirdPartyIntegrations.value) !== normalizeTrimmed(originalThirdPartyIntegrations)) {
       const trimmed = normalizeTrimmed(thirdPartyIntegrations.value);
       profileUpdate.third_party_integrations = trimmed || null;
+    }
+    if (isBot.value && !functionsListsEqual(parseFunctionsText(functionsText.value).functions, originalFunctions)) {
+      const parsedFunctions = parseFunctionsText(functionsText.value);
+      if (!parsedFunctions.ok) {
+        functionsError.value = 'Each function must be one word with no whitespace';
+        errorMessage.value = '';
+        isSubmitting.value = false;
+        return;
+      }
+      profileUpdate.functions = parsedFunctions.functions;
     }
     if (normalizeTrimmed(availableVersions.value) !== normalizeTrimmed(originalAvailableVersions)) {
       const trimmed = normalizeTrimmed(availableVersions.value);
@@ -714,6 +1015,12 @@ const updateProfile = async () => {
       errorMessage.value = '';
     } else if (code === 'invalid_third_party_integrations') {
       botCapabilitiesError.value = 'Enter a valid integration name.';
+      errorMessage.value = '';
+    } else if (code === 'invalid_functions') {
+      functionsError.value = 'Each function must be one word with no whitespace';
+      errorMessage.value = '';
+    } else if (code === 'invalid_icon') {
+      iconError.value = 'That icon could not be saved';
       errorMessage.value = '';
     } else if (code === 'user_tag_conflict') {
       tagError.value = 'That tag is already taken';
@@ -1362,6 +1669,45 @@ const deleteAccount = async () => {
               <h4>Profile basics</h4>
               <p>Update what people see on your public profile.</p>
             </div>
+            <div class="field icon-field">
+              <label>Icon</label>
+              <div class="icon-editor">
+                <div
+                  class="icon-preview"
+                  :class="{ 'is-cropping': iconCropActive }"
+                  @pointerdown="onCropPointerDown"
+                  @pointermove="onCropPointerMove"
+                  @pointerup="onCropPointerUp"
+                  @pointercancel="onCropPointerUp"
+                  @wheel.prevent="onCropWheel"
+                >
+                  <img v-if="iconCropActive" :src="iconCropUrl" alt="" draggable="false" :style="cropImageStyle" />
+                  <img v-else-if="iconPreviewUrl" :src="iconPreviewUrl" alt="" />
+                  <span v-else class="icon-preview-placeholder" aria-hidden="true"></span>
+                </div>
+                <div class="icon-editor-actions">
+                  <button type="button" class="verify-btn" @click="pickIcon" :disabled="iconUploading || isSubmitting">
+                    {{ iconUploading ? 'Uploading…' : 'Set' }}
+                  </button>
+                  <button type="button" class="verify-btn" @click="clearIcon" :disabled="!canClearIcon || iconUploading || isSubmitting">
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <label v-if="iconCropActive" class="icon-zoom">
+                <span>Crop</span>
+                <input v-model.number="iconZoom" type="range" min="1" max="3" step="0.01" aria-label="Zoom crop" />
+              </label>
+              <div v-if="iconCropActive" class="field-hint">Drag the photo to position it. The circle is what gets saved.</div>
+              <input
+                ref="iconFileInput"
+                class="icon-file-input"
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp"
+                @change="onIconPicked"
+              />
+              <div class="field-error" v-if="iconError">{{ iconError }}</div>
+            </div>
             <div class="field">
               <label for="displayName">Display Name</label>
               <input 
@@ -1476,6 +1822,21 @@ const deleteAccount = async () => {
                     placeholder="e.g., OpenAI, Anthropic"
                   />
                   <div class="field-hint">Optional 3rd party integrations list.</div>
+                </div>
+                <div class="field">
+                  <label for="functions">Functions</label>
+                  <textarea
+                    id="functions"
+                    ref="functionsInput"
+                    class="functions-input"
+                    v-model="functionsText"
+                    rows="1"
+                    placeholder="search_web"
+                    @input="resizeFunctionsInput"
+                    @blur="validateFunctions"
+                  ></textarea>
+                  <div class="field-error" v-if="functionsError">{{ functionsError }}</div>
+                  <div class="field-hint">One function name per line. Names cannot contain whitespace.</div>
                 </div>
                 <div class="field">
                   <label for="availableVersionSelect">Available version</label>
@@ -2073,6 +2434,78 @@ const deleteAccount = async () => {
   font-size: var(--font-size-sm);
 }
 
+.icon-editor {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.icon-editor-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.icon-preview {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  background: var(--color-input-background, rgba(255, 255, 255, 0.06));
+}
+
+.icon-preview.is-cropping {
+  cursor: grab;
+  touch-action: none;
+}
+
+.icon-preview.is-cropping:active {
+  cursor: grabbing;
+}
+
+.icon-preview img,
+.icon-preview-placeholder {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.icon-preview.is-cropping img {
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
+}
+
+.icon-zoom {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.icon-zoom input {
+  flex: 1;
+  min-width: 0;
+}
+
+.icon-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
 .field-header {
   display: flex;
   justify-content: space-between;
@@ -2109,6 +2542,13 @@ const deleteAccount = async () => {
   min-height: 100px;
   resize: vertical;
   font-family: inherit;
+  line-height: 1.4;
+}
+
+.field textarea.functions-input {
+  min-height: 0;
+  resize: none;
+  overflow: hidden;
   line-height: 1.4;
 }
 

@@ -2,7 +2,6 @@
   <!-- Mobile mode - render as inline buttons for footer -->
   <div v-if="mobileMode" class="mobile-sibling-nav" :class="{ compact }">
     <button 
-      @mouseover="logHover('prev')"
       @click.stop="navigate('prev')" 
       class="mobile-nav-btn mobile-nav-prev"
       :class="{ 'disabled': !canNavigatePrev, 'loading': isLoading, 'target-is-stitch': isPrevStitch }"
@@ -20,7 +19,6 @@
     </button>
     
     <button 
-      @mouseover="logHover('next')"
       @click.stop="navigate('next')" 
       class="mobile-nav-btn mobile-nav-next"
       :class="{ 'disabled': !canNavigateNext, 'loading': isLoading, 'target-is-stitch': isNextStitch }"
@@ -41,7 +39,6 @@
   <!-- Desktop mode - original positioning -->
   <div v-else class="sibling-navigator" :class="{ compact }">
     <button 
-      @mouseover="logHover('prev')"
       @click.stop="navigate('prev')" 
       class="nav-button nav-prev"
       :class="{ 'disabled': !canNavigatePrev, 'loading': isLoading, 'target-is-stitch': isPrevStitch }"
@@ -60,7 +57,6 @@
     </button>
     
     <button 
-      @mouseover="logHover('next')"
       @click.stop="navigate('next')" 
       class="nav-button nav-next"
       :class="{ 'disabled': !canNavigateNext, 'loading': isLoading, 'target-is-stitch': isNextStitch }"
@@ -81,7 +77,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed } from 'vue';
 import { useStore } from 'vuex';
 import DefaultOutgoingStar from './DefaultOutgoingStar.vue';
 
@@ -108,17 +104,15 @@ const emit = defineEmits(['navigate']);
 
 const store = useStore();
 
-// Internal loading state based on parent existence (original behavior)
-const isParentLoading = computed(() => {
-  // If parent ID doesn't exist or message doesn't exist, we're not loading
-  if (!props.parentId) return false;
-  
-  // Check if parent exists in the store
-  const parent = store.getters['messages/getMessage'](props.parentId);
-  
-  // If parent doesn't exist, we're loading
-  return !parent;
+// Parent record for this column. structureVersion forces a refresh when a
+// live reply is linked, which is what enables the arrows.
+const parentMessage = computed(() => {
+  void store.state.messages.structureVersion;
+  if (!props.parentId) return null;
+  return store.state.messages.messages[props.parentId] || null;
 });
+
+const isParentLoading = computed(() => !!props.parentId && !parentMessage.value);
 
 const nextSiblingId = computed(() => {
   if (!canNavigateNext.value) return null;
@@ -133,15 +127,13 @@ const prevSiblingId = computed(() => {
 });
 
 const isNextStitch = computed(() => {
-  if (!nextSiblingId.value) return false;
-  const parent = store.getters['messages/getMessage'](props.parentId);
-  return parent && parent.stitch_child_ids && parent.stitch_child_ids.includes(nextSiblingId.value);
+  const parent = parentMessage.value;
+  return !!(nextSiblingId.value && parent?.stitch_child_ids?.includes(nextSiblingId.value));
 });
 
 const isPrevStitch = computed(() => {
-  if (!prevSiblingId.value) return false;
-  const parent = store.getters['messages/getMessage'](props.parentId);
-  return parent && parent.stitch_child_ids && parent.stitch_child_ids.includes(prevSiblingId.value);
+  const parent = parentMessage.value;
+  return !!(prevSiblingId.value && parent?.stitch_child_ids?.includes(prevSiblingId.value));
 });
 
 // Check if siblings are currently loading
@@ -154,48 +146,29 @@ const isLoading = computed(() => {
   return isParentLoading.value || isSiblingLoading.value;
 });
 
-const logHover = (dir) => {
-  const isStitch = dir === 'next' ? isNextStitch.value : isPrevStitch.value;
-  const targetId = dir === 'next' ? nextSiblingId.value : prevSiblingId.value;
-  if (targetId?.startsWith('msg_')) {
-     console.log(`[SIBLING HOVER DEBUG] Hovering ${dir} button. Target: ${targetId}, isStitch: ${isStitch}`);
-  }
-};
-
-// Watch for parent changes to update sibling order
-const parentRef = computed(() => store.getters['messages/getMessage'](props.parentId));
-watch(parentRef, (newVal) => {
-  if (newVal && newVal.reply_order) {
-    const orderedIds = store.getters['messages/getChildIds'](props.parentId);
-    const unorderedIds = (newVal.child_ids || []).filter(id => !newVal.reply_order.includes(id));
-    if (unorderedIds.length > 0) {
-      const unorderedWithTimestamps = unorderedIds.map(id => {
-        const msg = store.getters['messages/getMessage'](id);
-        return { id, timestamp: msg?.timestamp || 'unknown' };
-      });
-      console.log(`[SiblingNavigator] reply_order active for ${props.parentId}: ordered=${orderedIds.length}, unordered=${unorderedIds.length}`, {
-        ordered: orderedIds,
-        unordered: unorderedWithTimestamps
-      });
-    }
-  }
-});
-
-// Get message siblings from the store - use getChildIds to respect reply_order
 const siblings = computed(() => {
-  const parent = store.getters['messages/getMessage'](props.parentId);
-  if (!parent) {
-    return [];
-  }
-  // Use getChildIds getter which respects reply_order
-  return store.getters['messages/getChildIds'](props.parentId);
+  // Read the structure counter here. A parent-record computed can return the
+  // same object, and the arrows already on screen would keep the old list.
+  void store.state.messages.structureVersion;
+  if (!props.parentId) return [];
+  const parent = store.state.messages.messages[props.parentId];
+  void parent?.child_ids;
+  void parent?.stitch_child_ids;
+  void parent?.reply_order;
+  void store.state.messages.childrenByParent?.[String(props.parentId)];
+  const ids = store.getters['messages/getChildIds'](props.parentId);
+  console.log('[sibling-nav] siblings', {
+    messageId: props.messageId,
+    parentId: props.parentId,
+    ids,
+    structureVersion: store.state.messages.structureVersion,
+  });
+  return ids;
 });
-
-const totalSiblings = computed(() => siblings.value.length);
 
 // Link under the arrow on the side where the default sits, when this message is not the default.
 const defaultMarkSide = computed(() => {
-  const parent = store.getters['messages/getMessage'](props.parentId);
+  const parent = parentMessage.value;
   if (!parent || !parent.default_outgoing || parent.default_outgoing === props.messageId) return null;
   const ids = siblings.value;
   const currentIndex = ids.indexOf(props.messageId);
@@ -213,7 +186,7 @@ const currentPosition = computed(() => {
   
   if (!branchChild) return 1; // Default to first position if no branch child
   
-  const position = childIds.indexOf(branchChild);
+  const position = childIds.findIndex(id => String(id) === String(branchChild));
   return position === -1 ? 1 : position + 1;
 });
 
@@ -224,8 +197,23 @@ const canNavigatePrev = computed(() => {
 });
 
 const canNavigateNext = computed(() => {
-  if (isLoading.value) return false;
-  return siblings.value.length > 1 && currentPosition.value < siblings.value.length;
+  const loading = isLoading.value;
+  const ids = siblings.value;
+  const position = currentPosition.value;
+  const next = !loading && ids.length > 1 && position < ids.length;
+  const prev = !loading && ids.length > 1 && position > 1;
+  console.log('[sibling-nav] arrows', {
+    messageId: props.messageId,
+    parentId: props.parentId,
+    loadingForcedOff: loading,
+    parentMissing: isParentLoading.value,
+    siblingLoading: isSiblingLoading.value,
+    count: ids.length,
+    position,
+    prev,
+    next,
+  });
+  return next;
 });
 
 // Navigation handler
@@ -285,20 +273,20 @@ const navigate = async (direction) => {
   min-height: 28px;
 }
 
-/* Make active/clickable buttons more prominent - bright arrows, subtle border */
+/* Available reply arrows light up in the neutral palette. */
 .mobile-nav-btn:not(.disabled):not(.loading) {
   background-color: var(--color-surface-hover);
-  border-color: var(--color-border); /* Keep border subtle */
-  color: var(--color-primary); /* Bright arrow color */
+  border-color: var(--color-border-light);
+  color: var(--color-text);
   opacity: 1;
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
 }
 
 .mobile-nav-btn:hover:not(:disabled) {
   opacity: 1;
-  background-color: var(--color-surface-hover);
-  border-color: var(--color-border-hover);
-  color: var(--color-primary);
+  background-color: var(--color-surface-light);
+  border-color: var(--color-text-secondary);
+  color: var(--color-text);
   transform: scale(1.1);
 }
 
@@ -394,7 +382,7 @@ const navigate = async (direction) => {
 }
 
 .nav-button:hover::before {
-  background-color: var(--color-primary-light, rgba(0, 123, 255, 0.1));
+  background-color: rgba(243, 236, 220, 0.08);
 }
 
 .nav-button::after {
@@ -414,8 +402,8 @@ const navigate = async (direction) => {
 }
 
 .nav-button:hover::after {
-  background-color: var(--color-primary-light);
-  border-color: var(--color-primary);
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border-light);
   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
 }
 
@@ -461,34 +449,34 @@ const navigate = async (direction) => {
   border-color: transparent transparent transparent var(--color-text-secondary);
 }
 
-/* Hover styles - not disabled */
+/* Hover styles - not disabled. Reply targets stay in the neutral palette. */
 .nav-button:hover:not(:disabled) .left-triangle {
-  border-color: transparent var(--color-primary) transparent transparent;
+  border-color: transparent var(--color-text) transparent transparent;
 }
 
 .nav-button:hover:not(:disabled) .right-triangle {
-  border-color: transparent transparent transparent var(--color-primary);
+  border-color: transparent transparent transparent var(--color-text);
 }
 
-/* Active (non-disabled) styling with gradient connection */
+/* Available reply targets light up with a white/grey wash. */
 .nav-button:not(.disabled):not(:disabled)::after {
-  border-color: var(--color-border);
+  border-color: var(--color-border-light);
 }
 
 .nav-button.nav-prev:not(.disabled):not(:disabled)::after {
-  background: linear-gradient(to right, var(--color-surface), var(--color-primary-light, #e6f0ff));
+  background: linear-gradient(to right, var(--color-surface), rgba(243, 236, 220, 0.16));
 }
 
 .nav-button.nav-next:not(.disabled):not(:disabled)::after {
-  background: linear-gradient(to left, var(--color-surface), var(--color-primary-light, #e6f0ff));
+  background: linear-gradient(to left, var(--color-surface), rgba(243, 236, 220, 0.16));
 }
 
 .nav-button.nav-prev:not(.disabled):not(:disabled) .left-triangle {
-  border-color: transparent var(--color-primary) transparent transparent;
+  border-color: transparent var(--color-text) transparent transparent;
 }
 
 .nav-button.nav-next:not(.disabled):not(:disabled) .right-triangle {
-  border-color: transparent transparent transparent var(--color-primary);
+  border-color: transparent transparent transparent var(--color-text);
 }
 
 .default-outgoing-side-mark {
@@ -544,47 +532,42 @@ const navigate = async (direction) => {
 
 </style> 
 <style scoped>
-/* State when an arrow targets a stitch link (static preview) */
-.sibling-navigator .nav-button.target-is-stitch:not(:disabled)::after {
-  background: linear-gradient(to left, var(--color-surface), rgba(76, 175, 80, 0.35)) !important;
-  border-color: rgba(76, 175, 80, 0.65);
-  border-style: solid;
+/* Stitched siblings use the sage lit state that reply arrows used to use. */
+.sibling-navigator .nav-button.nav-next.target-is-stitch:not(:disabled)::after {
+  background: linear-gradient(to left, var(--color-surface), var(--color-primary-light));
+  border-color: var(--color-border);
 }
 
 .sibling-navigator .nav-button.nav-prev.target-is-stitch:not(:disabled)::after {
-  background: linear-gradient(to right, var(--color-surface), rgba(76, 175, 80, 0.35)) !important;
+  background: linear-gradient(to right, var(--color-surface), var(--color-primary-light));
+  border-color: var(--color-border);
 }
 
-/* Keep arrow white when targeting a stitch */
 .sibling-navigator .nav-button.target-is-stitch:not(:disabled) .right-triangle {
-  border-color: transparent transparent transparent #ffffff;
+  border-color: transparent transparent transparent var(--color-primary);
   opacity: 1;
 }
 .sibling-navigator .nav-button.target-is-stitch:not(:disabled) .left-triangle {
-  border-color: transparent #ffffff transparent transparent;
+  border-color: transparent var(--color-primary) transparent transparent;
   opacity: 1;
 }
 
-/* Hover over stitch target */
-.sibling-navigator .nav-button.target-is-stitch:hover:not(:disabled)::after {
-  background: linear-gradient(to left, var(--color-surface), rgba(76, 175, 80, 0.55)) !important;
-  border-color: rgba(76, 175, 80, 0.85);
-  border-style: solid;
+.sibling-navigator .nav-button.target-is-stitch:hover:not(:disabled)::before {
+  background-color: var(--color-primary-light);
 }
+
+.sibling-navigator .nav-button.nav-next.target-is-stitch:hover:not(:disabled)::after,
 .sibling-navigator .nav-button.nav-prev.target-is-stitch:hover:not(:disabled)::after {
-  background: linear-gradient(to right, var(--color-surface), rgba(76, 175, 80, 0.55)) !important;
-}
-.sibling-navigator .nav-button.target-is-stitch:hover:not(:disabled) .triangle-icon {
-  filter: drop-shadow(0 0 2px rgba(76, 175, 80, 0.5));
+  background-color: var(--color-primary-light);
+  border-color: var(--color-primary);
 }
 
 .sibling-navigator .nav-button.target-is-stitch:hover:not(:disabled) .right-triangle {
-  /* Guard against generic hover styles that would recolor the arrow */
-  border-color: transparent transparent transparent #ffffff;
+  border-color: transparent transparent transparent var(--color-primary);
 }
 
 .sibling-navigator .nav-button.target-is-stitch:hover:not(:disabled) .left-triangle {
-  border-color: transparent #ffffff transparent transparent;
+  border-color: transparent var(--color-primary) transparent transparent;
 }
 
 /* Function rows: a disclosure-sized chevron, not the full reply rail. */
@@ -635,7 +618,7 @@ const navigate = async (direction) => {
 
 .sibling-navigator.compact .nav-button.target-is-stitch:not(:disabled),
 .sibling-navigator.compact .nav-button.target-is-stitch:hover:not(:disabled) {
-  color: #7dcea0;
+  color: var(--color-accent-light);
 }
 
 .mobile-sibling-nav.compact {
@@ -667,7 +650,7 @@ const navigate = async (direction) => {
 .mobile-sibling-nav.compact .mobile-nav-btn.target-is-stitch:hover:not(:disabled) {
   background: transparent;
   border: none;
-  color: #7dcea0;
+  color: var(--color-accent-light);
 }
 
 .mobile-sibling-nav.compact .loading-dot {
@@ -675,9 +658,14 @@ const navigate = async (direction) => {
 }
 
 .mobile-sibling-nav .mobile-nav-btn.target-is-stitch:not(:disabled) {
-  background: rgba(76, 175, 80, 0.1);
-  border-color: rgba(76, 175, 80, 0.55);
-  border-style: solid;
-  color: #ffffff;
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-border);
+  color: var(--color-primary);
+}
+
+.mobile-sibling-nav .mobile-nav-btn.target-is-stitch:hover:not(:disabled) {
+  background-color: var(--color-primary-light);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 </style>

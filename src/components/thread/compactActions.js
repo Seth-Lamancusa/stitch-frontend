@@ -21,7 +21,7 @@ export function compactToolbarActions(actions) {
 }
 
 export function compactOverflowFromMenu(menuActions) {
-  return (menuActions || []).filter((action) => action.id !== 'copy-text' && visibleAction(action))
+  return (menuActions || []).filter(visibleAction)
 }
 
 export function extraCompactMoreActions({

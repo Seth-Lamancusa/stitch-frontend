@@ -8,24 +8,19 @@
       </div>
       
       <!-- Navigation Tabs - desktop only -->
-      <div class="navigation-tabs" role="tablist" aria-label="Main tabs">
-          <!-- Search tab commented out
-          <router-link 
-            to="/search" 
-            class="nav-tab"
-            :class="{ 'active': activeTab === 'search' }"
-            role="tab"
-            :aria-selected="activeTab === 'search'"
-          >
-            <span class="tab-emoji" aria-hidden="true">🔎</span>
-            <span class="tab-label">Search</span>
-          </router-link>
-          -->
+      <div
+        class="navigation-tabs"
+        :class="{ 'is-icon-only': tabsIconOnly }"
+        role="tablist"
+        aria-label="Main tabs"
+        ref="navigationTabsRef"
+      >
           <router-link 
             to="/history" 
             class="nav-tab has-glyph"
             :class="{ 'active': activeTab === 'history' }"
             role="tab"
+            aria-label="History"
             :aria-selected="activeTab === 'history'"
           >
             <TabGlyph name="history" :size="36" />
@@ -36,16 +31,29 @@
             class="nav-tab has-glyph"
             :class="{ 'active': activeTab === 'timeline' }"
             role="tab"
+            aria-label="Timeline"
             :aria-selected="activeTab === 'timeline'"
           >
             <TabGlyph name="timeline" :size="36" />
             <span class="tab-label">Timeline</span>
+          </router-link>
+          <router-link
+            to="/public"
+            class="nav-tab has-glyph"
+            :class="{ 'active': activeTab === 'public' }"
+            role="tab"
+            aria-label="Public"
+            :aria-selected="activeTab === 'public'"
+          >
+            <TabGlyph name="public" :size="36" />
+            <span class="tab-label">Public</span>
           </router-link>
           <router-link 
             to="/saved" 
             class="nav-tab has-glyph"
             :class="{ 'active': activeTab === 'saved' }"
             role="tab"
+            aria-label="Saved"
             :aria-selected="activeTab === 'saved'"
           >
             <TabGlyph name="saved" :size="36" />
@@ -56,6 +64,7 @@
             class="nav-tab has-glyph"
             :class="{ 'active': activeTab === 'channels' }"
             role="tab"
+            aria-label="Channels"
             :aria-selected="activeTab === 'channels'"
           >
             <TabGlyph name="channels" :size="36" />
@@ -66,6 +75,7 @@
             class="nav-tab has-glyph"
             :class="{ 'active': activeTab === 'inbox' }"
             role="tab"
+            aria-label="Inbox"
             :aria-selected="activeTab === 'inbox'"
           >
             <TabGlyph name="inbox" :size="36" />
@@ -76,11 +86,23 @@
             <span v-else-if="unreadCount > 0" class="unread-inline-badge">{{ unreadCount }}</span>
           </router-link>
           <router-link
+            to="/search"
+            class="nav-tab has-glyph"
+            :class="{ 'active': activeTab === 'search' }"
+            role="tab"
+            aria-label="Search"
+            :aria-selected="activeTab === 'search'"
+          >
+            <TabGlyph name="search" :size="36" />
+            <span class="tab-label">Search</span>
+          </router-link>
+          <router-link
             v-if="isAdmin"
             to="/admin/metrics"
             class="nav-tab"
             :class="{ 'active': activeTab === 'admin-metrics' }"
             role="tab"
+            aria-label="Admin"
             :aria-selected="activeTab === 'admin-metrics'"
           >
             <span class="tab-emoji" aria-hidden="true">📊</span>
@@ -311,14 +333,6 @@
       @close="showCreateModal = false"
       @new-thread="handleNewThread"
       @import="handleImport"
-      @create-channel="handleCreateChannel"
-    />
-
-    <!-- Create Channel Modal -->
-    <CreateChannelModal
-      :show="showCreateChannelModal"
-      @close="showCreateChannelModal = false"
-      @created="handleChannelCreated"
     />
     
     <!-- Mobile tab bar - only visible on mobile -->
@@ -332,7 +346,7 @@
 </template>
 
 <script setup>
-  import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
+  import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useStore } from 'vuex';
 import { useAuthentication } from '../../composables/useAuthentication';
@@ -346,7 +360,6 @@ import MobileTabBar from './MobileTabBar.vue';
 import TabGlyph from './TabGlyph.vue';
 import UserDisplay from '../common/UserDisplay.vue';
 import NewThreadModal from '../modals/NewThreadModal.vue';
-import CreateChannelModal from '../modals/CreateChannelModal.vue';
 import { ADMIN_ORIGIN } from '@/config/appConfig.js';
 
 const router = useRouter();
@@ -365,6 +378,7 @@ const authReady = computed(() => store.getters['auth/authReady']);
   if (p.startsWith('/search')) return 'search';
   if (p.startsWith('/history')) return 'history';
   if (p.startsWith('/timeline')) return 'timeline';
+  if (p.startsWith('/public')) return 'public';
   if (p.startsWith('/saved')) return 'saved';
   if (p.startsWith('/channels')) return 'channels';
   if (p.startsWith('/inbox')) return 'inbox';
@@ -384,20 +398,71 @@ const switchingPrincipalUid = ref(null);
 const isSwitchingPrincipal = computed(() => !!switchingPrincipalUid.value);
 const isCreateManagedModalOpen = ref(false);
 const showCreateModal = ref(false);
-const showCreateChannelModal = ref(false);
+const navigationTabsRef = ref(null);
+const tabsIconOnly = ref(false);
+let navigationTabsObserver = null;
+let navigationTabsFitFrame = 0;
+let fittingNavigationTabs = false;
+
+// Hide tab names once their row would run into the account controls.
+// Measured with the labels in the flow, so a long display name collapses
+// sooner than a short one, and the names come back when the row has room.
+const measureTabsContentWidth = (el) => {
+  const style = getComputedStyle(el);
+  const gap = parseFloat(style.columnGap || style.gap) || 0;
+  const children = [...el.children].filter((child) => child instanceof HTMLElement);
+  let width = 0;
+  for (const child of children) width += child.getBoundingClientRect().width;
+  if (children.length > 1) width += gap * (children.length - 1);
+  return width;
+};
+
+const availableTabsWidth = (el) => {
+  const style = getComputedStyle(el);
+  const padding = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+  return el.clientWidth - padding;
+};
+
+const fitNavigationTabs = () => {
+  const el = navigationTabsRef.value;
+  if (!el || fittingNavigationTabs) return;
+  if (getComputedStyle(el).display === 'none') return;
+
+  fittingNavigationTabs = true;
+  try {
+    const wasIconOnly = tabsIconOnly.value;
+    if (wasIconOnly) el.classList.remove('is-icon-only');
+
+    const available = availableTabsWidth(el);
+    if (available <= 0) {
+      if (wasIconOnly) el.classList.add('is-icon-only');
+      return;
+    }
+
+    const overflow = measureTabsContentWidth(el) - available;
+    // Once names are hidden, wait for a little spare room before bringing them back.
+    const shouldIconOnly = wasIconOnly ? overflow > -16 : overflow > 1;
+    el.classList.toggle('is-icon-only', shouldIconOnly);
+    if (tabsIconOnly.value !== shouldIconOnly) tabsIconOnly.value = shouldIconOnly;
+  } finally {
+    fittingNavigationTabs = false;
+  }
+};
+
+const scheduleFitNavigationTabs = () => {
+  if (navigationTabsFitFrame) cancelAnimationFrame(navigationTabsFitFrame);
+  navigationTabsFitFrame = requestAnimationFrame(() => {
+    navigationTabsFitFrame = 0;
+    fitNavigationTabs();
+  });
+};
 
 // Check scopes for create modal
 const hasImportScope = computed(() => {
   return store.getters['auth/hasAnyScope'](['msg.import.cursor', 'msg.import.audio']);
 });
 
-const hasChannelCreateScope = computed(() => {
-  return store.getters['auth/hasScope']('channels.create');
-});
-
-const shouldShowCreateModal = computed(() => {
-  return hasImportScope.value || hasChannelCreateScope.value;
-});
+const shouldShowCreateModal = computed(() => hasImportScope.value);
 
 const canInteract = computed(() => store.getters['auth/canInteract']);
 
@@ -726,8 +791,27 @@ const onDocumentClick = (e) => {
   closePrincipalMenu();
 };
 
-onMounted(() => { document.addEventListener('click', onDocumentClick); });
-onBeforeUnmount(() => { document.removeEventListener('click', onDocumentClick); });
+watch(
+  [isAdmin, unreadCount, isUnreadCountLoading],
+  () => { nextTick(() => fitNavigationTabs()); }
+);
+
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick);
+  const el = navigationTabsRef.value;
+  if (el && typeof ResizeObserver !== 'undefined') {
+    navigationTabsObserver = new ResizeObserver(() => scheduleFitNavigationTabs());
+    navigationTabsObserver.observe(el);
+  }
+  fitNavigationTabs();
+  document.fonts?.ready?.then(() => fitNavigationTabs()).catch(() => {});
+});
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocumentClick);
+  navigationTabsObserver?.disconnect();
+  navigationTabsObserver = null;
+  if (navigationTabsFitFrame) cancelAnimationFrame(navigationTabsFitFrame);
+});
 
 // Sync store's active tab with route-driven value
 watch(
@@ -788,8 +872,7 @@ const handleGlobalCreateClick = () => {
     return;
   }
 
-  // If user has import or channel.create scopes, show modal
-  // Otherwise go straight to new thread
+  // Import needs a choice; otherwise go straight to a new thread
   if (shouldShowCreateModal.value) {
     showCreateModal.value = true;
   } else {
@@ -806,24 +889,6 @@ const handleImport = () => {
   showCreateModal.value = false;
   store.dispatch('navigation/setPreviousRoute', route.path);
   router.push('/import');
-};
-
-const handleCreateChannel = () => {
-  showCreateModal.value = false;
-  showCreateChannelModal.value = true;
-};
-
-const handleChannelCreated = async (newChannel) => {
-  console.log('[TabViewLayout] Channel created:', newChannel);
-  showCreateChannelModal.value = false;
-  
-  // Trigger refresh so ChannelsView can reload its list
-  store.dispatch('navigation/triggerRefresh');
-  
-  // Navigate to channels tab if not already there to show the new channel
-  if (route.path !== '/channels') {
-    router.push('/channels');
-  }
 };
 </script>
 
@@ -850,8 +915,6 @@ const handleChannelCreated = async (newChannel) => {
   gap: var(--space-lg, 24px);
   min-width: 0;
   width: 100%;
-  container-type: inline-size;
-  container-name: app-header;
 }
 
 .branding {
@@ -879,10 +942,15 @@ const handleChannelCreated = async (newChannel) => {
   align-items: center;
   gap: var(--space-sm, 12px);
   flex-wrap: nowrap; /* Keep on one line */
-  overflow-x: auto; /* Scroll if tabs overflow */
+  overflow-x: auto; /* Scroll if the icons themselves still overflow */
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none; /* Hide by default (Firefox) */
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0; /* Yield to the account controls instead of overlapping them */
+}
+
+.navigation-tabs.is-icon-only .tab-label {
+  display: none;
 }
 
 /* Hide navigation tabs on mobile - shown in footer instead */
@@ -934,13 +1002,6 @@ const handleChannelCreated = async (newChannel) => {
 
 .nav-tab.active :deep(.tab-glyph) {
   opacity: 1;
-}
-
-/* Names stay beside the icons while the header row has room. */
-@container app-header (max-width: 1200px) {
-  .navigation-tabs .tab-label {
-    display: none;
-  }
 }
 
 .unread-inline-badge {

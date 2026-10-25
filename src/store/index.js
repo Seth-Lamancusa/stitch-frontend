@@ -5,6 +5,7 @@ import ui from './modules/ui'
 import navigation from './modules/navigation'
 import graphView from './modules/graphView'
 import speedDial from './modules/speedDial'
+import typing from './modules/typing'
 
 /**
  * Vuex store for the Stitch Thread application.
@@ -21,7 +22,8 @@ const store = createStore({
     navigation,
     ui,
     graphView,
-    speedDial
+    speedDial,
+    typing
   }
 })
 

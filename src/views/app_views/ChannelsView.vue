@@ -9,23 +9,14 @@
       
       <!-- Channel selector dropdown -->
       <div class="channel-selector">
-        <div class="selector-row">
-          <select 
-            v-model="selectedChannelId" 
-            class="channel-dropdown"
-            aria-label="Select a channel"
-            @change="handleChannelSelect"
-          >
-            <option value="">{{ channelsLoading ? 'Loading channels...' : 'Select a channel' }}</option>
-            <option 
-              v-for="channel in userChannels" 
-              :key="channel.id || channel._key"
-              :value="channel.id || channel._key"
-            >
-              {{ channel.display_name }}
-            </option>
-          </select>
-        </div>
+        <ChannelSelectDropdown
+          :channels="userChannels"
+          :selected-id="selectedChannelId || ''"
+          :loading="channelsLoading"
+          :can-create="canCreateChannel"
+          @select="handleChannelSelect"
+          @create="showCreateChannelModal = true"
+        />
       </div>
 
       <!-- Selected channel: header, members, admin actions -->
@@ -141,7 +132,10 @@
 
       <!-- No channel selected state -->
       <div v-else-if="!channelsLoading" class="no-selection-state">
-        <p v-if="userChannels.length === 0">You are not a member of any channels yet.</p>
+        <p v-if="userChannels.length === 0">
+          You are not a member of any channels yet.
+          <template v-if="canCreateChannel"> Open the menu above to create one.</template>
+        </p>
         <p v-else>Select a channel from the dropdown above to manage it and see members.</p>
       </div>
 
@@ -177,6 +171,12 @@
           </div>
         </div>
       </div>
+
+      <CreateChannelModal
+        :show="showCreateChannelModal"
+        @close="showCreateChannelModal = false"
+        @created="handleChannelCreated"
+      />
     </div>
   </TabViewLayout>
 </template>
@@ -187,6 +187,8 @@ import { useStore } from 'vuex';
 import { useRoute, useRouter } from 'vue-router';
 import TabViewLayout from '../../components/layouts/TabViewLayout.vue';
 import UserSearchInput from '../../components/UserSearchInput.vue';
+import ChannelSelectDropdown from '../../components/ChannelSelectDropdown.vue';
+import CreateChannelModal from '../../components/modals/CreateChannelModal.vue';
 import ChannelsService from '../../services/ChannelsService.js';
 
 const store = useStore();
@@ -197,6 +199,7 @@ const router = useRouter();
 const userChannels = ref([]);
 const channelsLoading = ref(false);
 const showDeleteConfirm = ref(false);
+const showCreateChannelModal = ref(false);
 const isDeletingChannel = ref(false);
 // Edit channel (admin): inline name/description
 const isEditingChannel = ref(false);
@@ -211,6 +214,7 @@ const addMemberError = ref('');
 
 // Computed - use store for selectedChannelId
 const user = computed(() => store.getters['auth/user']);
+const canCreateChannel = computed(() => store.getters['auth/hasScope']('channels.create'));
 const selectedChannelId = computed({
   get: () => store.getters['navigation/selectedChannelId'],
   set: (value) => {
@@ -245,15 +249,27 @@ const fetchUserChannels = async () => {
   }
 };
 
-const handleChannelSelect = () => {
-  const channelId = selectedChannelId.value;
-  store.dispatch('navigation/setSelectedChannelId', channelId);
-  if (channelId) {
-    router.replace({ path: '/channels', query: { channelId } });
+const handleChannelSelect = (channelId) => {
+  const nextId = channelId || null;
+  selectedChannelId.value = nextId;
+  if (nextId) {
+    router.replace({ path: '/channels', query: { channelId: nextId } });
   } else {
     router.replace({ path: '/channels' });
   }
-  if (channelId) fetchChannelMembers();
+};
+
+const handleChannelCreated = async (newChannel) => {
+  showCreateChannelModal.value = false;
+  const channelId = newChannel?.id || newChannel?._key || '';
+  await fetchUserChannels();
+  if (channelId && !userChannels.value.some((channel) => (channel.id || channel._key) === channelId)) {
+    userChannels.value = [newChannel, ...userChannels.value];
+  }
+  if (channelId) {
+    selectedChannelId.value = channelId;
+    router.replace({ path: '/channels', query: { channelId } });
+  }
 };
 
 // --- Edit channel (admin): start, cancel, save ---
@@ -419,7 +435,7 @@ const handleDeleteChannel = async () => {
   }
 };
 
-// Handle channel creation from global create button (via refresh trigger)
+// Refresh the list when another view asks the app to reload (e.g. after a mutation elsewhere)
 watch(() => store.getters['navigation/refreshTrigger'], async (newTrigger) => {
   if (newTrigger > 0) {
     // Refresh channels when refresh is triggered (e.g., after channel creation)
@@ -517,34 +533,6 @@ watch(userChannels, (channels) => {
 
 .channel-selector {
   margin-bottom: var(--space-lg);
-}
-
-.selector-row {
-  display: flex;
-  gap: var(--space-sm);
-  align-items: center;
-}
-
-.channel-dropdown {
-  flex: 1;
-  padding: 12px 16px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: var(--font-size-base);
-  cursor: pointer;
-  transition: border-color 0.2s ease;
-}
-
-.channel-dropdown:hover {
-  border-color: var(--color-primary);
-}
-
-.channel-dropdown:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.1);
 }
 
 .channel-content {
@@ -825,11 +813,6 @@ watch(userChannels, (channels) => {
   .channels-view {
     max-width: 100%;
     padding: 8px 4px;
-  }
-
-  .channel-dropdown {
-    padding: 10px 12px;
-    font-size: var(--font-size-sm);
   }
 
   .channel-header {

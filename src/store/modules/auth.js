@@ -50,6 +50,10 @@ function mapApiUserToAuthState(userData) {
         : typeof data.foundation_provider === 'string'
           ? data.foundation_provider
           : null,
+    functions: Array.isArray(data.functions)
+      ? data.functions.filter((name) => typeof name === 'string' && name && !/\s/.test(name))
+      : [],
+    icon: typeof data.icon === 'string' && data.icon.trim() ? data.icon.trim() : null,
     context_origin_id:
       typeof data.context_origin_id === 'string' && data.context_origin_id.trim()
         ? data.context_origin_id.trim()
@@ -419,6 +423,15 @@ export default {
               third_party_integrations:
                 typeof result.profile.third_party_integrations === 'string'
                   ? result.profile.third_party_integrations
+                  : null,
+              functions: Array.isArray(result.profile.functions)
+                ? result.profile.functions.filter(
+                    (name) => typeof name === 'string' && name && !/\s/.test(name)
+                  )
+                : [],
+              icon:
+                typeof result.profile.icon === 'string' && result.profile.icon.trim()
+                  ? result.profile.icon.trim()
                   : null,
               context_origin_id:
                 typeof result.profile.context_origin_id === 'string' &&

@@ -1,11 +1,12 @@
 <template>
   <div
     class="message-node function-message"
-    :class="{ 'menu-open': menuOpen, 'compact': compact, 'selected': isMessageSelected, 'reply-target': isSelected }"
+    :class="{ 'menu-open': menuOpen, 'compact': compact, 'selected': isMessageSelected, 'selection-target': isSelectionMode, 'reply-target': isSelected, 'has-typing-cue': typingLabel && !menuOpen }"
     :data-message-id="message.id"
     :data-has-siblings="shouldReserveSiblingNavSpace ? 'true' : 'false'"
     :data-is-reply-root="isReplyRoot ? 'true' : 'false'"
     ref="rootRef"
+    @click.capture="handleSelectionClick"
   >
     <div v-if="showSiblingNavMobile" class="mobile-sibling-nav-slot">
       <SiblingNavigator
@@ -142,6 +143,7 @@
       >{{ code }}</pre>
 
       <MessageAttachments v-if="open && message.files?.length" :attachments="message.files" />
+      <p v-if="typingLabel && !menuOpen" class="typing-cue" aria-live="polite">{{ typingLabel }}</p>
     </div>
 
     <teleport to="body">
@@ -237,6 +239,7 @@ const columnParent = computed(() => {
   return store.getters['messages/getMessage'](parentId);
 });
 
+const typingLabel = computed(() => store.getters['typing/labelAt'](props.message.id));
 const kind = computed(() => functionKind(props.message));
 const displayName = computed(() => (
   props.message.type === 'function_invocation'
@@ -455,6 +458,14 @@ function toggleSelection() {
   store.dispatch('navigation/toggleMessageSelection', props.message.id);
 }
 
+function handleSelectionClick(event) {
+  if (!isSelectionMode.value) return;
+  if (event.target.closest('a, input')) return;
+  event.preventDefault();
+  event.stopPropagation();
+  toggleSelection();
+}
+
 function toggleMenu() {
   store.dispatch('navigation/toggleActionBar', props.message.id);
 }
@@ -555,6 +566,10 @@ onBeforeUnmount(() => {
   z-index: 100;
 }
 
+.function-message.has-typing-cue {
+  padding-bottom: 22px;
+}
+
 .fn-body {
   position: relative;
   padding: 2px 12px;
@@ -576,6 +591,16 @@ onBeforeUnmount(() => {
 .fn-line:hover,
 .function-message.reply-target .fn-line {
   background: rgba(255, 255, 255, 0.04);
+}
+
+.function-message.selection-target {
+  cursor: pointer;
+}
+
+.function-message.selected .fn-line,
+.function-message.selection-target:hover .fn-line {
+  background: var(--color-surface-hover);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
 }
 
 .fn-toggle {

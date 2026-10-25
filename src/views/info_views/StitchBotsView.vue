@@ -95,9 +95,17 @@
           <div v-else class="bots-list-grid" aria-label="Native stitch bots">
             <div v-for="bot in botsToRender" :key="bot.user_tag || bot.userTag || bot.uid" class="bot-profile-card">
               <div class="bot-profile-top">
-                <div>
-                  <div class="bot-profile-name">{{ bot.display_name || bot.displayName || bot.user_tag }}</div>
-                  <div class="bot-profile-tag">@{{ bot.user_tag || bot.userTag }}</div>
+                <div class="bot-profile-identity">
+                  <img
+                    v-if="botLogo(bot)"
+                    class="bot-profile-logo"
+                    :src="botLogo(bot)"
+                    alt=""
+                  />
+                  <div>
+                    <div class="bot-profile-name">{{ bot.display_name || bot.displayName || bot.user_tag }}</div>
+                    <div class="bot-profile-tag">@{{ bot.user_tag || bot.userTag }}</div>
+                  </div>
                 </div>
                 <div class="bot-profile-actions">
                   <template v-if="(getBotAvailableVersions(bot) || []).length > 1">
@@ -187,6 +195,20 @@ const BOT_TAGS_IN_ORDER = [
   'kimi',
   'veo',
 ];
+
+const BOT_LOGOS = {
+  gpt: '/bot-icons/chatgpt-logo.png',
+  chatgpt: '/bot-icons/chatgpt-logo.png',
+  claude: '/bot-icons/claude-logo.jpeg',
+  gemini: '/bot-icons/gemini-logo.webp',
+};
+
+function botLogo(bot) {
+  const fromProfile = typeof bot?.icon === 'string' ? bot.icon.trim() : '';
+  if (fromProfile) return fromProfile;
+  const tag = String(bot?.user_tag || bot?.userTag || '').replace(/^@/, '').toLowerCase();
+  return BOT_LOGOS[tag] || null;
+}
 
 const LABEL_BY_MODALITY = {
   text: 'Text',
@@ -468,6 +490,23 @@ const botsToRender = computed(() => bots.value);
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 0.75rem;
+}
+
+.bot-profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.bot-profile-logo {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
 }
 
 .bot-profile-name {

@@ -1,17 +1,19 @@
 <template>
   <div 
      class="message-node" 
-   :class="{ 
+    :class="{ 
        'list-view': inListView,
        'compact': compact,
        'selected': inListView ? selected : isMessageSelected,
+       'selection-target': isSelectionMode && !inListView,
        'dropdown-open': showActionBar || compactToolbarVisible,
        'collapsed': isCollapsed
-     }"
+    }"
     :data-message-id="message.id"
     :data-has-siblings="shouldReserveSiblingNavSpace"
     :data-is-reply-root="isReplyRoot ? 'true' : 'false'"
      ref="messageNodeRef"
+    @click.capture="handleSelectionClick"
     @mouseenter="onCompactHoverEnter"
     @mouseleave="onCompactHoverLeave"
    >
@@ -59,6 +61,12 @@
             </span>
           
           <div class="author-info">
+            <img
+              v-if="showAuthorIcon"
+              class="author-icon"
+              :src="authorIcon"
+              alt=""
+            />
             <template v-if="showParticipantsLabel">
               <template v-for="(participant, index) in participantItems" :key="participant.key">
                 <UserDisplay
@@ -265,6 +273,13 @@
       <!-- Files -->
       <message-attachments :attachments="message.files" />
 
+      <p
+        v-if="typingLabel && !hideTypingCue"
+        class="typing-cue"
+        :class="{ 'typing-cue--inset': inListView }"
+        aria-live="polite"
+      >{{ typingLabel }}</p>
+
       <CompactHoverToolbar
         v-if="!inListView && !isSelectionMode && !isCollapsed"
         :visible="isMobile || compactToolbarVisible || revealToolbar"
@@ -276,6 +291,39 @@
       />
       
      </div>
+
+      <teleport to="body">
+        <TagsModal
+          :is-visible="showTagsModal"
+          :is-add-mode="true"
+          :existing-tags="existingTags"
+          :message-id="message?.id"
+          @close="closeTagsModal"
+          @update="handleTagsUpdate"
+          @done="closeTagsModal"
+        />
+        <ChannelsModal
+          :is-visible="showChannelsModal"
+          :is-add-mode="true"
+          :existing-channels="existingChannels"
+          :message-id="message?.id"
+          @close="closeChannelsModal"
+          @update="handleChannelsUpdate"
+          @done="closeChannelsModal"
+        />
+      </teleport>
+
+      <teleport to="body">
+        <ReplyOrderModal
+          :is-visible="showReplyOrderModal"
+          :message-id="message?.id"
+          :child-ids="message?.child_ids || []"
+          :stitch-child-ids="message?.stitch_child_ids || []"
+          :existing-reply-order="message?.reply_order || []"
+          @close="closeReplyOrderModal"
+          @update="handleReplyOrderUpdate"
+        />
+      </teleport>
    </div>
 
 </template>
@@ -575,7 +623,7 @@ export default {
       {
         id: 'copy-text',
         emoji: '📝',
-        text: isTextCopied.value ? 'Copied!' : 'Copy',
+        text: isTextCopied.value ? 'Copied!' : 'Copy message',
         desktopVisible: false,
         mobileVisible: false,
         adminOnly: false,
@@ -769,7 +817,18 @@ export default {
     const onCompactMoreOpenChanged = (isOpen) => {
       compactMoreOpen.value = isOpen;
     };
+
+    const typingLabel = computed(() => store.getters['typing/labelAt'](props.message.id));
     
+    // Selection mode: any click on the node toggles selection, except links and form fields.
+    const handleSelectionClick = (event) => {
+      if (!isSelectionMode.value || props.inListView) return;
+      if (event.target.closest('a, input, textarea, select, .add-subject-input-container')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      store.dispatch('navigation/toggleMessageSelection', props.message.id);
+    };
+
     // Message click handler - only handles navigation in preview mode
     const handleMessageClick = () => {
       if (props.displayMode === 'preview' && !props.selectable) {
@@ -810,6 +869,13 @@ export default {
     
     // Collapse state
     const isCollapsed = ref(false);
+    const hideTypingCue = computed(() => {
+      const hoverMenuShowing = !props.inListView
+        && !isSelectionMode.value
+        && !isCollapsed.value
+        && (isMobile.value || compactToolbarVisible.value || props.revealToolbar);
+      return hoverMenuShowing || showActionBar.value;
+    });
     const displayContent = computed(() => contentText(props.message?.content));
 
     const canCollapse = computed(() => {
@@ -1011,6 +1077,15 @@ export default {
     const authorDisplayName = computed(() => getAuthorDisplayName(props.message));
 
     const authorUserTag = computed(() => getAuthorUserTag(props.message));
+
+    const authorIcon = computed(() => {
+      const value = props.message?.author?.icon;
+      return typeof value === 'string' ? value.trim() : '';
+    });
+
+    const showAuthorIcon = computed(() => {
+      return !isCompactThread.value && !props.inListView && !isImported.value && !!authorIcon.value;
+    });
     
     const authorUid = computed(() => getAuthorUid(props.message));
     
@@ -1376,17 +1451,13 @@ export default {
 
     // Check if this message has siblings that can be navigated to
     const hasSiblings = computed(() => {
+      void store.state.messages.structureVersion;
       const currentParentId = derivedParentId.value;
       if (!currentParentId) {
         return false;
       }
-      
-      const parent = store.getters['messages/getMessage'](currentParentId);
-      if (!parent) {
-        return false;
-      }
-      
-      // Use getChildIds to respect reply_order and stitch links
+
+      // Use getChildIds to respect reply_order, stitch links, and live replies.
       const orderedChildIds = store.getters['messages/getChildIds'](currentParentId);
       return orderedChildIds.length > 1;
     });
@@ -2013,6 +2084,8 @@ export default {
       compactToolbarActionList,
       compactMoreActionList,
       compactToolbarVisible,
+      typingLabel,
+      hideTypingCue,
       onCompactHoverEnter,
       onCompactHoverLeave,
       onCompactMoreOpenChanged,
@@ -2057,6 +2130,8 @@ export default {
       recipientsExcludingUser,
       authorDisplayName,
       authorUserTag,
+      authorIcon,
+      showAuthorIcon,
       showParticipantsLabel,
       participantItems,
       openTagsModal,
@@ -2096,6 +2171,7 @@ export default {
       openLinksModal,
       openAddRecipientsModal,
       handleMessageClick,
+      handleSelectionClick,
       handleSelectionToggle,
       // Mobile floating action bar
       showActionBar,
@@ -2419,6 +2495,19 @@ export default {
   background-color: var(--color-surface);
 }
 
+.message-node.selection-target .message-content {
+  cursor: pointer;
+}
+
+.message-node.selection-target:hover .message-content {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-primary);
+}
+
+.message-node.selection-target.selected:hover .message-content {
+  background-color: var(--color-surface-hover);
+}
+
 .message-header {
   display: flex;
   flex-direction: column;
@@ -2564,10 +2653,21 @@ export default {
   flex-shrink: 0;
 }
 
+.author-icon {
+  width: calc(1.5rem + 6px);
+  height: calc(1.5rem + 6px);
+  margin-right: 4px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #fff;
+}
+
 .author-info {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 4px;
+  margin-right: 6px;
   justify-content: flex-start;
   flex: 1 1 auto;
   min-width: 0; /* Ensures proper text truncation */

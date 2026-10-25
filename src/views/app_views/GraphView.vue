@@ -124,7 +124,6 @@ import { mapState, mapGetters, mapActions } from 'vuex';
 import GraphCanvas from '../../components/graph/GraphCanvas.vue';
 import GraphSidePanel from '../../components/graph/GraphSidePanel.vue';
 import LoadThreadModal from '../../components/modals/LoadThreadModal.vue';
-import UserService from '../../services/UserService.js';
 import { getAuthorDisplayName } from '../../utils/messageCompat.js';
 
 
@@ -239,8 +238,7 @@ export default {
       'selectMessage',
       'clearSelection',
       'startStitchDrawing',
-      'cancelStitchDrawing',
-      'addStitchLink'
+      'cancelStitchDrawing'
     ]),
 
     async handleLoadThread(messageId) {
@@ -321,13 +319,16 @@ export default {
       
       this.isLinking = true;
       try {
-        const success = await UserService.createLink(sourceId, targetId);
+        const success = await this.$store.dispatch('messages/createLink', {
+          messageIdFrom: sourceId,
+          messageIdTo: targetId,
+        });
         if (success) {
-          // Optimistically update the graph edges in the store
-          this.addStitchLink({ sourceId, targetId });
-          
-          // Selection is already on the target node; side panel will open automatically
-          // because isStitchDrawingMode becomes false in addStitchLink action.
+          // messages/ADD_STITCH_LINK writes the adjacency the thread reads.
+          // Leave drawing mode so the side panel opens on the selected target,
+          // then redraw edges from that store.
+          this.$store.commit('graphView/SET_STITCH_DRAWING_MODE', { isDrawing: false });
+          await this.refreshGraphFromStore();
         } else {
           alert('Failed to create stitch link.');
           this.cancelDrawingStitch();

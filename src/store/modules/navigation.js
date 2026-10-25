@@ -26,6 +26,27 @@ function normalizeTagList(tags) {
   return normalized;
 }
 
+function listMessageChannelIds(message) {
+  const ids = new Set();
+  if (Array.isArray(message?.channel_ids)) {
+    message.channel_ids.forEach(id => { if (id) ids.add(String(id)); });
+  }
+  if (Array.isArray(message?.channels)) {
+    message.channels.forEach(channel => {
+      if (!channel) return;
+      if (typeof channel === 'string') ids.add(channel);
+      else if (channel.id) ids.add(String(channel.id));
+    });
+  }
+  return ids;
+}
+
+function listCacheMode(tab) {
+  if (!tab) return '';
+  const splitAt = tab.lastIndexOf(':');
+  return splitAt === -1 ? tab : tab.slice(splitAt + 1);
+}
+
 export default {
   namespaced: true,
   
@@ -617,6 +638,35 @@ export default {
       console.log(`[Navigation] Saving list cache for "${tab}" - ${messages?.length} messages`);
       commit('SET_LIST_CACHE', { tab, messages, currentSkip, isAllLoaded });
     },
+
+    // A new root is already in the by-id store. List membership is this snapshot,
+    // so put that one row at the top of each loaded page it belongs on.
+    prependCreatedRoot({ state, commit, rootGetters }, message) {
+      if (!message?.id || message.parent_id) return;
+      const uid = rootGetters['auth/activePrincipalUid'] || 'anon';
+      const channelId = state.selectedChannelId ? String(state.selectedChannelId) : null;
+      const onChannelTabs = !channelId || listMessageChannelIds(message).has(channelId);
+      const modes = [];
+      if (onChannelTabs) {
+        modes.push('history', 'timeline');
+        if (state.inboxUnreadOnly !== true || message.is_read === false) modes.push('inbox');
+      }
+      if (message.public === true || message.public === 1) modes.push('public');
+
+      modes.forEach(mode => {
+        const tab = `${uid}:${mode}`;
+        const cached = state.listCache[tab];
+        if (!cached?.messages?.length) return;
+        if (cached.messages.some(row => String(row?.id) === String(message.id))) return;
+        commit('SET_LIST_CACHE', {
+          tab,
+          messages: [message, ...cached.messages],
+          currentSkip: (cached.currentSkip || 0) + 1,
+          isAllLoaded: !!cached.isAllLoaded,
+        });
+        commit('SET_LIST_SCROLL_POSITION', { tab, position: 0 });
+      });
+    },
     
     clearListCache({ commit }, tab) {
       console.log(`[Navigation] Clearing list cache${tab ? ` for "${tab}"` : ' (all)'}`);
@@ -629,25 +679,9 @@ export default {
       commit('CLEAR_LIST_SCROLL_POSITION', null);
     },
 
-    async setActiveTab({ commit, state, dispatch }, tab) {
-      // Only clear caches if the tab is actually changing
-      const previousTab = state.activeTab;
-      const isTabChange = previousTab !== tab;
-      
-      // Set the tab immediately for responsive UI
+    setActiveTab({ commit, state }, tab) {
+      if (state.activeTab === tab) return;
       commit('SET_ACTIVE_TAB', tab);
-     
-      // Only clear caches when explicitly switching to a different tab
-      if (isTabChange) {
-        console.log(`[Navigation] Tab changed from "${previousTab}" to "${tab}" - clearing caches`);
-        // Clear the list cache for all tabs when switching (so we get fresh data)
-        commit('CLEAR_LIST_CACHE', null);
-        
-        // Clear message cache when switching tabs to trigger fresh load
-        await dispatch('messages/clearCache', {}, { root: true });
-      } else {
-        console.log(`[Navigation] Tab "${tab}" re-activated (same tab) - preserving caches`);
-      }
     },
     
     syncReplySettings({ commit, state, rootGetters, rootState }, messageId) {
@@ -873,10 +907,14 @@ export default {
       commit('HIDE_SPEED_DIAL_MODAL');
     },
     
-    setSelectedChannelId({ commit }, channelId) {
+    setSelectedChannelId({ commit, state }, channelId) {
       commit('SET_SELECTED_CHANNEL_ID', channelId);
-      // Clear list caches for tabs that are filtered by channel so they refetch with the new selection
-      ['inbox', 'history', 'timeline'].forEach(tab => commit('CLEAR_LIST_CACHE', tab));
+      // Clear list caches for tabs that are filtered by channel so they refetch with the new selection.
+      // Keys are `${principal}:${mode}`.
+      const filtered = new Set(['inbox', 'history', 'timeline']);
+      Object.keys(state.listCache).forEach(tab => {
+        if (filtered.has(listCacheMode(tab))) commit('CLEAR_LIST_CACHE', tab);
+      });
     },
   }
 };

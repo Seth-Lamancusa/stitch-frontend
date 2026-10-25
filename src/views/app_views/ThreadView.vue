@@ -689,7 +689,7 @@ const refreshRepliesForMessage = async (messageId) => {
     await store.dispatch('messages/ingestNewlyDiscoveredMessages', {
       messages: loaded,
       previouslyKnownIds,
-      autoMarkIfInBranch: false,
+      autoMarkIfInBranch: true,
       notifyIfOffPath: false,
     });
     
@@ -713,6 +713,69 @@ const refreshRepliesForLastVisibleMessage = async () => {
   }
   
   await refreshRepliesForMessage(lastMessage.id);
+};
+
+// visibilitychange and pageshow both fire on re-entry. Ignore the second one,
+// and ignore one that lands in the second after the thread load itself.
+const REPLY_CHAIN_REFRESH_COOLDOWN_MS = 1000;
+let replyChainRefreshInFlight = false;
+let replyChainRefreshAnchor = null;
+let replyChainRefreshPending = null;
+let lastReplyChainRefreshAt = 0;
+let threadViewActive = true;
+
+const refreshVisibleReplyChain = async ({ rerender = false } = {}) => {
+  const anchorId = messageId.value;
+  if (!threadViewActive || !anchorId) return;
+
+  if (replyChainRefreshInFlight) {
+    if (replyChainRefreshAnchor !== anchorId) {
+      replyChainRefreshPending = { rerender };
+    }
+    return;
+  }
+
+  replyChainRefreshInFlight = true;
+  replyChainRefreshAnchor = anchorId;
+  lastReplyChainRefreshAt = Date.now();
+
+  try {
+    const previouslyKnownIds = new Set(
+      Object.keys(store.state.messages.messages || {}).map(id => String(id))
+    );
+
+    const loaded = await store.dispatch('messages/refreshLoadedReplyChain', {
+      messageId: anchorId,
+    });
+
+    await store.dispatch('messages/ingestNewlyDiscoveredMessages', {
+      messages: loaded,
+      previouslyKnownIds,
+      autoMarkIfInBranch: true,
+      notifyIfOffPath: false,
+    });
+
+    if (rerender && threadViewActive && messageId.value === anchorId) {
+      await renderThread(true, true);
+    }
+  } catch (error) {
+    console.error('[ThreadView] Failed to refresh reply chain:', error);
+  } finally {
+    replyChainRefreshInFlight = false;
+    replyChainRefreshAnchor = null;
+    const pending = replyChainRefreshPending;
+    replyChainRefreshPending = null;
+    if (pending && threadViewActive) {
+      await refreshVisibleReplyChain(pending);
+    }
+  }
+};
+
+const onThreadPageVisible = () => {
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+  if (isLoadingThread.value || replyChainRefreshInFlight) return;
+  if ((Date.now() - lastReplyChainRefreshAt) < REPLY_CHAIN_REFRESH_COOLDOWN_MS) return;
+  refreshVisibleReplyChain({ rerender: true });
 };
 
 const isRefreshingLastMessage = computed(() => {
@@ -792,14 +855,17 @@ const loadInitialContent = async (targetMessageId) => {
         }
       }
       // If any needed message is missing, fetch radius once
+      let fetched = false;
       for (const id of neededIds) {
         if (!getMsg(id)) {
+          fetched = true;
           await store.dispatch('messages/loadMessageRadius', { messageId: centerId, radius });
           break;
         }
       }
+      return fetched;
     };
-    await ensureRadiusInStore(targetMessageId, LOAD_RADIUS);
+    const fetchedRadius = await ensureRadiusInStore(targetMessageId, LOAD_RADIUS);
     
     // Wait for next tick to ensure store updates are processed
     await nextTick();
@@ -807,6 +873,13 @@ const loadInitialContent = async (targetMessageId) => {
     // CRITICAL: Prepare branch path so target message is in visible branch
     // This must happen before ensureCorrectScroll to ensure correct branch selection
     await store.dispatch('messages/prepareBranchPath', targetMessageId);
+
+    // Cached radius is not a refresh: child_ids can be stale. Ask the server to
+    // walk the loaded reply chain before the thread is shown. A fresh radius
+    // fetch already has current replies.
+    if (!fetchedRadius) {
+      await refreshVisibleReplyChain({ rerender: false });
+    }
     
   } catch (error) {
     console.error('[ThreadView] Error loading initial content:', error);
@@ -814,8 +887,11 @@ const loadInitialContent = async (targetMessageId) => {
     // Show container even on error so user can see the error state
     isContainerVisible.value = true;
   } finally {
-    // Clear loading state - this will trigger displayedMessages to show content
+    // Clear loading state - this will trigger displayedMessages to show content.
+    // Stamp before the first await so a visibility event during scroll setup
+    // does not start a second walk of a thread that just loaded.
     isLoadingThread.value = false;
+    lastReplyChainRefreshAt = Date.now();
     
     // Handle scroll positioning after content is rendered
     // ensureCorrectScroll will verify target is in visible branch before scrolling
@@ -1419,6 +1495,10 @@ const findEndOfBranchMessage = () => {
 
 // Lifecycle hooks
 onMounted(async () => {
+  threadViewActive = true;
+  document.addEventListener('visibilitychange', onThreadPageVisible);
+  window.addEventListener('pageshow', onThreadPageVisible);
+
   // Enable thread view mode for auto-marking messages as read
   store.commit('messages/SET_THREAD_VIEW_MODE', true);
   
@@ -1450,6 +1530,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  threadViewActive = false;
   if (heightObserver) {
     heightObserver.disconnect();
     heightObserver = null;
@@ -1459,6 +1540,7 @@ onBeforeUnmount(() => {
     unsubscribeMessages();
     unsubscribeMessages = null;
   }
+  store.dispatch('navigation/exitSelectionMode');
   store.dispatch('navigation/clearReplyingTo');
   store.dispatch('navigation/closeActiveActionBar');
   if (websocketDebounceTimer.value) {
@@ -1468,6 +1550,8 @@ onBeforeUnmount(() => {
   if (messageList.value) {
     messageList.value.removeEventListener('scroll', handleScroll);
   }
+  document.removeEventListener('visibilitychange', onThreadPageVisible);
+  window.removeEventListener('pageshow', onThreadPageVisible);
 });
 
 // Watch for route changes
@@ -1525,17 +1609,16 @@ const closeProfileModal = () => {
 const topStitchCount = computed(() => {
   if (displayedMessages.value.length === 0) return 0;
   const first = displayedMessages.value[0];
-  const ids = first.stitch_parent_ids || [];
-  // Only count stitches that still need to be loaded.
-  return ids.filter((id) => !store.getters['messages/getMessage'](id)).length;
+  // The first row is the end of the upward walk, so none of its stitch parents
+  // are already the displayed parent. Count loaded neighbors too: a stitch
+  // between two cached messages still needs the branch switch.
+  return (first.stitch_parent_ids || []).filter(Boolean).length;
 });
 
 const bottomStitchCount = computed(() => {
   if (displayedMessages.value.length === 0) return 0;
   const last = displayedMessages.value[displayedMessages.value.length - 1];
-  const ids = last.stitch_child_ids || [];
-  // Only count stitches that still need to be loaded.
-  return ids.filter((id) => !store.getters['messages/getMessage'](id)).length;
+  return (last.stitch_child_ids || []).filter(Boolean).length;
 });
 
 const handleLoadStitchBoundary = async (position) => {

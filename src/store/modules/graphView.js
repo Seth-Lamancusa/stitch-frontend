@@ -322,28 +322,6 @@ const mutations = {
     state.ui.stitchSourceId = sourceId;
   },
 
-  ADD_STITCH_ADJACENCY(state, { sourceId, targetId }) {
-    // Find messages in local state and update their stitch adjacency
-    const sourceMsg = state.messages.find(m => m.id === sourceId);
-    if (sourceMsg) {
-      if (!sourceMsg.stitch_child_ids) sourceMsg.stitch_child_ids = [];
-      if (!sourceMsg.stitch_child_ids.includes(targetId)) {
-        sourceMsg.stitch_child_ids.push(targetId);
-      }
-    }
-
-    const targetMsg = state.messages.find(m => m.id === targetId);
-    if (targetMsg) {
-      if (!targetMsg.stitch_parent_ids) targetMsg.stitch_parent_ids = [];
-      if (!targetMsg.stitch_parent_ids.includes(sourceId)) {
-        targetMsg.stitch_parent_ids.push(sourceId);
-      }
-    }
-
-    // Recalculate edges to include the new stitch
-    state.edges = calculateEdges(state.messages);
-  },
-
   CLEAR_FILTERS(state) {
     state.filters = {
       showUnreadOnly: false,
@@ -606,11 +584,6 @@ const actions = {
   },
 
   cancelStitchDrawing({ commit }) {
-    commit('SET_STITCH_DRAWING_MODE', { isDrawing: false });
-  },
-
-  addStitchLink({ commit }, { sourceId, targetId }) {
-    commit('ADD_STITCH_ADJACENCY', { sourceId, targetId });
     commit('SET_STITCH_DRAWING_MODE', { isDrawing: false });
   }
 };

@@ -82,12 +82,82 @@ function isMessageRead(message) {
   return message && message.is_read === true;
 }
 
+function sameId(a, b) {
+  return a != null && b != null && String(a) === String(b);
+}
+
+function openThreadAnchorId() {
+  if (typeof window === 'undefined' || !window.location) return null;
+  const match = String(window.location.pathname || '').match(/^\/messages\/([^/]+)\/?$/);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch (_) {
+    return match[1];
+  }
+}
+
+function isOnOpenVisibleBranch(getters, messageId) {
+  const anchorId = openThreadAnchorId();
+  if (!anchorId || messageId == null) return false;
+  const branch = getters.getFullVisibleBranch(anchorId);
+  return Array.isArray(branch) && branch.some(message => sameId(message && message.id, messageId));
+}
+
+function rememberOutgoingChild(state, parentId, childId) {
+  if (parentId == null || childId == null || sameId(parentId, childId)) return false;
+  if (!state.childrenByParent) state.childrenByParent = {};
+  const parentKey = String(parentId);
+  const known = state.childrenByParent[parentKey] || [];
+  if (known.some(id => sameId(id, childId))) return false;
+  state.childrenByParent[parentKey] = [...known, childId];
+  return true;
+}
+
+function forgetOutgoingChild(state, parentId, childId) {
+  if (parentId == null || childId == null || !state.childrenByParent) return;
+  const parentKey = String(parentId);
+  const known = state.childrenByParent[parentKey];
+  if (!known) return;
+  const next = known.filter(id => !sameId(id, childId));
+  if (next.length === known.length) return;
+  if (next.length === 0) delete state.childrenByParent[parentKey];
+  else state.childrenByParent[parentKey] = next;
+}
+
+// Append a reply onto its parent. Every store write goes through here so a
+// websocket message and a fetched thread update the same child list.
+// The side index is what the already-mounted sibling arrows read, including
+// when the parent record itself is not replaced.
+function linkReplyToParent(state, parentId, childId) {
+  if (parentId == null || childId == null || sameId(parentId, childId)) return;
+  const recorded = rememberOutgoingChild(state, parentId, childId);
+  const parent = state.messages[parentId] || state.messages[String(parentId)];
+  let linkedOnParent = false;
+  if (parent) {
+    const childIds = Array.isArray(parent.child_ids) ? parent.child_ids : [];
+    if (!childIds.some(id => sameId(id, childId))) {
+      const storeKey = state.messages[parentId] ? parentId : String(parentId);
+      state.messages[storeKey] = {
+        ...parent,
+        child_ids: [...childIds, childId]
+      };
+      linkedOnParent = true;
+    }
+  }
+  if (recorded || linkedOnParent) state.structureVersion += 1;
+}
+
 export default {
   namespaced: true,
   
   state: {
     // Flat storage of messages by ID
     messages: {},
+
+    // parent id -> reply ids learned from stored messages. Sibling arrows read
+    // this so a websocket reply lights up the navigator already on screen.
+    childrenByParent: {},
 
     // Simplified filters object that includes sorting
     filters: {
@@ -279,26 +349,12 @@ export default {
         // Add to store
         state.messages[message.id] = { ...message };
       }
-    },
-    
-    SET_MESSAGES(state, messages) {
-      if (!Array.isArray(messages)) return;
-      for (const message of messages) {
-        if (message && message.id) {
-          // Use inline code since we can't easily call other mutations from a mutation
-          const existingMessage = state.messages[message.id];
-          
-          if (!existingMessage) {
-            state.structureVersion += 1;
-            state.messages[message.id] = { ...message };
-          } else {
-             // Basic merge for bulk set (could be improved to match SET_MESSAGE exactly if needed)
-             state.messages[message.id] = { ...existingMessage, ...message };
-          }
-        }
+
+      const stored = state.messages[message.id];
+      if (stored && stored.parent_id) {
+        linkReplyToParent(state, stored.parent_id, stored.id);
       }
     },
-
     
     SET_MESSAGES(state, messages) {
       for (const message of messages) {
@@ -317,16 +373,12 @@ export default {
       
       // If this message has a parent, remove it from parent's child_ids
       const message = state.messages[messageId];
-      if (message.parent_id && state.messages[message.parent_id]) {
+      if (message.parent_id) {
+        forgetOutgoingChild(state, message.parent_id, messageId);
         const parent = state.messages[message.parent_id];
-        if (parent.child_ids) {
-          const index = parent.child_ids.indexOf(messageId);
-          if (index !== -1) {
-            // Create a new array without the deleted message ID
-            const newChildIds = [...parent.child_ids];
-            newChildIds.splice(index, 1);
-            
-            // Update the parent with new child_ids array
+        if (parent && parent.child_ids) {
+          const newChildIds = parent.child_ids.filter(id => !sameId(id, messageId));
+          if (newChildIds.length !== parent.child_ids.length) {
             state.messages[message.parent_id] = {
               ...parent,
               child_ids: newChildIds
@@ -372,13 +424,19 @@ export default {
       // First pass: collect all parent updates needed
       for (const msgId of messagesToDelete) {
         const message = state.messages[msgId];
-        if (message && message.parent_id && state.messages[message.parent_id] && !messagesToDelete.has(message.parent_id)) {
-          // Only update parents that aren't being deleted themselves
-          if (!parentUpdates.has(message.parent_id)) {
-            parentUpdates.set(message.parent_id, new Set(state.messages[message.parent_id].child_ids || []));
+        if (message && message.parent_id && !messagesToDelete.has(message.parent_id)) {
+          forgetOutgoingChild(state, message.parent_id, msgId);
+          if (state.messages[message.parent_id]) {
+            // Only update parents that aren't being deleted themselves
+            if (!parentUpdates.has(message.parent_id)) {
+              parentUpdates.set(message.parent_id, new Set(state.messages[message.parent_id].child_ids || []));
+            }
+            // Remove this message from its parent's child_ids
+            const pool = parentUpdates.get(message.parent_id);
+            for (const id of [...pool]) {
+              if (sameId(id, msgId)) pool.delete(id);
+            }
           }
-          // Remove this message from its parent's child_ids
-          parentUpdates.get(message.parent_id).delete(msgId);
         }
       }
       
@@ -449,14 +507,7 @@ export default {
     
     // New mutation for WebSocket updates
     ADD_CHILD_TO_PARENT(state, { parentId, childId }) {
-      const parent = state.messages[parentId];
-      if (parent && !parent.child_ids.includes(childId)) {
-        state.messages[parentId] = {
-          ...parent,
-          child_ids: [...(parent.child_ids || []), childId]
-        };
-        state.structureVersion += 1;
-      }
+      linkReplyToParent(state, parentId, childId);
     },
     
     // Add a new mutation to update the read status of a message
@@ -582,16 +633,36 @@ export default {
   
   actions: {
     // Shared ingest for websocket, sibling catch-up, and thread refresh.
-    // Live websocket messages auto-mark when they land on the visible path;
-    // refresh-discovered siblings stay unread (red envelope) like off-path WS arrivals.
-    async ingestIncomingMessage({ commit, getters, dispatch, rootState }, {
+    // A recipient message that lands on the open thread's visible branch is
+    // marked read. Silence and refresh suppress the toast only; a message
+    // off that branch stays unread.
+    async ingestIncomingMessage({ commit, getters, dispatch, rootState, state }, {
       messageData,
       writeToStore = true,
       autoMarkIfInBranch = true,
       notifyIfOffPath = true,
+      source = 'unspecified',
+      silent = false,
     } = {}) {
       try {
         if (!messageData || !messageData.id) return;
+
+        if (!messageData.parent_id && messageData.parentId) {
+          messageData.parent_id = messageData.parentId;
+        }
+        if (messageData.silent === true) silent = true;
+        if (Object.prototype.hasOwnProperty.call(messageData, 'silent')) {
+          messageData = { ...messageData };
+          delete messageData.silent;
+        }
+
+        // Create payloads ship is_read: null. Keep a real read, and record every
+        // other recipient message as unread so a later branch mark can see it.
+        const stored = state.messages[messageData.id] || state.messages[String(messageData.id)];
+        const alreadyRead = stored?.is_read === true || messageData.is_read === true;
+        if (alreadyRead && messageData.is_read !== true) {
+          messageData = { ...messageData, is_read: true };
+        }
 
         if (writeToStore) {
           commit('SET_MESSAGE', messageData);
@@ -601,6 +672,13 @@ export default {
         const { isFromCurrentUser, isToCurrentUser } = getIncomingMessageAudience(messageData, user);
 
         const parentId = messageData.parent_id;
+        const typingAuthorUid = getAuthorUid(messageData);
+        if (!silent && parentId && typingAuthorUid) {
+          dispatch('typing/clearAuthor', {
+            authorUid: typingAuthorUid,
+            targetMessageId: parentId
+          }, { root: true });
+        }
         if (parentId) {
           const parentInStore = getters.getMessage(parentId);
           if (parentInStore) {
@@ -616,14 +694,15 @@ export default {
         }
 
         if (isToCurrentUser && !isFromCurrentUser) {
-          commit('UPDATE_MESSAGE_READ_STATUS', { messageId: messageData.id, isRead: false });
+          if (!alreadyRead) {
+            commit('UPDATE_MESSAGE_READ_STATUS', { messageId: messageData.id, isRead: false });
+          }
 
-          const parent = parentId ? getters.getMessage(parentId) : null;
-          const isNextInBranch = parent && parent.branch_child === messageData.id;
+          const onVisibleBranch = isOnOpenVisibleBranch(getters, messageData.id);
 
-          if (autoMarkIfInBranch && isNextInBranch) {
+          if (autoMarkIfInBranch && onVisibleBranch) {
             dispatch('batchMarkAsRead', [messageData.id]);
-          } else if (notifyIfOffPath && !isNextInBranch) {
+          } else if (!silent && notifyIfOffPath && !onVisibleBranch) {
             const authorName = getAuthorDisplayName(messageData) !== 'Unknown'
               ? getAuthorDisplayName(messageData)
               : (getAuthorUserTag(messageData) || 'Someone');
@@ -648,13 +727,14 @@ export default {
 
     // Handle incoming message from WebSocket (transport-agnostic)
     async handleIncomingWsMessage({ dispatch }, messageData) {
-      return dispatch('ingestIncomingMessage', { messageData });
+      const silent = messageData?.silent === true;
+      return dispatch('ingestIncomingMessage', { messageData, source: 'websocket', silent });
     },
 
     async ingestNewlyDiscoveredMessages({ state, dispatch }, {
       messages,
       previouslyKnownIds,
-      autoMarkIfInBranch = false,
+      autoMarkIfInBranch = true,
       notifyIfOffPath = false,
     } = {}) {
       if (!Array.isArray(messages) || messages.length === 0) return;
@@ -672,6 +752,7 @@ export default {
           writeToStore: !state.messages[messageData.id],
           autoMarkIfInBranch,
           notifyIfOffPath,
+          source: 'refresh',
         });
       }
       dispatch('refreshThreadUnreadCounts');
@@ -872,6 +953,51 @@ export default {
       const up_depth = depth;
       return dispatch('loadTraversal', { messageId, up_depth, down_depth: 0, get_replies, get_children });
     },
+
+    // Reload the loaded reply chain. The client graph cannot discover replies that
+    // arrived while it was cached, so the server walks from the deepest loaded reply
+    // on the visible spine. Stitch links are not part of that spine. up_depth is the
+    // number of reply ancestors already in the store, capped at LOAD_RADIUS, plus one
+    // hop of reply bodies past the leaf.
+    async refreshLoadedReplyChain({ dispatch, state }, { messageId } = {}) {
+      if (!messageId || !state.messages[messageId]) return [];
+
+      let leaf = state.messages[messageId];
+      const seenDown = new Set([String(leaf.id)]);
+      while (leaf) {
+        const nextId = leaf.branch_child;
+        if (!nextId || !state.messages[nextId]) break;
+        const replyIds = new Set((leaf.child_ids || []).map(id => String(id)));
+        if (!replyIds.has(String(nextId))) break;
+        if (seenDown.has(String(nextId))) break;
+        seenDown.add(String(nextId));
+        leaf = state.messages[nextId];
+      }
+
+      let upDepth = 0;
+      let current = leaf;
+      const seenUp = new Set([String(leaf.id)]);
+      while (
+        upDepth < LOAD_RADIUS &&
+        current &&
+        current.parent_id &&
+        state.messages[current.parent_id] &&
+        !seenUp.has(String(current.parent_id))
+      ) {
+        seenUp.add(String(current.parent_id));
+        upDepth += 1;
+        current = state.messages[current.parent_id];
+      }
+
+      return dispatch('loadTraversal', {
+        messageId: leaf.id,
+        up_depth: upDepth,
+        down_depth: 1,
+        get_replies: true,
+        get_children: true,
+        edge_type: 'replies',
+      });
+    },
     
     // Send a reply to a message
     async sendReply({ commit, dispatch, rootState, state, getters }, { parentId, content, isPrivate, recipients, content_author, tags, files, subject, channel_ids }) {
@@ -1023,6 +1149,11 @@ export default {
           }
         } catch (e) {
           console.warn('[Messages Store] Failed to auto-mark sent message as read:', e);
+        }
+
+        if (!parentId && newMessage?.id) {
+          const created = state.messages[newMessage.id] || newMessage;
+          dispatch('navigation/prependCreatedRoot', created, { root: true });
         }
         
         // No need to subscribe here, ThreadView handles WebSocket subscriptions
@@ -1289,13 +1420,6 @@ export default {
         if (mode === 'inbox' && inboxFetchGen !== inboxFetchSerial) {
           return { messages: [], has_more: false, stale: true };
         }
-        if (mode === 'inbox' && skip === 0) {
-          // First page replaces the list, including when the filtered result is empty.
-          await this.dispatch('messages/clearCache');
-          if (inboxFetchGen !== inboxFetchSerial) {
-            return { messages: [], has_more: false, stale: true };
-          }
-        }
         if (messages.length > 0) {
           // Loop through and commit individually to ensure full merge logic runs
           messages.forEach(m => commit('SET_MESSAGE', m));
@@ -1520,7 +1644,7 @@ export default {
       }
       
       const currentChildId = message.branch_child;
-      const currentIndex = orderedChildIds.indexOf(currentChildId);
+      const currentIndex = orderedChildIds.findIndex(id => String(id) === String(currentChildId));
       
       if (currentIndex === -1) {
         // If no valid current child, use last child from ordered list (furthest right)
@@ -1877,14 +2001,23 @@ export default {
     },
     
     getChildIds: state => parentId => {
-      const message = state.messages[parentId];
-      if (!message) return [];
+      const message = state.messages[parentId] || state.messages[String(parentId)];
+      const knownChildren = state.childrenByParent?.[String(parentId)] || [];
+      if (!message && knownChildren.length === 0) return [];
 
-      const childIds = message.child_ids || [];
-      const stitchChildIds = message.stitch_child_ids || [];
-      const replySet = new Set(childIds);
-      const order = Array.isArray(message.reply_order) ? message.reply_order : [];
-      const orderSet = new Set(order);
+      const childIds = [];
+      const seenChild = new Set();
+      for (const id of [...(message?.child_ids || []), ...knownChildren]) {
+        if (id == null) continue;
+        const key = String(id);
+        if (seenChild.has(key)) continue;
+        seenChild.add(key);
+        childIds.push(id);
+      }
+      const stitchChildIds = message?.stitch_child_ids || [];
+      const replySet = new Set(childIds.map(id => String(id)));
+      const order = Array.isArray(message?.reply_order) ? message.reply_order : [];
+      const orderSet = new Set(order.map(id => String(id)));
 
       const byTime = (a, b) => {
         const msgA = state.messages[a];
@@ -1896,17 +2029,18 @@ export default {
       };
 
       // Frontend placement: unordered replies, then the partial order, then unordered stitches.
-      const unorderedReplies = childIds.filter(id => !orderSet.has(id)).sort(byTime);
+      const unorderedReplies = childIds.filter(id => !orderSet.has(String(id))).sort(byTime);
       const ordered = [];
       const seen = new Set();
       for (const id of order) {
-        if (seen.has(id)) continue;
-        if (replySet.has(id) || stitchChildIds.includes(id)) {
-          seen.add(id);
+        const key = String(id);
+        if (seen.has(key)) continue;
+        if (replySet.has(key) || stitchChildIds.some(stitchId => sameId(stitchId, id))) {
+          seen.add(key);
           ordered.push(id);
         }
       }
-      const unorderedStitches = stitchChildIds.filter(id => !orderSet.has(id) && !replySet.has(id));
+      const unorderedStitches = stitchChildIds.filter(id => !orderSet.has(String(id)) && !replySet.has(String(id)));
       return [...unorderedReplies, ...ordered, ...unorderedStitches];
     },
     

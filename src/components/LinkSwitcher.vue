@@ -104,27 +104,32 @@ const isCurrentStitch = computed(() => {
 
 // Show:
 // - full navigator when we can cycle between multiple origins
-// - OR a non-interactive “Linked origin” indicator when the active parent is a stitch parent
-//   but there is only a single origin.
+// - OR a “Linked origin” indicator when this message has a stitch parent,
+//   including a reply root whose stitch parent is not the active parent yet.
 const shouldShowIndicator = computed(() => {
   if (isSwitchable.value) return true;
+  if ((props.stitchParentIds || []).length > 0) return true;
   return hasActiveParent.value && isCurrentStitch.value;
 });
 
 const isPrevStitch = computed(() => {
-  if (!isSwitchable.value || currentIndex.value <= 0) return false;
-  let idx = currentIndex.value - 1;
-  return allParents.value[idx]?.type === 'stitch';
+  if (currentIndex.value <= 0) return false;
+  return allParents.value[currentIndex.value - 1]?.type === 'stitch';
 });
 
 const isNextStitch = computed(() => {
-  if (!isSwitchable.value || currentIndex.value >= allParents.value.length - 1) return false;
-  let idx = currentIndex.value + 1;
+  const idx = currentIndex.value + 1;
+  if (idx < 0 || idx >= allParents.value.length) return false;
   return allParents.value[idx]?.type === 'stitch';
 });
 
-const canNavigatePrev = computed(() => isSwitchable.value && currentIndex.value > 0);
-const canNavigateNext = computed(() => isSwitchable.value && currentIndex.value < allParents.value.length - 1);
+const canNavigatePrev = computed(() => currentIndex.value > 0);
+const canNavigateNext = computed(() => {
+  if (allParents.value.length === 0) return false;
+  // No origin selected yet (reply root). The next arrow steps onto the first one.
+  if (currentIndex.value === -1) return true;
+  return currentIndex.value < allParents.value.length - 1;
+});
 
 const indicatorLabel = computed(() => {
   const info = currentParentInfo.value;
@@ -141,13 +146,13 @@ const indicatorLabel = computed(() => {
 });
 
 const cycleParent = (direction) => {
-  if (!isSwitchable.value) return;
-  
+  if (allParents.value.length === 0) return;
+
   const nextIdx = currentIndex.value + direction;
-  
-  // Guard against out of bounds (no looping)
+
+  // Guard against out of bounds (no looping). Index -1 is "no origin selected".
   if (nextIdx < 0 || nextIdx >= allParents.value.length) return;
-  
+
   emit('switchParent', allParents.value[nextIdx].id);
 };
 </script>

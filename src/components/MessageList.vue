@@ -1,11 +1,10 @@
 <script setup>
-import { computed, onMounted, ref, onUnmounted, nextTick, watch } from 'vue';
+import { computed, onMounted, onUnmounted, onActivated, onDeactivated, ref, nextTick, watch } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
 import MessagePreview from './MessagePreview.vue';
 import DeleteConfirmModal from './modals/DeleteConfirmModal.vue';
 import NewThreadModal from './modals/NewThreadModal.vue';
-import { onActivated } from 'vue';
 import { isCurrentUserAuthor as isMessageAuthor } from '../utils/messageCompat.js';
 
 // Props to support different modes and configurations
@@ -55,6 +54,19 @@ const props = defineProps({
   showAllLinks: {
     type: Boolean,
     default: false
+  },
+  // Search owns its pages. When set, custom mode shows Load more from hasMore.
+  externalPaging: {
+    type: Boolean,
+    default: false
+  },
+  hasMore: {
+    type: Boolean,
+    default: false
+  },
+  loadingMore: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -63,7 +75,7 @@ const router = useRouter();
 const route = useRoute();
 
 // Define emits
-const emit = defineEmits(['messageClicked', 'selectionChanged', 'createChannel']);
+const emit = defineEmits(['messageClicked', 'selectionChanged', 'load-more']);
 
 const isAllLoaded = ref(false);
 const currentSkip = ref(0);
@@ -80,29 +92,16 @@ const selectedMessageIds = ref(new Set());
 // Link deletion loading state
 const deletingLinkId = ref(null);
 
-// Request management for race condition prevention
-const currentRequestId = ref(0);
-const localLoadingState = ref(false);
+// This list's request, not the shared store flag. That flag is global, so one
+// fetch could block another list and a discarded response left Load More with no rows.
+const isLoading = ref(false);
+const listActive = ref(true);
+let requestSerial = 0;
+// keep-alive runs onActivated right after onMounted; the mount load is enough.
+const skipActivateLoad = ref(false);
 
-// Track if we've restored from cache (to prevent immediate watch from clearing it)
-const restoredFromCache = ref(false);
-const skipNextActivateRefresh = ref(false);
-
-// Mode classification helpers
 const isLocalMode = computed(() => ['saved', 'public', 'history', 'timeline', 'incoming-links', 'outgoing-links', 'custom'].includes(props.mode));
-const isStoreMode = computed(() => ['inbox', 'admin'].includes(props.mode));
 const requiresAuth = computed(() => ['inbox', 'saved', 'history', 'timeline'].includes(props.mode));
-// Server-ordered recency lists: restore cache for instant paint, then refetch so
-// order matches the API regardless of whether we entered via mount, keep-alive, or back-from-thread.
-// Saved is included because bookmarking happens on a message, outside this list.
-const isServerOrderedMode = computed(() => ['history', 'timeline', 'saved'].includes(props.mode));
-
-// Store loading state - single source of truth for store-based modes only
-const isLoading = computed(() => {
-  return isLocalMode.value
-    ? localLoadingState.value
-    : store.getters['messages/isLoading']('fetchingMessages');
-});
 
 // Reference to the message list container for scroll detection
 const messageListRef = ref(null);
@@ -116,9 +115,6 @@ const activeTab = computed(() => store.getters['navigation/activeTab'] || 'histo
 const isInboxMode = computed(() => props.mode === 'inbox');
 const inboxUnreadOnly = computed(() => store.getters['navigation/inboxUnreadOnly']);
 let inboxLiveTimer = null;
-// Inbox page 1 clears the shared message cache before writing the new page.
-// That dip to zero is not an external reset; ignore it until the response is applied.
-let inboxCacheResetSuppressions = 0;
 
 // NOTE: Inbox "mark all as read" was added but disabled per product decision.
 // Keeping the code here commented so it can be re-enabled later.
@@ -145,7 +141,7 @@ const markAllAsRead = async () => {
     const scrollContainer = messageListRef.value?.closest('.main-content');
     if (scrollContainer) scrollContainer.scrollTop = 0;
 
-    await loadMessages();
+    await loadFromStart();
   } catch (e) {
     console.error('[MessageList] markAllAsRead failed:', e);
   } finally {
@@ -206,7 +202,7 @@ const modeDescription = computed(() => {
     case 'inbox':
       return 'Your inbox shows the latest message from each conversation thread where you are involved—either as a recipient or as the author. This gives you a quick overview of all your active conversations.';
     case 'public':
-      return 'Public messages are visible to everyone. This view shows the most recent message (leaf node) from each public thread, giving you a snapshot of public conversations happening across the platform.';
+      return 'Public shows the root of each public thread, one row per thread. A public reply under a private message starts its own thread. Roots are ordered by when they were created, newest first.';
     case 'timeline':
       return 'Timeline shows all messages you have access to in reverse chronological order. This includes public messages, messages you authored, messages you received, and messages in channels you\'re a member of.';
     default:
@@ -282,6 +278,8 @@ const error = computed(() => store.getters['ui/error']);
 const user = computed(() => store.getters['auth/user']);
 const canInteract = computed(() => store.getters['auth/canInteract']);
 const activePrincipalUid = computed(() => store.getters['auth/activePrincipalUid']);
+// Snapshots are per principal so switching profiles cannot paint the other person's list.
+const listCacheKey = computed(() => `${activePrincipalUid.value || 'anon'}:${props.mode}`);
 
 const firebaseReady = ref(true);
 const replyCounts = ref({}); // Track reply counts by thread ID
@@ -342,23 +340,12 @@ const viewMessage = (messageId) => {
     const scrollPos = scrollContainer.scrollTop;
     console.log(`[MessageList] Saving scroll position: ${scrollPos} for tab "${props.mode}"`);
     store.dispatch('navigation/saveListScrollPosition', {
-      tab: props.mode,
+      tab: listCacheKey.value,
       position: scrollPos
     });
   }
   
-  // Save list cache for local modes (so we don't have to refetch)
-  if (isLocalMode.value && localMessages.value.length > 0) {
-    console.log(`[MessageList] Saving cache for "${props.mode}" - ${localMessages.value.length} messages, skip: ${currentSkip.value}`);
-    store.dispatch('navigation/saveListCache', {
-      tab: props.mode,
-      messages: localMessages.value,
-      currentSkip: currentSkip.value,
-      isAllLoaded: isAllLoaded.value
-    });
-  } else {
-    console.log(`[MessageList] NOT saving cache - isLocalMode: ${isLocalMode.value}, messages: ${localMessages.value.length}`);
-  }
+  persistLocalListCache();
   
   // Store current route before navigation (only for non-link modes)
   // Use fullPath to include query params (e.g., channelId for channels tab)
@@ -378,6 +365,7 @@ const confirmDeleteMessage = (message) => {
 
 // Create a new message thread
 const createNewThread = () => {
+  persistLocalListCache();
   // Store current route before navigation
   store.dispatch('navigation/setPreviousRoute', route.path);
   
@@ -390,13 +378,7 @@ const hasImportScope = computed(() => {
   return store.getters['auth/hasAnyScope'](['msg.import.cursor', 'msg.import.audio']);
 });
 
-const hasChannelCreateScope = computed(() => {
-  return store.getters['auth/hasScope']('channels.create');
-});
-
-const shouldShowModal = computed(() => {
-  return hasImportScope.value || hasChannelCreateScope.value;
-});
+const shouldShowModal = computed(() => hasImportScope.value);
 
 // Handle the create button click
 const handleCreateClick = (event) => {
@@ -412,8 +394,7 @@ const handleCreateClick = (event) => {
     return;
   }
 
-  // If user has import or channel.create scopes, show modal
-  // Otherwise go straight to new thread
+  // Import needs a choice; otherwise go straight to a new thread
   if (shouldShowModal.value) {
     showNewThreadModal.value = true;
   } else {
@@ -430,12 +411,6 @@ const handleImportConfirm = () => {
   showNewThreadModal.value = false;
   store.dispatch('navigation/setPreviousRoute', route.path);
   router.push('/import');
-};
-
-const handleCreateChannelConfirm = () => {
-  showNewThreadModal.value = false;
-  // Emit event to parent (ChannelsView will handle this)
-  emit('createChannel');
 };
 
 // Function to check if the author is the current user
@@ -489,7 +464,7 @@ const getListScrollContainer = () => messageListRef.value?.closest('.main-conten
 const getListScrollTop = () => {
   const container = getListScrollContainer();
   if (container && container.scrollTop > 0) return container.scrollTop;
-  return store.getters['navigation/getListScrollPosition'](props.mode) || 0;
+  return store.getters['navigation/getListScrollPosition'](listCacheKey.value) || 0;
 };
 
 const restoreListScroll = (position) => {
@@ -498,10 +473,18 @@ const restoreListScroll = (position) => {
 };
 
 const persistLocalListCache = () => {
-  if (!isLocalMode.value) return;
+  if (props.mode === 'custom') return;
+  let messages = null;
+  if (props.mode === 'inbox') {
+    const byId = store.state.messages.messages;
+    messages = inboxMessageIds.value.map(id => byId[id]).filter(Boolean);
+  } else if (isLocalMode.value) {
+    messages = localMessages.value;
+  }
+  if (!messages?.length) return;
   store.dispatch('navigation/saveListCache', {
-    tab: props.mode,
-    messages: localMessages.value,
+    tab: listCacheKey.value,
+    messages,
     currentSkip: currentSkip.value,
     isAllLoaded: isAllLoaded.value
   });
@@ -557,120 +540,38 @@ const applyFetchedPage = (response, { replace }) => {
   persistLocalListCache();
 };
 
-// Refetch skip=0 for the currently loaded window so History/Timeline order
-// matches the API after returning from a thread (cache is only for instant paint).
-const ensureFreshServerOrderedList = async () => {
-  if (!isServerOrderedMode.value) return;
-  if (requiresAuth.value && !user.value) return;
-  if (isLoading.value) return;
+const rowCount = () => (
+  props.mode === 'inbox' ? inboxMessageIds.value.length : localMessages.value.length
+);
 
-  const hadMessages = localMessages.value.length > 0;
-  const previousPrefix = localMessages.value.slice(0, pageSize.value).map(m => String(m.id));
-  const savedScroll = hadMessages ? getListScrollTop() : 0;
-  const limit = Math.max(pageSize.value, localMessages.value.length || pageSize.value);
-
-  const requestId = ++currentRequestId.value;
-  localLoadingState.value = true;
-  try {
-    const response = await store.dispatch('messages/fetchMessages', {
-      mode: props.mode,
-      ...buildFetchParams({ skip: 0, limit })
-    });
-    if (requestId !== currentRequestId.value) return;
-    if (!response) return;
-
-    applyFetchedPage(response, { replace: true });
-
-    const newPrefix = (response.messages || []).slice(0, pageSize.value).map(m => String(m.id));
-    const prefixUnchanged = hadMessages && idsPrefixEqual(previousPrefix, newPrefix);
-    await nextTick();
-    if (prefixUnchanged && savedScroll > 0) {
-      restoreListScroll(savedScroll);
-      setTimeout(() => restoreListScroll(savedScroll), 50);
-    } else if (hadMessages && !prefixUnchanged) {
-      restoreListScroll(0);
-    }
-  } catch (error) {
-    console.error(`[MessageList] Error refreshing ${props.mode} messages:`, error);
-  } finally {
-    if (requestId === currentRequestId.value) {
-      localLoadingState.value = false;
-    }
-  }
-};
-
-const holdInboxCacheReset = async (fn) => {
-  if (props.mode !== 'inbox') return fn();
-  inboxCacheResetSuppressions++;
-  try {
-    return await fn();
-  } finally {
-    // Cover the watcher flush that sees the temporary empty cache.
-    await nextTick();
-    inboxCacheResetSuppressions--;
-  }
-};
-
-// Abstract fetch function - delegates to store based on mode
-const loadMessages = async () => {
-  // Skip loading if already loading or all loaded
-  if (isLoading.value || isAllLoaded.value) {
-    return;
-  }
-  
-  // Skip for auth-required modes if no user
-  if (requiresAuth.value && !user.value) return;
-  
-  // Generate a unique request ID to prevent race conditions
-  const requestId = ++currentRequestId.value;
-  
-  
-  // Set loading state based on mode
-  if (isLocalMode.value) localLoadingState.value = true;
-  // Store modes handle their own loading state in the store
-  
-  try {
-    const response = await holdInboxCacheReset(() => store.dispatch('messages/fetchMessages', {
-      mode: props.mode,
-      ...buildFetchParams({ skip: currentSkip.value, limit: pageSize.value })
-    }));
-
-    if (requestId !== currentRequestId.value || response?.stale) return;
-    if (response) {
-      applyFetchedPage(response, { replace: false });
-    }
-  } catch (error) {
-    
-    console.error(`[MessageList] Error loading ${props.mode} messages:`, error);
-  } finally {
-    // Only clear loading state if this is still the current request
-    if (requestId === currentRequestId.value) {
-      if (isLocalMode.value) localLoadingState.value = false;
-    }
-  }
+const clearRows = () => {
+  requestSerial += 1;
+  isLoading.value = false;
+  isAllLoaded.value = false;
+  currentSkip.value = 0;
+  selectedMessageIds.value.clear();
+  localMessages.value = [];
+  inboxMessageIds.value = [];
 };
 
 const restoreFromListCache = () => {
-  if (!isLocalMode.value) return false;
-  const cached = store.getters['navigation/getListCache'](props.mode);
+  if (props.mode === 'custom') return false;
+  if (!isLocalMode.value && props.mode !== 'inbox') return false;
+  const cached = store.getters['navigation/getListCache'](listCacheKey.value);
   if (!cached?.messages?.length) return false;
-
-  restoredFromCache.value = true;
-  localMessages.value = applyLastDeletedMessage(cached.messages);
-  currentSkip.value = cached.currentSkip;
-  isAllLoaded.value = cached.isAllLoaded;
-  persistLocalListCache();
-
-  if (!isServerOrderedMode.value) {
-    nextTick(() => {
-      nextTick(() => {
-        setTimeout(() => {
-          const savedScrollPosition = store.getters['navigation/getListScrollPosition'](props.mode);
-          if (savedScrollPosition > 0) restoreListScroll(savedScrollPosition);
-        }, 50);
-      });
+  const messages = applyLastDeletedMessage(cached.messages);
+  if (props.mode === 'inbox') {
+    messages.forEach(message => {
+      if (message?.id && !store.state.messages.messages[message.id]) {
+        store.commit('messages/SET_MESSAGE', message);
+      }
     });
+    inboxMessageIds.value = messages.map(message => message.id).filter(Boolean);
+  } else {
+    localMessages.value = messages;
   }
+  currentSkip.value = cached.currentSkip;
+  isAllLoaded.value = !!cached.isAllLoaded;
   return true;
 };
 
@@ -688,204 +589,214 @@ const removeDeletedFromLocalList = () => {
   }
 };
 
-onMounted(() => {
-  const restored = restoreFromListCache();
-
-  if (isServerOrderedMode.value) {
-    skipNextActivateRefresh.value = true;
-    ensureFreshServerOrderedList();
-    return;
-  }
-
-  if (restored) return;
-
-  if (props.mode === 'admin') {
-    loadMessages();
-  } else if (requiresAuth.value && !user.value) {
-    return;
-  } else {
-    loadMessages();
-  }
-});
-
-onActivated(() => {
-  try {
-    removeDeletedFromLocalList();
-
-    if (skipNextActivateRefresh.value) {
-      skipNextActivateRefresh.value = false;
-      return;
-    }
-
-    const hasUser = !!user.value;
-    const needsAuth = requiresAuth.value;
-    const anyMessages = (store.getters['messages/getLoadedMessages'] || []).length > 0;
-    const cached = store.getters['navigation/getListCache'](props.mode);
-    const cacheEmpty = !cached?.messages?.length;
-    if (isLocalMode.value && localMessages.value.length > 0 && cacheEmpty) {
-      resetListUiState();
-    }
-
-    if (isServerOrderedMode.value) {
-      nextTick(() => {
-        ensureFreshServerOrderedList();
-      });
-      return;
-    }
-
-    if (isStoreMode.value && !isLoading.value && !anyMessages && (!needsAuth || hasUser)) {
-      nextTick(() => {
-        loadMessages();
-      });
-    } else if (isLocalMode.value && !isLoading.value && localMessages.value.length === 0 && (!needsAuth || hasUser)) {
-      nextTick(() => {
-        loadMessages();
-      });
-    }
-
-    const savedScrollPosition = store.getters['navigation/getListScrollPosition'](props.mode);
-    if (savedScrollPosition > 0 && messageListRef.value) {
-      nextTick(() => {
-        restoreListScroll(savedScrollPosition);
-      });
-    }
-  } catch (e) {
-    // no-op
-  }
-});
-
-const resetListUiState = () => {
-  currentRequestId.value++;
-  localLoadingState.value = false;
-  selectedMessageIds.value.clear();
-  isAllLoaded.value = false;
-  currentSkip.value = 0;
-  restoredFromCache.value = false;
-  if (isLocalMode.value) {
-    localMessages.value = [];
-  }
+const prefixIds = () => {
   if (props.mode === 'inbox') {
-    inboxMessageIds.value = [];
+    return inboxMessageIds.value.slice(0, pageSize.value).map((id) => String(id));
+  }
+  return localMessages.value.slice(0, pageSize.value).map((message) => String(message.id));
+};
+
+// First page, or the pages already on screen when we already have rows.
+const loadFromStart = async ({ preserveWindow = false, allowStaleRetry = true } = {}) => {
+  if (!listActive.value) return;
+  if (props.mode === 'custom') {
+    if (!props.externalPaging) isAllLoaded.value = true;
+    return;
+  }
+  if (requiresAuth.value && !user.value) return;
+
+  const keepWindow = preserveWindow && rowCount() > 0;
+  const limit = keepWindow ? Math.max(pageSize.value, rowCount()) : pageSize.value;
+  const previousPrefix = keepWindow ? prefixIds() : [];
+  const savedScroll = keepWindow ? getListScrollTop() : 0;
+
+  const requestId = ++requestSerial;
+  isLoading.value = true;
+  if (!keepWindow) {
+    currentSkip.value = 0;
+    isAllLoaded.value = false;
+  }
+
+  try {
+    const response = await store.dispatch('messages/fetchMessages', {
+      mode: props.mode,
+      ...buildFetchParams({ skip: 0, limit })
+    });
+    if (requestId !== requestSerial || !listActive.value) return;
+    if (response?.stale) {
+      if (allowStaleRetry && threads.value.length === 0) {
+        return loadFromStart({ preserveWindow, allowStaleRetry: false });
+      }
+      return;
+    }
+    if (!response) return;
+
+    applyFetchedPage(response, { replace: true });
+
+    if (!keepWindow) return;
+    const nextPrefix = (response.messages || []).slice(0, pageSize.value).map((message) => String(message.id));
+    await nextTick();
+    if (requestId !== requestSerial) return;
+    if (idsPrefixEqual(previousPrefix, nextPrefix) && savedScroll > 0) {
+      restoreListScroll(savedScroll);
+      setTimeout(() => restoreListScroll(savedScroll), 50);
+    } else if (!idsPrefixEqual(previousPrefix, nextPrefix)) {
+      restoreListScroll(0);
+    }
+  } catch (error) {
+    console.error(`[MessageList] Error loading ${props.mode} messages:`, error);
+  } finally {
+    if (requestId === requestSerial) isLoading.value = false;
   }
 };
 
-// Watch for user changes to start loading when they log in, and drop list state on logout
-watch(user, (newUser, oldUser) => {
-  if (newUser && !oldUser) {
-    if (requiresAuth.value || (isLocalMode.value && localMessages.value.length === 0)) {
-      loadMessages();
+const loadMore = async () => {
+  if (!listActive.value || isLoading.value || isAllLoaded.value) return;
+  if (props.mode === 'custom') {
+    if (props.externalPaging && props.hasMore) emit('load-more');
+    return;
+  }
+  if (requiresAuth.value && !user.value) return;
+
+  const requestId = ++requestSerial;
+  isLoading.value = true;
+  try {
+    const response = await store.dispatch('messages/fetchMessages', {
+      mode: props.mode,
+      ...buildFetchParams({ skip: currentSkip.value, limit: pageSize.value })
+    });
+    if (requestId !== requestSerial || !listActive.value || response?.stale || !response) return;
+    applyFetchedPage(response, { replace: false });
+  } catch (error) {
+    console.error(`[MessageList] Error loading ${props.mode} messages:`, error);
+  } finally {
+    if (requestId === requestSerial) isLoading.value = false;
+  }
+};
+
+const showList = () => {
+  if (!listActive.value) return;
+  if (props.mode === 'custom') {
+    if (!props.externalPaging) {
+      isAllLoaded.value = true;
+      isLoading.value = false;
     }
-  } else if (!newUser && oldUser) {
-    resetListUiState();
+    return;
+  }
+  if (requiresAuth.value && !user.value) {
+    isLoading.value = false;
+    return;
+  }
+  restoreFromListCache();
+  return loadFromStart({ preserveWindow: rowCount() > 0 });
+};
+
+// Search pages from outside this list. Other custom lists are already complete.
+watch(
+  () => [props.externalPaging, props.hasMore, props.loadingMore],
+  () => {
+    if (props.mode !== 'custom' || !props.externalPaging) return;
+    isAllLoaded.value = !props.hasMore;
+    isLoading.value = !!props.loadingMore;
+  },
+  { immediate: true }
+);
+
+// Spinner on the first paint. Otherwise the button shows for a frame before the fetch starts.
+if (props.mode === 'custom') {
+  if (!props.externalPaging) isAllLoaded.value = true;
+} else {
+  isLoading.value = true;
+}
+
+onMounted(() => {
+  listActive.value = true;
+  skipActivateLoad.value = true;
+  showList();
+});
+
+onActivated(() => {
+  listActive.value = true;
+  if (skipActivateLoad.value) {
+    skipActivateLoad.value = false;
+    return;
+  }
+  removeDeletedFromLocalList();
+  if (props.mode === 'custom' || (requiresAuth.value && !user.value)) return;
+  // Rows kept in this instance belong to this principal. Refresh them in place.
+  loadFromStart({ preserveWindow: rowCount() > 0 });
+});
+
+onDeactivated(() => {
+  listActive.value = false;
+  persistLocalListCache();
+});
+
+watch(user, (next, prev) => {
+  if (next && !prev) {
+    showList();
+  } else if (!next && prev) {
+    clearRows();
     store.dispatch('navigation/clearListCache');
   }
 });
 
-// Reload when active principal changes (manager ↔ managed or between manageds)
-watch(activePrincipalUid, async (newUid, oldUid) => {
-  try {
-    if (newUid === oldUid) return;
-    resetListUiState();
-    // Clear navigation cache since we're switching principals
-    store.dispatch('navigation/clearListCache');
-    // Trigger fresh load respecting mode/auth
-    await nextTick();
-    if (isServerOrderedMode.value) {
-      ensureFreshServerOrderedList();
-    } else {
-      loadMessages();
-    }
-  } catch (e) {
-    // no-op
-  }
+// Profile switches usually swap in another list via its key. A list that stays
+// mounted (an open modal) reloads here, after the swap, and only if it is still showing.
+watch(activePrincipalUid, async (next, prev) => {
+  if (!next || next === prev) return;
+  await nextTick();
+  if (!listActive.value) return;
+  clearRows();
+  loadFromStart();
 });
 
 watch(selectedChannelId, (next, prev) => {
   if (next === prev) return;
-  // Saved refetches on show, and its contents do not depend on the channel filter.
   if (!['history', 'timeline'].includes(props.mode)) return;
-  resetListUiState();
-  nextTick(() => {
-    ensureFreshServerOrderedList();
-  });
+  clearRows();
+  loadFromStart();
 });
-
-const reloadInboxFromStart = async () => {
-  if (props.mode !== 'inbox') return;
-  const requestId = ++currentRequestId.value;
-  isAllLoaded.value = false;
-  currentSkip.value = 0;
-  try {
-    const response = await holdInboxCacheReset(() => store.dispatch('messages/fetchMessages', {
-      mode: 'inbox',
-      ...buildFetchParams({ skip: 0, limit: pageSize.value })
-    }));
-    if (requestId !== currentRequestId.value || response?.stale) return;
-    if (response) applyFetchedPage(response, { replace: true });
-  } catch (error) {
-    console.error('[MessageList] Error reloading inbox:', error);
-  }
-};
 
 const toggleInboxUnreadOnly = async () => {
   if (!isInboxMode.value || !user.value) return;
   store.commit('navigation/SET_INBOX_UNREAD_ONLY', !inboxUnreadOnly.value);
   const scrollContainer = messageListRef.value?.closest('.main-content');
   if (scrollContainer) scrollContainer.scrollTop = 0;
-  await reloadInboxFromStart();
+  clearRows();
+  await loadFromStart();
 };
 
 watch(
   () => store.getters['navigation/inboxLiveRefresh'],
   (next, prev) => {
     if (next === prev) return;
-    if (props.mode !== 'inbox' || !inboxUnreadOnly.value) return;
+    if (props.mode !== 'inbox' || !inboxUnreadOnly.value || !listActive.value) return;
     if (inboxLiveTimer) clearTimeout(inboxLiveTimer);
     inboxLiveTimer = setTimeout(() => {
       inboxLiveTimer = null;
-      reloadInboxFromStart();
+      loadFromStart({ preserveWindow: rowCount() > 0 });
     }, 300);
   }
 );
 
-// Watch for refresh trigger from navigation store
 const refreshTrigger = computed(() => store.getters['navigation/refreshTrigger']);
-watch(refreshTrigger, async (newTrigger) => {
-  if (newTrigger > 0) {
-    console.log('[MessageList] Refresh triggered, reloading messages...');
-    // Cancel any in-flight requests
-    currentRequestId.value++;
-    localLoadingState.value = false;
-    selectedMessageIds.value.clear();
-    isAllLoaded.value = false;
-    currentSkip.value = 0;
-    
-    // Clear cache for current mode
-    store.dispatch('navigation/clearListCache', props.mode);
-    
-    // Clear messages store cache if in store mode
-    if (isStoreMode.value) {
-      await store.dispatch('messages/clearCache');
-    } else if (isLocalMode.value) {
-      localMessages.value = [];
-    }
-    
-    // Trigger fresh load
-    await nextTick();
-    loadMessages();
-  }
+watch(refreshTrigger, (next) => {
+  if (!next || !listActive.value) return;
+  store.dispatch('navigation/clearListCache', listCacheKey.value);
+  clearRows();
+  loadFromStart();
 });
 
-// Clean up observers
 onUnmounted(() => {
-  // Cancel any pending requests to prevent memory leaks
-  currentRequestId.value++;
+  listActive.value = false;
+  persistLocalListCache();
+  requestSerial += 1;
+  isLoading.value = false;
   if (inboxLiveTimer) clearTimeout(inboxLiveTimer);
-  localLoadingState.value = false;
-  
-  // Clear any open action bars when MessageList is unmounted
   store.dispatch('navigation/closeActiveActionBar');
 });
+
 
 // Add computed properties for delete confirmation modal
 const showDeleteConfirm = computed(() => store.getters['ui/showDeleteConfirm']);
@@ -916,7 +827,7 @@ const deleteMessage = async (options) => {
     // For list view, we don't navigate away - the message will disappear from the list
     // Optionally refresh the list if needed
     if (props.mode === 'saved' || props.mode === 'public' || props.mode === 'incoming-links' || props.mode === 'outgoing-links') {
-      await loadMessages();
+      await loadFromStart();
     }
   } catch (error) {
     console.error('Error deleting message:', error);
@@ -928,8 +839,7 @@ const deleteMessage = async (options) => {
       errorMessage = 'This message has already been deleted (likely when its parent was deleted)';
       // Hide confirmation modal since the message is already gone
       store.commit('ui/SET_DELETE_CONFIRM', { show: false, message: null });
-      // Refresh the list to remove the deleted message
-      await loadMessages();
+      await loadFromStart();
     } else if (error.response?.status === 403) {
       errorMessage = 'You do not have permission to delete this message';
     } else if (error.message) {
@@ -943,34 +853,7 @@ const deleteMessage = async (options) => {
   }
 };
 
-// Reset state when cache is cleared
-watch(() => store.getters['messages/getLoadedMessages'].length, (newLength, oldLength) => {
-  console.log(`[MessageList] Message cache length changed: ${oldLength} -> ${newLength}`);
-  // If messages were cleared, reset loading states
-  if (oldLength > 0 && newLength === 0) {
-    if (props.mode === 'inbox' && inboxCacheResetSuppressions > 0) return;
-
-    console.log('[MessageList] Cache was cleared, resetting loading states');
-    
-    // Cancel any pending requests
-    currentRequestId.value++;
-    localLoadingState.value = false;
-    
-    isAllLoaded.value = false;
-    currentSkip.value = 0;
-    
-    // For store-based modes (inbox, admin), trigger reload after cache clear
-    if (props.mode === 'inbox' || props.mode === 'admin') {
-      console.log(`[MessageList] Cache cleared for store-based mode "${props.mode}", triggering reload`);
-      nextTick(() => {
-        loadMessages();
-      });
-    }
-  }
-});
-
-// Reset local state when mode or sourceMessageId changes
-// Watch for store message updates and sync to localMessages (for tags, recipients, etc.)
+// Keep local rows in sync when a message is edited in the store.
 watch(
   () => store.state.messages.messages,
   (newMessages) => {
@@ -991,69 +874,10 @@ watch(
 );
 
 watch([() => props.mode, () => props.sourceMessageId, () => props.showAllLinks], () => {
-  console.log(`[MessageList] Mode/source/showAllLinks changed - mode: "${props.mode}"`);
-  
-  // Check if we have a cache for this mode - if so, don't reset, let onMounted restore it
-  const hasCache = store.getters['navigation/getListCache'](props.mode);
-  console.log(`[MessageList] Cache check in watch for "${props.mode}":`, hasCache ? `found ${hasCache.messages?.length} messages` : 'no cache');
-  if (hasCache && hasCache.messages && hasCache.messages.length > 0) {
-    console.log(`[MessageList] Watch triggered but cache exists for "${props.mode}" - skipping reset`);
-    restoredFromCache.value = true; // Set flag so we don't reset
-    return;
-  }
-  
-  // Skip reset if we just restored from cache (prevents immediate: true from clearing cache)
-  if (restoredFromCache.value) {
-    console.log(`[MessageList] Watch triggered but skipping reset - restored from cache flag set`);
-    restoredFromCache.value = false; // Reset flag so future mode changes still work
-    return;
-  }
-  
-  console.log(`[MessageList] Watch triggered - will reset state for mode: "${props.mode}"`);
-  
-  // Cancel any pending requests immediately
-  currentRequestId.value++;
-  localLoadingState.value = false;
-  
-  if (isLocalMode.value) {
-    console.log(`[MessageList] Local state mode "${props.mode}", resetting local state`);
-    console.log(`[MessageList] Current local state:`, {
-      localMessagesCount: localMessages.value.length,
-      selectedMessageIds: selectedMessageIds.value.size,
-      isAllLoaded: isAllLoaded.value,
-      currentSkip: currentSkip.value
-    });
-    
-    localMessages.value = [];
-    selectedMessageIds.value.clear();
-    isAllLoaded.value = false;
-    currentSkip.value = 0;
-    
-    // Trigger reload
-    console.log('[MessageList] Triggering message reload after local mode change');
-    nextTick(() => {
-      loadMessages();
-    });
-  } else if (isStoreMode.value) {
-    console.log(`[MessageList] Store-based mode "${props.mode}", resetting pagination state`);
-    // For store-based modes, just reset pagination (messages handled by store)
-    isAllLoaded.value = false;
-    currentSkip.value = 0;
-    selectedMessageIds.value.clear();
-    if (props.mode === 'inbox') {
-      inboxMessageIds.value = [];
-    }
-
-    // Inbox keeps its own row list. A warm message store is the open thread, not this page.
-    const currentMessages = store.getters['messages/getLoadedMessages'] || [];
-    if (props.mode === 'inbox' || currentMessages.length === 0) {
-      console.log('[MessageList] Triggering reload for store-based mode');
-      loadMessages();
-    } else {
-      console.log(`[MessageList] Store already has ${currentMessages.length} messages, skipping reload`);
-    }
-  }
-}, { immediate: true });
+  if (!listActive.value) return;
+  clearRows();
+  showList();
+});
 
 // Handle message selection changes
 const handleMessageSelection = (messageId) => {
@@ -1109,12 +933,7 @@ const handleLinkDelete = async (linkData) => {
       
       // Refresh the message list to reflect the deletion
       // Reset pagination and reload from the beginning
-      isAllLoaded.value = false;
-      currentSkip.value = 0;
-      localMessages.value = [];
-      
-      // Reload the messages
-      await loadMessages();
+      await loadFromStart();
     } else {
       console.error('[MessageList] Failed to delete link');
       // Could show a toast notification here
@@ -1238,7 +1057,7 @@ const handleLinkDelete = async (linkData) => {
         }}</p>
         <button 
           v-else 
-          @click="loadMessages" 
+          @click="loadMore" 
           class="load-more-button"
           :disabled="isLoading"
         >
@@ -1267,7 +1086,6 @@ const handleLinkDelete = async (linkData) => {
       @close="showNewThreadModal = false"
       @new-thread="handleNewThreadConfirm"
       @import="handleImportConfirm"
-      @create-channel="handleCreateChannelConfirm"
     />
   </div>
 </template>
