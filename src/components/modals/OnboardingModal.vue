@@ -172,6 +172,7 @@ import { useStore } from 'vuex';
 import { useRoute } from 'vue-router';
 import MessageNode from '../MessageNode.vue';
 import { appUrl } from '../../config/appConfig.js';
+import { isMobileDisclaimerPending, MOBILE_DISCLAIMER_ACCEPTED_EVENT } from '../../utils/mobileDisclaimer.js';
 
 const ONBOARDING_STORAGE_KEY = 'stitch_onboarding_completed_v1';
 const THEME_STORAGE_KEY = 'stitch_theme';
@@ -192,6 +193,7 @@ const onboardingOpen = computed(() => store.getters['ui/onboardingOpen']);
 
 const currentModal = ref(1);
 const currentPhaseIndex = ref(0);
+const mobileDisclaimerBlocking = ref(isMobileDisclaimerPending());
 
 const PARENT_COPY = 'I think Stitch is a really cool platform!';
 const REPLY_ONE_COPY = 'I agree! It\'s a great place for multiple people to weigh in with different responses.';
@@ -448,9 +450,14 @@ const dismissOnboarding = () => {
 };
 
 // Auto-trigger only once per browser when first authenticated
+const clearMobileDisclaimerBlock = () => {
+  mobileDisclaimerBlocking.value = false;
+};
+
 watch(
-  [authReady, isAuthenticated, () => user.value?.uid, () => route.path],
+  [authReady, isAuthenticated, () => user.value?.uid, () => route.path, mobileDisclaimerBlocking],
   () => {
+    if (mobileDisclaimerBlocking.value) return;
     if (!authReady.value || !isAuthenticated.value || !user.value) return;
     const path = route.path || '';
     if (path === '/login' || path === '/register') return;
@@ -496,6 +503,7 @@ const onKeydown = (e) => {
   // Global shortcut: Ctrl+Shift+O or Cmd+Shift+O toggles onboarding anytime
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'o') {
     e.preventDefault();
+    if (mobileDisclaimerBlocking.value) return;
     store.dispatch('ui/setOnboardingOpen', !onboardingOpen.value);
     return;
   }
@@ -512,10 +520,12 @@ const onKeydown = (e) => {
 
 onMounted(() => {
   window.addEventListener('keydown', onKeydown);
+  window.addEventListener(MOBILE_DISCLAIMER_ACCEPTED_EVENT, clearMobileDisclaimerBlock);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
+  window.removeEventListener(MOBILE_DISCLAIMER_ACCEPTED_EVENT, clearMobileDisclaimerBlock);
 });
 </script>
 

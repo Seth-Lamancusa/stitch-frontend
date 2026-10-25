@@ -5,6 +5,7 @@ import RecipientsModal from './components/modals/RecipientsModal.vue';
 import LinksModal from './components/modals/LinksModal.vue';
 import QuickPromptModal from './components/modals/QuickPromptModal.vue';
 import OnboardingModal from './components/modals/OnboardingModal.vue';
+import MobileDisclaimerModal from './components/modals/MobileDisclaimerModal.vue';
 import SettingsModal from './components/modals/SettingsModal.vue';
 import WebSocketService from '@/services/ws/WebSocketService';
 
@@ -66,6 +67,7 @@ onBeforeUnmount(() => {
     <QuickPromptModal />
     <OnboardingModal />
     <SettingsModal />
+    <MobileDisclaimerModal />
   </div>
 </template>
 

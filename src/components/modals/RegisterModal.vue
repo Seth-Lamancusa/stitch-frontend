@@ -10,6 +10,7 @@
         <div class="panel">
           <label for="register-email">Email</label>
           <input v-model="email" type="email" placeholder="you@example.com" id="register-email" name="email" autocomplete="email" autocapitalize="off" spellcheck="false" />
+          <p class="hint">Stitch is in closed beta. The email has to be admitted before you can create an account.</p>
           <label for="register-phone">Phone (optional)</label>
           <input v-model="phone" type="tel" placeholder="+1 555 123 4567" id="register-phone" name="tel" autocomplete="tel" inputmode="tel" />
           <label for="register-username">User Tag (required, unique)</label>
@@ -165,6 +166,10 @@ const submit = async () => {
     if (code === 'user_tag_conflict' || code === 'user_tag_in_use') {
       tagError.value = 'That tag is already taken'
       error.value = ''
+    } else if (code === 'email_not_allowed') {
+      error.value = "This email isn't admitted yet. If you already have an account, log in. Otherwise join the waitlist at stitch.fyi/join."
+    } else if (code === 'invalid_email') {
+      error.value = 'Enter a valid email address'
     } else if (code === 'email_conflict') {
       error.value = 'That email is already in use'
     } else if (code === 'phone_conflict') {
