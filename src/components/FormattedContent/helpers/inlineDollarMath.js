@@ -104,10 +104,96 @@ export function replaceInlineDollarMath(content, { onMath, onNonMathDollar } = {
 }
 
 /**
+ * Map curly quotes and unicode primes onto ASCII `'`, which KaTeX typesets as a prime.
+ */
+const UNICODE_PRIMES = [
+  [/‴/g, "'''"],
+  [/″/g, "''"],
+  [/[’‘‛ʼ′‵]/g, "'"]
+];
+
+export function normalizeMathPrimes(text) {
+  let out = text ?? '';
+  for (const [pattern, replacement] of UNICODE_PRIMES) {
+    out = out.replace(pattern, replacement);
+  }
+  return out;
+}
+
+function skipSpaces(text, i) {
+  while (text[i] === ' ' || text[i] === '\t') i++;
+  return i;
+}
+
+function consumePrimes(text, i) {
+  while (text[i] === "'") i++;
+  return i;
+}
+
+/**
+ * A number, optionally carrying a degree mark (`0°`, `135°`).
+ * Commas are list separators, so `1,285.7` is two numeric atoms.
+ */
+function parseNumber(text, i) {
+  const match = /^-?\d+(?:\.\d+)?(?:[xX]|%)?°?/.exec(text.slice(i));
+  return match ? i + match[0].length : -1;
+}
+
+/**
+ * An identifier (`n`, `foo`, `x1`, `a.b`), trailing primes, and an optional
+ * call whose arguments are themselves a math list: `E(a, b)`, `E(a, b')`.
+ */
+function parseIdentAtom(text, i) {
+  const match = /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9]+)*/.exec(text.slice(i));
+  if (!match) return -1;
+  let pos = consumePrimes(text, i + match[0].length);
+  if (text[pos] !== '(') return pos;
+
+  pos = skipSpaces(text, pos + 1);
+  const innerEnd = parseAtomList(text, pos);
+  if (innerEnd < 0) return -1;
+  pos = skipSpaces(text, innerEnd);
+  if (text[pos] !== ')') return -1;
+  return consumePrimes(text, pos + 1);
+}
+
+function parseAtom(text, i) {
+  if (i >= text.length) return -1;
+  const asNumber = parseNumber(text, i);
+  if (asNumber >= 0 && asNumber > i) return asNumber;
+  return parseIdentAtom(text, i);
+}
+
+/**
+ * A single atom, or a comma-separated list of atoms.
+ * Spaces are allowed only around commas and inside call parentheses
+ * (`$a, a'$`, `$E(a, b)$`), so prose like `$1000 dollars$` still fails.
+ *
+ * Degrees have to count: otherwise `$0°$ and $90°$` leaves the closing
+ * dollar free, and that dollar pairs with the next one to swallow ` and `.
+ */
+function parseAtomList(text, i) {
+  let pos = parseAtom(text, i);
+  if (pos < 0) return -1;
+  while (pos < text.length) {
+    const comma = skipSpaces(text, pos);
+    if (text[comma] !== ',') return pos;
+    const next = parseAtom(text, skipSpaces(text, comma + 1));
+    if (next < 0) return -1;
+    pos = next;
+  }
+  return pos;
+}
+
+function isCommaSeparatedMathAtoms(text) {
+  return parseAtomList(text, 0) === text.length;
+}
+
+/**
  * Heuristic: decide whether `$...$` is intended as LaTeX math.
  *
  * Goal:
- * - Allow math-ish short forms like `$n$`, `$p$`, `$10$`, `$0.25$`.
+ * - Allow math-ish short forms like `$n$`, `$a'$`, `$a, a'$`, `$E(a, b)$`, `$0°$`.
  * - Avoid rendering `$...$` spans that look like prose/currency,
  *   e.g. `$1000 dollars and my friend has $...$`.
  */
@@ -121,23 +207,11 @@ export function looksLikeLatexInline(inner) {
   // Guardrail: avoid attempting KaTeX on huge spans.
   if (trimmed.length > 200) return false;
 
+  const normalized = normalizeMathPrimes(trimmed);
+
   // Strong LaTeX indicators.
-  if (/(\\[a-zA-Z]+)|\\[%$&_^{}]/.test(trimmed)) return true;
-  if (/(\\(times|cdot|left|right|frac|sqrt|text|mathit|mathrm|mathbf|sum|prod|pm|ge|le|gt|lt)\b)/.test(trimmed)) return true;
-  if (/[=+\-^_{}]/.test(trimmed)) return true;
+  if (/(\\[a-zA-Z]+)|\\[%$&_^{}]/.test(normalized)) return true;
+  if (/[=+\-^_{}]/.test(normalized)) return true;
 
-  const hasWhitespace = /\s/.test(trimmed);
-
-  // If it's multi-word prose (like currency descriptions), don't treat it as math.
-  // Keep this strict unless there are strong indicators above.
-  if (hasWhitespace) return false;
-
-  // No whitespace: accept common math atoms.
-  // Examples: n, p, x1, 10, 0.25, 1,285.7
-  if (/^-?\d[\d,]*(?:\.\d+)?\s*(?:[xX]|%)?$/.test(trimmed)) return true;
-  if (/^[A-Za-z]$/.test(trimmed)) return true;
-  if (/^[A-Za-z][A-Za-z0-9_]*$/.test(trimmed)) return true;
-  if (/^[A-Za-z0-9]+(?:[._][A-Za-z0-9]+)*$/.test(trimmed)) return true;
-
-  return false;
+  return isCommaSeparatedMathAtoms(normalized);
 }

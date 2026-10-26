@@ -4,7 +4,7 @@
  * Formats LaTeX expressions using KaTeX.
  */
 import { createFormatter } from './base';
-import { replaceInlineDollarMath } from '../helpers/inlineDollarMath';
+import { normalizeMathPrimes, replaceInlineDollarMath } from '../helpers/inlineDollarMath';
 
 // Will need to be installed: npm install katex
 let katex = null;
@@ -43,6 +43,20 @@ async function getKaTeX() {
  * @param {string} content - The content to process
  * @returns {string} - The processed content
  */
+function renderLatex(katex, tex, displayMode) {
+  const normalized = normalizeMathPrimes(tex);
+  const errorTag = displayMode ? 'div' : 'span';
+  try {
+    return katex.renderToString(normalized, {
+      displayMode,
+      throwOnError: false
+    });
+  } catch (error) {
+    console.error('Error rendering LaTeX:', error);
+    return `<${errorTag} class="katex-error">${normalized}</${errorTag}>`;
+  }
+}
+
 async function processLatexBlocks(content) {
   const katex = await getKaTeX();
   
@@ -52,30 +66,12 @@ async function processLatexBlocks(content) {
   // Find all LaTeX blocks: $$latex$$
   // Modified regex to make sure we're capturing the entire content between $$...$$ sequences
   processedContent = processedContent.replace(/\$\$([\s\S]*?)\$\$/g, (match, latex) => {
-    try {
-      // Process the content between the dollar signs
-      return katex.renderToString(latex, {
-        displayMode: true,
-        throwOnError: false
-      });
-    } catch (error) {
-      console.error('Error rendering LaTeX block:', error);
-      return `<div class="katex-error">${latex}</div>`;
-    }
+    return renderLatex(katex, latex, true);
   });
   
   // Find all LaTeX display math blocks: \[latex\]
   processedContent = processedContent.replace(/\\\[([\s\S]*?)\\\]/g, (match, latex) => {
-    try {
-      // Process the content between \[ and \]
-      return katex.renderToString(latex, {
-        displayMode: true,
-        throwOnError: false
-      });
-    } catch (error) {
-      console.error('Error rendering LaTeX block:', error);
-      return `<div class="katex-error">${latex}</div>`;
-    }
+    return renderLatex(katex, latex, true);
   });
   
   return processedContent;
@@ -92,31 +88,13 @@ async function processInlineLatex(content) {
 
   // Inline `$...$` with awareness of escaped dollars like `\\$900`.
   let processedContent = replaceInlineDollarMath(content, {
-    onMath: ({ inner }) => {
-      try {
-        return katex.renderToString(inner, {
-          displayMode: false,
-          throwOnError: false
-        });
-      } catch (error) {
-        console.error('Error rendering inline LaTeX:', error);
-        return `<span class="katex-error">${inner}</span>`;
-      }
-    }
+    onMath: ({ inner }) => renderLatex(katex, inner, false)
   });
   
   // Find all inline LaTeX: \(latex\)
   // Use non-greedy match to capture content between \( and \)
   processedContent = processedContent.replace(/\\\(([\s\S]*?)\\\)/g, (match, latex) => {
-    try {
-      return katex.renderToString(latex, {
-        displayMode: false,
-        throwOnError: false
-      });
-    } catch (error) {
-      console.error('Error rendering inline LaTeX:', error);
-      return `<span class="katex-error">${latex}</span>`;
-    }
+    return renderLatex(katex, latex, false);
   });
   
   return processedContent;
