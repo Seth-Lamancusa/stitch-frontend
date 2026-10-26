@@ -139,54 +139,93 @@ function parseNumber(text, i) {
   return match ? i + match[0].length : -1;
 }
 
+function parseDelimited(text, i, open, close) {
+  if (text[i] !== open) return -1;
+  const innerEnd = parseExprList(text, skipSpaces(text, i + 1));
+  if (innerEnd < 0) return -1;
+  const end = skipSpaces(text, innerEnd);
+  if (text[end] !== close) return -1;
+  return end + 1;
+}
+
 /**
  * An identifier (`n`, `foo`, `x1`, `a.b`), trailing primes, and an optional
  * call whose arguments are themselves a math list: `E(a, b)`, `E(a, b')`.
  */
-function parseIdentAtom(text, i) {
-  const match = /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9]+)*/.exec(text.slice(i));
+function parseIdent(text, i) {
+  const match = /^[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)*/.exec(text.slice(i));
   if (!match) return -1;
   let pos = consumePrimes(text, i + match[0].length);
   if (text[pos] !== '(') return pos;
 
   pos = skipSpaces(text, pos + 1);
-  const innerEnd = parseAtomList(text, pos);
+  const innerEnd = parseExprList(text, pos);
   if (innerEnd < 0) return -1;
   pos = skipSpaces(text, innerEnd);
   if (text[pos] !== ')') return -1;
   return consumePrimes(text, pos + 1);
 }
 
-function parseAtom(text, i) {
+function parsePrimary(text, i) {
   if (i >= text.length) return -1;
+  if (text[i] === '{') return parseDelimited(text, i, '{', '}');
+  if (text[i] === '(') return parseDelimited(text, i, '(', ')');
   const asNumber = parseNumber(text, i);
-  if (asNumber >= 0 && asNumber > i) return asNumber;
-  return parseIdentAtom(text, i);
+  if (asNumber > i) return asNumber;
+  return parseIdent(text, i);
 }
 
-/**
- * A single atom, or a comma-separated list of atoms.
- * Spaces are allowed only around commas and inside call parentheses
- * (`$a, a'$`, `$E(a, b)$`), so prose like `$1000 dollars$` still fails.
- *
- * Degrees have to count: otherwise `$0°$ and $90°$` leaves the closing
- * dollar free, and that dollar pairs with the next one to swallow ` and `.
- */
-function parseAtomList(text, i) {
-  let pos = parseAtom(text, i);
+/** Tight superscripts and subscripts: `$a^2$`, `$x_1$`, `$x_{ab}$`. */
+function parsePostfix(text, i) {
+  let pos = parsePrimary(text, i);
   if (pos < 0) return -1;
-  while (pos < text.length) {
-    const comma = skipSpaces(text, pos);
-    if (text[comma] !== ',') return pos;
-    const next = parseAtom(text, skipSpaces(text, comma + 1));
+  while (text[pos] === '^' || text[pos] === '_') {
+    const next = parsePrimary(text, pos + 1);
     if (next < 0) return -1;
     pos = next;
   }
   return pos;
 }
 
-function isCommaSeparatedMathAtoms(text) {
-  return parseAtomList(text, 0) === text.length;
+function parseUnary(text, i) {
+  if (text[i] === '+' || text[i] === '-') return parseUnary(text, i + 1);
+  return parsePostfix(text, i);
+}
+
+/**
+ * Atoms joined by `=`, `+`, or `-`. Spaces are allowed beside those
+ * operators and beside commas, and nowhere else. A prose hyphen such as
+ * `full-year` only counts when the entire span is that expression, so a
+ * later currency dollar cannot swallow the sentence in between.
+ */
+function parseExpr(text, i) {
+  let pos = parseUnary(text, i);
+  if (pos < 0) return -1;
+  while (pos < text.length) {
+    const op = skipSpaces(text, pos);
+    if (text[op] !== '=' && text[op] !== '+' && text[op] !== '-') return pos;
+    const next = parseUnary(text, skipSpaces(text, op + 1));
+    if (next < 0) return -1;
+    pos = next;
+  }
+  return pos;
+}
+
+function parseExprList(text, i) {
+  let pos = parseExpr(text, i);
+  if (pos < 0) return -1;
+  while (pos < text.length) {
+    const comma = skipSpaces(text, pos);
+    if (text[comma] !== ',') return pos;
+    const next = parseExpr(text, skipSpaces(text, comma + 1));
+    if (next < 0) return -1;
+    pos = next;
+  }
+  return pos;
+}
+
+function isMathExpression(text) {
+  return parseExprList(text, 0) === text.length;
 }
 
 /**
@@ -209,9 +248,9 @@ export function looksLikeLatexInline(inner) {
 
   const normalized = normalizeMathPrimes(trimmed);
 
-  // Strong LaTeX indicators.
+  // A LaTeX command is enough on its own. A bare hyphen or plus is not:
+  // `$4.6 billion ... full-year ... $380M` would otherwise become one span.
   if (/(\\[a-zA-Z]+)|\\[%$&_^{}]/.test(normalized)) return true;
-  if (/[=+\-^_{}]/.test(normalized)) return true;
 
-  return isCommaSeparatedMathAtoms(normalized);
+  return isMathExpression(normalized);
 }
