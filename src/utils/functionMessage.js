@@ -31,11 +31,52 @@ export function functionLabel(message, parent) {
   return name ? `${kind}: ${name}` : kind;
 }
 
+function valueType(value) {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  if (typeof value === 'string') return 'string';
+  if (typeof value === 'number') return 'number';
+  if (typeof value === 'boolean') return 'boolean';
+  if (typeof value === 'object') return 'object';
+  return 'string';
+}
+
+export function invocationPreview(name, parameters) {
+  const label = name || 'function';
+  if (Array.isArray(parameters)) {
+    if (!parameters.length) return `${label}()`;
+    return `${label}(${parameters.map(valueType).join(', ')})`;
+  }
+  if (parameters && typeof parameters === 'object') {
+    const keys = Object.keys(parameters);
+    if (!keys.length) return `${label}()`;
+    return `${label}(${keys.join(', ')})`;
+  }
+  return `${label}()`;
+}
+
+function formatJson(value) {
+  try {
+    const rendered = JSON.stringify(value);
+    return rendered === undefined ? String(value) : rendered;
+  } catch {
+    return String(value);
+  }
+}
+
 function formatInvocation(name, parameters) {
-  const args = Array.isArray(parameters) ? parameters : [];
-  if (!args.length) return `${name}()`;
-  const lines = args.map((param) => `  ${JSON.stringify(param)}`);
-  return `${name}(\n${lines.join(',\n')}\n)`;
+  if (Array.isArray(parameters)) {
+    if (!parameters.length) return `${name}()`;
+    const lines = parameters.map((param) => `  ${formatJson(param)}`);
+    return `${name}(\n${lines.join(',\n')}\n)`;
+  }
+  if (parameters && typeof parameters === 'object') {
+    const keys = Object.keys(parameters);
+    if (!keys.length) return `${name}()`;
+    const lines = keys.map((key) => `  ${key}: ${formatJson(parameters[key])}`);
+    return `${name}(\n${lines.join(',\n')}\n)`;
+  }
+  return `${name}()`;
 }
 
 function formatOutput(output) {

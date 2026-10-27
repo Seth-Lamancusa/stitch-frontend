@@ -3,6 +3,8 @@
  * Write path still sends `content_author` on create/reply/import.
  */
 
+import { invocationPreview } from './functionMessage.js';
+
 export function getAuthorDisplayName(message) {
   if (!message) return 'Unknown';
   return message.author?.display_name || 'Unknown';
@@ -35,9 +37,8 @@ export function contentText(content) {
   if (typeof content === 'object') {
     const name = content.name;
     const parameters = content.parameters;
-    if (typeof name === 'string' && Array.isArray(parameters)) {
-      const args = parameters.map((param) => JSON.stringify(param)).join(', ');
-      return `${name}(${args})`;
+    if (typeof name === 'string' && (Array.isArray(parameters) || (parameters && typeof parameters === 'object'))) {
+      return invocationPreview(name, parameters);
     }
     if (Object.prototype.hasOwnProperty.call(content, 'output')) {
       const output = content.output;

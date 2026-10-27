@@ -60,6 +60,8 @@ export default {
     listScrollPositions: {}, // { 'inbox': 150, 'public': 0, ... }
     // Cached list state per tab (messages, pagination) for preserving across navigation
     listCache: {}, // { 'public': { messages: [...], currentSkip: 30, isAllLoaded: false }, ... }
+    // Search tab form + result pages, keyed by principal uid ('anon' when logged out)
+    searchSessions: {},
     replySettings: {
       isPublic: true,
       recipients: [],  // Recipients for new message drafts
@@ -160,6 +162,14 @@ export default {
       } else {
         state.listCache = {};
       }
+    },
+
+    SET_SEARCH_SESSION(state, { key, session }) {
+      state.searchSessions[key] = session;
+    },
+
+    CLEAR_SEARCH_SESSIONS(state) {
+      state.searchSessions = {};
     },
 
     SET_LAST_DELETED_MESSAGE_ID(state, messageId) {
@@ -451,6 +461,8 @@ export default {
     
     // List cache getter
     getListCache: state => tab => state.listCache[tab] || null,
+
+    getSearchSession: state => key => state.searchSessions[key] || null,
     
     // Global action bar getters
     activeActionBarMessageId: state => state.activeActionBarMessageId,
@@ -673,10 +685,16 @@ export default {
       commit('CLEAR_LIST_CACHE', tab);
     },
 
+    saveSearchSession({ commit }, { key, session }) {
+      if (!key || !session) return;
+      commit('SET_SEARCH_SESSION', { key, session });
+    },
+
     /** Clear list cache and scroll position for every in-app message list tab (e.g. on logout). */
     clearAllListStateForLogout({ commit }) {
       commit('CLEAR_LIST_CACHE', null);
       commit('CLEAR_LIST_SCROLL_POSITION', null);
+      commit('CLEAR_SEARCH_SESSIONS');
     },
 
     setActiveTab({ commit, state }, tab) {

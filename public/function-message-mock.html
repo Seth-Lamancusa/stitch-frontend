@@ -529,7 +529,7 @@
         type: 'function_invocation',
         author: stitch,
         name: 'fetch_page',
-        parameters: ['https://example.com/function-type-check', 'text'],
+        parameters: { url: 'https://example.com/function-type-check', format: 'text' },
         open: true
       },
       {
@@ -542,7 +542,7 @@
           'A function message is a normal message whose content is one dictionary.',
           'The dictionary holds the fields for that type.',
           '',
-          'An invocation has a name and a list of string parameters.',
+          'An invocation has a name and either a list of parameters or a dictionary of named parameters.',
           'A response has an output, which may be a string, an object, or an array.',
           'Files stay on the message. They are not part of the function dictionary.',
           '',
@@ -605,9 +605,23 @@
       </div>`;
     }
 
+    function formatJson(value) {
+      try {
+        const rendered = JSON.stringify(value);
+        return rendered === undefined ? String(value) : rendered;
+      } catch (err) {
+        return String(value);
+      }
+    }
+
     function formatInvocation(name, parameters) {
-      if (!parameters.length) return `${name}()`;
-      const lines = parameters.map((param) => `  ${JSON.stringify(param)}`);
+      const list = Array.isArray(parameters) ? parameters : null;
+      const named = !list && parameters && typeof parameters === 'object' ? Object.keys(parameters) : null;
+      const entries = list || named || [];
+      if (!entries.length) return `${name}()`;
+      const lines = list
+        ? list.map((param) => `  ${formatJson(param)}`)
+        : named.map((key) => `  ${key}: ${formatJson(parameters[key])}`);
       return `${name}(\n${lines.join(',\n')}\n)`;
     }
 

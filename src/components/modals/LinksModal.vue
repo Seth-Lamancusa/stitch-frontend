@@ -19,6 +19,8 @@ const activeTab = ref('incoming');
 const isSelecting = ref(false);
 const linkType = ref(null); // 'incoming' or 'outgoing'
 const selectedMessages = ref(new Set());
+// Saved list, or BM25 similarity against the source message.
+const useSimilar = ref(false);
 
 // Toggle for showing all links vs user's links
 const showAllLinks = ref(true);
@@ -43,7 +45,8 @@ const resetForm = () => {
   activeTab.value = 'incoming';
   isSelecting.value = false;
   linkType.value = null;
-  selectedMessages.value.clear();
+  useSimilar.value = false;
+  selectedMessages.value = new Set();
 };
 
 onMounted(() => {
@@ -63,7 +66,20 @@ const handleMessageClick = (messageId) => {
 const startAddingLinks = (type) => {
   isSelecting.value = true;
   linkType.value = type; // 'incoming' or 'outgoing'
-  selectedMessages.value.clear();
+  useSimilar.value = false;
+  selectedMessages.value = new Set();
+};
+
+const selectorMode = computed(() => {
+  if (!isSelecting.value) {
+    return activeTab.value === 'incoming' ? 'incoming-links' : 'outgoing-links';
+  }
+  return useSimilar.value ? 'similar' : 'saved';
+});
+
+const toggleSelectorSource = () => {
+  useSimilar.value = !useSimilar.value;
+  selectedMessages.value = new Set();
 };
 
 // Handle selection changes from MessageList
@@ -75,7 +91,8 @@ const handleSelectionChanged = (selectedIds) => {
 const cancelSelection = () => {
   isSelecting.value = false;
   linkType.value = null;
-  selectedMessages.value.clear();
+  useSimilar.value = false;
+  selectedMessages.value = new Set();
 };
 
 // Add selected links and return to viewing
@@ -161,6 +178,20 @@ const addSelectedLinks = async () => {
           <MessagePreview :message="message" displayMode="single-line" />
         </div>
         
+        <!-- Saved vs similarity, only while picking messages to stitch -->
+        <div v-if="isSelecting" class="selector-source">
+          <div
+            class="toggle-container"
+            :title="useSimilar ? 'Messages ranked by similarity to the source' : 'Your saved messages'"
+          >
+            <span class="toggle-label" :class="{ 'active': !useSimilar }">Saved</span>
+            <div class="toggle-switch" @click.stop="toggleSelectorSource">
+              <div class="toggle-slider" :class="{ 'active': useSimilar }"></div>
+            </div>
+            <span class="toggle-label" :class="{ 'active': useSimilar }">Similar</span>
+          </div>
+        </div>
+
         <!-- Tab Navigation - only show when not selecting -->
         <div v-if="!isSelecting" class="tab-navigation">
           <button 
@@ -202,7 +233,8 @@ const addSelectedLinks = async () => {
           
           <div v-else class="messages-container">
             <MessageList
-              :mode="isSelecting ? 'saved' : (activeTab === 'incoming' ? 'incoming-links' : 'outgoing-links')"
+              :key="selectorMode"
+              :mode="selectorMode"
               :sourceMessageId="message?.id"
               :showAllLinks="showAllLinks"
               :hideHeader="true"
@@ -387,6 +419,15 @@ const addSelectedLinks = async () => {
   to {
     transform: rotate(360deg);
   }
+}
+
+.selector-source {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-sm) var(--space-lg);
+  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  flex-shrink: 0;
 }
 
 .tab-navigation {

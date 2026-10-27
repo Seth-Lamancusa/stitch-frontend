@@ -12,7 +12,7 @@ const props = defineProps({
   mode: {
     type: String,
     required: true,
-    validator: (val) => ['inbox', 'public', 'history', 'saved', 'timeline', 'incoming-links', 'outgoing-links', 'custom'].includes(val)
+    validator: (val) => ['inbox', 'public', 'history', 'saved', 'similar', 'timeline', 'incoming-links', 'outgoing-links', 'custom'].includes(val)
   },
   // Custom messages to display instead of fetching from store
   customMessages: {
@@ -100,7 +100,7 @@ let requestSerial = 0;
 // keep-alive runs onActivated right after onMounted; the mount load is enough.
 const skipActivateLoad = ref(false);
 
-const isLocalMode = computed(() => ['saved', 'public', 'history', 'timeline', 'incoming-links', 'outgoing-links', 'custom'].includes(props.mode));
+const isLocalMode = computed(() => ['saved', 'similar', 'public', 'history', 'timeline', 'incoming-links', 'outgoing-links', 'custom'].includes(props.mode));
 const requiresAuth = computed(() => ['inbox', 'saved', 'history', 'timeline'].includes(props.mode));
 
 // Reference to the message list container for scroll detection
@@ -199,6 +199,8 @@ const modeDescription = computed(() => {
       return 'History shows the root message of each thread where you have sent at least one message, in any branch. Threads are sorted by your most recent activity, so the threads you\'ve participated in recently appear first.';
     case 'saved':
       return 'Saved messages are messages you\'ve bookmarked for easy access later. Use the bookmark button on any message to save it here.';
+    case 'similar':
+      return 'Similar messages are ranked by text overlap with the source message. The source itself is left out.';
     case 'inbox':
       return 'Your inbox shows the latest message from each conversation thread where you are involved—either as a recipient or as the author. This gives you a quick overview of all your active conversations.';
     case 'public':
@@ -235,6 +237,8 @@ const emptyStateMessage = computed(() => {
       } else {
         return 'You must be logged in to view your saved messages.';
       }
+    case 'similar':
+      return 'No similar messages found.';
     case 'timeline':
       if (user.value) {
         return 'No messages in your timeline yet.';
@@ -279,7 +283,11 @@ const user = computed(() => store.getters['auth/user']);
 const canInteract = computed(() => store.getters['auth/canInteract']);
 const activePrincipalUid = computed(() => store.getters['auth/activePrincipalUid']);
 // Snapshots are per principal so switching profiles cannot paint the other person's list.
-const listCacheKey = computed(() => `${activePrincipalUid.value || 'anon'}:${props.mode}`);
+const listCacheKey = computed(() => {
+  const base = `${activePrincipalUid.value || 'anon'}:${props.mode}`;
+  if (props.mode === 'similar' && props.sourceMessageId) return `${base}:${props.sourceMessageId}`;
+  return base;
+});
 
 const firebaseReady = ref(true);
 const replyCounts = ref({}); // Track reply counts by thread ID

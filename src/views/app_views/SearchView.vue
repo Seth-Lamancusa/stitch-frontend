@@ -1,6 +1,6 @@
 <template>
   <TabViewLayout>
-    <div class="search-view">
+    <div class="search-view" ref="searchViewRef">
       <div class="mode-description">
         <span class="info-icon">ℹ</span>
         <p>Similar ranks messages you can see by overlap with the source. #tags narrow with any or all. @user keeps messages from that author.</p>
@@ -106,7 +106,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch, computed, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import TabViewLayout from '../../components/layouts/TabViewLayout.vue';
 import MessageList from '../../components/MessageList.vue';
@@ -125,25 +125,55 @@ const similarIdFromRoute = (value) => {
   return typeof id === 'string' && id ? id : null;
 };
 
-const q = ref('');
+const principalKey = () => store.getters['auth/activePrincipalUid'] || 'anon';
+
+const copySession = (session) => ({
+  q: typeof session?.q === 'string' ? session.q : '',
+  tags: Array.isArray(session?.tags) ? [...session.tags] : [],
+  userTags: Array.isArray(session?.userTags)
+    ? session.userTags
+        .map((user) => ({
+          user_tag: user?.user_tag,
+          display_name: user?.display_name || user?.user_tag,
+        }))
+        .filter((user) => user.user_tag)
+    : [],
+  match: session?.match === 'all' ? 'all' : 'any',
+  fromDate: typeof session?.fromDate === 'string' ? session.fromDate : '',
+  toDate: typeof session?.toDate === 'string' ? session.toDate : '',
+  similarToMessageId: session?.similarToMessageId || null,
+  results: Array.isArray(session?.results) ? session.results.slice() : [],
+  hasMore: !!session?.hasMore,
+  searched: !!session?.searched,
+});
+
+// Read before the criteria watch exists so restore is not a new search.
+const initialSession = copySession(
+  store.getters['navigation/getSearchSession'](principalKey())
+);
+let epochAtSetup = store.getters['auth/sessionEpoch'] || 0;
+
+const q = ref(initialSession.q);
 const tagInput = ref('');
-const tags = ref([]);
-const userTags = ref([]);
-const fromDate = ref('');
-const toDate = ref('');
-const match = ref('any');
-const results = ref([]);
-const hasMore = ref(false);
+const tags = ref(initialSession.tags);
+const userTags = ref(initialSession.userTags);
+const fromDate = ref(initialSession.fromDate);
+const toDate = ref(initialSession.toDate);
+const match = ref(initialSession.match);
+const results = ref(initialSession.results);
+const hasMore = ref(initialSession.hasMore);
 const isLoading = ref(false);
 const error = ref('');
-const searched = ref(false);
-const similarToMessageId = ref(similarIdFromRoute(route.query.similar_to));
+const searched = ref(initialSession.searched);
+const similarToMessageId = ref(initialSession.similarToMessageId);
 const userFilter = ref('');
 const userResults = ref([]);
 const userLookupSettled = ref(false);
 const userFilterRef = ref(null);
+const searchViewRef = ref(null);
 let requestSerial = 0;
 let userSearchTimer = null;
+let suppressCriteriaWatch = 0;
 
 const similarToMessage = computed(() => {
   if (!similarToMessageId.value) return null;
@@ -241,6 +271,60 @@ const closeUserResults = (event) => {
   userResults.value = [];
 };
 
+const snapshotSession = () => ({
+  q: q.value,
+  tags: [...tags.value],
+  userTags: userTags.value.map((user) => ({
+    user_tag: user.user_tag,
+    display_name: user.display_name || user.user_tag,
+  })),
+  match: match.value,
+  fromDate: fromDate.value,
+  toDate: toDate.value,
+  similarToMessageId: similarToMessageId.value,
+  results: results.value.slice(),
+  hasMore: hasMore.value,
+  searched: searched.value,
+});
+
+const persistSession = (key = principalKey()) => {
+  if ((store.getters['auth/sessionEpoch'] || 0) !== epochAtSetup) return;
+  store.dispatch('navigation/saveSearchSession', { key, session: snapshotSession() });
+};
+
+const applySession = (session) => {
+  const next = copySession(session);
+  suppressCriteriaWatch += 1;
+  q.value = next.q;
+  tags.value = next.tags;
+  userTags.value = next.userTags;
+  match.value = next.match;
+  fromDate.value = next.fromDate;
+  toDate.value = next.toDate;
+  similarToMessageId.value = next.similarToMessageId;
+  results.value = next.results;
+  hasMore.value = next.hasMore;
+  searched.value = next.searched;
+  error.value = '';
+  nextTick(() => {
+    suppressCriteriaWatch -= 1;
+  });
+};
+
+const restoreSearchScroll = () => {
+  if (!results.value.length) return;
+  const position = store.getters['navigation/getListScrollPosition'](`${principalKey()}:custom`) || 0;
+  if (!position) return;
+  const apply = () => {
+    const container = searchViewRef.value?.closest('.main-content');
+    if (container) container.scrollTop = position;
+  };
+  nextTick(() => {
+    apply();
+    setTimeout(apply, 50);
+  });
+};
+
 const runSearch = async ({ append = false } = {}) => {
   if (append && isLoading.value) return;
   if (!append && !commitTag({ silent: true })) return;
@@ -255,10 +339,13 @@ const runSearch = async ({ append = false } = {}) => {
     searched.value = false;
     error.value = '';
     isLoading.value = false;
+    persistSession();
     return;
   }
 
+  const requestKey = principalKey();
   const requestId = ++requestSerial;
+  const stillCurrent = () => requestId === requestSerial && principalKey() === requestKey;
   const skip = append ? results.value.length : 0;
   isLoading.value = true;
   error.value = '';
@@ -272,7 +359,7 @@ const runSearch = async ({ append = false } = {}) => {
       if (!similarToMessage.value) {
         await store.dispatch('messages/loadMessage', similarToMessageId.value);
       }
-      if (requestId !== requestSerial) return;
+      if (!stillCurrent()) return;
       const resp = await MessageService.getSimilarMessages(similarToMessageId.value, {
         tags: tokens,
         match: match.value,
@@ -298,30 +385,41 @@ const runSearch = async ({ append = false } = {}) => {
       messages = Array.isArray(data.messages) ? data.messages : [];
       more = !!data.has_more;
     }
-    if (requestId !== requestSerial) return;
+    if (!stillCurrent()) return;
     results.value = append ? results.value.concat(messages) : messages;
     hasMore.value = more;
     searched.value = true;
   } catch (e) {
     console.error('[SearchView] search error', e);
-    if (requestId !== requestSerial) return;
+    if (!stillCurrent()) return;
     error.value = 'Search failed. Try again.';
     if (!append) results.value = [];
     hasMore.value = false;
     searched.value = true;
   } finally {
     if (requestId === requestSerial) isLoading.value = false;
+    // Still write after unmount so a click during Searching… keeps the page that just arrived.
+    if (stillCurrent()) persistSession(requestKey);
   }
 };
 
 onMounted(() => {
   document.addEventListener('click', closeUserResults);
-  if (hasCriteria()) runSearch();
+  const routeSimilar = similarIdFromRoute(route.query.similar_to);
+  if (routeSimilar !== similarToMessageId.value) {
+    similarToMessageId.value = routeSimilar;
+    return;
+  }
+  if (similarToMessageId.value && !similarToMessage.value) {
+    store.dispatch('messages/loadMessage', similarToMessageId.value);
+  }
+  restoreSearchScroll();
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', closeUserResults);
   if (userSearchTimer) clearTimeout(userSearchTimer);
+  persistSession();
 });
 
 watch(
@@ -343,11 +441,27 @@ watch(
     similarToMessageId.value,
   ],
   () => {
+    if (suppressCriteriaWatch > 0) return;
     if (skipNextTagWatch) {
       skipNextTagWatch = false;
       return;
     }
     runSearch();
+  }
+);
+
+watch(
+  () => store.getters['auth/activePrincipalUid'] || 'anon',
+  (next, prev) => {
+    if (next === prev) return;
+    if ((store.getters['auth/sessionEpoch'] || 0) !== epochAtSetup) {
+      applySession(null);
+      epochAtSetup = store.getters['auth/sessionEpoch'] || 0;
+      return;
+    }
+    persistSession(prev);
+    applySession(store.getters['navigation/getSearchSession'](next));
+    restoreSearchScroll();
   }
 );
 </script>

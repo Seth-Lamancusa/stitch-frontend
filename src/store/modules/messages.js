@@ -1361,6 +1361,18 @@ export default {
             // Use existing UserService.getSavedMessages (which already handles pagination properly)
             response = await UserService.getSavedMessages(skip, limit);
             break;
+          case 'similar': {
+            if (!sourceMessageId) throw new Error('sourceMessageId required for similar mode');
+            const SimilarMessageService = (await import('../../services/MessageService')).default;
+            const similarResponse = await SimilarMessageService.getSimilarMessages(sourceMessageId, { skip, limit });
+            const similarData = similarResponse?.data || {};
+            response = {
+              messages: similarData.messages || [],
+              has_more: similarData.has_more || false,
+              total: similarData.total || 0
+            };
+            break;
+          }
           case 'history':
             {
               const MessageService = (await import('../../services/MessageService')).default;
