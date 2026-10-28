@@ -76,6 +76,29 @@ export default {
     }
   },
 
+  async getMessage(id) {
+    const response = await apiClient.get(`/messages/${id}`, { headers: getAuthHeaders() })
+    return response.data
+  },
+
+  async sendAnnotation({ targetId, content, part = null }) {
+    // The server copies the host's public flag, recipients, and channels.
+    const messageData = {
+      type: 'annotation',
+      content,
+      target_id: targetId
+    }
+    if (Number.isInteger(part)) messageData.part = part
+
+    const response = await apiClient.post(`/messages`, [messageData], { headers: getAuthHeaders() })
+    const results = Array.isArray(response.data) ? response.data : []
+    const first = results[0] || null
+    if (!first || !first.success || !first.message) {
+      throw new Error(first?.error || 'Could not save annotation')
+    }
+    return { data: first.message, status: response.status }
+  },
+
   // Update message tags (full replace)
   async updateTags(id, tags) {
     const headers = getAuthHeaders()

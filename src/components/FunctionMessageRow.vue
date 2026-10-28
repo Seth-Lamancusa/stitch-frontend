@@ -143,6 +143,23 @@
       >{{ code }}</pre>
 
       <MessageAttachments v-if="open && message.files?.length" :attachments="message.files" />
+      <button
+        v-if="canAnnotate"
+        type="button"
+        class="fn-annotate"
+        :class="{ 'is-visible': composingWhole || isMobile }"
+        title="Annotate"
+        aria-label="Annotate"
+        @click.stop="composingWhole = true"
+      >+</button>
+      <AnnotatedBody
+        :message="message"
+        :render-parts="false"
+        :can-annotate="canAnnotate"
+        :pin-controls="isMobile"
+        :composing-whole="composingWhole"
+        @done-whole="composingWhole = false"
+      />
       <p v-if="typingLabel && !menuOpen" class="typing-cue" aria-live="polite">{{ typingLabel }}</p>
     </div>
 
@@ -179,6 +196,7 @@ import { useStore } from 'vuex';
 import DefaultOutgoingStar from './DefaultOutgoingStar.vue';
 import LinkSwitcher from './LinkSwitcher.vue';
 import MessageAttachments from './MessageAttachments.vue';
+import AnnotatedBody from './AnnotatedBody.vue';
 import ReplyOrderModal from './modals/ReplyOrderModal.vue';
 import SiblingNavigator from './SiblingNavigator.vue';
 import UserDisplay from './common/UserDisplay.vue';
@@ -208,6 +226,7 @@ const route = useRoute();
 const router = useRouter();
 
 const open = ref(false);
+const composingWhole = ref(false);
 const showModal = ref(false);
 const showReplyOrderModal = ref(false);
 const menuBelow = ref(false);
@@ -291,6 +310,7 @@ const isDefaultOutgoing = computed(() => {
 });
 
 const canDelete = computed(() => store.getters['auth/canDeleteMessage'](props.message));
+const canAnnotate = computed(() => store.getters['auth/canInteract'] && !isSelectionMode.value);
 
 const canOrderReplies = computed(() => {
   const outgoing = [
@@ -309,6 +329,9 @@ const canSetDefaultOutgoing = computed(() => {
 
 const menuActions = computed(() => {
   const items = [
+    ...(canAnnotate.value
+      ? [{ id: 'annotate', emoji: '+', text: 'Annotate', close: true, run: () => { composingWhole.value = true } }]
+      : []),
     { id: 'copy-text', emoji: '📝', text: textCopied.value ? 'Copied!' : 'Copy', run: copyText },
     {
       id: 'copy-link',
@@ -573,6 +596,37 @@ onBeforeUnmount(() => {
 .fn-body {
   position: relative;
   padding: 2px 12px;
+}
+
+.fn-annotate {
+  position: absolute;
+  right: 8px;
+  bottom: -14px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+}
+
+.function-message:hover .fn-annotate,
+.function-message:focus-within .fn-annotate,
+.fn-annotate.is-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .function-message.compact .fn-body {

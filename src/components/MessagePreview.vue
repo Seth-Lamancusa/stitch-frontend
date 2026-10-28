@@ -11,6 +11,7 @@
   >
     <!-- Single line mode layout -->
     <div v-if="displayMode === 'single-line'" class="single-line-content" @click="handleMessageClick">
+      <span v-if="message.type === 'annotation'" class="annotation-kind">annotation</span>
       <span class="author-prefix" :class="{ 'current-user-name': highlightAuthorName }">{{ authorDisplayName }}:</span>
       <span class="content-text" :style="messageBodyStyle">{{ truncatedContent }}</span>
     </div>
@@ -32,6 +33,7 @@
           </span>
 
           <div class="author-info">
+            <span v-if="message.type === 'annotation'" class="annotation-kind">annotation</span>
             <template v-if="showParticipantsLabel">
               <div class="participants" ref="participantsRef">
                 <div
@@ -1402,5 +1404,11 @@ const formatTimestamp = (timestamp) => {
     height: 24px;
     padding: 0 6px 0 5px;
   }
+}
+
+.annotation-kind {
+  margin-right: 6px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
 }
 </style>

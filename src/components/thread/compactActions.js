@@ -15,7 +15,7 @@ export function compactHeaderActions(actions) {
 }
 
 export function compactToolbarActions(actions) {
-  return ['reply', 'prompt', 'save']
+  return ['reply', 'prompt', 'save', 'annotate']
     .map((id) => actionById(actions, id))
     .filter(visibleAction)
 }

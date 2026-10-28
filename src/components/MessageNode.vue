@@ -99,6 +99,7 @@
               variant="message"
                :title="isBot ? botVersionTooltip : undefined"
              />
+            <span v-if="message.type === 'annotation'" class="annotation-kind">annotation</span>
             <span v-if="isImported" class="imported-badge" :title="importedBadgeTitle">
               via <UserDisplay 
                 :display-name="message.import_info.importer_user_tag"
@@ -262,12 +263,31 @@
             Cancel
           </button>
         </div>
+        <annotated-body
+          v-if="displayMode === 'full' && usesPartLayout"
+          :message="message"
+          :options="formattedContentOptions"
+          :can-annotate="canAnnotate"
+          :pin-controls="isMobile"
+          :composing-whole="composingWhole"
+          @done-whole="composingWhole = false"
+        />
         <formatted-content 
-          v-if="displayMode === 'full'" 
+          v-else-if="displayMode === 'full'" 
           :content="displayContent" 
           :options="formattedContentOptions"
         />
         <div v-else-if="!message.subject" class="plaintext-content">{{ truncatedContent }}</div>
+        <annotated-body
+          v-if="displayMode === 'full' && !usesPartLayout"
+          :message="message"
+          :render-parts="false"
+          :options="formattedContentOptions"
+          :can-annotate="canAnnotate"
+          :pin-controls="isMobile"
+          :composing-whole="composingWhole"
+          @done-whole="composingWhole = false"
+        />
       </div>
       
       <!-- Files -->
@@ -342,6 +362,8 @@ import MessageAttachments from './MessageAttachments.vue';
 import UserDisplay from './common/UserDisplay.vue';
 import CompactAuthorActions from './thread/CompactAuthorActions.vue';
 import CompactHoverToolbar from './thread/CompactHoverToolbar.vue';
+import AnnotatedBody from './AnnotatedBody.vue';
+import { displayParts } from '../utils/annotations.js';
 import {
   compactHeaderActions,
   compactToolbarActions,
@@ -377,7 +399,8 @@ export default {
     MessageAttachments,
     UserDisplay,
     CompactAuthorActions,
-    CompactHoverToolbar
+    CompactHoverToolbar,
+    AnnotatedBody
   },
   
   props: {
@@ -582,6 +605,15 @@ export default {
 
     const isDefaultOutgoingChild = computed(() => isShownDefaultOutgoing());
     
+    const composingWhole = ref(false);
+    const usesPartLayout = computed(() => props.displayMode === 'full' && !!displayParts(props.message));
+    const canAnnotate = computed(() => (
+      props.displayMode === 'full'
+      && !props.inListView
+      && !isSelectionMode.value
+      && store.getters['auth/canInteract']
+    ));
+
     // Define unified message actions with standardized attributes
     const messageActions = computed(() => [
       {
@@ -605,6 +637,16 @@ export default {
         handler: openPromptModal,
         condition: () => !props.inListView,
         disabled: () => !currentUser.value
+      },
+      {
+        id: 'annotate',
+        emoji: '+',
+        text: 'Annotate',
+        desktopVisible: true,
+        mobileVisible: true,
+        adminOnly: false,
+        handler: () => { composingWhole.value = true },
+        condition: () => canAnnotate.value
       },
       {
         id: 'save',
@@ -2146,6 +2188,9 @@ export default {
       copyMessageText,
       truncatedContent,
       displayContent,
+      usesPartLayout,
+      canAnnotate,
+      composingWhole,
       formattedContentOptions,
       messageBodyStyle,
       // isReformatting,
@@ -4089,6 +4134,12 @@ export default {
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
+}
+
+.annotation-kind {
+  margin-left: 6px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
 }
 
 .imported-badge {

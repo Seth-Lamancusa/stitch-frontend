@@ -5,9 +5,12 @@ import UserService from '../../services/UserService'
 import WebSocketService from '../../services/ws/WebSocketService'
 import GraphLayoutService from '../../services/GraphLayoutService.js'
 import { contentText, getAuthorDisplayName, getAuthorUid, getAuthorUserTag } from '../../utils/messageCompat.js'
+import { withoutAnnotation } from '../../utils/annotations.js'
 
 // Latest inbox list fetch. An older response must not commit after a newer one.
 let inboxFetchSerial = 0
+
+const annotationLoads = new Map()
 
 // Helper function to check if a message is a descendant of another
 function isDescendantOf(state, messageId, ancestorId) {
@@ -183,6 +186,9 @@ export default {
     // Version counter incremented on any structural change (add/remove message, add/remove link)
     // to allow external views (like GraphView) to react without deep-watching the messages object.
     structureVersion: 0,
+
+    // Annotation ids the viewer cannot read. The edge does not grant visibility.
+    unavailableAnnotationIds: {},
   },
   
   mutations: {
@@ -355,6 +361,33 @@ export default {
         linkReplyToParent(state, stored.parent_id, stored.id);
       }
     },
+
+    CACHE_ANNOTATION(state, message) {
+      if (!message || !message.id) return;
+      const existing = state.messages[message.id];
+      state.messages[message.id] = {
+        ...(existing || {}),
+        ...message,
+        parent_id: null,
+        child_ids: Array.isArray(message.child_ids) ? message.child_ids : (existing?.child_ids || []),
+        branch_child: existing?.branch_child ?? null
+      };
+    },
+
+    ADD_ANNOTATION_REF(state, { hostId, id, part }) {
+      const host = state.messages[hostId];
+      if (!host || !id) return;
+      const annotations = Array.isArray(host.annotations) ? host.annotations.filter(Boolean) : [];
+      if (annotations.some((item) => item.id === id)) return;
+      const ref = { id };
+      if (Number.isInteger(part)) ref.part = part;
+      state.messages[hostId] = { ...host, annotations: [...annotations, ref] };
+    },
+
+    MARK_ANNOTATION_UNAVAILABLE(state, id) {
+      if (!id) return;
+      state.unavailableAnnotationIds = { ...state.unavailableAnnotationIds, [id]: true };
+    },
     
     SET_MESSAGES(state, messages) {
       for (const message of messages) {
@@ -455,6 +488,15 @@ export default {
         if (state.messages[msgId]) {
           delete state.messages[msgId];
         }
+      }
+
+      // Annotation rows hang off a host's annotations list, not child_ids.
+      for (const host of Object.values(state.messages)) {
+        if (!host || !Array.isArray(host.annotations)) continue;
+        let next = host.annotations;
+        for (const id of messagesToDelete) next = withoutAnnotation(next, id);
+        if (next.length === host.annotations.length) continue;
+        state.messages[host.id] = { ...host, annotations: next };
       }
       state.structureVersion += 1;
     },
@@ -2015,6 +2057,56 @@ export default {
         console.error(`Error toggling read status for message ${messageId}:`, error);
         return false;
       }
+    },
+
+    async ensureAnnotations({ state, commit }, ids) {
+      const wanted = [...new Set((ids || []).filter((id) => typeof id === 'string' && id))];
+      await Promise.all(wanted.map(async (id) => {
+        if (state.messages[id] || state.unavailableAnnotationIds[id]) return;
+        if (annotationLoads.has(id)) {
+          await annotationLoads.get(id);
+          return;
+        }
+        let finish = () => {};
+        const gate = new Promise((resolve) => { finish = resolve; });
+        annotationLoads.set(id, gate);
+        try {
+          const message = await MessageService.getMessage(id);
+          if (message?.id) commit('CACHE_ANNOTATION', message);
+        } catch (error) {
+          const status = error?.response?.status;
+          if (status === 403 || status === 404) {
+            commit('MARK_ANNOTATION_UNAVAILABLE', id);
+            return;
+          }
+          console.error('[messages] annotation load failed', id, error);
+        } finally {
+          finish();
+          annotationLoads.delete(id);
+        }
+      }));
+    },
+
+    async createAnnotation({ commit }, { targetId, content, part = null }) {
+      try {
+        const result = await MessageService.sendAnnotation({
+          targetId,
+          content,
+          part
+        });
+        const message = result.data;
+        commit('CACHE_ANNOTATION', message);
+        commit('ADD_ANNOTATION_REF', {
+          hostId: targetId,
+          id: message.id,
+          part: Number.isInteger(part) ? part : null
+        });
+        return message;
+      } catch (error) {
+        const detail = error?.response?.data?.detail || error?.response?.data?.error;
+        const message = typeof detail === 'string' ? detail : (error?.message || 'Could not save annotation');
+        throw new Error(message);
+      }
     }
 
   },
@@ -2076,7 +2168,7 @@ export default {
     },
     
     getLoadedMessages: (state) => {
-      const messages = Object.values(state.messages);
+      const messages = Object.values(state.messages).filter((message) => message?.type !== 'annotation');
       // Sort messages by timestamp with newest first by default
       return messages.sort((a, b) => {
         const dateA = new Date(a.timestamp);
