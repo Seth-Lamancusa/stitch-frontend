@@ -182,13 +182,23 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
+.compact-hover-toolbar > :deep(.compact-action-button) {
+  height: 24px;
+  min-height: 24px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  line-height: 1;
+}
+
 .more-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 32px;
-  min-height: 32px;
-  padding: 6px 8px;
+  height: 24px;
+  min-height: 24px;
+  padding: 2px 8px;
+  line-height: 1;
   background: transparent;
   border: none;
   border-radius: 6px;

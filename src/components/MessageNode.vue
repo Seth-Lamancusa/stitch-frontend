@@ -639,16 +639,6 @@ export default {
         disabled: () => !currentUser.value
       },
       {
-        id: 'annotate',
-        emoji: '+',
-        text: 'Annotate',
-        desktopVisible: true,
-        mobileVisible: true,
-        adminOnly: false,
-        handler: () => { composingWhole.value = true },
-        condition: () => canAnnotate.value
-      },
-      {
         id: 'save',
         emoji: '🔖',
         text: isMessageSaved.value ? 'Saved' : 'Save',

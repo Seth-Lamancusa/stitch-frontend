@@ -5,6 +5,7 @@ import {
   displayParts,
   partText,
   previewLine,
+  orderAnnotationRefs,
   refsForPart,
   splitParagraphs,
   wholeMessageRefs,
@@ -66,6 +67,28 @@ test('annotation refs keep a part index and drop a missing one', () => {
   assert.deepEqual(refs, [{ id: 'a', part: 1 }, { id: 'b' }, { id: 'c' }])
   assert.deepEqual(refsForPart(refs, 1), [{ id: 'a', part: 1 }])
   assert.deepEqual(wholeMessageRefs(refs).map((ref) => ref.id), ['b', 'c'])
+})
+
+test('annotations on one parent or part are earliest first', () => {
+  const refs = [
+    { id: 'later', part: 0 },
+    { id: 'earlier', part: 0 },
+    { id: 'whole-later' },
+    { id: 'whole-earlier' }
+  ]
+  const created = {
+    later: '2026-02-02T00:00:00Z',
+    earlier: '2026-01-01T00:00:00Z',
+    'whole-later': '2026-03-02T00:00:00Z',
+    'whole-earlier': '2026-03-01T00:00:00Z'
+  }
+  const ordered = orderAnnotationRefs(refs, (ref) => created[ref.id])
+  assert.deepEqual(refsForPart(ordered, 0).map((ref) => ref.id), ['earlier', 'later'])
+  assert.deepEqual(wholeMessageRefs(ordered).map((ref) => ref.id), ['whole-earlier', 'whole-later'])
+  assert.deepEqual(
+    orderAnnotationRefs(refs, () => null).map((ref) => ref.id),
+    refs.map((ref) => ref.id)
+  )
 })
 
 test('part text prefers text representations', () => {

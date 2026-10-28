@@ -153,6 +153,26 @@ export function refsForPart(refs, index) {
   return (refs || []).filter((ref) => ref.part === index)
 }
 
+function createdTime(value) {
+  if (value == null || value === '') return null
+  const time = new Date(value).getTime()
+  return Number.isFinite(time) ? time : null
+}
+
+// Earlier annotations first. Refs without a created time keep their current order
+// until that time is known, then they slot in.
+export function orderAnnotationRefs(refs, createdAt) {
+  const list = refs || []
+  const lookup = typeof createdAt === 'function' ? createdAt : () => null
+  return list
+    .map((ref, index) => ({ ref, index, time: createdTime(lookup(ref)) }))
+    .sort((a, b) => {
+      if (a.time != null && b.time != null && a.time !== b.time) return a.time - b.time
+      return a.index - b.index
+    })
+    .map((item) => item.ref)
+}
+
 export function wholeMessageRefs(refs) {
   return (refs || []).filter((ref) => ref.part == null)
 }

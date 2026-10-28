@@ -26,25 +26,15 @@
           :options="options"
           :can-annotate="canAnnotate"
           :pin-controls="pinControls"
-          :composing-whole="composing"
           :depth="depth + 1"
-          @done-whole="composing = false"
         />
       </div>
     </div>
     <div
-      v-if="canAnnotateMore || canDelete"
+      v-if="canDelete"
       class="annotation-toolbar"
       :class="{ 'is-visible': showToolbar }"
     >
-      <button
-        v-if="canAnnotateMore"
-        type="button"
-        class="annotation-plus"
-        title="Annotate"
-        aria-label="Annotate"
-        @click.stop="startAnnotate"
-      >+</button>
       <button
         v-if="canDelete"
         type="button"
@@ -68,7 +58,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useStore } from 'vuex'
 import AnnotatedBody from './AnnotatedBody.vue'
 import { getAuthorDisplayName } from '../utils/messageCompat.js'
@@ -85,7 +75,6 @@ const props = defineProps({
 const store = useStore()
 const open = ref(false)
 const hover = ref(false)
-const composing = ref(false)
 const confirming = ref(false)
 const deleting = ref(false)
 const deleteError = ref('')
@@ -95,9 +84,8 @@ const annotation = computed(() => store.getters['messages/getMessage'](props.ann
 const preview = computed(() => previewLine(annotation.value?.content))
 const authorName = computed(() => getAuthorDisplayName(annotation.value))
 const canDelete = computed(() => store.getters['auth/canDeleteMessage'](annotation.value))
-const canAnnotateMore = computed(() => props.canAnnotate && props.depth < 7)
 const showToolbar = computed(() => (
-  hover.value || composing.value || confirming.value || deleting.value || props.pinControls
+  hover.value || confirming.value || deleting.value || props.pinControls
 ))
 const deleteLabel = computed(() => {
   if (deleting.value) return 'Deleting annotation'
@@ -111,13 +99,6 @@ function onPointerOver(event) {
 function toggle() {
   confirming.value = false
   open.value = !open.value
-}
-
-async function startAnnotate() {
-  confirming.value = false
-  open.value = true
-  await nextTick()
-  composing.value = true
 }
 
 async function onDelete() {
@@ -150,6 +131,10 @@ async function onDelete() {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: transparent;
+}
+
+.annotation-card:has(.annotation-toolbar.is-visible) .annotation-toggle {
+  padding-right: 28px;
 }
 
 .annotation-toggle {
@@ -215,18 +200,25 @@ async function onDelete() {
   font-style: italic;
 }
 
+.annotation-text :deep(.message-parts > .message-part:not(:last-child)) {
+  margin-bottom: 2px;
+}
+
 .annotation-toolbar {
   position: absolute;
-  right: 8px;
-  bottom: -16px;
+  top: 0;
+  right: 0;
+  margin-top: 3px;
+  margin-left: 4px;
+  margin-right: 4px;
   z-index: 6;
   display: inline-flex;
   align-items: center;
-  padding: 2px;
+  padding: 1px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.18s ease;
@@ -237,16 +229,15 @@ async function onDelete() {
   pointer-events: auto;
 }
 
-.annotation-plus,
 .annotation-delete {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
@@ -254,23 +245,13 @@ async function onDelete() {
 }
 
 .annotation-delete svg {
-  width: 14px;
-  height: 14px;
+  width: 11px;
+  height: 11px;
 }
 
-.annotation-plus {
-  font-size: 16px;
-  line-height: 1;
-}
-
-.annotation-plus:hover,
 .annotation-delete:hover:not(:disabled) {
   background: var(--color-surface-hover);
   color: var(--color-text);
-}
-
-.annotation-plus:hover {
-  color: var(--color-primary);
 }
 
 .annotation-delete.is-confirm,

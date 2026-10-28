@@ -100,6 +100,7 @@ import AnnotationRow from './AnnotationRow.vue'
 import {
   annotationRefs,
   displayParts,
+  orderAnnotationRefs,
   partText,
   refsForPart,
   wholeMessageRefs
@@ -130,7 +131,10 @@ const wholeComposerRef = ref(null)
 
 const parts = computed(() => (props.renderParts ? displayParts(props.message) : null))
 const showParts = computed(() => Array.isArray(parts.value) && parts.value.length > 0)
-const partRefs = computed(() => annotationRefs(props.message))
+const partRefs = computed(() => orderAnnotationRefs(
+  annotationRefs(props.message),
+  (ref) => store.getters['messages/getMessage'](ref.id)?.timestamp
+))
 const wholeRefs = computed(() => (props.depth < maxDepth ? wholeMessageRefs(partRefs.value) : []))
 
 const annotationIds = computed(() => partRefs.value.map((ref) => ref.id).join('\0'))
@@ -239,7 +243,7 @@ async function submit(part) {
 }
 
 .message-part-text.is-active {
-  background: var(--color-hover-overlay);
+  background: color-mix(in srgb, var(--color-hover-overlay) 40%, transparent);
 }
 
 .message-part-text :deep(.formatted-content > p:last-child) {
@@ -248,16 +252,19 @@ async function submit(part) {
 
 .part-hover-toolbar {
   position: absolute;
-  right: 8px;
-  bottom: -16px;
+  top: 0;
+  right: 0;
+  margin-top: 3px;
+  margin-left: 4px;
+  margin-right: 4px;
   z-index: 6;
   display: inline-flex;
   align-items: center;
-  padding: 2px;
+  padding: 1px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.18s ease;
@@ -272,14 +279,14 @@ async function submit(part) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   color: var(--color-text-secondary);
-  font-size: 16px;
+  font-size: 13px;
   line-height: 1;
   cursor: pointer;
   transition: background-color 0.18s ease, color 0.18s ease;
