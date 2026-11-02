@@ -194,9 +194,9 @@ export default {
   },
 
   // Load messages via unified traversal endpoint
-  async traverseFrom(messageId, { up_depth = 2, down_depth = 2, get_replies = true, get_children = false, edge_type = 'replies', default_path_only = false } = {}) {
+  async traverseFrom(messageId, { up_depth = 2, down_depth = 2, get_replies = true, get_children = false, edge_type = 'replies', default_path_only = false, fallback_latest = false } = {}) {
     const headers = getAuthHeaders()
-    const url = `/messages/traverse-from/${messageId}?up_depth=${up_depth}&down_depth=${down_depth}&get_replies=${get_replies}&get_children=${get_children}&edge_type=${edge_type}&default_path_only=${default_path_only}`
+    const url = `/messages/traverse-from/${messageId}?up_depth=${up_depth}&down_depth=${down_depth}&get_replies=${get_replies}&get_children=${get_children}&edge_type=${edge_type}&default_path_only=${default_path_only}&fallback_latest=${fallback_latest}`
     const response = await apiClient.get(url, { headers })
     return response
   },

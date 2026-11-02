@@ -444,6 +444,11 @@ export default {
       type: String,
       default: null
     },
+    // ThreadView hides this on the first row while the top marker owns that edge.
+    showLinkSwitcher: {
+      type: Boolean,
+      default: true
+    },
     // Onboarding keeps the hover toolbar and its menu up without a pointer.
     revealToolbar: {
       type: Boolean,
@@ -603,6 +608,19 @@ export default {
       }
     };
 
+    const viewStoredContext = async () => {
+      try {
+        const result = await store.dispatch('messages/viewMessageContext', props.message.id);
+        if (result?.anchorId) emit('center', result.anchorId);
+      } catch (error) {
+        console.error('[MessageNode] Failed to view stored context', error);
+        store.commit('ui/SET_ERROR', {
+          code: error?.code || 'context_load_failed',
+          message: error?.message || 'Could not load the stored context',
+        });
+      }
+    };
+
     const isDefaultOutgoingChild = computed(() => isShownDefaultOutgoing());
     
     const composingWhole = ref(false);
@@ -651,6 +669,16 @@ export default {
         loading: () => isSavingMessage.value,
         active: () => isMessageSaved.value,
         customClass: () => isMessageSaved.value ? 'save-active' : ''
+      },
+      {
+        id: 'view-context',
+        emoji: '📖',
+        text: 'View context',
+        desktopVisible: false,
+        mobileVisible: false,
+        adminOnly: false,
+        handler: viewStoredContext,
+        condition: () => !props.inListView && Array.isArray(props.message.context) && props.message.context.length > 0
       },
       {
         id: 'copy-text',
@@ -1444,7 +1472,7 @@ export default {
  
     const shouldShowLinkSwitcher = computed(() => {
       if (props.displayMode !== 'full') return false; // Only show in ThreadView
-      return true;
+      return props.showLinkSwitcher;
     });
 
     const handleSwitchParent = async (parentId) => {

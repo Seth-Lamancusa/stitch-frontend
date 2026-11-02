@@ -18,6 +18,7 @@
     </div>
 
     <LinkSwitcher
+      v-if="showLinkSwitcher"
       :activeParentId="activeParentId"
       :replyParentId="message.parent_id"
       :stitchParentIds="message.stitch_parent_ids || []"
@@ -215,6 +216,7 @@ import {
 const props = defineProps({
   message: { type: Object, required: true },
   activeParentId: { type: String, default: null },
+  showLinkSwitcher: { type: Boolean, default: true },
   compact: { type: Boolean, default: false },
   isSelected: { type: Boolean, default: false }
 });
@@ -327,8 +329,24 @@ const canSetDefaultOutgoing = computed(() => {
   return outgoing.includes(props.message.id);
 });
 
+async function viewStoredContext() {
+  try {
+    const result = await store.dispatch('messages/viewMessageContext', props.message.id);
+    if (result?.anchorId) emit('center', result.anchorId);
+  } catch (error) {
+    console.error('[FunctionMessageRow] Failed to view stored context', error);
+    store.commit('ui/SET_ERROR', {
+      code: error?.code || 'context_load_failed',
+      message: error?.message || 'Could not load the stored context',
+    });
+  }
+}
+
 const menuActions = computed(() => {
   const items = [
+    ...(Array.isArray(props.message.context) && props.message.context.length > 0
+      ? [{ id: 'view-context', emoji: '📖', text: 'View context', close: true, run: viewStoredContext }]
+      : []),
     ...(canAnnotate.value
       ? [{ id: 'annotate', emoji: '+', text: 'Annotate', close: true, run: () => { composingWhole.value = true } }]
       : []),

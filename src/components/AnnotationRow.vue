@@ -1,6 +1,6 @@
 <template>
   <div
-    v-if="annotation && !unavailable"
+    v-if="(annotation || loadingContent) && !unavailable"
     class="annotation-card"
     :class="{ 'is-open': open }"
     @mouseover="onPointerOver"
@@ -16,10 +16,13 @@
         <path d="M6 3.5 L11 8 L6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
       <span class="annotation-label">annotation</span>
-      <span v-if="!open && preview" class="annotation-preview">{{ preview }}</span>
+      <span v-if="!open && loadingContent" class="annotation-loading">Loading</span>
+      <span v-else-if="!open && preview" class="annotation-preview">{{ preview }}</span>
     </button>
     <div v-if="open" class="annotation-expanded">
-      <div class="annotation-author">{{ authorName }}</div>
+      <p v-if="loadingContent" class="annotation-loading annotation-loading--block" aria-live="polite">Loading</p>
+      <template v-else>
+      <div class="annotation-author" :class="{ 'is-current-user': authorIsCurrent }">{{ authorName }}</div>
       <div class="annotation-text">
         <AnnotatedBody
           :message="annotation"
@@ -29,6 +32,38 @@
           :depth="depth + 1"
         />
       </div>
+      <div
+        v-for="reply in replyChain"
+        :key="reply.id"
+        class="annotation-reply"
+      >
+        <div class="annotation-author" :class="{ 'is-current-user': authorIsCurrentUser(reply) }">
+          {{ replyAuthorName(reply) }}
+        </div>
+        <div class="annotation-text">
+          <AnnotatedBody
+            v-if="replyHasParts(reply)"
+            :message="reply"
+            :options="options"
+            :can-annotate="canAnnotate"
+            :pin-controls="pinControls"
+            :depth="depth + 1"
+          />
+          <template v-else>
+            <formatted-content :content="replyContent(reply)" :options="options" />
+            <AnnotatedBody
+              :message="reply"
+              :render-parts="false"
+              :options="options"
+              :can-annotate="canAnnotate"
+              :pin-controls="pinControls"
+              :depth="depth + 1"
+            />
+          </template>
+        </div>
+      </div>
+      <p v-if="loadingReplies" class="annotation-loading annotation-loading--block" aria-live="polite">Loading replies</p>
+      </template>
     </div>
     <div
       v-if="canDelete"
@@ -58,11 +93,14 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useStore } from 'vuex'
 import AnnotatedBody from './AnnotatedBody.vue'
-import { getAuthorDisplayName } from '../utils/messageCompat.js'
-import { previewLine } from '../utils/annotations.js'
+import FormattedContent from './FormattedContent/index.vue'
+import { contentText, getAuthorDisplayName, isCurrentUserAuthor } from '../utils/messageCompat.js'
+import { continuationChain, displayParts, previewLine } from '../utils/annotations.js'
+
+const CHAIN_LIMIT = 100
 
 const props = defineProps({
   annotationId: { type: String, required: true },
@@ -78,11 +116,78 @@ const hover = ref(false)
 const confirming = ref(false)
 const deleting = ref(false)
 const deleteError = ref('')
+const loadingReplies = ref(false)
+const loadingContent = ref(false)
 
 const unavailable = computed(() => !!store.state.messages.unavailableAnnotationIds?.[props.annotationId])
 const annotation = computed(() => store.getters['messages/getMessage'](props.annotationId))
+const currentUser = computed(() => store.getters['auth/user'])
 const preview = computed(() => previewLine(annotation.value?.content))
 const authorName = computed(() => getAuthorDisplayName(annotation.value))
+const authorIsCurrent = computed(() => isCurrentUserAuthor(annotation.value, currentUser.value))
+const replyChain = computed(() => {
+  if (!open.value || !annotation.value) return []
+  return continuationChain(
+    annotation.value,
+    (id) => store.getters['messages/getMessage'](id),
+    CHAIN_LIMIT
+  )
+})
+
+let loadToken = 0
+let contentToken = 0
+
+watch(() => props.annotationId, (id) => {
+  contentToken += 1
+  const token = contentToken
+  if (!id || unavailable.value || store.getters['messages/getMessage'](id)) {
+    loadingContent.value = false
+    return
+  }
+  loadingContent.value = true
+  store.dispatch('messages/ensureAnnotations', [id]).finally(() => {
+    if (token === contentToken) loadingContent.value = false
+  })
+}, { immediate: true })
+
+function replyAuthorName(message) {
+  return getAuthorDisplayName(message)
+}
+
+function authorIsCurrentUser(message) {
+  return isCurrentUserAuthor(message, currentUser.value)
+}
+
+function replyHasParts(message) {
+  return !!displayParts(message)
+}
+
+function replyContent(message) {
+  return contentText(message?.content)
+}
+
+async function walkReplyChain(token) {
+  const rootId = props.annotationId
+  if (token !== loadToken || !open.value || !rootId) return
+  loadingReplies.value = true
+  try {
+    await store.dispatch('messages/loadDefaultOutgoingChain', rootId)
+  } finally {
+    if (token === loadToken) loadingReplies.value = false
+  }
+}
+
+watch(open, (isOpen) => {
+  loadToken += 1
+  if (!isOpen) {
+    loadingReplies.value = false
+    return
+  }
+  const token = loadToken
+  walkReplyChain(token).catch((error) => {
+    console.error('[annotation] reply chain load failed', error)
+  })
+})
 const canDelete = computed(() => store.getters['auth/canDeleteMessage'](annotation.value))
 const showToolbar = computed(() => (
   hover.value || confirming.value || deleting.value || props.pinControls
@@ -176,7 +281,6 @@ async function onDelete() {
   min-width: 0;
   overflow: hidden;
   color: var(--color-text);
-  font-style: italic;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -194,10 +298,42 @@ async function onDelete() {
   letter-spacing: 0.01em;
 }
 
-.annotation-text :deep(.formatted-content) {
+.annotation-author.is-current-user {
+  color: var(--color-current-user-name);
+}
+
+.annotation-reply {
+  margin-top: 10px;
+}
+
+.annotation-loading {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  animation: annotation-replies-pulse 1.4s ease-in-out infinite;
+}
+
+.annotation-loading--block {
+  margin: 8px 0 2px;
+}
+
+@keyframes annotation-replies-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .annotation-loading {
+    animation: none;
+  }
+}
+
+.annotation-text {
+  font-size: calc(var(--message-font-size, 1.125rem) - 0.25rem);
+}
+
+.annotation-card .annotation-text :deep(.formatted-content) {
   color: var(--color-text);
-  font-size: 0.95rem;
-  font-style: italic;
+  font-size: calc(var(--message-font-size, 1.125rem) - 0.25rem);
 }
 
 .annotation-text :deep(.message-parts > .message-part:not(:last-child)) {

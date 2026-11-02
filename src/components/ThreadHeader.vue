@@ -43,6 +43,10 @@
       <span class="copy-thread-text">{{ isThreadCopied ? 'Copied!' : 'Copy thread' }}</span>
     </button>
 
+    <div v-if="contextLabel" class="context-indicator" :title="contextLabel">
+      Context of {{ contextLabel }}
+    </div>
+
     <!-- Selection mode controls -->
     <div v-if="isSelectionMode" class="selection-controls">
       <span class="selection-count">{{ selectedMessageCount }} message{{ selectedMessageCount === 1 ? '' : 's' }} selected</span>
@@ -106,6 +110,7 @@ defineProps({
   isCopied: { type: Boolean, default: false },
   showCopyThreadButton: { type: Boolean, default: false },
   isThreadCopied: { type: Boolean, default: false },
+  contextLabel: { type: String, default: '' },
 });
 
 defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'copyThread', 'exitSelection', 'logout', 'openProfile']);
@@ -179,6 +184,16 @@ defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'copyThread', 'exit
     background-color: var(--color-surface-hover);
     border-color: var(--color-border-hover);
   }
+
+.context-indicator {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
 
 .selection-controls {
   display: flex;

@@ -4,7 +4,6 @@ import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
 import MessagePreview from './MessagePreview.vue';
 import DeleteConfirmModal from './modals/DeleteConfirmModal.vue';
-import NewThreadModal from './modals/NewThreadModal.vue';
 import { isCurrentUserAuthor as isMessageAuthor } from '../utils/messageCompat.js';
 
 // Props to support different modes and configurations
@@ -296,8 +295,6 @@ const replyCounts = ref({}); // Track reply counts by thread ID
 const isInfoBoxCollapsed = ref(localStorage.getItem('infoBoxCollapsed') === 'true');
 
 // New Thread Modal State
-const showNewThreadModal = ref(false);
-
 // Link mode detection
 const isLinkMode = computed(() => {
   return props.mode === 'incoming-links' || props.mode === 'outgoing-links';
@@ -369,56 +366,6 @@ const confirmDeleteMessage = (message) => {
   // If a message is deleted from the list view, use the UI store to handle confirmation
   store.dispatch('ui/showDeleteConfirm', message);
   // The actual deletion is handled by the UI store and messages module
-};
-
-// Create a new message thread
-const createNewThread = () => {
-  persistLocalListCache();
-  // Store current route before navigation
-  store.dispatch('navigation/setPreviousRoute', route.path);
-  
-  // Simply navigate to the new thread route
-  router.push('/new-thread');
-};
-
-// Check if user has any special scopes that require modal
-const hasImportScope = computed(() => {
-  return store.getters['auth/hasAnyScope'](['msg.import.cursor', 'msg.import.audio']);
-});
-
-const shouldShowModal = computed(() => hasImportScope.value);
-
-// Handle the create button click
-const handleCreateClick = (event) => {
-  // First check if user is logged in
-  if (!user.value) {
-    store.commit('ui/SET_ERROR', { code: 'auth_required', message: 'Please log in to create new messages' });
-    return;
-  }
-
-  // Check capability: msg.write via centralized auth getter
-  if (!store.getters['auth/canInteract']) {
-    store.commit('ui/SET_ERROR', { code: 'permission_required', message: 'You need write permission to create new messages' });
-    return;
-  }
-
-  // Import needs a choice; otherwise go straight to a new thread
-  if (shouldShowModal.value) {
-    showNewThreadModal.value = true;
-  } else {
-    createNewThread();
-  }
-};
-
-const handleNewThreadConfirm = () => {
-  showNewThreadModal.value = false;
-  createNewThread();
-};
-
-const handleImportConfirm = () => {
-  showNewThreadModal.value = false;
-  store.dispatch('navigation/setPreviousRoute', route.path);
-  router.push('/import');
 };
 
 // Function to check if the author is the current user
@@ -1088,13 +1035,6 @@ const handleLinkDelete = async (linkData) => {
       @confirm="deleteMessage"
     />
 
-    <!-- Create Options Modal -->
-    <NewThreadModal
-      :show="showNewThreadModal"
-      @close="showNewThreadModal = false"
-      @new-thread="handleNewThreadConfirm"
-      @import="handleImportConfirm"
-    />
   </div>
 </template>
 

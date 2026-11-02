@@ -35,6 +35,14 @@
         <span>Load {{ stitchCount > 1 ? stitchCount : '' }} stitch{{ stitchCount > 1 ? 'es' : '' }}</span>
       </button>
 
+      <button
+        v-if="contextActionLabel"
+        class="stitch-load-btn"
+        @click="$emit('load-context')"
+      >
+        <span>{{ contextActionLabel }}</span>
+      </button>
+
       <button 
         v-if="showRefreshShortcut && position === 'bottom'"
         class="refresh-shortcut"
@@ -101,6 +109,12 @@ export default {
     stitchCount: {
       type: Number,
       default: 0
+    },
+
+    // Earlier messages above a context window, or a continuation below it.
+    contextActionLabel: {
+      type: String,
+      default: ''
     },
     
     // Custom text for error state

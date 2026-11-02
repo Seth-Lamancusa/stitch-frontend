@@ -187,3 +187,70 @@ export function previewLine(content, limit = 96) {
   if (flat.length <= limit) return flat
   return `${flat.slice(0, limit - 1).trimEnd()}…`
 }
+
+function idList(value) {
+  if (!Array.isArray(value)) return []
+  return value.filter((id) => id != null && id !== '')
+}
+
+// The one outgoing message to keep walking. default_outgoing wins whether the
+// edge is a reply or a stitch. Otherwise the last reply, using reply_order the
+// same way the thread does, then the latest reply. child_ids arrive oldest first.
+// A stitch is the fallback only when there is no reply.
+export function continuationId(message) {
+  if (!message) return null
+  const childIds = idList(message.child_ids)
+  const stitchIds = idList(message.stitch_child_ids)
+  const pool = new Map()
+  for (const id of [...childIds, ...stitchIds]) pool.set(String(id), id)
+  if (pool.size === 0) return null
+
+  const explicit = message.default_outgoing
+  if (explicit != null && explicit !== '' && pool.has(String(explicit))) {
+    return pool.get(String(explicit))
+  }
+
+  const order = idList(message.reply_order)
+  if (order.length > 0 && childIds.length > 0) {
+    const orderIndex = new Map(order.map((id, index) => [String(id), index]))
+    const replies = [...childIds].sort((a, b) => {
+      const ai = orderIndex.has(String(a)) ? orderIndex.get(String(a)) : null
+      const bi = orderIndex.has(String(b)) ? orderIndex.get(String(b)) : null
+      if (ai == null && bi == null) return 0
+      if (ai == null) return -1
+      if (bi == null) return 1
+      return ai - bi
+    })
+    return replies[replies.length - 1]
+  }
+
+  if (childIds.length > 0) return childIds[childIds.length - 1]
+  if (order.length > 0) {
+    const orderIndex = new Map(order.map((id, index) => [String(id), index]))
+    const orderedStitches = stitchIds.filter((id) => orderIndex.has(String(id)))
+    if (orderedStitches.length > 0) {
+      orderedStitches.sort((a, b) => orderIndex.get(String(a)) - orderIndex.get(String(b)))
+      return orderedStitches[orderedStitches.length - 1]
+    }
+  }
+  return stitchIds.length > 0 ? stitchIds[stitchIds.length - 1] : null
+}
+
+// Messages along the default path, not including the start. Stops at a cycle,
+// a missing body, or the limit. The caller renders this list flat.
+export function continuationChain(message, lookup, limit = 100) {
+  const chain = []
+  const seen = new Set()
+  if (message?.id != null) seen.add(String(message.id))
+  let current = message
+  while (current && chain.length < limit) {
+    const next = continuationId(current)
+    if (next == null || seen.has(String(next))) break
+    seen.add(String(next))
+    const loaded = typeof lookup === 'function' ? lookup(next) : null
+    if (!loaded) break
+    chain.push(loaded)
+    current = loaded
+  }
+  return chain
+}

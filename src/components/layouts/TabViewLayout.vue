@@ -316,6 +316,18 @@
       </svg>
     </router-link>
 
+    <router-link
+      v-if="user && canQuote"
+      to="/import"
+      class="global-import-btn"
+      title="Import conversation"
+      aria-label="Import conversation"
+    >
+      <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="currentColor" d="M11 3h2v10.17l3.59-3.58L18 11l-6 6-6-6 1.41-1.41L11 13.17V3zM5 19h14v2H5v-2z"/>
+      </svg>
+    </router-link>
+
     <!-- Global Create Button (floating, appears on all tabs) -->
     <button
       v-if="user && canInteract"
@@ -326,14 +338,6 @@
     >
       <span class="btn-icon">+</span>
     </button>
-
-    <!-- Global Create Options Modal -->
-    <NewThreadModal
-      :show="showCreateModal"
-      @close="showCreateModal = false"
-      @new-thread="handleNewThread"
-      @import="handleImport"
-    />
     
     <!-- Mobile tab bar - only visible on mobile -->
     <MobileTabBar />
@@ -359,8 +363,8 @@ import GlobalNotifications from '../GlobalNotifications.vue';
 import MobileTabBar from './MobileTabBar.vue';
 import TabGlyph from './TabGlyph.vue';
 import UserDisplay from '../common/UserDisplay.vue';
-import NewThreadModal from '../modals/NewThreadModal.vue';
 import { ADMIN_ORIGIN } from '@/config/appConfig.js';
+import { P } from '@/auth/constants.js';
 
 const router = useRouter();
 const route = useRoute();
@@ -397,7 +401,6 @@ const usernameContainerRef = ref(null);
 const switchingPrincipalUid = ref(null);
 const isSwitchingPrincipal = computed(() => !!switchingPrincipalUid.value);
 const isCreateManagedModalOpen = ref(false);
-const showCreateModal = ref(false);
 const navigationTabsRef = ref(null);
 const tabsIconOnly = ref(false);
 let navigationTabsObserver = null;
@@ -457,14 +460,8 @@ const scheduleFitNavigationTabs = () => {
   });
 };
 
-// Check scopes for create modal
-const hasImportScope = computed(() => {
-  return store.getters['auth/hasAnyScope'](['msg.import.cursor', 'msg.import.audio']);
-});
-
-const shouldShowCreateModal = computed(() => hasImportScope.value);
-
 const canInteract = computed(() => store.getters['auth/canInteract']);
+const canQuote = computed(() => store.getters['auth/hasScope'](P.MESSAGES_QUOTE));
 
 // Public SPA: no internal/admin tabs here
 
@@ -872,23 +869,7 @@ const handleGlobalCreateClick = () => {
     return;
   }
 
-  // Import needs a choice; otherwise go straight to a new thread
-  if (shouldShowCreateModal.value) {
-    showCreateModal.value = true;
-  } else {
-    router.push('/new-thread');
-  }
-};
-
-const handleNewThread = () => {
-  showCreateModal.value = false;
   router.push('/new-thread');
-};
-
-const handleImport = () => {
-  showCreateModal.value = false;
-  store.dispatch('navigation/setPreviousRoute', route.path);
-  router.push('/import');
 };
 </script>
 
@@ -1600,6 +1581,7 @@ const handleImport = () => {
 
 /* Matched corner controls. Sage fill with a matte wood grain. */
 .global-feedback-btn,
+.global-import-btn,
 .global-create-btn {
   position: fixed;
   bottom: var(--space-xl);
@@ -1635,7 +1617,15 @@ const handleImport = () => {
   line-height: 1;
 }
 
+.global-import-btn {
+  width: 52px;
+  height: 52px;
+  right: calc(var(--space-xl) + 16px);
+  bottom: calc(var(--space-xl) + 84px + 12px);
+}
+
 .global-feedback-btn .btn-icon,
+.global-import-btn .btn-icon,
 .global-create-btn .btn-icon {
   display: flex;
   align-items: center;
@@ -1648,6 +1638,11 @@ const handleImport = () => {
   height: 42px;
 }
 
+.global-import-btn .btn-icon {
+  width: 26px;
+  height: 26px;
+}
+
 .global-create-btn .btn-icon {
   transform: translateY(-2px);
   font-size: 80px;
@@ -1656,12 +1651,14 @@ const handleImport = () => {
 }
 
 .global-feedback-btn:hover,
+.global-import-btn:hover,
 .global-create-btn:hover {
   background-color: var(--color-primary-dark);
   color: var(--color-text-inverse);
 }
 
 .global-feedback-btn:focus-visible,
+.global-import-btn:focus-visible,
 .global-create-btn:focus-visible {
   outline: 3px solid var(--color-cream);
   outline-offset: 3px;
@@ -1670,6 +1667,7 @@ const handleImport = () => {
 /* Mobile responsive for global create and feedback buttons */
 @media (max-width: 768px) {
   .global-feedback-btn,
+  .global-import-btn,
   .global-create-btn {
     background-size: 64px;
   }
@@ -1679,6 +1677,18 @@ const handleImport = () => {
     height: 52px;
     bottom: 80px; /* Move up to avoid mobile tab bar */
     right: var(--space-md);
+  }
+
+  .global-import-btn {
+    width: 36px;
+    height: 36px;
+    right: calc(var(--space-md) + 8px);
+    bottom: calc(80px + 52px + 10px);
+  }
+
+  .global-import-btn .btn-icon {
+    width: 18px;
+    height: 18px;
   }
 
   .global-create-btn .btn-icon {

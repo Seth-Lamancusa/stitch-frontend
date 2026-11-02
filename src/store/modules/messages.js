@@ -5,7 +5,14 @@ import UserService from '../../services/UserService'
 import WebSocketService from '../../services/ws/WebSocketService'
 import GraphLayoutService from '../../services/GraphLayoutService.js'
 import { contentText, getAuthorDisplayName, getAuthorUid, getAuthorUserTag } from '../../utils/messageCompat.js'
-import { withoutAnnotation } from '../../utils/annotations.js'
+import { continuationId, withoutAnnotation } from '../../utils/annotations.js'
+import {
+  chooseBranchChild,
+  explicitDefaultOutgoing,
+  loadedDescendantIds,
+  outgoingChildPool,
+  resolvedBranchParent,
+} from '../branchContext.js'
 
 // Latest inbox list fetch. An older response must not commit after a newer one.
 let inboxFetchSerial = 0
@@ -33,18 +40,6 @@ function isDescendantOf(state, messageId, ancestorId) {
   }
   
   return false;
-}
-
-function outgoingChildPool(message) {
-  if (!message) return [];
-  return [...new Set([...(message.child_ids || []), ...(message.stitch_child_ids || [])])];
-}
-
-// default_outgoing initializes branch_child only when it names a current outgoing child.
-function explicitDefaultOutgoing(message) {
-  const id = message && message.default_outgoing;
-  if (!id) return null;
-  return outgoingChildPool(message).includes(id) ? id : null;
 }
 
 // Helper: unread only when the user is a recipient and is_read is explicitly false.
@@ -189,6 +184,9 @@ export default {
 
     // Annotation ids the viewer cannot read. The edge does not grant visibility.
     unavailableAnnotationIds: {},
+
+    // { anchorId } while the thread is showing that message's stored context.
+    contextView: null,
   },
   
   mutations: {
@@ -261,9 +259,14 @@ export default {
         };
         
         // default_outgoing fills branch_child only when no selection exists yet.
+        // A context anchor keeps an explicit empty branch_child until the view leaves.
         const hasChildren = allPotentialChildren.length > 0;
         const explicitDefault = explicitDefaultOutgoing(mergedMessage);
-        if (hasChildren && currentBranchChild === undefined && explicitDefault) {
+        const contextAnchor = state.contextView
+          && String(state.contextView.anchorId) === String(message.id);
+        if (contextAnchor && currentBranchChild == null) {
+          mergedMessage.branch_child = null;
+        } else if (hasChildren && currentBranchChild === undefined && explicitDefault) {
           mergedMessage.branch_child = explicitDefault;
         } else if (hasChildren && currentBranchChild === undefined) {
           // If reply_order is set, use last child from ordered list
@@ -536,8 +539,7 @@ export default {
       };
     },
     SET_BRANCH_PARENT(state, { messageId, parentId }) {
-      // Deprecated in favor of SET_BRANCH_LINK, but kept for minimal compatibility
-      console.log(`[SET_BRANCH_PARENT] ${messageId} -> ${parentId}`);
+      // parentId null is an explicit upward terminus. undefined is not stored here.
       const message = state.messages[messageId];
       if (!message) return;
       
@@ -545,6 +547,25 @@ export default {
         ...message,
         branch_parent: parentId
       };
+    },
+
+    SET_CONTEXT_VIEW(state, anchorId) {
+      state.contextView = anchorId ? { anchorId } : null;
+    },
+
+    CLEAR_CONTEXT_VIEW(state) {
+      state.contextView = null;
+    },
+
+    // Drop cached messages without rewriting the anchor's child lists.
+    UNLOAD_MESSAGES(state, ids) {
+      let removed = false;
+      for (const id of ids || []) {
+        if (!state.messages[id]) continue;
+        delete state.messages[id];
+        removed = true;
+      }
+      if (removed) state.structureVersion += 1;
     },
     
     // New mutation for WebSocket updates
@@ -814,8 +835,8 @@ export default {
       let highestAncestor = startingMessage;
       let childMessage = startingMessage;
       
-      // Resolve parent using branch_parent (explicit stitch/history override) or standard parent_id
-      const getParentId = (msg) => (msg.branch_parent !== undefined && msg.branch_parent !== null) ? msg.branch_parent : msg.parent_id;
+      // branch_parent null stops the walk. Otherwise default_incoming, then parent_id.
+      const getParentId = (msg) => resolvedBranchParent(msg);
       
       let currentParentId = getParentId(startingMessage);
       const visitedUp = new Set([startingMessage.id]);
@@ -852,32 +873,24 @@ export default {
         }
         visitedDown.add(currentMessage.id);
 
-        // pool of children (replies + stitches)
-        const childPool = (currentMessage.child_ids || []).concat(currentMessage.stitch_child_ids || []);
+        // An active context anchor stays the bottom of the thread until a child is chosen.
+        if (
+          state.contextView
+          && String(state.contextView.anchorId) === String(currentMessage.id)
+          && !currentMessage.branch_child
+        ) {
+          break;
+        }
 
-        // If message has no branch child but has children in pool, set last child as branch_child
-        if (!currentMessage.branch_child && childPool.length > 0) {
-          // Get all child messages present in store
-          const childMessages = childPool
-            .map(childId => state.messages[childId])
-            .filter(child => child)
-            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-          
-          if (childMessages.length > 0) {
-            // Always use last child (furthest right / newest) from complete pool
-            const branchChild = childMessages[childMessages.length - 1];
-            
-            // Set link in both directions
-            commit('SET_BRANCH_LINK', { 
-              parentId: currentMessage.id, 
-              childId: branchChild.id
-            });
-            
-            // Get updated message reference
-            currentMessage = state.messages[currentMessage.id];
-          } else {
-            break;
-          }
+        // Existing branch_child wins. Otherwise default_outgoing, then reply order / timestamp.
+        if (!currentMessage.branch_child) {
+          const branchChildId = chooseBranchChild(currentMessage, state.messages);
+          if (!branchChildId) break;
+          commit('SET_BRANCH_LINK', {
+            parentId: currentMessage.id,
+            childId: branchChildId
+          });
+          currentMessage = state.messages[currentMessage.id];
         }
         
         // If message has no branch child (even after trying to set one), break
@@ -898,17 +911,62 @@ export default {
       
       return true;
     },
+
+    // Replace the visible branch above messageId with its stored context.
+    // Every context id has to load. A miss leaves the current branch alone.
+    async viewMessageContext({ commit, state, dispatch }, messageId) {
+      const anchor = state.messages[messageId];
+      const contextIds = anchor && Array.isArray(anchor.context) ? anchor.context.filter(Boolean) : [];
+      if (!anchor || contextIds.length === 0) return null;
+
+      const stored = (id) => !!(state.messages[id] || state.messages[String(id)]);
+      const missing = contextIds.filter(id => !stored(id));
+      if (missing.length) {
+        await Promise.all(missing.map(async (id) => {
+          try {
+            await dispatch('loadMessage', id);
+          } catch (error) {
+            console.error('[messages] stored context message failed', { messageId, contextId: id, error });
+          }
+        }));
+      }
+
+      const failedIds = contextIds.filter(id => !stored(id));
+      if (failedIds.length) {
+        console.error('[messages] stored context load failed', { messageId, failedIds });
+        const error = new Error(
+          failedIds.length === 1
+            ? 'Could not load a message in the stored context'
+            : `Could not load ${failedIds.length} messages in the stored context`
+        );
+        error.code = 'context_load_failed';
+        error.failedIds = failedIds;
+        throw error;
+      }
+
+      const windowIds = [...contextIds, anchor.id];
+      const remove = loadedDescendantIds(state.messages, anchor.id, windowIds);
+      if (remove.length) commit('UNLOAD_MESSAGES', remove);
+
+      commit('SET_BRANCH_PARENT', { messageId: contextIds[0], parentId: null });
+      for (let index = 0; index < windowIds.length - 1; index += 1) {
+        commit('SET_BRANCH_LINK', { parentId: windowIds[index], childId: windowIds[index + 1] });
+      }
+      commit('SET_BRANCH_CHILD', { messageId: anchor.id, childId: null });
+      commit('SET_CONTEXT_VIEW', anchor.id);
+      return { anchorId: anchor.id, windowIds };
+    },
     
     // REMOVED setBranchPath - no longer needed since in_branch_path flags are unused
     
     // Network traversal with the HTTP result kept intact.
     // loadTraversal still returns the message array for older callers.
-    async loadTraversalReport({ commit }, { messageId, up_depth = 0, down_depth = 0, get_replies = true, get_children = false, edge_type = 'replies' } = {}) {
+    async loadTraversalReport({ commit }, { messageId, up_depth = 0, down_depth = 0, get_replies = true, get_children = false, edge_type = 'replies', default_path_only = false, fallback_latest = false } = {}) {
       if (!messageId) {
         return { messages: [], ok: false, status: 0, detail: 'missing message id' };
       }
       try {
-        const response = await MessageService.traverseFrom(messageId, { up_depth, down_depth, get_replies, get_children, edge_type });
+        const response = await MessageService.traverseFrom(messageId, { up_depth, down_depth, get_replies, get_children, edge_type, default_path_only, fallback_latest });
         const data = response?.data || {};
         const messages = [];
         if (data.origin) messages.push(data.origin);
@@ -927,9 +985,25 @@ export default {
     },
 
     // Unified traversal loader
-    async loadTraversal({ commit, dispatch }, { messageId, up_depth = 0, down_depth = 0, get_replies = true, get_children = false, edge_type = 'replies' }) {
+    async loadTraversal({ commit, dispatch }, { messageId, up_depth = 0, down_depth = 0, get_replies = true, get_children = false, edge_type = 'replies', default_path_only = false, fallback_latest = false }) {
       if (String(messageId).startsWith('msg_')) {
         console.log(`[MOCK] loadTraversal ${messageId} up:${up_depth} down:${down_depth} type:${edge_type}`);
+
+        if (default_path_only) {
+          const toLoad = [];
+          const seen = new Set();
+          let current = mockMessages[messageId];
+          let depth = 0;
+          while (current && !seen.has(current.id) && depth <= down_depth) {
+            seen.add(current.id);
+            toLoad.push(current);
+            depth += 1;
+            const nextId = fallback_latest ? continuationId(current) : current.default_outgoing;
+            current = nextId ? mockMessages[nextId] : null;
+          }
+          toLoad.forEach(m => commit('SET_MESSAGE', m));
+          return toLoad;
+        }
         
         const toLoad = new Map(); // id -> depth info
         const queue = [{ id: messageId, du: 0, dd: 0 }];
@@ -970,8 +1044,23 @@ export default {
         results.forEach(m => commit('SET_MESSAGE', m));
         return results;
       }
-      const report = await dispatch('loadTraversalReport', { messageId, up_depth, down_depth, get_replies, get_children, edge_type });
+      const report = await dispatch('loadTraversalReport', { messageId, up_depth, down_depth, get_replies, get_children, edge_type, default_path_only, fallback_latest });
       return report.messages;
+    },
+
+    // One request for the whole downward chain. Hops use default_outgoing, then
+    // the latest reply, and the server returns that path together.
+    async loadDefaultOutgoingChain({ dispatch }, messageId) {
+      if (!messageId) return [];
+      return dispatch('loadTraversal', {
+        messageId,
+        up_depth: 0,
+        down_depth: 100,
+        get_replies: true,
+        get_children: false,
+        default_path_only: true,
+        fallback_latest: true
+      });
     },
 
     // Load a single message
@@ -2201,7 +2290,7 @@ export default {
 
         result.push(state.messages[currentId]);
         const msg = state.messages[currentId];
-        currentId = msg.branch_parent !== undefined ? msg.branch_parent : msg.parent_id;
+        currentId = resolvedBranchParent(msg);
       }
       return result.reverse();
     },
@@ -2224,7 +2313,7 @@ export default {
             
       // STEP 1: First trace UPWARD to find the highest ancestor that's in the store
       let highestAncestor = startingMessage;
-      const getParentId = (msg) => (msg.branch_parent !== undefined && msg.branch_parent !== null) ? msg.branch_parent : msg.parent_id;
+      const getParentId = (msg) => resolvedBranchParent(msg);
       
       let currentParentId = getParentId(startingMessage);
       const visitedUp = new Set([startingMessage.id]);

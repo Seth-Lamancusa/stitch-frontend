@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   annotationRefs,
+  continuationChain,
+  continuationId,
   displayParts,
   partText,
   previewLine,
@@ -111,4 +113,43 @@ test('withoutAnnotation drops one ref and leaves the rest', () => {
   const annotations = [{ id: 'a', part: 0 }, { id: 'b' }]
   assert.deepEqual(withoutAnnotation(annotations, 'a'), [{ id: 'b' }])
   assert.equal(withoutAnnotation(null, 'a'), null)
+})
+
+test('continuation prefers default_outgoing over a later reply, including a stitch', () => {
+  assert.equal(continuationId({
+    default_outgoing: 'stitch-1',
+    child_ids: ['reply-old', 'reply-new'],
+    stitch_child_ids: ['stitch-1']
+  }), 'stitch-1')
+  assert.equal(continuationId({
+    default_outgoing: 'missing',
+    child_ids: ['reply-old', 'reply-new']
+  }), 'reply-new')
+})
+
+test('continuation falls back to the last ordered reply, then the latest reply', () => {
+  assert.equal(continuationId({
+    child_ids: ['older', 'newer'],
+    reply_order: ['older']
+  }), 'older')
+  assert.equal(continuationId({
+    child_ids: ['older', 'newer']
+  }), 'newer')
+  assert.equal(continuationId({
+    stitch_child_ids: ['s1', 's2'],
+    reply_order: ['s1']
+  }), 's1')
+  assert.equal(continuationId({ stitch_child_ids: ['s1', 's2'] }), 's2')
+  assert.equal(continuationId({ child_ids: [] }), null)
+})
+
+test('continuation chain walks reply to reply and stops on a cycle or a gap', () => {
+  const messages = {
+    a: { id: 'a', default_outgoing: 'b', child_ids: ['b', 'other'] },
+    b: { id: 'b', child_ids: ['c'] },
+    c: { id: 'c', default_outgoing: 'a', child_ids: ['a'] }
+  }
+  const chain = continuationChain(messages.a, (id) => messages[id]).map((message) => message.id)
+  assert.deepEqual(chain, ['b', 'c'])
+  assert.deepEqual(continuationChain(messages.a, () => null), [])
 })

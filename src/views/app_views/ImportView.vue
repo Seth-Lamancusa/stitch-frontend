@@ -12,10 +12,15 @@
         <div class="permission-requirements">
           <h3>Required Permissions:</h3>
           <ul class="permission-list">
-            <li :class="{ 'has-permission': can('messages.write') }">
-              <span class="permission-icon">{{ can('messages.write') ? '✓' : '✗' }}</span>
+            <li :class="{ 'has-permission': can(P.MESSAGES_WRITE) }">
+              <span class="permission-icon">{{ can(P.MESSAGES_WRITE) ? '✓' : '✗' }}</span>
               <span class="permission-name">messages.write</span>
               <span class="permission-desc">— Write messages</span>
+            </li>
+            <li :class="{ 'has-permission': can(P.MESSAGES_QUOTE) }">
+              <span class="permission-icon">{{ can(P.MESSAGES_QUOTE) ? '✓' : '✗' }}</span>
+              <span class="permission-name">messages.quote</span>
+              <span class="permission-desc">— Quote a transcript</span>
             </li>
           </ul>
         </div>
@@ -37,11 +42,11 @@
 
       <div class="import-content">
         <!-- Mode Tabs -->
-        <div class="import-tabs" v-if="true">
+        <div class="import-tabs" v-if="canQuote && canImportAudio">
           <button 
             class="tab-button" 
-            :class="{ active: activeMode === 'cursor' }"
-            @click="activeMode = 'cursor'"
+            :class="{ active: activeMode === 'text' }"
+            @click="activeMode = 'text'"
           >
             <span class="tab-icon">📝</span>
             Text / Markdown
@@ -59,14 +64,14 @@
         <div class="import-panel">
           
           <!-- Text / Markdown Import Mode -->
-          <div v-if="activeMode === 'cursor'" class="mode-container">
+          <div v-if="canQuote && activeMode === 'text'" class="mode-container">
             <h3>Import Text / Markdown</h3>
             <p class="import-mode-description">
-              Paste conversation text or upload a markdown file.
+              Paste a transcript whose turns start with <code>## User</code> and <code>## Assistant</code>.
             </p>
 
             <p class="help-text">
-              Prefill runs a best-effort parse. Then set each message’s speaker name (and optionally mark it as "Me").
+              Each heading becomes a message. Tool sections stay in the assistant message. Then set each speaker, and mark your own turns as "Me".
             </p>
 
             <div class="input-method-container">
@@ -282,6 +287,8 @@ import { useRouter } from 'vue-router';
 import { useStore } from 'vuex';
 import { usePermissions } from '../../composables/usePermissions';
 import ImportService from '../../services/ImportService';
+import { parseHeadingTranscript } from '../../services/import/parseHeadingTranscript.js';
+import { P } from '../../auth/constants.js';
 import TranscriptionService from '../../services/TranscriptionService';
 import RecipientsModal from '../../components/modals/RecipientsModal.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
@@ -290,12 +297,17 @@ const router = useRouter();
 const store = useStore();
 const { can, canAny, isAdmin, user: currentUser } = usePermissions();
 
-const hasImportPermissions = computed(() => {
-  return can('messages.write');
-});
+const canQuote = computed(() => can(P.MESSAGES_WRITE) && can(P.MESSAGES_QUOTE));
+const canImportAudio = computed(() => can(P.MESSAGES_WRITE) && can(P.MESSAGES_IMPORT_AUDIO));
+const hasImportPermissions = computed(() => canQuote.value || canImportAudio.value);
 
 // State
-const activeMode = ref('cursor');
+const activeMode = ref('text');
+
+watch([canQuote, canImportAudio], ([quote, audio]) => {
+  if (!quote && audio) activeMode.value = 'audio';
+  if (quote && !audio && activeMode.value === 'audio') activeMode.value = 'text';
+}, { immediate: true });
 const isImporting = ref(false);
 const importError = ref('');
 const isPublic = ref(false);
@@ -309,9 +321,6 @@ watch(loginModalOpen, (open) => {
   if (open) showRecipients.value = false;
 });
 
-// Builder mode state (Cursor)
-
-// Cursor Mode State
 const importText = ref('');
 const parsedMessages = ref([]);
 const fileInput = ref(null);
@@ -332,9 +341,7 @@ onMounted(async () => {
 // Watchers
 watch(importText, (val) => {
   if (val) {
-    const result = ImportService.parseConversation(val);
-    const normalized = Array.isArray(result) ? result : (result.messages || []);
-    parsedMessages.value = (normalized || []).map(m => ({
+    parsedMessages.value = parseHeadingTranscript(val).map(m => ({
       content: m.content || '',
       isMe: m.role === 'user',
       speakerName: m.role === 'assistant' ? 'Assistant' : 'User',
@@ -417,7 +424,7 @@ const truncate = (str) => str && str.length > 100 ? str.substring(0, 100) + '...
 const uniqueSpeakers = computed(() => Object.keys(speakerRegistry.value));
 
 const canProceed = computed(() => {
-  if (activeMode.value === 'cursor') {
+  if (activeMode.value === 'text') {
     if (!parsedMessages.value.length) return false;
     return parsedMessages.value.every(m => {
       if (!m || !m.content || !m.content.trim()) return false;
@@ -477,7 +484,7 @@ const importConversation = async () => {
   try {
     let builderMessages = [];
 
-    if (activeMode.value === 'cursor') {
+    if (activeMode.value === 'text') {
       builderMessages = parsedMessages.value.map(m => ({
         content: m.content,
         isMe: !!m.isMe,

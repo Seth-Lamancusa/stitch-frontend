@@ -156,14 +156,7 @@ const siblings = computed(() => {
   void parent?.stitch_child_ids;
   void parent?.reply_order;
   void store.state.messages.childrenByParent?.[String(props.parentId)];
-  const ids = store.getters['messages/getChildIds'](props.parentId);
-  console.log('[sibling-nav] siblings', {
-    messageId: props.messageId,
-    parentId: props.parentId,
-    ids,
-    structureVersion: store.state.messages.structureVersion,
-  });
-  return ids;
+  return store.getters['messages/getChildIds'](props.parentId);
 });
 
 // Link under the arrow on the side where the default sits, when this message is not the default.
@@ -197,23 +190,8 @@ const canNavigatePrev = computed(() => {
 });
 
 const canNavigateNext = computed(() => {
-  const loading = isLoading.value;
-  const ids = siblings.value;
-  const position = currentPosition.value;
-  const next = !loading && ids.length > 1 && position < ids.length;
-  const prev = !loading && ids.length > 1 && position > 1;
-  console.log('[sibling-nav] arrows', {
-    messageId: props.messageId,
-    parentId: props.parentId,
-    loadingForcedOff: loading,
-    parentMissing: isParentLoading.value,
-    siblingLoading: isSiblingLoading.value,
-    count: ids.length,
-    position,
-    prev,
-    next,
-  });
-  return next;
+  if (isLoading.value) return false;
+  return siblings.value.length > 1 && currentPosition.value < siblings.value.length;
 });
 
 // Navigation handler

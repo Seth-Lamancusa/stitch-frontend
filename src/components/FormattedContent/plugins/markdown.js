@@ -62,12 +62,6 @@ export const markdownFormatter = createFormatter(
       // LaTeX expressions need protection
       let processedContent = content;
       
-      const debug = context?.options?.debugMermaid || false;
-      if (debug) {
-        const mermaidHtmlMatches = (processedContent.match(/<div\s+class=["']mermaid-diagram["'][^>]*>/gi) || []).length;
-        console.log('[Markdown Formatter] Found', mermaidHtmlMatches, 'rendered mermaid HTML block(s) to protect');
-      }
-      
       processedContent = protectMermaidHtml(processedContent, context); // Protect rendered HTML
       processedContent = protectMermaidBlocks(processedContent, context); // Protect any remaining raw blocks
       processedContent = protectLatexBlocks(processedContent, context);
@@ -76,10 +70,6 @@ export const markdownFormatter = createFormatter(
       // Process the content with markdown-it
       const md = await getMarkdownIt();
       processedContent = md.render(processedContent);
-      
-      if (debug) {
-        console.log('[Markdown Formatter] After markdown processing, protected zones count:', context.protectedZones?.size || 0);
-      }
       
       // Add target="_blank" to all links so they open in new tabs
       processedContent = processedContent.replace(/<a\s+([^>]*?)>/gi, (match, attrs) => {

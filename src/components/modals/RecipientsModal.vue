@@ -927,7 +927,7 @@ const handleDone = async () => {
   isAddingRecipients.value = true;
   
   try {
-    // Emit add-recipients event with current recipients and ancestor flag (UI always notifies of origin)
+    // Emit staged recipients (including each card's notify flag) and the ancestor flag.
     const recipientsToAdd = [...recipients.value];
     emit('add-recipients', recipientsToAdd, addToAncestors.value);
     

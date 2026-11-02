@@ -35,6 +35,7 @@
         @exitSelection="exitSelectionMode"
         @logout="logout"
         @openProfile="openProfileModal"
+        :context-label="contextLabel"
       />
       
       <!-- Messages container with fixed spacing -->
@@ -52,9 +53,11 @@
             position="top"
             :state="topMarkerState"
             :stitchCount="topStitchCount"
+            :context-action-label="topContextActionLabel"
             class-name="thread-begin-marker"
             @load-more="loadMoreParents"
             @load-stitch="handleLoadStitchBoundary('top')"
+            @load-context="handleLoadContextBoundary('top')"
             @retry="loadMoreParents"
             ref="topMarker"
           />
@@ -68,6 +71,7 @@
               v-if="isFunctionMessage(message) && (message.id === replyingToMessageId && !isReplyMessageLoading || message.id !== replyingToMessageId)"
               :message="message"
               :active-parent-id="index > 0 ? displayedMessages[index - 1].id : null"
+              :show-link-switcher="index > 0 || showOriginSwitcherOnFirstMessage"
               :compact="compactThread"
               :is-selected="message.id === replyingToMessageId"
               @delete="confirmDeleteMessage"
@@ -80,6 +84,7 @@
                       message.id !== replyingToMessageId)"
               :message="message"
               :active-parent-id="index > 0 ? displayedMessages[index - 1].id : null"
+              :show-link-switcher="index > 0 || showOriginSwitcherOnFirstMessage"
               :displayMode="'full'"
               :compact="compactThread"
               :selectable="true"
@@ -110,9 +115,11 @@
             position="bottom"
             :state="bottomMarkerState"
             :stitchCount="bottomStitchCount"
+            :context-action-label="bottomContextActionLabel"
             class-name="thread-end-marker"
             @load-more="loadMoreChildren"
             @load-stitch="handleLoadStitchBoundary('bottom')"
+            @load-context="handleLoadContextBoundary('bottom')"
             @retry="loadMoreChildren"
             :show-refresh-shortcut="bottomMarkerState === 'end'"
             :refreshing="isRefreshingLastMessage"
@@ -177,6 +184,7 @@
         @exitSelection="exitSelectionMode"
         @logout="logout"
         @openProfile="openProfileModal"
+        :context-label="contextLabel"
       />
 
       <div class="not-found">
@@ -260,6 +268,7 @@ import LoginButton from '@buttons/LoginButton.vue'
 import { useCompactThread } from '../../composables/useCompactThread.js';
 import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
 import { contentText, getAuthorDisplayName, getAuthorUserTag } from '../../utils/messageCompat.js';
+import { contextChainMatches, continuationIds, earlierParentIds, resolvedBranchParent } from '../../store/branchContext.js';
 import { messageUrl } from '../../config/appConfig.js';
 
 // import BranchNavigator from '../../components/BranchNavigator.vue';
@@ -622,7 +631,10 @@ const phaseToMarkerState = (phase) => {
 const snapshotUp = (messages) => {
   const head = messages[0];
   if (!head) return { edgeId: null, phase: 'exhausted' };
-  if (!head.parent_id || storedMessage(head.parent_id)) {
+  // A stored context window ends here. Scrolling must not walk into the real parent.
+  if (head.branch_parent === null) return { edgeId: head.id, phase: 'exhausted' };
+  const parentId = resolvedBranchParent(head);
+  if (!parentId || storedMessage(parentId)) {
     return { edgeId: head.id, phase: 'exhausted' };
   }
   return { edgeId: head.id, phase: 'idle' };
@@ -631,6 +643,10 @@ const snapshotUp = (messages) => {
 const snapshotDown = (messages) => {
   const tail = messages[messages.length - 1];
   if (!tail) return { edgeId: null, phase: 'exhausted' };
+  const anchorId = store.state.messages.contextView?.anchorId;
+  if (anchorId && sameEdgeId(tail.id, anchorId)) {
+    return { edgeId: tail.id, phase: 'exhausted' };
+  }
   const missingReply = (tail.child_ids || []).some(id => id != null && !storedMessage(id));
   return { edgeId: tail.id, phase: missingReply ? 'idle' : 'exhausted' };
 };
@@ -1133,15 +1149,22 @@ watch(
     ];
   },
   ([head, tail], previous) => {
+    const cleared = releaseContextViewIfBranchLeft();
     const [previousHead, previousTail] = previous || [null, null];
-    if (head != null && !sameEdgeId(head, previousHead) && topBoundary.value.phase !== 'loading') {
+    if ((cleared || (head != null && !sameEdgeId(head, previousHead))) && topBoundary.value.phase !== 'loading') {
       topBoundary.value = snapshotUp(displayedMessages.value);
     }
-    if (tail != null && !sameEdgeId(tail, previousTail) && bottomBoundary.value.phase !== 'loading') {
+    if ((cleared || (tail != null && !sameEdgeId(tail, previousTail))) && bottomBoundary.value.phase !== 'loading') {
       bottomBoundary.value = snapshotDown(displayedMessages.value);
     }
   }
 );
+
+watch(() => store.state.messages.contextView, () => {
+  if (topBoundary.value.phase === 'loading' || bottomBoundary.value.phase === 'loading') return;
+  topBoundary.value = snapshotUp(displayedMessages.value);
+  bottomBoundary.value = snapshotDown(displayedMessages.value);
+});
 
 // Watch for direct message refresh trigger (for sent messages)
 watch(() => store.state.messages.directMessagesLastUpdated, (newVal, oldVal) => {
@@ -1309,12 +1332,16 @@ const handleAddRecipients = async (recipients, addToAncestors = true) => {
       return;
     }
 
+    // Staged-card bell. Missing notify means notify (string tags have no flag).
+    const wantsNotify = (r) => !r || typeof r !== 'object' || r.notify !== false;
+
     // 1. Grant Access (Add recipients to message/ancestors)
-    // Backend supports per-recipient notify flag. We set notify: false for additions
-    // if we are going to ping the origin message later.
+    // Ancestor grants stay silent: one origin ping is the notification, so a bot
+    // is not hit once per ancestor. A direct add uses the staged bell as `added`.
+    // notify: false skips both the added webhook and the ping.
     const accessRecipients = recipients.map(r => ({
       ...(typeof r === 'string' ? { user_tag: r } : r),
-      notify: !addToAncestors // Only notify via 'added' if NOT doing an explicit ping
+      notify: addToAncestors ? false : wantsNotify(r),
     }));
 
     if (addToAncestors) {
@@ -1328,9 +1355,10 @@ const handleAddRecipients = async (recipients, addToAncestors = true) => {
     }
 
     // 2. Trigger Response (Explicit Ping)
-    // If we added to ancestors, we explicitly ping the origin message to get a response
-    if (addToAncestors) {
-      const pingRecipients = recipients.map(r => {
+    // Ancestor adds ping the origin once, and only for recipients whose bell is on.
+    const notifyRecipients = addToAncestors ? recipients.filter(wantsNotify) : [];
+    if (notifyRecipients.length > 0) {
+      const pingRecipients = notifyRecipients.map(r => {
         if (typeof r === 'string') return r;
         if (!r || typeof r !== 'object') return r;
 
@@ -1719,6 +1747,46 @@ const closeProfileModal = () => {
   isProfileModalOpen.value = false;
 };
 
+const contextLabel = computed(() => {
+  const anchorId = store.state.messages.contextView?.anchorId;
+  if (!anchorId) return '';
+  const anchor = storedMessage(anchorId);
+  const text = contentText(anchor?.content).replace(/\s+/g, ' ').trim();
+  if (!text) return String(anchorId);
+  return text.length > 42 ? `${text.slice(0, 42)}…` : text;
+});
+
+const topContextActionLabel = computed(() => {
+  const count = earlierParentIds(displayedMessages.value[0]).length;
+  if (!count) return '';
+  return count === 1 ? 'Load earlier message' : `Load ${count} earlier messages`;
+});
+
+const bottomContextActionLabel = computed(() => {
+  const tail = displayedMessages.value[displayedMessages.value.length - 1];
+  const anchorId = store.state.messages.contextView?.anchorId;
+  if (!tail || !anchorId || !sameEdgeId(tail.id, anchorId)) return '';
+  const count = continuationIds(tail, (id) => !storedMessage(id)).length;
+  if (!count) return '';
+  return count === 1 ? 'Load continuation' : `Load ${count} continuations`;
+});
+
+const releaseContextViewIfBranchLeft = () => {
+  const view = store.state.messages.contextView;
+  if (!view?.anchorId) return false;
+  const anchor = storedMessage(view.anchorId);
+  if (!anchor) {
+    store.commit('messages/CLEAR_CONTEXT_VIEW');
+    return true;
+  }
+  const visibleIds = displayedMessages.value.map(message => message.id);
+  if (!visibleIds.length) return false;
+  const contextIds = Array.isArray(anchor.context) ? anchor.context : [];
+  if (contextChainMatches(visibleIds, contextIds, view.anchorId)) return false;
+  store.commit('messages/CLEAR_CONTEXT_VIEW');
+  return true;
+};
+
 const topStitchCount = computed(() => {
   if (displayedMessages.value.length === 0) return 0;
   const first = displayedMessages.value[0];
@@ -1728,11 +1796,86 @@ const topStitchCount = computed(() => {
   return (first.stitch_parent_ids || []).filter(Boolean).length;
 });
 
+// The first row's origin switcher repeats the top marker. Scroll-up, a load in
+// flight, a failed load, "Load stitches", and "Load earlier messages" already
+// own that edge. A bare "Beginning of thread" has no incoming edge to switch.
+const showOriginSwitcherOnFirstMessage = computed(() => {
+  if (topBoundary.value.phase !== 'exhausted') return false;
+  if (topStitchCount.value > 0) return false;
+  if (topContextActionLabel.value) return false;
+  return true;
+});
+
 const bottomStitchCount = computed(() => {
   if (displayedMessages.value.length === 0) return 0;
   const last = displayedMessages.value[displayedMessages.value.length - 1];
   return (last.stitch_child_ids || []).filter(Boolean).length;
 });
+
+const handleLoadContextBoundary = async (position) => {
+  if (displayedMessages.value.length === 0) return;
+  const boundary = position === 'top' ? topBoundary : bottomBoundary;
+  if (boundary.value.phase === 'loading') return;
+
+  const head = displayedMessages.value[0];
+  const tail = displayedMessages.value[displayedMessages.value.length - 1];
+  const edgeId = position === 'top' ? head.id : tail.id;
+  const generation = pageGeneration;
+  boundary.value = { edgeId, phase: 'loading' };
+
+  const restoreBoundary = () => {
+    if (generation !== pageGeneration) return;
+    boundary.value = position === 'top'
+      ? snapshotUp(displayedMessages.value)
+      : snapshotDown(displayedMessages.value);
+  };
+
+  try {
+    if (position === 'top') {
+      const targetId = earlierParentIds(head)[0];
+      if (!targetId) {
+        restoreBoundary();
+        return;
+      }
+      if (!storedMessage(targetId)) {
+        await store.dispatch('messages/loadMessageRadius', { messageId: targetId, radius: LOAD_RADIUS });
+      }
+      if (generation !== pageGeneration) return;
+      if (!storedMessage(targetId)) {
+        throw new Error('Could not load the earlier message');
+      }
+      store.commit('messages/SET_BRANCH_PARENT', { messageId: head.id, parentId: targetId });
+      await store.dispatch('messages/prepareBranchPath', head.id);
+    } else {
+      const targetId = continuationIds(tail, (id) => !storedMessage(id))[0];
+      if (!targetId) {
+        restoreBoundary();
+        return;
+      }
+      if (!storedMessage(targetId)) {
+        await store.dispatch('messages/loadMessage', targetId);
+      }
+      if (generation !== pageGeneration) return;
+      if (!storedMessage(targetId)) {
+        throw new Error('Could not load the continuation');
+      }
+      store.commit('messages/SET_BRANCH_LINK', { parentId: tail.id, childId: targetId });
+      await store.dispatch('messages/prepareBranchPath', tail.id);
+    }
+
+    if (generation !== pageGeneration) return;
+    await renderThread(true, true);
+    restoreBoundary();
+  } catch (err) {
+    console.error('[ThreadView] Failed to load context boundary:', err);
+    if (generation !== pageGeneration) return;
+    store.commit('ui/SET_ERROR', {
+      code: 'context_boundary_failed',
+      message: err?.message || 'Could not load the next message',
+    });
+    restoreBoundary();
+  }
+};
 
 const handleLoadStitchBoundary = async (position) => {
   if (displayedMessages.value.length === 0) return;
