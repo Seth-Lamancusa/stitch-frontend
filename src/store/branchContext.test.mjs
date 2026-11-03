@@ -6,6 +6,7 @@ import {
   earlierParentIds,
   loadedDescendantIds,
   resolvedBranchParent,
+  uniqueIds,
 } from './branchContext.js';
 
 const messages = {
@@ -29,7 +30,10 @@ assert.equal(resolvedBranchParent({ branch_parent: 's', parent_id: 'q' }), 's');
 assert.equal(chooseBranchChild({ ...messages.m, default_outgoing: 'b' }, messages), 'b');
 assert.equal(chooseBranchChild(messages.m, messages), 'c');
 
+assert.deepEqual(uniqueIds(['s', 's', '', null, 't', 's']), ['s', 't']);
+assert.deepEqual(uniqueIds(undefined), []);
 assert.deepEqual(earlierParentIds({ branch_parent: null, default_incoming: 'p', parent_id: 'p', stitch_parent_ids: ['s'] }), ['p', 's']);
+assert.deepEqual(earlierParentIds({ branch_parent: null, stitch_parent_ids: ['s', 's'] }), ['s']);
 assert.deepEqual(earlierParentIds({ branch_parent: undefined, parent_id: 'p' }), []);
 
 assert.deepEqual(

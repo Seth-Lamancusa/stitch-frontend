@@ -12,6 +12,7 @@ import {
   loadedDescendantIds,
   outgoingChildPool,
   resolvedBranchParent,
+  uniqueIds,
 } from '../branchContext.js'
 
 // Latest inbox list fetch. An older response must not commit after a newer one.
@@ -1083,6 +1084,64 @@ export default {
       return dispatch('loadTraversal', { messageId, up_depth: radius, down_depth: radius, get_replies, get_children, edge_type });
     },
     
+    // Show a recipient on messages already in the store. Skips a message that
+    // already lists them. Does not fetch.
+    appendLoadedRecipients({ commit, state, rootGetters }, additions) {
+      const actor = rootGetters['auth/user'] || {};
+      const addedBy = actor.uid || null;
+      const addedByTag = actor.user_tag || '';
+      const stamp = new Date().toISOString();
+      for (const item of additions || []) {
+        const messageId = item && item.messageId != null ? String(item.messageId) : '';
+        const incoming = item && item.recipient;
+        if (!messageId || !incoming || typeof incoming !== 'object') continue;
+        const message = state.messages[messageId];
+        if (!message) continue;
+        const uid = incoming.uid || null;
+        const userTag = incoming.user_tag || incoming.userTag || '';
+        const tagKey = String(userTag).trim().replace(/^@/, '').toLowerCase();
+        if (!uid && !tagKey) continue;
+        const existing = Array.isArray(message.recipients) ? message.recipients : [];
+        const alreadyListed = existing.some((recipient) => {
+          if (!recipient || typeof recipient !== 'object') return false;
+          if (uid && recipient.uid && recipient.uid === uid) return true;
+          const existingTag = String(recipient.user_tag || recipient.userTag || '')
+            .trim()
+            .replace(/^@/, '')
+            .toLowerCase();
+          return !!(tagKey && existingTag && existingTag === tagKey);
+        });
+        if (alreadyListed) continue;
+        commit('SET_MESSAGE', {
+          ...message,
+          recipients: [
+            ...existing,
+            {
+              uid,
+              user_tag: tagKey ? String(userTag).trim().replace(/^@/, '') : '',
+              display_name: incoming.display_name || incoming.displayName || userTag || '',
+              is_bot: !!(incoming.is_bot ?? incoming.isBot),
+              available_versions: incoming.available_versions ?? incoming.availableVersions ?? null,
+              public: incoming.public !== false && incoming.visible !== false,
+              added_by: addedBy,
+              added_by_tag: addedByTag,
+              timestamp: stamp,
+            },
+          ],
+        });
+      }
+    },
+
+    // Reload these messages by id. The caller names the set; this does not walk the graph.
+    async reloadMessages({ commit }, ids) {
+      const wanted = [...new Set((ids || []).filter((id) => id != null && id !== '').map((id) => String(id)))]
+      if (wanted.length === 0) return []
+      const messages = await Promise.all(wanted.map((id) => MessageService.getMessage(id)))
+      const loaded = messages.filter((message) => message && message.id)
+      loaded.forEach((message) => commit('SET_MESSAGE', message))
+      return loaded
+    },
+
     // Refresh all loaded ancestors of a message (only up to those present in the store)
     async refreshLoadedAncestors({ dispatch, state }, { messageId, get_replies = true, get_children = true }) {
       if (!messageId) return [];
@@ -2219,7 +2278,7 @@ export default {
         seenChild.add(key);
         childIds.push(id);
       }
-      const stitchChildIds = message?.stitch_child_ids || [];
+      const stitchChildIds = uniqueIds(message?.stitch_child_ids);
       const replySet = new Set(childIds.map(id => String(id)));
       const order = Array.isArray(message?.reply_order) ? message.reply_order : [];
       const orderSet = new Set(order.map(id => String(id)));

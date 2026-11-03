@@ -345,7 +345,7 @@ import TagsModal from './modals/TagsModal.vue';
 import ChannelsModal from './modals/ChannelsModal.vue';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 import MessageService from '../services/MessageService.js';
-import { addRecipientsToAncestorsExcludingAuthoredMessages } from '../utils/recipientPropagation.js';
+import { addRecipientsToMessagesExcludingAuthored } from '../utils/recipientPropagation.js';
 import { getAuthorDisplayName, getAuthorUserTag, getAuthorUid } from '../utils/messageCompat.js';
 import AttachmentService from '../services/AttachmentService.js';
 
@@ -1804,22 +1804,12 @@ const sendReply = async () => {
       if (!addRecipientsMessageId.value || recipients.value.length === 0) {
         throw new Error('No message or recipients to add');
       }
-      await addRecipientsToAncestorsExcludingAuthoredMessages({
-        originMessageId: addRecipientsMessageId.value,
-        recipients: recipients.value,
-        addToAncestors: true,
-      });
-      // Refresh origin and loaded ancestors
-      await store.dispatch('messages/refreshLoadedAncestors', {
-        messageId: addRecipientsMessageId.value,
-        get_replies: true,
-        get_children: true,
-      });
-      // Clear the form and exit add recipients mode
+      const branchMessages = store.getters['messages/getAncestorPath'](addRecipientsMessageId.value) || [];
+      const targets = branchMessages.length > 0 ? branchMessages : [{ id: addRecipientsMessageId.value }];
+      const additions = await addRecipientsToMessagesExcludingAuthored(targets, recipients.value);
+      await store.dispatch('messages/appendLoadedRecipients', additions);
       content.value = '';
       store.dispatch('navigation/clearAddRecipientsMode');
-      // No need to radius reload; ancestors refresh already updated data
-      // Show success message
       showSendSuccess.value = true;
       setTimeout(() => {
         showSendSuccess.value = false;
@@ -1827,34 +1817,26 @@ const sendReply = async () => {
       return;
     }
     
-    // DRAFT REPLY FLOW: If configured, bulk add draft recipients to ancestors of parent first (notify only for reply later)
+    // When Add to All Ancestors is on, put each recipient on the loaded context
+    // for this reply. The messages are already on screen, so show the recipient
+    // there instead of fetching each one again.
     if (props.targetId && recipients.value.length > 0 && replyAddToAncestors.value) {
-      // Set notify: false on each recipient for bulk ancestor add (notify only when reply is sent)
+      const branchMessages = store.getters['messages/getAncestorPath'](props.targetId) || [];
       const recipientsWithoutNotification = recipients.value.map(recipient => {
         if (typeof recipient === 'string') {
-          // String format: convert to object with notify: false
           return { user_tag: recipient, notify: false };
         } else if (typeof recipient === 'object') {
-          // Object format: ensure notify: false is set
           return { ...recipient, notify: false };
         }
         return recipient;
       });
-      if (replyAddToAncestors.value) {
-        await addRecipientsToAncestorsExcludingAuthoredMessages({
-          originMessageId: props.targetId,
-          recipients: recipientsWithoutNotification,
-          addToAncestors: true,
-        });
-      } else {
-        await MessageService.addRecipientsToMessage(props.targetId, recipientsWithoutNotification, false);
+      if (branchMessages.length > 0) {
+        const additions = await addRecipientsToMessagesExcludingAuthored(
+          branchMessages,
+          recipientsWithoutNotification,
+        );
+        await store.dispatch('messages/appendLoadedRecipients', additions);
       }
-      // Refresh origin and loaded ancestors (no notify path)
-      await store.dispatch('messages/refreshLoadedAncestors', {
-        messageId: props.targetId,
-        get_replies: true,
-        get_children: true,
-      });
     }
     
     // Create a new message using the store action (normal notification for new reply)

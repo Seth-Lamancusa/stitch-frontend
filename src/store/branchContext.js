@@ -19,9 +19,9 @@ export function resolvedBranchParent(message) {
   return message.default_incoming || message.parent_id || null;
 }
 
-function uniqueIds(ids) {
+export function uniqueIds(ids) {
   const ordered = [];
-  for (const id of ids) {
+  for (const id of ids || []) {
     if (id == null || id === '') continue;
     if (ordered.some(existing => String(existing) === String(id))) continue;
     ordered.push(id);

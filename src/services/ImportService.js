@@ -45,8 +45,19 @@ class ImportService {
     });
 
     try {
-      const response = await apiClient.post(`${endpoint}`, payload, { headers: {} });
-      const results = Array.isArray(response.data) ? response.data : [];
+      // Each turn is its own create. The next turn replies to the last one that landed.
+      const results = [];
+      let parentId = null;
+      for (const item of payload) {
+        const body = parentId ? { ...item, parent_id: parentId } : item;
+        const response = await apiClient.post(`${endpoint}`, body, { headers: {} });
+        const data = response.data;
+        const first = Array.isArray(data) ? (data[0] || null) : data;
+        results.push(first);
+        if (first && first.success && first.message && first.message.id) {
+          parentId = first.message.id;
+        }
+      }
       const successful = results.filter(r => r && r.success && r.message);
       const totalRequested = payload.length;
       const messageCount = successful.length;

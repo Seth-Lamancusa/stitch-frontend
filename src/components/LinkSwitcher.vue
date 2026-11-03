@@ -38,6 +38,7 @@
 
 <script setup>
 import { computed } from 'vue';
+import { uniqueIds } from '../store/branchContext.js';
 
 const props = defineProps({
   // The ID of the currently active path from above
@@ -62,6 +63,9 @@ const props = defineProps({
 
 const emit = defineEmits(['switchParent', 'loadParent']);
 
+// Parallel stitch edges share a message id. The branch walk follows that id, so they are one origin.
+const stitchParents = computed(() => uniqueIds(props.stitchParentIds));
+
 // Combine all valid parents into a single array for cycling.
 // Order: Reply Parent (if exists) -> Stitch Parents (in order)
 const allParents = computed(() => {
@@ -69,17 +73,16 @@ const allParents = computed(() => {
   if (props.replyParentId) {
     parents.push({ id: props.replyParentId, type: 'reply' });
   }
-  
-  if (props.stitchParentIds && props.stitchParentIds.length > 0) {
-    props.stitchParentIds.forEach((id, index) => {
-      parents.push({ 
-        id, 
-        type: 'stitch', 
-        index: index + 1, 
-        total: props.stitchParentIds.length 
-      });
+
+  const stitchIds = stitchParents.value;
+  stitchIds.forEach((id, index) => {
+    parents.push({
+      id,
+      type: 'stitch',
+      index: index + 1,
+      total: stitchIds.length
     });
-  }
+  });
   return parents;
 });
 
@@ -108,7 +111,7 @@ const isCurrentStitch = computed(() => {
 //   including a reply root whose stitch parent is not the active parent yet.
 const shouldShowIndicator = computed(() => {
   if (isSwitchable.value) return true;
-  if ((props.stitchParentIds || []).length > 0) return true;
+  if (stitchParents.value.length > 0) return true;
   return hasActiveParent.value && isCurrentStitch.value;
 });
 

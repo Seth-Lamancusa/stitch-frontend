@@ -410,7 +410,7 @@
                 :disabled="isAddingRecipients"
               />
               <span class="descendants-toggle-text">Add to all ancestors</span>
-              <span class="descendants-toggle-hint" title="Also add recipients to all visible parents up to the visible root">ⓘ</span>
+              <span class="descendants-toggle-hint" title="Also add recipients to messages already loaded on this branch">ⓘ</span>
             </label>
           </div>
           
@@ -446,7 +446,7 @@
                 :disabled="isAddingRecipients"
               />
               <span class="descendants-toggle-text">Add to all ancestors</span>
-              <span class="descendants-toggle-hint" title="Also add recipients to all visible parents up to the visible root">ⓘ</span>
+              <span class="descendants-toggle-hint" title="Also add recipients to messages already loaded on this branch">ⓘ</span>
             </label>
           </div>
           <button 

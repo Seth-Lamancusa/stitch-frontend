@@ -256,7 +256,7 @@ import AdaptiveMarker from '../../components/AdaptiveMarker.vue';
 import ReplyBox from '../../components/ReplyBox.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
 import MessageService, { LOAD_RADIUS } from '../../services/MessageService.js';
-import { addRecipientsToAncestorsExcludingAuthoredMessages } from '../../utils/recipientPropagation.js';
+import { addRecipientsToMessagesExcludingAuthored } from '../../utils/recipientPropagation.js';
 import LinksModal from '../../components/modals/LinksModal.vue';
 import RecipientsModal from '../../components/modals/RecipientsModal.vue';
 import TreeOptionsModal from '../../components/modals/TreeOptionsModal.vue';
@@ -268,7 +268,7 @@ import LoginButton from '@buttons/LoginButton.vue'
 import { useCompactThread } from '../../composables/useCompactThread.js';
 import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
 import { contentText, getAuthorDisplayName, getAuthorUserTag } from '../../utils/messageCompat.js';
-import { contextChainMatches, continuationIds, earlierParentIds, resolvedBranchParent } from '../../store/branchContext.js';
+import { contextChainMatches, continuationIds, earlierParentIds, resolvedBranchParent, uniqueIds } from '../../store/branchContext.js';
 import { messageUrl } from '../../config/appConfig.js';
 
 // import BranchNavigator from '../../components/BranchNavigator.vue';
@@ -1345,11 +1345,10 @@ const handleAddRecipients = async (recipients, addToAncestors = true) => {
     }));
 
     if (addToAncestors) {
-      await addRecipientsToAncestorsExcludingAuthoredMessages({
-        originMessageId: messageId,
-        recipients: accessRecipients,
-        addToAncestors: true,
-      });
+      const branchMessages = store.getters['messages/getAncestorPath'](messageId) || [];
+      const targets = branchMessages.length > 0 ? branchMessages : [{ id: messageId }];
+      const additions = await addRecipientsToMessagesExcludingAuthored(targets, accessRecipients);
+      await store.dispatch('messages/appendLoadedRecipients', additions);
     } else {
       await MessageService.addRecipientsToMessage(messageId, accessRecipients, false);
     }
@@ -1391,12 +1390,15 @@ const handleAddRecipients = async (recipients, addToAncestors = true) => {
       await MessageService.pingMessage(messageId, pingRecipients, context);
     }
 
-    // Refresh origin and all loaded ancestors to reflect recipient changes
-    await store.dispatch('messages/refreshLoadedAncestors', {
-      messageId: messageId,
-      get_replies: true,
-      get_children: true,
-    });
+    // The branch grant already updated messages on screen. A single-message add
+    // still reloads that message.
+    if (!addToAncestors) {
+      await store.dispatch('messages/refreshLoadedAncestors', {
+        messageId: messageId,
+        get_replies: true,
+        get_children: true,
+      });
+    }
     
     // Signal completion to the modal
     recipientsModalRef.value?.onAddRecipientsComplete();
@@ -1793,7 +1795,7 @@ const topStitchCount = computed(() => {
   // The first row is the end of the upward walk, so none of its stitch parents
   // are already the displayed parent. Count loaded neighbors too: a stitch
   // between two cached messages still needs the branch switch.
-  return (first.stitch_parent_ids || []).filter(Boolean).length;
+  return uniqueIds(first.stitch_parent_ids).length;
 });
 
 // The first row's origin switcher repeats the top marker. Scroll-up, a load in
@@ -1809,7 +1811,7 @@ const showOriginSwitcherOnFirstMessage = computed(() => {
 const bottomStitchCount = computed(() => {
   if (displayedMessages.value.length === 0) return 0;
   const last = displayedMessages.value[displayedMessages.value.length - 1];
-  return (last.stitch_child_ids || []).filter(Boolean).length;
+  return uniqueIds(last.stitch_child_ids).length;
 });
 
 const handleLoadContextBoundary = async (position) => {
@@ -1884,9 +1886,9 @@ const handleLoadStitchBoundary = async (position) => {
     ? displayedMessages.value[0] 
     : displayedMessages.value[displayedMessages.value.length - 1];
     
-  const stitchIds = position === 'top' 
-    ? (msg.stitch_parent_ids || []) 
-    : (msg.stitch_child_ids || []);
+  const stitchIds = uniqueIds(position === 'top'
+    ? msg.stitch_parent_ids
+    : msg.stitch_child_ids);
     
   if (stitchIds.length === 0) return;
   

@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch, reactive } from 'vue';
 import { useStore } from 'vuex';
 import MessageService from '../../services/MessageService.js';
-import { addRecipientsToAncestorsExcludingAuthoredMessages } from '../../utils/recipientPropagation.js';
+import { addRecipientsToMessagesExcludingAuthored } from '../../utils/recipientPropagation.js';
 import BotVersionPicker from '../common/BotVersionPicker.vue';
 
 const store = useStore();
@@ -101,11 +101,10 @@ const addSelectedUsers = async () => {
     // We set notify: false because we will follow up with an explicit ping
     const accessRecipients = recipients.map(r => ({ ...r, notify: false }));
     if (addToAncestors.value) {
-      await addRecipientsToAncestorsExcludingAuthoredMessages({
-        originMessageId: targetMessageId.value,
-        recipients: accessRecipients,
-        addToAncestors: true,
-      });
+      const branchMessages = store.getters['messages/getAncestorPath'](targetMessageId.value) || [];
+      const targets = branchMessages.length > 0 ? branchMessages : [{ id: targetMessageId.value }];
+      const additions = await addRecipientsToMessagesExcludingAuthored(targets, accessRecipients);
+      await store.dispatch('messages/appendLoadedRecipients', additions);
     } else {
       await MessageService.addRecipientsToMessage(targetMessageId.value, accessRecipients, false);
     }
@@ -137,11 +136,13 @@ const addSelectedUsers = async () => {
 
     await MessageService.pingMessage(targetMessageId.value, pingRecipients, context);
 
-    await store.dispatch('messages/refreshLoadedAncestors', {
-      messageId: targetMessageId.value,
-      get_replies: false,
-      get_children: false,
-    });
+    if (!addToAncestors.value) {
+      await store.dispatch('messages/refreshLoadedAncestors', {
+        messageId: targetMessageId.value,
+        get_replies: false,
+        get_children: false,
+      });
+    }
     addSuccess.value = true;
     setTimeout(() => {
       addSuccess.value = false;
@@ -166,7 +167,7 @@ const addSelectedUsers = async () => {
 
         <div class="modal-content">
           <p class="modal-description">Select recipients from your speed dial to prompt a response.</p>
-          <div class="ancestors-toggle" title="Also add recipients to all visible parents up to the visible root">
+          <div class="ancestors-toggle" title="Also add recipients to messages already loaded on this branch">
             <label>
               <input type="checkbox" v-model="addToAncestors" />
               <span>Add to all ancestors</span>

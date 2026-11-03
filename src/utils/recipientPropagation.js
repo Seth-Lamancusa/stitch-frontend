@@ -43,31 +43,47 @@ const resolveRecipientUid = async (recipient, cache) => {
   return null
 }
 
-/**
- * Adds recipients to the origin message + visible ancestors, but skips adding
- * a recipient to any message in the ancestor chain where that recipient is
- * the message author.
- */
-export async function addRecipientsToAncestorsExcludingAuthoredMessages({
-  originMessageId,
-  recipients,
-  addToAncestors,
-  maxDepth = 100,
-}) {
-  if (!addToAncestors) {
-    return MessageService.addRecipientsToMessage(originMessageId, recipients, false)
+// Ids from an already-loaded list. A recipient is left off messages they authored.
+export function messageIdsExcludingAuthor(messages, { uid = null, tag = null } = {}) {
+  return (Array.isArray(messages) ? messages : [])
+    .filter((message) => {
+      if (!message?.id) return false
+      if (uid) return getMessageAuthorUid(message) !== uid
+      if (tag) return getMessageAuthorTag(message) !== tag
+      return true
+    })
+    .map((message) => message.id)
+}
+
+function recipientRecord(recipientInput, uid) {
+  if (typeof recipientInput === 'string') {
+    const isUid = recipientInput.startsWith('uid:')
+    return {
+      uid: uid || (isUid ? recipientInput.slice(4) : null),
+      user_tag: isUid ? null : normalizeUserTag(recipientInput),
+    }
   }
+  if (!recipientInput || typeof recipientInput !== 'object') {
+    return { uid: uid || null, user_tag: null }
+  }
+  return {
+    ...recipientInput,
+    uid: uid || recipientInput.uid || null,
+    user_tag: normalizeUserTag(recipientInput.user_tag || recipientInput.userTag),
+  }
+}
 
-  const resp = await MessageService.traverseFrom(originMessageId, {
-    up_depth: maxDepth,
-    down_depth: 0,
-    get_replies: true,
-    get_children: false,
-    edge_type: 'replies',
-  })
-  const data = resp?.data || {}
-  const chain = [data.origin, ...(Array.isArray(data.messages) ? data.messages : [])].filter(Boolean)
-
+/**
+ * Adds recipients to the given messages. Skips a message when the recipient
+ * authored it. Does not discover further messages. Callers pass the loaded
+ * branch, including the message the grant started from.
+ *
+ * Returns one entry per message the write included, so the caller can show
+ * the recipient on messages already loaded. The server still ignores a
+ * duplicate edge.
+ */
+export async function addRecipientsToMessagesExcludingAuthored(messages, recipients) {
+  const chain = (Array.isArray(messages) ? messages : []).filter(Boolean)
   const tagToUidCache = new Map()
 
   // Dedupe by resolvable identity to avoid multiple calls for identical recipients.
@@ -99,31 +115,40 @@ export async function addRecipientsToAncestorsExcludingAuthoredMessages({
     }
   }
 
+  const additions = []
+  const record = (messageIds, recipientInput, uid) => {
+    const recipient = recipientRecord(recipientInput, uid)
+    for (const messageId of messageIds) {
+      additions.push({ messageId, recipient })
+    }
+  }
+
   // 1) Handle resolvable recipients with explicit message_ids.
   for (const [uid, recipientInput] of dedupedByUid.entries()) {
-    const targetMessageIds = chain
-      .filter((m) => getMessageAuthorUid(m) !== uid)
-      .map((m) => m.id)
-
+    const targetMessageIds = messageIdsExcludingAuthor(chain, { uid })
     if (targetMessageIds.length === 0) continue
     await MessageService.addRecipientsToMessage(targetMessageIds, [recipientInput], false)
+    record(targetMessageIds, recipientInput, uid)
   }
 
   // 2) Fallback for recipients where we can match by author tag.
   for (const [tag, recipientInput] of dedupedByTag.entries()) {
-    const targetMessageIds = chain
-      .filter((m) => getMessageAuthorTag(m) !== tag)
-      .map((m) => m.id)
-
+    const targetMessageIds = messageIdsExcludingAuthor(chain, { tag })
     if (targetMessageIds.length === 0) continue
     await MessageService.addRecipientsToMessage(targetMessageIds, [recipientInput], false)
+    record(targetMessageIds, recipientInput, null)
   }
 
-  // 3) Final fallback for recipients we cannot identify: grant to all traversed ancestors.
+  // 3) Final fallback for recipients we cannot identify: grant to every given message.
   if (nonResolvedRecipients.length > 0) {
-    const targetMessageIds = chain.map((m) => m.id)
+    const targetMessageIds = messageIdsExcludingAuthor(chain)
     if (targetMessageIds.length > 0) {
       await MessageService.addRecipientsToMessage(targetMessageIds, nonResolvedRecipients, false)
+      for (const recipientInput of nonResolvedRecipients) {
+        record(targetMessageIds, recipientInput, null)
+      }
     }
   }
+
+  return additions
 }

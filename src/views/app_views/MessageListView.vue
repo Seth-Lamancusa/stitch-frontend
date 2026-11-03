@@ -38,7 +38,7 @@ import MessageList from '../../components/MessageList.vue';
 import RecipientsModal from '../../components/modals/RecipientsModal.vue';
 import DeleteConfirmModal from '../../components/modals/DeleteConfirmModal.vue';
 import MessageService from '../../services/MessageService.js';
-import { addRecipientsToAncestorsExcludingAuthoredMessages } from '../../utils/recipientPropagation.js';
+import { addRecipientsToMessagesExcludingAuthored } from '../../utils/recipientPropagation.js';
 
 // Accept mode prop from router
 const props = defineProps({
@@ -104,24 +104,20 @@ const handleAddRecipients = async (recipients, addToAncestors = true) => {
       return;
     }
 
-    // Add recipients, optionally propagating to ancestors while excluding
-    // recipient-authored messages in the ancestor chain.
+    // Add recipients to the loaded branch, skipping messages this recipient authored.
     if (addToAncestors) {
-      await addRecipientsToAncestorsExcludingAuthoredMessages({
-        originMessageId: messageId,
-        recipients,
-        addToAncestors: true,
-      });
+      const branchMessages = store.getters['messages/getAncestorPath'](messageId) || [];
+      const targets = branchMessages.length > 0 ? branchMessages : [{ id: messageId }];
+      const additions = await addRecipientsToMessagesExcludingAuthored(targets, recipients);
+      await store.dispatch('messages/appendLoadedRecipients', additions);
     } else {
       await MessageService.addRecipientsToMessage(messageId, recipients, false);
+      await store.dispatch('messages/refreshLoadedAncestors', {
+        messageId: messageId,
+        get_replies: true,
+        get_children: true,
+      });
     }
-
-    // Refresh the message to reflect recipient changes
-    await store.dispatch('messages/refreshLoadedAncestors', {
-      messageId: messageId,
-      get_replies: true,
-      get_children: true,
-    });
     
     // Signal completion to the modal
     recipientsModalRef.value?.onAddRecipientsComplete();
