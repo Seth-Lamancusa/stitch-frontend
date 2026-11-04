@@ -1,6 +1,10 @@
 <template>
   <TabViewLayout>
     <div class="admin-metrics-view">
+      <nav class="admin-nav" aria-label="Admin">
+        <router-link to="/admin/metrics">Metrics</router-link>
+        <router-link to="/admin/admissions">Admissions</router-link>
+      </nav>
       <div class="page-header">
         <h1 class="page-title">Messages per day by user</h1>
         <p class="page-description">Aggregated message counts by calendar day and author. Admin only.</p>
@@ -123,6 +127,23 @@ onMounted(() => {
   padding: 8px;
   max-width: 960px;
   margin: 0 auto;
+}
+
+.admin-nav {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+
+.admin-nav a {
+  color: var(--color-text-secondary, #666);
+  text-decoration: none;
+}
+
+.admin-nav a.router-link-active {
+  color: var(--color-text, #111);
+  font-weight: 600;
 }
 
 .page-header {

@@ -18,6 +18,7 @@ import MessageListView from './views/app_views/MessageListView.vue';
 import PasswordResetView from './views/app_views/PasswordResetView.vue';
 import ImportView from './views/app_views/ImportView.vue';
 import AdminMetricsView from './views/app_views/AdminMetricsView.vue';
+import AdminAdmissionsView from './views/app_views/AdminAdmissionsView.vue';
 import store from './store';
 import { P } from './auth/constants.js';
 import { APP_HOST } from './config/appConfig.js';
@@ -138,6 +139,15 @@ const routes = [
     component: AdminMetricsView,
     meta: {
       title: 'Admin – Messages per day',
+      requiredPermissions: [P.ADMIN]
+    }
+  },
+  {
+    path: '/admin/admissions',
+    name: 'admin-admissions',
+    component: AdminAdmissionsView,
+    meta: {
+      title: 'Admin – Admissions',
       requiredPermissions: [P.ADMIN]
     }
   },
