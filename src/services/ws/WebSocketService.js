@@ -47,7 +47,14 @@ const WebSocketService = {
   lastActivityAt: null,
   activityListenerRegistered: false,
   idleTimerGeneration: 0,
+  idlePausedForHidden: false,
   activityEvents: ['mousemove', 'pointermove', 'touchstart', 'touchmove', 'keydown', 'scroll', 'wheel'],
+
+  // Keep the socket up briefly after the tab is backgrounded. Idle disconnect
+  // is paused for the same window so the 3-minute idle timer cannot win.
+  hiddenGraceMs: 10 * 60 * 1000,
+  hiddenGraceTimeoutId: null,
+  hiddenGraceGeneration: 0,
 
   // Network/visibility robustness
   networkVisibilityListenerRegistered: false,
@@ -119,11 +126,17 @@ const WebSocketService = {
         this.isOnline = false;
       },
       onVisible: () => {
+        this.cancelHiddenGraceDisconnect();
+        this.resumeIdleAfterHidden();
         const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
         if (!isOpen && this.isOnline && this.isAuthenticated()) this.safeConnect();
       },
       onHidden: () => {
-        this.disconnectUser();
+        this.scheduleHiddenGraceDisconnect();
+      },
+      onPageHide: () => {
+        this.cancelHiddenGraceDisconnect();
+        this.disconnectUser('Page unloading');
       }
     });
     this.netVis.start();
@@ -163,6 +176,8 @@ const WebSocketService = {
     }
   },
   clearClientSideHandlers() {
+    this.cancelHiddenGraceDisconnect();
+    this.idlePausedForHidden = false;
     this.stopPingInterval();
     this.stopIdleTimer();
     this.teardownActivityListeners();
@@ -625,14 +640,14 @@ const WebSocketService = {
     return Promise.resolve();
   },
   
-  disconnectUser() {
+  disconnectUser(reason = "User disconnected intentionally") {
     this.log(`DisconnectUser called`);
     
     if (this.client && this.client.socket) {
       this.log(`Disconnecting user ${this.userId}`);
       
       try {
-        this.client.disconnect(1000, "User disconnected intentionally");
+        this.client.disconnect(1000, reason);
       } catch (e) {
         this.error('Error closing connection:', e);
       }
@@ -738,6 +753,43 @@ const WebSocketService = {
   },
   resetIdleTimer() {
     try { this.idleManager?.reset(); } catch (e) {}
+  },
+  pauseIdleForHidden() {
+    this.idlePausedForHidden = true;
+    try { this.idleManager?.pause(); } catch (e) {}
+  },
+  resumeIdleAfterHidden() {
+    if (!this.idlePausedForHidden) return;
+    this.idlePausedForHidden = false;
+    this.lastActivityAt = Date.now();
+    try { this.idleManager?.resume(); } catch (e) {}
+  },
+  scheduleHiddenGraceDisconnect() {
+    this.pauseIdleForHidden();
+    if (this.hiddenGraceTimeoutId) return;
+    const generation = ++this.hiddenGraceGeneration;
+    this.log('Page hidden; keeping WebSocket open for grace period');
+    this.hiddenGraceTimeoutId = setTimeout(() => {
+      this.onHiddenGraceElapsed(generation);
+    }, this.hiddenGraceMs);
+  },
+  cancelHiddenGraceDisconnect() {
+    this.hiddenGraceGeneration++;
+    if (this.hiddenGraceTimeoutId) {
+      clearTimeout(this.hiddenGraceTimeoutId);
+      this.hiddenGraceTimeoutId = null;
+    }
+  },
+  onHiddenGraceElapsed(generation) {
+    if (generation !== this.hiddenGraceGeneration) return;
+    this.hiddenGraceTimeoutId = null;
+    const stillHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    if (!stillHidden) {
+      this.resumeIdleAfterHidden();
+      return;
+    }
+    this.log('Hidden grace period elapsed, disconnecting WebSocket');
+    this.disconnectUser('Hidden grace period elapsed');
   },
   onIdleTimeout() {
     // Double-check inactivity to avoid false positives from throttled timers

@@ -66,7 +66,7 @@
           <div ref="scrollAnchor" class="scroll-anchor"></div>
         
           <!-- Thread messages - showing single branch -->
-          <template v-for="(message, index) in displayedMessages" :key="message.id">
+          <template v-for="(message, index) in displayedMessages" :key="branchRowKey(message.id, index, contextWalkActive)">
             <function-message-row
               v-if="isFunctionMessage(message) && (message.id === replyingToMessageId && !isReplyMessageLoading || message.id !== replyingToMessageId)"
               :message="message"
@@ -268,7 +268,7 @@ import LoginButton from '@buttons/LoginButton.vue'
 import { useCompactThread } from '../../composables/useCompactThread.js';
 import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
 import { contentText, getAuthorDisplayName, getAuthorUserTag } from '../../utils/messageCompat.js';
-import { contextChainMatches, continuationIds, earlierParentIds, resolvedBranchParent, uniqueIds } from '../../store/branchContext.js';
+import { activeContextWalk, branchRowKey, continuationIds, earlierParentIds, resolvedBranchParent, uniqueIds } from '../../store/branchContext.js';
 import { messageUrl } from '../../config/appConfig.js';
 
 // import BranchNavigator from '../../components/BranchNavigator.vue';
@@ -399,10 +399,12 @@ const displayedMessages = computed(() => {
   // Don't show any messages while loading thread
   if (isLoadingThread.value) return [];
   
-  const msgs = store.getters['messages/getFullVisibleBranch'](messageId.value);
+  const msgs = store.getters['messages/getDisplayedBranch'](messageId.value);
   console.log('[ThreadView] displayedMessages for', messageId.value, 'count:', msgs.length, 'msgs:', msgs.map(m=>m.id));
   return msgs;
 });
+
+const contextWalkActive = computed(() => !!activeContextWalk(store.state.messages.contextView));
 
 const rootMessage = computed(() => {
   if (displayedMessages.value.length === 0) return null;
@@ -930,6 +932,7 @@ const loadInitialContent = async (targetMessageId, reason = 'mount') => {
   };
 
   try {
+    store.commit('messages/CLEAR_CONTEXT_VIEW');
     beginPageSession();
     isContainerVisible.value = false;
     shouldShowMarkers.value = false;
@@ -976,7 +979,7 @@ const loadInitialContent = async (targetMessageId, reason = 'mount') => {
     store.commit('ui/SET_ERROR', 'Failed to load thread.');
     isContainerVisible.value = true;
   } finally {
-    const branch = store.getters['messages/getFullVisibleBranch'](targetMessageId) || [];
+    const branch = store.getters['messages/getDisplayedBranch'](targetMessageId) || [];
     trace.inStore = !!store.getters['messages/getMessage'](targetMessageId);
     trace.branchLength = branch.length;
     trace.branchHasCenter = branch.some(message => sameMessageId(message, targetMessageId));
@@ -1495,6 +1498,21 @@ const getTotalRepliesCount = (parentId) => {
   return store.getters['messages/getReplyCount'](parentId);
 };
 
+// Leave the context walk and stand on standId. A different route reloads that
+// message's successor orbit. The caller continues only when the route stays.
+const endContextWalk = async (standId) => {
+  if (!store.state.messages.contextView) return 'inactive';
+  store.commit('messages/CLEAR_CONTEXT_VIEW');
+  if (standId != null && String(standId) !== String(messageId.value)) {
+    const nav = route.name
+      ? { name: route.name, params: { ...route.params, id: standId }, query: { ...route.query } }
+      : { path: `/messages/${standId}`, query: { ...route.query } };
+    await router.push(nav);
+    return 'navigated';
+  }
+  return 'cleared';
+};
+
 // Update loadMoreParents function to maintain scroll position relative to existing content
 const loadMoreParents = async () => {
   const boundary = topBoundary.value;
@@ -1530,6 +1548,8 @@ const loadMoreParents = async () => {
     }
     
     const firstMessageId = requestedEdgeId;
+    const leave = await endContextWalk(requestedEdgeId);
+    if (leave === 'navigated' || generation !== pageGeneration) return;
 
     await store.dispatch('messages/loadMessageBranchUp', {
       messageId: requestedEdgeId,
@@ -1595,6 +1615,8 @@ const loadMoreChildren = async () => {
     // Capture current scroll position
     const scrollPosition = messageList.value ? messageList.value.scrollTop : 0;
     const lastMessageId = requestedEdgeId;
+    const leave = await endContextWalk(requestedEdgeId);
+    if (leave === 'navigated' || generation !== pageGeneration) return;
 
     await store.dispatch('messages/loadMessageBranchDown', {
       messageId: requestedEdgeId,
@@ -1783,8 +1805,10 @@ const releaseContextViewIfBranchLeft = () => {
   }
   const visibleIds = displayedMessages.value.map(message => message.id);
   if (!visibleIds.length) return false;
-  const contextIds = Array.isArray(anchor.context) ? anchor.context : [];
-  if (contextChainMatches(visibleIds, contextIds, view.anchorId)) return false;
+  const walkIds = activeContextWalk(view) || [];
+  const sameWalk = visibleIds.length === walkIds.length
+    && visibleIds.every((id, index) => String(id) === String(walkIds[index]));
+  if (sameWalk) return false;
   store.commit('messages/CLEAR_CONTEXT_VIEW');
   return true;
 };
@@ -1847,6 +1871,8 @@ const handleLoadContextBoundary = async (position) => {
         throw new Error('Could not load the earlier message');
       }
       store.commit('messages/SET_BRANCH_PARENT', { messageId: head.id, parentId: targetId });
+      const leave = await endContextWalk(head.id);
+      if (leave === 'navigated' || generation !== pageGeneration) return;
       await store.dispatch('messages/prepareBranchPath', head.id);
     } else {
       const targetId = continuationIds(tail, (id) => !storedMessage(id))[0];
@@ -1862,6 +1888,8 @@ const handleLoadContextBoundary = async (position) => {
         throw new Error('Could not load the continuation');
       }
       store.commit('messages/SET_BRANCH_LINK', { parentId: tail.id, childId: targetId });
+      const leave = await endContextWalk(tail.id);
+      if (leave === 'navigated' || generation !== pageGeneration) return;
       await store.dispatch('messages/prepareBranchPath', tail.id);
     }
 
@@ -1911,14 +1939,14 @@ const handleLoadStitchBoundary = async (position) => {
   }
   
   if (position === 'top') {
-    // Set this as our new branch parent and re-path
     store.commit('messages/SET_BRANCH_PARENT', { messageId: msg.id, parentId: targetId });
   } else {
-    // Set this as our new branch child and re-path
     store.commit('messages/SET_BRANCH_CHILD', { messageId: msg.id, childId: targetId });
   }
-  
-  // Re-path from the boundary message
+
+  const leave = await endContextWalk(msg.id);
+  if (leave === 'navigated') return;
+
   await store.dispatch('messages/prepareBranchPath', msg.id);
   
   // Refresh view

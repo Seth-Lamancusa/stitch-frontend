@@ -1500,6 +1500,7 @@ export default {
         }
       }
 
+      store.commit('messages/CLEAR_CONTEXT_VIEW');
       store.commit('messages/SET_BRANCH_PARENT', { messageId: props.message.id, parentId });
       await store.dispatch('messages/prepareBranchPath', props.message.id);
       

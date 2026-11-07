@@ -193,24 +193,42 @@ export function useAuthentication() {
     return result
   }
 
-  const requestEndpointVerification = async (endpointUrl) => {
-    const resp = await axios.post(
-      '/v1/auth/contacts/endpoint/request',
-      { endpoint: endpointUrl },
-      { withCredentials: true }
-    )
-    return resp?.data || {}
+  const endpointError = (e, fallback) => {
+    const detail = e?.response?.data?.detail
+    if (detail === 'nonce_mismatch') return 'Verification failed. The endpoint did not echo the nonce.'
+    if (detail === 'no_endpoint') return 'Save an endpoint URL first.'
+    if (detail === 'endpoint_mismatch') return 'Save this URL before verifying it.'
+    if (detail === 'invalid_endpoint_url') return 'Enter a valid http(s) URL.'
+    if (typeof detail === 'string' && detail) return detail
+    return e?.message || fallback
   }
 
-  const verifyEndpointWithChallenge = async ({ endpoint }) => {
-    const resp = await axios.post(
-      '/v1/auth/contacts/endpoint/verify',
-      { endpoint },
-      { withCredentials: true }
-    )
-    const result = resp?.data || {}
-    await store.dispatch('auth/validateExistingToken')
-    return result
+  const replaceEndpoint = async (url) => {
+    try {
+      const resp = await axios.patch(
+        '/v1/users/me/endpoint',
+        { url },
+        { withCredentials: true }
+      )
+      await store.dispatch('auth/validateExistingToken')
+      return resp?.data || {}
+    } catch (e) {
+      throw new Error(endpointError(e, 'Failed to update endpoint'))
+    }
+  }
+
+  const verifySavedEndpoint = async () => {
+    try {
+      const resp = await axios.post(
+        '/v1/users/me/endpoint/verify',
+        {},
+        { withCredentials: true }
+      )
+      await store.dispatch('auth/validateExistingToken')
+      return resp?.data || {}
+    } catch (e) {
+      throw new Error(endpointError(e, 'Failed to verify endpoint'))
+    }
   }
 
   return {
@@ -224,8 +242,8 @@ export function useAuthentication() {
     verifyEmailWithCode,
     requestPhoneVerification,
     verifyPhoneWithCode,
-    requestEndpointVerification,
-    verifyEndpointWithChallenge,
+    replaceEndpoint,
+    verifySavedEndpoint,
     logout,
   }
 }

@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import {
+  activeContextWalk,
+  branchRowKey,
   chooseBranchChild,
   contextChainMatches,
+  contextWalkIds,
   continuationIds,
   earlierParentIds,
   loadedDescendantIds,
@@ -43,6 +46,14 @@ assert.deepEqual(
   ),
   ['a', 'c', 'b']
 );
+
+assert.deepEqual(contextWalkIds(['b', 'a', 'b'], 'm'), ['b', 'a', 'b', 'm']);
+assert.deepEqual(contextWalkIds([null, '', 'a'], 'm'), ['a', 'm']);
+assert.equal(activeContextWalk(null), null);
+assert.equal(activeContextWalk({ anchorId: 'm' }), null);
+assert.deepEqual(activeContextWalk({ anchorId: 'm', ids: ['b', 'a', 'b', 'm'] }), ['b', 'a', 'b', 'm']);
+assert.equal(branchRowKey('b', 0, false), 'b');
+assert.equal(branchRowKey('b', 2, true), 'walk:2:b');
 
 assert.equal(contextChainMatches(['c0', 'c1', 'm'], ['c0', 'c1'], 'm'), true);
 assert.equal(contextChainMatches(['c0', 'm', 'child'], ['c0'], 'm'), false);

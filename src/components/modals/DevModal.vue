@@ -11,7 +11,7 @@ const store = useStore();
 const user = computed(() => store.getters['auth/user']);
 const isApiAllowed = computed(() => store.getters['auth/isApiAllowed']);
 const contactSupportHref = 'mailto:seth@stitch.fyi?subject=Stitch%20API%20Access%20Request';
-const { requestEndpointVerification: requestEndpointChallenge, verifyEndpointWithChallenge } = useAuthentication();
+const { replaceEndpoint, verifySavedEndpoint } = useAuthentication();
 
 const loading = ref(false);
 const errorMessage = ref('');
@@ -63,7 +63,6 @@ const secretError = ref('');
 const generatedSecret = ref('');
 const hasJustRevealedSecret = ref(false);
 const secretCopied = ref(false);
-const endpointRotationHint = ref('');
 
 let saveFlashTimer = null;
 let verifyFlashTimer = null;
@@ -271,7 +270,6 @@ function resetDevForm() {
   generatedSecret.value = '';
   hasJustRevealedSecret.value = false;
   secretError.value = '';
-  endpointRotationHint.value = '';
   savingEndpoint.value = false;
   saveSucceeded.value = false;
   verifySucceeded.value = false;
@@ -289,26 +287,20 @@ async function saveEndpoint() {
     }
     savingEndpoint.value = true;
     saveSucceeded.value = false;
-    const payload = { endpoint: next || null };
-    if (next && !prevEndpoint) {
-      payload.notify = { endpoint: true };
-    }
-    const result = await store.dispatch('auth/updateProfile', payload);
-    // If there was a signing secret before and the URL changed, re-verification is required.
-    // Secret rotation is recommended but not required (backend can migrate the existing secret).
-    if (hasEndpointSigningSecret.value && prevEndpoint && next && next !== prevEndpoint) {
-      endpointRotationHint.value = 'Endpoint URL updated. Verify this URL to resume deliveries. Rotating your signing secret is optional (recommended).';
+    let result = null;
+    if (!next) {
+      result = await store.dispatch('auth/updateProfile', { endpoint: null });
     } else {
-      endpointRotationHint.value = '';
+      result = await replaceEndpoint(next);
     }
     resetDevForm();
     flashSaveSuccess();
     if (next) {
-      if (result && result.endpoint_verified) {
+      const verified = result && (result.verified === true || result.endpoint_verified === true);
+      if (verified) {
         endpointVerificationMessage.value = 'Endpoint verified';
         flashVerifySuccess();
-        endpointRotationHint.value = '';
-      } else if (result && result.endpoint_verified === false) {
+      } else if (result && (result.verified === false || result.endpoint_verified === false)) {
         endpointVerificationMessage.value = 'Saved. Verification failed — click Verify to retry.';
       }
     }
@@ -329,8 +321,16 @@ async function verifyEndpointFlow() {
       return;
     }
     verifyingEndpoint.value = true;
-    await requestEndpointChallenge(next);
-    await verifyEndpointWithChallenge({ endpoint: next });
+    const saved = ((user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '').trim();
+    if (next !== saved) {
+      const result = await replaceEndpoint(next);
+      if (!result.verified) {
+        endpointVerificationMessage.value = 'Saved. Verification failed — click Verify to retry.';
+        return;
+      }
+    } else {
+      await verifySavedEndpoint();
+    }
     endpointVerificationMessage.value = 'Endpoint verified';
     flashVerifySuccess();
   } catch (e) {
@@ -423,8 +423,8 @@ async function setOrRotateSigningSecret() {
               </div>
 
               <div v-if="endpointChanged && hasEndpointSigningSecret" class="callout warning">
-                <strong>Heads up:</strong> You changed your endpoint URL. After saving and verifying this URL, click
-                <em>Rotate Secret</em> below if you want to rotate your signing secret (recommended). Your existing secret can be reused.
+                <strong>Heads up:</strong> Saving replaces this URL and keeps your current signing secret.
+                Rotate the secret below only if you want a new one.
               </div>
 
               <div class="field">

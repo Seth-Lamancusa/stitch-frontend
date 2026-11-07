@@ -32,6 +32,30 @@ test('comma-separated atoms and primes count as inline math', () => {
   assert.equal(looksLikeLatexInline('135°'), true)
 })
 
+test('grouped prices stay literal while decimal lists stay math', () => {
+  assert.equal(looksLikeLatexInline('50,000'), false)
+  assert.equal(looksLikeLatexInline('1,000,000'), false)
+  assert.equal(looksLikeLatexInline('-66,000'), false)
+  assert.equal(looksLikeLatexInline('50,000, less'), false)
+  assert.equal(looksLikeLatexInline('50,000 , less'), false)
+  assert.equal(looksLikeLatexInline('1, 000'), true)
+  assert.equal(looksLikeLatexInline('1,285.7, a'), true)
+  assert.equal(looksLikeLatexInline('n = 50,000'), true)
+  assert.equal(looksLikeLatexInline('x_{1,000}'), true)
+})
+
+test('a price and the next dollar amount are not one math span', () => {
+  const sample = [
+    '*Three-Year Strategic Adoption Pricing*',
+    "In consideration of Pylon Labs' three-year subscription commitment, Fennec will provide phased subscription pricing during the initial term. Pylon Labs will receive unlimited access to the full ASAP Platform, including MCP, throughout the entire subscription term.",
+    '• Year 1: $50,000, less $6,000 existing Bilby credit = *$44,000*',
+    '• Year 2: *$66,000*',
+    '• Year 3: *$85,000*'
+  ].join('\n')
+  const out = replaceInlineDollarMath(sample, { onMath: () => 'MATH' })
+  assert.equal(out, sample)
+})
+
 test('prose and currency spans stay literal', () => {
   assert.equal(looksLikeLatexInline('1000 dollars'), false)
   assert.equal(looksLikeLatexInline('1000 dollars and my friend has '), false)
@@ -140,6 +164,20 @@ test('message formatting renders a primed pair and leaves currency text', async 
     assert.match(revenue, /developer-focused/)
     assert.match(revenue, /Over 1,000 enterprise accounts/)
     assert.match(revenue, /\$1 million/)
+
+    const proposal = await applyFormatters([
+      '*Three-Year Strategic Adoption Pricing*',
+      "In consideration of Pylon Labs' three-year subscription commitment, Fennec will provide phased subscription pricing during the initial term.",
+      '• Year 1: $50,000, less $6,000 existing Bilby credit = *$44,000*',
+      '• Year 2: *$66,000*',
+      '• Year 3: *$85,000*'
+    ].join('\n'))
+    assert.equal(proposal.includes('katex'), false)
+    assert.match(proposal, /\$50,000/)
+    assert.match(proposal, /less \$6,000/)
+    assert.match(proposal, /<em>\$44,000<\/em>/)
+    assert.match(proposal, /<em>\$66,000<\/em>/)
+    assert.match(proposal, /<em>\$85,000<\/em>/)
   } finally {
     await server.close()
   }

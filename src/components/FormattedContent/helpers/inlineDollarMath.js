@@ -252,5 +252,21 @@ export function looksLikeLatexInline(inner) {
   // `$4.6 billion ... full-year ... $380M` would otherwise become one span.
   if (/(\\[a-zA-Z]+)|\\[%$&_^{}]/.test(normalized)) return true;
 
+  // Thousands grouping (`50,000`, `1,000,000`) uses the same comma as a math
+  // list, but the comma is glued to a bare 3-digit group. That is a price,
+  // including when a word continues the list (`50,000, less`). A decimal atom
+  // (`1,285.7`) and a spaced list (`1, 000`, `a, a'`) stay math.
+  if (isGroupedThousandsPrice(normalized)) return false;
+
   return isMathExpression(normalized);
+}
+
+/**
+ * True when `text` contains a US-style grouped integer (`50,000`) as the
+ * whole span, or that integer followed by a comma and a word (`50,000, less`).
+ * The comma after the group may have spaces; the grouping commas may not.
+ */
+function isGroupedThousandsPrice(text) {
+  if (/^-?\d{1,3}(?:,\d{3})+$/.test(text)) return true;
+  return /\d{1,3}(?:,\d{3})+\s*,\s*[A-Za-z]/.test(text);
 }

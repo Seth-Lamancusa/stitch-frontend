@@ -6,6 +6,7 @@ export default class NetworkVisibility {
     this.onOffline = typeof options.onOffline === 'function' ? options.onOffline : () => {};
     this.onVisible = typeof options.onVisible === 'function' ? options.onVisible : () => {};
     this.onHidden = typeof options.onHidden === 'function' ? options.onHidden : () => {};
+    this.onPageHide = typeof options.onPageHide === 'function' ? options.onPageHide : () => {};
     this._online = typeof navigator !== 'undefined' ? !!navigator.onLine : true;
     this._boundOnline = this._handleOnline.bind(this);
     this._boundOffline = this._handleOffline.bind(this);
@@ -61,8 +62,9 @@ export default class NetworkVisibility {
   }
 
   _handlePageHide(event) {
-    // Treat tab switch, app backgrounding, or navigation away as hidden
-    try { this.onHidden(); } catch (_) {}
+    // Navigation, discard, or bfcache. The document is going away, so this
+    // is not the same as a backgrounded tab (visibility hidden).
+    try { this.onPageHide(event); } catch (_) {}
   }
 }
 

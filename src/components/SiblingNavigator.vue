@@ -79,6 +79,7 @@
 <script setup>
 import { computed } from 'vue';
 import { useStore } from 'vuex';
+import { useRoute, useRouter } from 'vue-router';
 import DefaultOutgoingStar from './DefaultOutgoingStar.vue';
 
 const props = defineProps({
@@ -103,6 +104,8 @@ const props = defineProps({
 const emit = defineEmits(['navigate']);
 
 const store = useStore();
+const router = useRouter();
+const route = useRoute();
 
 // Parent record for this column. structureVersion forces a refresh when a
 // live reply is linked, which is what enables the arrows.
@@ -175,11 +178,11 @@ const currentPosition = computed(() => {
   if (isLoading.value || !siblings.value || !siblings.value.length) return 0;
   
   const childIds = siblings.value;
-  const branchChild = store.getters['messages/getBranchChild'](props.parentId);
-  
-  if (!branchChild) return 1; // Default to first position if no branch child
-  
-  const position = childIds.findIndex(id => String(id) === String(branchChild));
+  let position = childIds.findIndex(id => String(id) === String(props.messageId));
+  if (position === -1) {
+    const branchChild = store.getters['messages/getBranchChild'](props.parentId);
+    position = childIds.findIndex(id => String(id) === String(branchChild));
+  }
   return position === -1 ? 1 : position + 1;
 });
 
@@ -203,14 +206,25 @@ const navigate = async (direction) => {
     store.dispatch('navigation/clearReplyingTo');
     
     // Call the central store action for sibling navigation
+    const hadWalk = !!store.state.messages.contextView;
     const success = await store.dispatch('messages/navigateToSibling', {
       messageId: props.parentId,
-      direction: direction
+      direction: direction,
+      fromChildId: props.messageId
     });
     
     if (success) {
-      // Get the new branch child after navigation
       const newBranchChild = store.getters['messages/getBranchChild'](props.parentId);
+      if (hadWalk && newBranchChild) {
+        const nav = route.name
+          ? { name: route.name, params: { ...route.params, id: newBranchChild }, query: { ...route.query } }
+          : { path: `/messages/${newBranchChild}`, query: { ...route.query } };
+        try {
+          await router.push(nav);
+        } catch (error) {
+          console.error('[SiblingNavigator] navigation failed', error);
+        }
+      }
       
       // Emit event with new target sibling
       emit('navigate', {

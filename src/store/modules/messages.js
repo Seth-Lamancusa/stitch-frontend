@@ -7,9 +7,10 @@ import GraphLayoutService from '../../services/GraphLayoutService.js'
 import { contentText, getAuthorDisplayName, getAuthorUid, getAuthorUserTag } from '../../utils/messageCompat.js'
 import { continuationId, withoutAnnotation } from '../../utils/annotations.js'
 import {
+  activeContextWalk,
   chooseBranchChild,
+  contextWalkIds,
   explicitDefaultOutgoing,
-  loadedDescendantIds,
   outgoingChildPool,
   resolvedBranchParent,
   uniqueIds,
@@ -550,8 +551,10 @@ export default {
       };
     },
 
-    SET_CONTEXT_VIEW(state, anchorId) {
-      state.contextView = anchorId ? { anchorId } : null;
+    SET_CONTEXT_VIEW(state, payload) {
+      const anchorId = payload && typeof payload === 'object' ? payload.anchorId : payload;
+      const ids = payload && Array.isArray(payload.ids) ? payload.ids : null;
+      state.contextView = anchorId && ids && ids.length ? { anchorId, ids } : null;
     },
 
     CLEAR_CONTEXT_VIEW(state) {
@@ -913,7 +916,7 @@ export default {
       return true;
     },
 
-    // Replace the visible branch above messageId with its stored context.
+    // Show messageId's stored context as a walk. The successor orbit stays as it is.
     // Every context id has to load. A miss leaves the current branch alone.
     async viewMessageContext({ commit, state, dispatch }, messageId) {
       const anchor = state.messages[messageId];
@@ -945,16 +948,9 @@ export default {
         throw error;
       }
 
-      const windowIds = [...contextIds, anchor.id];
-      const remove = loadedDescendantIds(state.messages, anchor.id, windowIds);
-      if (remove.length) commit('UNLOAD_MESSAGES', remove);
-
-      commit('SET_BRANCH_PARENT', { messageId: contextIds[0], parentId: null });
-      for (let index = 0; index < windowIds.length - 1; index += 1) {
-        commit('SET_BRANCH_LINK', { parentId: windowIds[index], childId: windowIds[index + 1] });
-      }
-      commit('SET_BRANCH_CHILD', { messageId: anchor.id, childId: null });
-      commit('SET_CONTEXT_VIEW', anchor.id);
+      const windowIds = contextWalkIds(contextIds, anchor.id);
+      if (windowIds.length <= 1) return null;
+      commit('SET_CONTEXT_VIEW', { anchorId: anchor.id, ids: windowIds });
       return { anchorId: anchor.id, windowIds };
     },
     
@@ -1845,7 +1841,7 @@ export default {
     },
     
     // New action to handle sibling navigation
-    async navigateToSibling({ commit, state, dispatch, rootState, getters }, { messageId, direction }) {
+    async navigateToSibling({ commit, state, dispatch, rootState, getters }, { messageId, direction, fromChildId }) {
       const message = state.messages[messageId];
       if (!message) {
         return false;
@@ -1856,12 +1852,19 @@ export default {
       if (!orderedChildIds || orderedChildIds.length <= 1) {
         return false;
       }
-      
-      const currentChildId = message.branch_child;
+
+      // The row on screen wins over the orbit's selected child. A context walk
+      // can show a different trajectory through this parent.
+      const shownChildId = orderedChildIds.find(id => String(id) === String(fromChildId));
+      const currentChildId = shownChildId || message.branch_child;
+      const leaveWalk = () => {
+        if (state.contextView) commit('CLEAR_CONTEXT_VIEW');
+      };
       const currentIndex = orderedChildIds.findIndex(id => String(id) === String(currentChildId));
       
       if (currentIndex === -1) {
         // If no valid current child, use last child from ordered list (furthest right)
+        leaveWalk();
         if (message.reply_order && Array.isArray(message.reply_order) && message.reply_order.length > 0) {
           commit('SET_BRANCH_LINK', { 
             parentId: messageId, 
@@ -1897,6 +1900,7 @@ export default {
       if (newIndex !== currentIndex) {
         const newChildId = orderedChildIds[newIndex];
         const oldChildId = currentChildId;
+        leaveWalk();
         
         // Check if the new sibling is loaded in the store
         const isNewChildLoaded = !!state.messages[newChildId];
@@ -2090,7 +2094,7 @@ export default {
       if (!messageId) return;
             
       // Get visible branch messages
-      const visibleMessages = getters.getFullVisibleBranch(messageId);
+      const visibleMessages = getters.getDisplayedBranch(messageId);
       if (!visibleMessages || visibleMessages.length === 0) {
         return;
       }
@@ -2358,6 +2362,17 @@ export default {
     getVisibleBranchMessages: (state, getters) => (messageId) => {
       const path = getters.getAncestorPath(messageId);
       return path.length > 0 ? path.slice(0, -1) : [];
+    },
+
+    // The line on screen. A context view supplies its walk. Otherwise the successor orbit.
+    getDisplayedBranch: (state, getters) => (messageId) => {
+      const ids = activeContextWalk(state.contextView);
+      if (ids) {
+        return ids
+          .map(id => state.messages[id] || state.messages[String(id)])
+          .filter(Boolean);
+      }
+      return getters.getFullVisibleBranch(messageId);
     },
 
     // Modified getter - PURE GETTER with no state modifications

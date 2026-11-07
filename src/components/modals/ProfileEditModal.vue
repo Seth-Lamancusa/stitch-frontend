@@ -109,7 +109,7 @@ const phoneCooldown = ref(0);
 let emailCooldownTimerId = null;
 let phoneCooldownTimerId = null;
 
-const { changePassword, requestEmailVerification, verifyEmailWithCode, requestPhoneVerification, verifyPhoneWithCode, requestEndpointVerification: requestEndpointChallenge, verifyEndpointWithChallenge } = useAuthentication();
+const { changePassword, requestEmailVerification, verifyEmailWithCode, requestPhoneVerification, verifyPhoneWithCode, replaceEndpoint, verifySavedEndpoint } = useAuthentication();
 const notifyPrefs = ref({ email: false, phone: false, endpoint: false });
 const showPhoneConsent = ref(false);
 
@@ -1157,12 +1157,18 @@ const verifyEndpointFlow = async () => {
       return;
     }
     verifyingEndpoint.value = true;
-    // Step 1: create challenge
-    await requestEndpointChallenge(endpoint.value.trim());
-    // Step 2: attempt verification by echo
-    await verifyEndpointWithChallenge({ endpoint: endpoint.value.trim() });
+    const next = endpoint.value.trim();
+    const saved = ((user.value?.contacts || []).find(c => c.type === 'endpoint')?.value || '').trim();
+    if (next !== saved) {
+      const result = await replaceEndpoint(next);
+      if (!result.verified) {
+        endpointVerificationMessage.value = 'Saved. Verification failed — click Verify to retry.';
+        return;
+      }
+    } else {
+      await verifySavedEndpoint();
+    }
     endpointVerificationMessage.value = 'Endpoint verified';
-    // Auto-enable notify on successful verification
     notifyPrefs.value.endpoint = true;
   } catch (e) {
     endpointVerificationMessage.value = e.message || 'Failed to verify endpoint';

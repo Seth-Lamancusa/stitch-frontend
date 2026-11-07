@@ -84,6 +84,29 @@ export function contextChainMatches(visibleIds, contextIds, anchorId) {
   return actual.every((id, index) => id === expected[index]);
 }
 
+// The stored context plus its anchor, repeats kept. This is a walk, not a successor orbit.
+export function contextWalkIds(contextIds, anchorId) {
+  const ids = [];
+  for (const id of contextIds || []) {
+    if (id == null || id === '') continue;
+    ids.push(id);
+  }
+  if (anchorId != null && anchorId !== '') ids.push(anchorId);
+  return ids;
+}
+
+// Ids to show while a context view is active. Null means follow the successor orbit.
+export function activeContextWalk(contextView) {
+  if (!contextView || !Array.isArray(contextView.ids) || contextView.ids.length === 0) return null;
+  return contextView.ids;
+}
+
+// A walk can show one message at more than one position, so the row key includes the index.
+export function branchRowKey(id, index, walkActive) {
+  if (walkActive) return `walk:${index}:${id}`;
+  return String(id);
+}
+
 // Loaded descendants of rootId, excluding the context window. Does not walk into a kept id.
 export function loadedDescendantIds(messages, rootId, keepIds) {
   const keep = new Set((keepIds || []).map(id => String(id)));
