@@ -22,7 +22,40 @@
     <div v-if="open" class="annotation-expanded">
       <p v-if="loadingContent" class="annotation-loading annotation-loading--block" aria-live="polite">Loading</p>
       <template v-else>
-      <div class="annotation-author" :class="{ 'is-current-user': authorIsCurrent }">{{ authorName }}</div>
+      <div class="annotation-author">
+        <UserDisplay
+          :display-name="authorView(annotation).displayName"
+          :user-tag="authorView(annotation).userTag"
+          :show-tag="authorView(annotation).showTag"
+          :is-current-user="authorView(annotation).isCurrentUser"
+          :is-bot="authorView(annotation).isBot"
+          :is-imported="authorView(annotation).imported"
+          name-class="annotation-author-name"
+          tag-class="annotation-author-tag"
+          variant="message"
+          :title="authorView(annotation).title"
+        />
+        <span
+          v-if="authorView(annotation).imported"
+          class="imported-badge"
+          :title="authorView(annotation).badgeTitle"
+        >
+          via <UserDisplay
+            :display-name="authorView(annotation).importerTag"
+            :user-tag="authorView(annotation).importerTag"
+            :show-tag="false"
+            variant="badge"
+            size="xs"
+          />
+          <a
+            v-if="authorView(annotation).sourceUrl"
+            :href="authorView(annotation).sourceUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="import-source-link"
+          >🔗</a>
+        </span>
+      </div>
       <div class="annotation-text">
         <AnnotatedBody
           :message="annotation"
@@ -37,8 +70,39 @@
         :key="reply.id"
         class="annotation-reply"
       >
-        <div class="annotation-author" :class="{ 'is-current-user': authorIsCurrentUser(reply) }">
-          {{ replyAuthorName(reply) }}
+        <div class="annotation-author">
+          <UserDisplay
+            :display-name="authorView(reply).displayName"
+            :user-tag="authorView(reply).userTag"
+            :show-tag="authorView(reply).showTag"
+            :is-current-user="authorView(reply).isCurrentUser"
+            :is-bot="authorView(reply).isBot"
+            :is-imported="authorView(reply).imported"
+            name-class="annotation-author-name"
+            tag-class="annotation-author-tag"
+            variant="message"
+            :title="authorView(reply).title"
+          />
+          <span
+            v-if="authorView(reply).imported"
+            class="imported-badge"
+            :title="authorView(reply).badgeTitle"
+          >
+            via <UserDisplay
+              :display-name="authorView(reply).importerTag"
+              :user-tag="authorView(reply).importerTag"
+              :show-tag="false"
+              variant="badge"
+              size="xs"
+            />
+            <a
+              v-if="authorView(reply).sourceUrl"
+              :href="authorView(reply).sourceUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="import-source-link"
+            >🔗</a>
+          </span>
         </div>
         <div class="annotation-text">
           <AnnotatedBody
@@ -97,7 +161,8 @@ import { computed, ref, watch } from 'vue'
 import { useStore } from 'vuex'
 import AnnotatedBody from './AnnotatedBody.vue'
 import FormattedContent from './FormattedContent/index.vue'
-import { contentText, getAuthorDisplayName, isCurrentUserAuthor } from '../utils/messageCompat.js'
+import UserDisplay from './common/UserDisplay.vue'
+import { contentText, getAuthorDisplayName, getAuthorUserTag, isAuthorBot, isCurrentUserAuthor } from '../utils/messageCompat.js'
 import { continuationChain, displayParts, previewLine } from '../utils/annotations.js'
 
 const CHAIN_LIMIT = 100
@@ -123,8 +188,44 @@ const unavailable = computed(() => !!store.state.messages.unavailableAnnotationI
 const annotation = computed(() => store.getters['messages/getMessage'](props.annotationId))
 const currentUser = computed(() => store.getters['auth/user'])
 const preview = computed(() => previewLine(annotation.value?.content))
-const authorName = computed(() => getAuthorDisplayName(annotation.value))
-const authorIsCurrent = computed(() => isCurrentUserAuthor(annotation.value, currentUser.value))
+
+function authorView(message) {
+  const info = message?.import_info
+  const imported = !!info
+  const userTag = imported ? null : getAuthorUserTag(message)
+  return {
+    imported,
+    displayName: imported ? info.display_name : getAuthorDisplayName(message),
+    userTag,
+    showTag: !imported && !!userTag,
+    isCurrentUser: isCurrentUserAuthor(message, currentUser.value),
+    isBot: isAuthorBot(message),
+    title: botTitle(message),
+    badgeTitle: importedTitle(info),
+    importerTag: info?.importer_user_tag,
+    sourceUrl: info?.source_url || ''
+  }
+}
+
+function botTitle(message) {
+  if (!isAuthorBot(message)) return undefined
+  const versionId = message?.author?.bot_version_id
+  if (!versionId) return 'No version available'
+  const versions = Array.isArray(message.author?.available_versions)
+    ? message.author.available_versions
+    : []
+  const match = versions.find((version) => version && version.id === versionId)
+  if (match?.label) return `Bot version: ${match.label}`
+  const fallback = versions.find((version) => version && version.default === true)
+  if (fallback?.label) return `Bot version: ${fallback.label}`
+  return `Bot version: ${versionId}`
+}
+
+function importedTitle(info) {
+  const importer = info?.importer_user_tag || 'user'
+  const platform = typeof info?.source_platform === 'string' ? info.source_platform.trim() : ''
+  return platform ? `Imported by ${importer} from ${platform}` : `Imported by ${importer}`
+}
 const replyChain = computed(() => {
   if (!open.value || !annotation.value) return []
   return continuationChain(
@@ -149,14 +250,6 @@ watch(() => props.annotationId, (id) => {
     if (token === contentToken) loadingContent.value = false
   })
 }, { immediate: true })
-
-function replyAuthorName(message) {
-  return getAuthorDisplayName(message)
-}
-
-function authorIsCurrentUser(message) {
-  return isCurrentUserAuthor(message, currentUser.value)
-}
 
 function replyHasParts(message) {
   return !!displayParts(message)
@@ -290,16 +383,48 @@ async function onDelete() {
 }
 
 .annotation-author {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px;
   margin-top: 7px;
   margin-bottom: 2px;
-  color: var(--color-text-secondary);
+  color: var(--color-text);
   font-size: var(--font-size-xs);
-  font-weight: 600;
   letter-spacing: 0.01em;
 }
 
-.annotation-author.is-current-user {
-  color: var(--color-current-user-name);
+.annotation-author :deep(.annotation-author-name) {
+  font-weight: 600;
+}
+
+.annotation-author :deep(.annotation-author-tag) {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.imported-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--color-hover-overlay);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 400;
+  cursor: help;
+}
+
+.import-source-link {
+  font-size: 0.8rem;
+  text-decoration: none;
+  opacity: 0.7;
+}
+
+.import-source-link:hover {
+  opacity: 1;
 }
 
 .annotation-reply {
