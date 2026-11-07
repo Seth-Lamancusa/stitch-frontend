@@ -608,7 +608,11 @@ export default {
       }
     };
 
+    const isViewingContext = ref(false);
+
     const viewStoredContext = async () => {
+      if (isViewingContext.value) return;
+      isViewingContext.value = true;
       try {
         const result = await store.dispatch('messages/viewMessageContext', props.message.id);
         if (result?.anchorId) emit('center', result.anchorId);
@@ -618,6 +622,8 @@ export default {
           code: error?.code || 'context_load_failed',
           message: error?.message || 'Could not load the stored context',
         });
+      } finally {
+        isViewingContext.value = false;
       }
     };
 
@@ -673,12 +679,14 @@ export default {
       {
         id: 'view-context',
         emoji: '📖',
-        text: 'View context',
+        text: isViewingContext.value ? 'Loading context' : 'View context',
         desktopVisible: false,
         mobileVisible: false,
         adminOnly: false,
         handler: viewStoredContext,
-        condition: () => !props.inListView && Array.isArray(props.message.context) && props.message.context.length > 0
+        condition: () => !props.inListView && Array.isArray(props.message.context) && props.message.context.length > 0,
+        disabled: () => isViewingContext.value,
+        loading: () => isViewingContext.value
       },
       {
         id: 'copy-text',
