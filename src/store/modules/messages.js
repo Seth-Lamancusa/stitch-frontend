@@ -4,7 +4,7 @@ console.log('[MOCK] mockMessages loaded, count:', Object.keys(mockMessages).leng
 import UserService from '../../services/UserService'
 import WebSocketService from '../../services/ws/WebSocketService'
 import GraphLayoutService from '../../services/GraphLayoutService.js'
-import { contentText, getAuthorDisplayName, getAuthorUid, getAuthorUserTag } from '../../utils/messageCompat.js'
+import { contentText, getAuthorDisplayName, getAuthorUid, getAuthorUserTag, testerFlags } from '../../utils/messageCompat.js'
 import { continuationId, withoutAnnotation } from '../../utils/annotations.js'
 import {
   activeContextWalk,
@@ -1117,6 +1117,7 @@ export default {
               user_tag: tagKey ? String(userTag).trim().replace(/^@/, '') : '',
               display_name: incoming.display_name || incoming.displayName || userTag || '',
               is_bot: !!(incoming.is_bot ?? incoming.isBot),
+              ...testerFlags(incoming),
               available_versions: incoming.available_versions ?? incoming.availableVersions ?? null,
               public: incoming.public !== false && incoming.visible !== false,
               added_by: addedBy,

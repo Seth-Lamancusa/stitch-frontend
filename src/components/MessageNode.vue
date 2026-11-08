@@ -70,6 +70,7 @@
             <template v-if="showParticipantsLabel">
               <template v-for="(participant, index) in participantItems" :key="participant.key">
                 <UserDisplay
+                  :user="participant.user"
                   :display-name="participant.displayName"
                   :user-tag="participant.userTag"
                   :show-tag="false"
@@ -88,6 +89,7 @@
             </template>
             <UserDisplay
               v-else
+              :user="isImported ? null : message.author"
               :display-name="isImported ? message.import_info.display_name : authorDisplayName"
               :user-tag="isImported ? null : authorUserTag"
               :show-tag="!isImported && !!authorUserTag"
@@ -1198,7 +1200,7 @@ export default {
 
       const items = [];
       const seen = new Set();
-      const addParticipant = ({ displayName, userTag = null, isBot = false, isCurrentUser: participantIsCurrentUser = false }) => {
+      const addParticipant = ({ displayName, userTag = null, isBot = false, isCurrentUser: participantIsCurrentUser = false, user = null }) => {
         const keySource = displayName || userTag || '';
         const key = String(keySource).trim().toLowerCase();
         if (!key) return;
@@ -1209,7 +1211,8 @@ export default {
           displayName: displayName || userTag || 'Unknown',
           userTag,
           isBot: !!isBot,
-          isCurrentUser: !!participantIsCurrentUser
+          isCurrentUser: !!participantIsCurrentUser,
+          user
         });
       };
 
@@ -1219,7 +1222,8 @@ export default {
           displayName: authorName || authorUserTag.value || '',
           userTag: authorUserTag.value,
           isBot: isBot.value,
-          isCurrentUser: !isImported.value && isCurrentUserIdentity(authorUid.value, authorUserTag.value, currentUser.value)
+          isCurrentUser: !isImported.value && isCurrentUserIdentity(authorUid.value, authorUserTag.value, currentUser.value),
+          user: isImported.value ? null : props.message.author
         });
       }
 
@@ -1230,7 +1234,8 @@ export default {
             displayName: name,
             userTag: recipient.user_tag || null,
             isBot: recipient.is_bot,
-            isCurrentUser: isCurrentUserIdentity(recipient.uid, recipient.user_tag, currentUser.value)
+            isCurrentUser: isCurrentUserIdentity(recipient.uid, recipient.user_tag, currentUser.value),
+            user: recipient
           });
         });
       }

@@ -242,6 +242,7 @@
       :isOpen="isProfileModalOpen" 
       @close="closeProfileModal" 
     />
+    <FeedbackButton />
   </div>
 </template>
 
@@ -264,6 +265,7 @@ import DeleteConfirmModal from '../../components/modals/DeleteConfirmModal.vue';
 import ProfileEditModal from '../../components/modals/ProfileEditModal.vue';
 import { useAuthentication } from '../../composables/useAuthentication';
 import ThreadHeader from '../../components/ThreadHeader.vue';
+import FeedbackButton from '@/components/buttons/FeedbackButton.vue';
 import LoginButton from '@buttons/LoginButton.vue'
 import { useCompactThread } from '../../composables/useCompactThread.js';
 import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';

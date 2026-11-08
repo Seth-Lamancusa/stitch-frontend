@@ -52,6 +52,7 @@
 
         <div class="fn-meta">
           <UserDisplay
+            :user="isImported ? null : message.author"
             :display-name="isImported ? message.import_info.display_name : authorDisplayName"
             :user-tag="isImported ? null : authorUserTag"
             :show-tag="!isImported && !!authorUserTag"

@@ -305,16 +305,7 @@
     />
     <GlobalNotifications />
     
-    <router-link
-      to="/messages/a784e721"
-      class="global-feedback-btn"
-      title="Give feedback"
-      aria-label="Give feedback"
-    >
-      <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path fill="currentColor" d="M4 3.5h16a2.5 2.5 0 0 1 2.5 2.5v8.5a2.5 2.5 0 0 1-2.5 2.5H10.2L4.8 21.2a.9.9 0 0 1-1.4-.7v-3.5H4A2.5 2.5 0 0 1 1.5 14.5V6A2.5 2.5 0 0 1 4 3.5z"/>
-      </svg>
-    </router-link>
+    <FeedbackButton />
 
     <router-link
       v-if="user && canQuote"
@@ -356,6 +347,7 @@ import { useStore } from 'vuex';
 import { useAuthentication } from '../../composables/useAuthentication';
 import LoginButton from '@/components/buttons/LoginButton.vue'
 import RegisterButton from '@/components/buttons/RegisterButton.vue'
+import FeedbackButton from '@/components/buttons/FeedbackButton.vue'
 import ProfileEditModal from '../modals/ProfileEditModal.vue';
 import DevModal from '../modals/DevModal.vue';
 import ManagedUserCreateModal from '../modals/ManagedUserCreateModal.vue';
@@ -1580,7 +1572,6 @@ const handleGlobalCreateClick = () => {
 }
 
 /* Matched corner controls. Sage fill with a matte wood grain. */
-.global-feedback-btn,
 .global-import-btn,
 .global-create-btn {
   position: fixed;
@@ -1608,10 +1599,6 @@ const handleGlobalCreateClick = () => {
   transition: background-color var(--transition-normal);
 }
 
-.global-feedback-btn {
-  left: var(--space-xl);
-}
-
 .global-create-btn {
   right: var(--space-xl);
   line-height: 1;
@@ -1624,18 +1611,12 @@ const handleGlobalCreateClick = () => {
   bottom: calc(var(--space-xl) + 84px + 12px);
 }
 
-.global-feedback-btn .btn-icon,
 .global-import-btn .btn-icon,
 .global-create-btn .btn-icon {
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
-}
-
-.global-feedback-btn .btn-icon {
-  width: 42px;
-  height: 42px;
 }
 
 .global-import-btn .btn-icon {
@@ -1650,14 +1631,12 @@ const handleGlobalCreateClick = () => {
   height: auto;
 }
 
-.global-feedback-btn:hover,
 .global-import-btn:hover,
 .global-create-btn:hover {
   background-color: var(--color-primary-dark);
   color: var(--color-text-inverse);
 }
 
-.global-feedback-btn:focus-visible,
 .global-import-btn:focus-visible,
 .global-create-btn:focus-visible {
   outline: 3px solid var(--color-cream);
@@ -1666,7 +1645,6 @@ const handleGlobalCreateClick = () => {
 
 /* Mobile responsive for global create and feedback buttons */
 @media (max-width: 768px) {
-  .global-feedback-btn,
   .global-import-btn,
   .global-create-btn {
     background-size: 64px;
@@ -1696,17 +1674,6 @@ const handleGlobalCreateClick = () => {
     font-size: 48px;
   }
 
-  .global-feedback-btn {
-    width: 52px;
-    height: 52px;
-    bottom: 80px;
-    left: var(--space-md);
-  }
-
-  .global-feedback-btn .btn-icon {
-    width: 26px;
-    height: 26px;
-  }
 }
 
 @media (max-width: 480px) {

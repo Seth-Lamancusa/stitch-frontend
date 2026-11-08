@@ -16,6 +16,7 @@ import ChatsView from './views/info_views/ChatsView.vue';
 import FeaturesView from './views/info_views/FeaturesView.vue';
 import MessageListView from './views/app_views/MessageListView.vue';
 import PasswordResetView from './views/app_views/PasswordResetView.vue';
+import SurveyView from './views/app_views/SurveyView.vue';
 import ImportView from './views/app_views/ImportView.vue';
 import AdminMetricsView from './views/app_views/AdminMetricsView.vue';
 import AdminAdmissionsView from './views/app_views/AdminAdmissionsView.vue';
@@ -24,6 +25,16 @@ import { P } from './auth/constants.js';
 import { APP_HOST } from './config/appConfig.js';
 
 import StitchPlaygroundView from './views/app_views/StitchPlaygroundView.vue';
+
+// The old marketing page still lives at /home. Root follows the app on the
+// deployed host and on local dev; other hosts keep the legacy page.
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+
+function rootPath() {
+  const host = window.location.hostname;
+  if (host === APP_HOST || LOCAL_HOSTS.has(host)) return '/history';
+  return '/home';
+}
 
 const routes = [
   {
@@ -36,7 +47,7 @@ const routes = [
   },
   {
     path: '/',
-    redirect: () => (window.location.hostname === APP_HOST ? '/history' : '/home')
+    redirect: rootPath
   },
   {
     path: '/search',
@@ -55,6 +66,14 @@ const routes = [
     path: '/reset-password',
     name: 'reset-password',
     component: PasswordResetView
+  },
+  {
+    path: '/beta/survey/:week',
+    name: 'beta-survey',
+    component: SurveyView,
+    meta: {
+      title: 'Weekly survey'
+    }
   },
   {
     path: '/home',

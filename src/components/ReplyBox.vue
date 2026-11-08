@@ -346,7 +346,7 @@ import ChannelsModal from './modals/ChannelsModal.vue';
 import { dismissMobileKeyboard } from '../utils/mobileKeyboard.js';
 import MessageService from '../services/MessageService.js';
 import { addRecipientsToMessagesExcludingAuthored } from '../utils/recipientPropagation.js';
-import { getAuthorDisplayName, getAuthorUserTag, getAuthorUid } from '../utils/messageCompat.js';
+import { getAuthorDisplayName, getAuthorUserTag, getAuthorUid, testerFlags } from '../utils/messageCompat.js';
 import AttachmentService from '../services/AttachmentService.js';
 
 const props = defineProps({
@@ -1165,6 +1165,7 @@ const ensureMentionRecipient = (user) => {
       display_name: user.display_name,
       user_tag: user.user_tag,
       is_bot: !!(user.is_bot ?? user.isBot),
+      ...testerFlags(user),
       available_versions: user.available_versions ?? user.availableVersions ?? null,
       email: user.email,
       public: true,
@@ -1202,6 +1203,7 @@ const ensureMentionRecipient = (user) => {
           ...recipient,
           notify: true,
           is_bot: !!(user.is_bot ?? user.isBot),
+          ...testerFlags(user),
           available_versions: user.available_versions ?? user.availableVersions ?? null,
         };
       }

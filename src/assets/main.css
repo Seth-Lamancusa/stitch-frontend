@@ -34,12 +34,12 @@ body {
   min-height: 100vh;
 }
 
-/* App canvas: darkened landing gradient with the landing weave behind messages. */
+/* App canvas: page-grain tapestry from the landing site, over a quiet brown-gray wash. */
 .app-canvas {
   position: relative;
   isolation: isolate;
   background-color: var(--color-background);
-  background-image: linear-gradient(160deg, #1a2420 0%, #1a1416 100%);
+  background-image: linear-gradient(160deg, #121914 0%, #121611 400%);
 }
 
 .app-canvas::before {
@@ -48,10 +48,10 @@ body {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image: url("/textures/tap-texture-2.avif");
+  background-image: url("/textures/texture.jpeg");
   background-repeat: repeat;
   background-size: 420px;
-  filter: contrast(1.4) brightness(1.15);
+  filter: contrast(1.5) brightness(1);
   mix-blend-mode: multiply;
 }
 

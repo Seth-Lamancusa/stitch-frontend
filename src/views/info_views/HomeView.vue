@@ -70,7 +70,7 @@
               <span class="btn-title">Search on Stitch</span>
             </div>
           </a>
-          <a :href="messageUrl('2HhB')" class="banner-btn">
+          <a :href="messageUrl(FEEDBACK_MESSAGE_ID)" class="banner-btn">
             <span class="btn-icon">💭</span>
             <div class="btn-text-content">
               <span class="btn-title">Give feedback</span>
@@ -118,7 +118,7 @@
 
 <script setup>
 import InfoViewLayout from '../../components/layouts/InfoViewLayout.vue';
-import { appUrl, messageUrl } from '../../config/appConfig.js';
+import { appUrl, messageUrl, FEEDBACK_MESSAGE_ID } from '../../config/appConfig.js';
 </script>
 
 <style>

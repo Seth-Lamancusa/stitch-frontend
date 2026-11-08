@@ -37,6 +37,7 @@ function mapApiUserToAuthState(userData) {
     has_endpoint_signing_secret: !!data.has_endpoint_signing_secret,
     has_api_access: !!data.has_api_access,
     is_platform_tester: !!(data.is_platform_tester ?? data.is_tester),
+    is_api_tester: !!data.is_api_tester,
     is_managed: !!data.is_managed,
     private: !!data.private,
     bio: typeof data.bio === 'string' ? data.bio : '',

@@ -25,6 +25,16 @@ export function isAuthorBot(message) {
   return !!message.author?.is_bot;
 }
 
+/** Tester flags from a user, author, or recipient payload. */
+export function testerFlags(person) {
+  const source = person && typeof person === 'object' ? person : {};
+  const platform = source.is_platform_tester ?? source.isPlatformTester ?? source.is_tester ?? source.isTester;
+  return {
+    is_platform_tester: !!platform,
+    is_api_tester: !!(source.is_api_tester ?? source.isApiTester),
+  };
+}
+
 /**
  * Readable text for a message `content` value.
  * Normal messages are already strings. Function messages are one dictionary.

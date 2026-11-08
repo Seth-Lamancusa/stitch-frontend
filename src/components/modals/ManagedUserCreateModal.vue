@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch, computed } from 'vue';
 import { useStore } from 'vuex';
+import { USER_TAG_HINT, USER_TAG_MAX, canonicalUserTag, sanitizeUserTagInput, userTagError } from '@/utils/userTag';
 
 const props = defineProps({ isOpen: Boolean });
 const emit = defineEmits(['close']);
@@ -24,7 +25,12 @@ watch(() => props.isOpen, (o) => {
   }
 });
 
-const canSubmit = computed(() => !!displayName.value.trim() && !!userTag.value.trim() && !isBusy.value);
+const tagError = computed(() => (userTag.value ? userTagError(userTag.value) : ''));
+const canSubmit = computed(() => !!displayName.value.trim() && !userTagError(userTag.value) && !isBusy.value);
+
+const onTagInput = () => {
+  userTag.value = sanitizeUserTagInput(userTag.value);
+};
 
 const close = () => emit('close');
 
@@ -36,7 +42,7 @@ const onCreate = async () => {
     const ep = endpoints.value && endpoints.value.trim() ? [endpoints.value.trim()] : [];
     const result = await store.dispatch('auth/createManagedUser', {
       display_name: displayName.value.trim(),
-      user_tag: userTag.value.trim(),
+      user_tag: canonicalUserTag(userTag.value),
       endpoints: ep,
       scopes: 'messages.read messages.write realtime.connect',
       private: false,
@@ -89,9 +95,10 @@ const onCreate = async () => {
               v-model="userTag"
               type="text"
               placeholder="e.g. acmebot"
-              maxlength="24"
+              :maxlength="USER_TAG_MAX"
+              @input="onTagInput"
             />
-            <div class="hint">2–24 characters: letters, numbers, and hyphens only.</div>
+            <div class="hint">{{ tagError || USER_TAG_HINT }}</div>
           </div>
           <div class="field">
             <label>Endpoints (optional)</label>

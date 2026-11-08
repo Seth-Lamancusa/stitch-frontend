@@ -320,6 +320,7 @@ import ChannelsService from '../../services/ChannelsService.js';
 import { useAuthentication } from '../../composables/useAuthentication';
 import LoginButton from '@buttons/LoginButton.vue'
 import BotVersionPicker from '../../components/common/BotVersionPicker.vue';
+import { testerFlags } from '../../utils/messageCompat.js';
 
 // Setup store and routing
 const store = useStore();
@@ -421,6 +422,7 @@ function selectRecipient(user) {
     public: true,
     notify: true,
     is_bot: !!(user.is_bot ?? user.isBot),
+    ...testerFlags(user),
     available_versions: user.available_versions ?? user.availableVersions ?? null
   });
   newRecipient.value = '';
@@ -473,6 +475,7 @@ function toggleSpeedDialUser(user) {
       public: true,
       notify: true,
       is_bot: !!(user.is_bot ?? user.isBot),
+      ...testerFlags(user),
       available_versions: user.available_versions ?? user.availableVersions ?? null
     });
   }

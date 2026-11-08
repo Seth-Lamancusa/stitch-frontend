@@ -26,6 +26,9 @@ export function appUrl(path = '/') {
   return `${APP_ORIGIN}${normalized}`;
 }
 
+// Shared with stitch-backend/app/util/welcome.py. The corner button opens this message.
+export const FEEDBACK_MESSAGE_ID = 'feedback';
+
 export function messageUrl(id) {
   return appUrl(`/messages/${id}`);
 }
@@ -34,6 +37,7 @@ export default {
   ADMIN_ORIGIN,
   APP_ORIGIN,
   APP_HOST,
+  FEEDBACK_MESSAGE_ID,
 };
 
 

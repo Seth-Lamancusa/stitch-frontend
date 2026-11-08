@@ -43,6 +43,7 @@
                 >
                   <template v-for="(participant, index) in visibleParticipantItems" :key="participant.key">
                     <UserDisplay
+                      :user="participant.user"
                       :display-name="participant.displayName"
                       :user-tag="participant.userTag"
                       :show-tag="false"
@@ -74,6 +75,7 @@
                   class="participant-unit"
                 >
                   <UserDisplay
+                    :user="participant.user"
                     :display-name="participant.displayName"
                     :user-tag="participant.userTag"
                     :show-tag="false"
@@ -91,6 +93,7 @@
             </template>
             <UserDisplay
               v-else
+              :user="isImported ? null : message.author"
               :display-name="authorDisplayName"
               :user-tag="authorUserTag"
               :show-tag="!!authorUserTag"
@@ -415,7 +418,8 @@ const participantItems = computed(() => {
     userTag = null,
     isBot = false,
     isImported: participantIsImported = false,
-    isCurrentUser: participantIsCurrentUser = false
+    isCurrentUser: participantIsCurrentUser = false,
+    user = null
   }) => {
     const keySource = displayName || userTag || '';
     const key = String(keySource).trim().toLowerCase();
@@ -428,7 +432,8 @@ const participantItems = computed(() => {
       userTag,
       isBot: !!isBot,
       isImported: !!participantIsImported,
-      isCurrentUser: !!participantIsCurrentUser
+      isCurrentUser: !!participantIsCurrentUser,
+      user
     });
   };
 
@@ -439,7 +444,8 @@ const participantItems = computed(() => {
       userTag: authorUserTag.value,
       isBot: isBot.value,
       isImported: isImported.value,
-      isCurrentUser: highlightAuthorName.value
+      isCurrentUser: highlightAuthorName.value,
+      user: isImported.value ? null : props.message.author
     });
   }
 
@@ -450,7 +456,8 @@ const participantItems = computed(() => {
         displayName: name,
         userTag: recipient.user_tag || null,
         isBot: recipient.is_bot,
-        isCurrentUser: isCurrentUserIdentity(recipient.uid, recipient.user_tag, currentUser.value)
+        isCurrentUser: isCurrentUserIdentity(recipient.uid, recipient.user_tag, currentUser.value),
+        user: recipient
       });
     });
   }

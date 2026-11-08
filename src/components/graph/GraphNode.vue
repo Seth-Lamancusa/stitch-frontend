@@ -27,8 +27,17 @@
       <foreignObject :x="contentPadding" :y="contentPadding - 2" :width="nodeWidth - (contentPadding*2)" height="24">
         <div xmlns="http://www.w3.org/1999/xhtml" class="gnode-header">
           <div class="author-info">
-            <span class="message-author" :class="{ 'current-user-name': isOwnMessage }">{{ authorDisplay }}</span>
-            <span v-if="authorTag" class="author-user-tag">@{{ authorTag }}</span>
+            <UserDisplay
+              :user="message.import_info?.display_name ? null : message.author"
+              :display-name="authorDisplay"
+              :user-tag="authorTag"
+              :show-tag="!!authorTag"
+              :is-current-user="isOwnMessage"
+              :is-imported="!!message.import_info?.display_name"
+              name-class="message-author"
+              tag-class="author-user-tag"
+              variant="message"
+            />
             <span v-if="message.public" class="visibility-indicator public">Public</span>
           </div>
           <div class="header-right">
@@ -117,9 +126,11 @@
 <script>
 import { format } from 'date-fns';
 import { contentText, getAuthorDisplayName, getAuthorUserTag, isCurrentUserAuthor } from '../../utils/messageCompat.js';
+import UserDisplay from '../common/UserDisplay.vue';
 
 export default {
   name: 'GraphNode',
+  components: { UserDisplay },
   props: {
     // Message data
     message: {
@@ -492,16 +503,15 @@ export default {
   min-width: 0;
 }
 
-.message-author {
+.author-info :deep(.message-author) {
   font-weight: bold;
 }
 
-.message-author.current-user-name {
+.author-info :deep(.user-display__name--current) {
   font-weight: 800;
-  color: var(--color-current-user-name);
 }
 
-.author-user-tag {
+.author-info :deep(.author-user-tag) {
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
 }

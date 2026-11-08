@@ -1,4 +1,4 @@
-import { getAuthorDisplayName, getAuthorUid, getAuthorUserTag, isAuthorBot, isCurrentUserAuthor } from '../../utils/messageCompat.js';
+import { getAuthorDisplayName, getAuthorUid, getAuthorUserTag, isAuthorBot, isCurrentUserAuthor, testerFlags } from '../../utils/messageCompat.js';
 
 const TAG_PATTERN = /^[A-Za-z0-9-]{1,32}$/;
 const MAX_DRAFT_TAGS = 20;
@@ -769,6 +769,7 @@ export default {
             display_name: getAuthorDisplayName(message),
             user_tag: authorTag,
             is_bot: authorIsBot || !!message.author?.isBot,
+            ...testerFlags(message.author),
             available_versions: message.author?.available_versions ?? message.author?.availableVersions ?? null,
             public: true,
             notify: true
@@ -811,6 +812,7 @@ export default {
             // keep whatever backend provides; email may be absent
             email: recipient.email,
             is_bot: !!(recipient.is_bot ?? recipient.isBot),
+            ...testerFlags(recipient),
             available_versions: recipient.available_versions ?? recipient.availableVersions ?? null,
             public: (recipient.public !== false),
             // Default behavior: all parent recipients get notify: false

@@ -17,15 +17,14 @@
           <input 
             v-model="userTag" 
             type="text" 
-            placeholder="2-24 characters: letters, numbers, and hyphens only" 
-            pattern="[A-Za-z0-9-]*"
-            title="2-24 characters: letters, numbers, and hyphens only"
+            :placeholder="USER_TAG_HINT"
+            :title="USER_TAG_HINT"
             id="register-username"
             name="username"
             autocomplete="username"
             autocapitalize="off"
             spellcheck="false"
-            maxlength="24"
+            :maxlength="USER_TAG_MAX"
             @input="onTagInput"
           />
           <p v-if="tagError" class="error">{{ tagError }}</p>
@@ -66,6 +65,7 @@
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { useAuthentication } from '@/composables/useAuthentication'
+import { USER_TAG_HINT, USER_TAG_MAX, canonicalUserTag, sanitizeUserTagInput, userTagError } from '@/utils/userTag'
 
 const props = defineProps({ isOpen: { type: Boolean, default: false } })
 const emit = defineEmits(['close','success'])
@@ -121,25 +121,8 @@ const canSubmit = computed(() => {
 })
 
 const validateTag = () => {
-  tagError.value = ''
-  const tag = (userTag.value || '').trim()
-  if (!tag) {
-    tagError.value = 'Tag is required'
-    return false
-  }
-  if (tag.length < 2) {
-    tagError.value = 'Tag must be at least 2 characters long'
-    return false
-  }
-  if (tag.length > 24) {
-    tagError.value = 'Tag must be no more than 24 characters long'
-    return false
-  }
-  if (!/^[A-Za-z0-9-]+$/.test(tag)) {
-    tagError.value = 'Tag must contain only letters, numbers, and hyphens'
-    return false
-  }
-  return true
+  tagError.value = userTagError(userTag.value)
+  return !tagError.value
 }
 
 const submit = async () => {
@@ -152,7 +135,7 @@ const submit = async () => {
     await registerWithPassword({
       email: email.value,
       password: password.value,
-      user_tag: userTag.value,
+      user_tag: canonicalUserTag(userTag.value),
       display_name: (displayName.value || '').trim(),
       phone: phone.value || undefined,
       endpoint: endpoint.value || undefined,
@@ -194,11 +177,7 @@ const selectNotify = (channel) => {
 }
 
 const onTagInput = () => {
-  userTag.value = (userTag.value || '').replace(/[^A-Za-z0-9-]/g, '')
-  // Enforce max length
-  if (userTag.value.length > 24) {
-    userTag.value = userTag.value.substring(0, 24)
-  }
+  userTag.value = sanitizeUserTagInput(userTag.value)
   validateTag()
 }
 </script>

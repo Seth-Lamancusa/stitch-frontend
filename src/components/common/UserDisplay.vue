@@ -49,6 +49,7 @@
 
 <script setup>
   import { computed, reactive, onBeforeUnmount } from 'vue';
+  import { testerFlags } from '../../utils/messageCompat.js';
 
   const props = defineProps({
     title: {
@@ -110,6 +111,14 @@
     default: false
   },
   isBot: {
+    type: Boolean,
+    default: false
+  },
+  isPlatformTester: {
+    type: Boolean,
+    default: false
+  },
+  isApiTester: {
     type: Boolean,
     default: false
   },
@@ -227,6 +236,12 @@ const isBotUser = computed(() => {
   return props.isBot || props.user?.is_bot === true || props.user?.isBot === true;
 });
 
+const isBetaTester = computed(() => {
+  if (props.isImported) return false;
+  const flags = testerFlags(props.user);
+  return !!(props.isPlatformTester || props.isApiTester || flags.is_platform_tester || flags.is_api_tester);
+});
+
 const resolvedBadges = computed(() => {
   const manualBadges = Array.isArray(props.badges)
     ? props.badges
@@ -235,6 +250,7 @@ const resolvedBadges = computed(() => {
     : [];
 
   const hasBotBadge = manualBadges.some((badge) => badge.key === 'bot');
+  const hasTesterBadge = manualBadges.some((badge) => badge.key === 'beta-tester');
 
   if (props.showAutoBadges && isBotUser.value && !hasBotBadge) {
     manualBadges.push({
@@ -243,6 +259,16 @@ const resolvedBadges = computed(() => {
       content: '🤖',
       ariaLabel: 'Bot',
       tooltip: props.title || 'No version available'
+    });
+  }
+
+  if (props.showAutoBadges && isBetaTester.value && !hasTesterBadge) {
+    manualBadges.push({
+      key: 'beta-tester',
+      label: 'Beta tester',
+      content: '🧪',
+      ariaLabel: 'Beta tester',
+      tooltip: 'Beta tester'
     });
   }
 

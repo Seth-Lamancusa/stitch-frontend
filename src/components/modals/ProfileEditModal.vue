@@ -9,6 +9,7 @@ import MessagePreview from '@/components/MessagePreview.vue';
 import UserDisplay from '../common/UserDisplay.vue';
 import { FONT_PRESET_LIST, resolveMessageFont } from '@/config/fonts.js';
 import AttachmentService from '@/services/AttachmentService.js';
+import { USER_TAG_HINT, USER_TAG_MAX, canonicalUserTag, sanitizeUserTagInput, userTagError } from '@/utils/userTag';
 
 const props = defineProps({
   isOpen: Boolean
@@ -439,24 +440,20 @@ watch([inputModalities, outputModalities], ([newInput, newOutput]) => {
   availableVersions.value = JSON.stringify(nextDraft, null, 2);
 });
 
+const onTagInput = () => {
+  const next = sanitizeUserTagInput(tag.value);
+  if (next !== tag.value) tag.value = next;
+  validateTag();
+};
+
 const validateTag = () => {
   tagError.value = '';
-  if (!tag.value.trim()) {
-    return true;
-  }
-  if (tag.value.length < 2) {
-    tagError.value = 'Tag must be at least 2 characters long';
-    return false;
-  }
-  if (tag.value.length > 24) {
-    tagError.value = 'Tag must be no more than 24 characters long';
-    return false;
-  }
-  if (!/^[a-zA-Z0-9-]+$/.test(tag.value)) {
-    tagError.value = 'Tag must contain only letters, numbers, and hyphens';
-    return false;
-  }
-  return true;
+  const current = canonicalUserTag(tag.value);
+  const original = canonicalUserTag(user.value?.user_tag || '');
+  // An existing tag stays valid until the person changes it.
+  if (current === original) return true;
+  tagError.value = userTagError(tag.value, { required: false });
+  return !tagError.value;
 };
 
 const validatePhoneNumber = () => {
@@ -900,7 +897,7 @@ const updateProfile = async () => {
       profileUpdate.display_name = normalizeTrimmed(displayName.value);
     }
     if (normalizeLowerTrimmed(tag.value) !== normalizeLowerTrimmed(user.value?.user_tag || '')) {
-      profileUpdate.user_tag = normalizeTrimmed(tag.value);
+      profileUpdate.user_tag = canonicalUserTag(tag.value);
     }
     if (normalizePhoneForCompare(phoneNumber.value) !== normalizePhoneForCompare(originalPhoneNumber)) {
       const trimmed = normalizeTrimmed(phoneNumber.value);
@@ -1744,12 +1741,13 @@ const deleteAccount = async () => {
                 v-model="tag" 
                 type="text" 
                 placeholder="Your unique tag"
-                maxlength="24"
+                :maxlength="USER_TAG_MAX"
                 @keydown="handleKeydown"
+                @input="onTagInput"
                 @blur="validateTag"
               />
               <div class="field-error" v-if="tagError">{{ tagError }}</div>
-              <div v-else class="field-hint">A unique identifier (letters, numbers, underscores, or hyphens).</div>
+              <div v-else class="field-hint">{{ USER_TAG_HINT }}</div>
             </div>
             <div class="field">
               <label for="messageFont">Message font</label>

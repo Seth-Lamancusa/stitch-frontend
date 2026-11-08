@@ -24,6 +24,7 @@
       <template v-else>
       <div class="annotation-author">
         <UserDisplay
+          :user="authorView(annotation).user"
           :display-name="authorView(annotation).displayName"
           :user-tag="authorView(annotation).userTag"
           :show-tag="authorView(annotation).showTag"
@@ -72,6 +73,7 @@
       >
         <div class="annotation-author">
           <UserDisplay
+            :user="authorView(reply).user"
             :display-name="authorView(reply).displayName"
             :user-tag="authorView(reply).userTag"
             :show-tag="authorView(reply).showTag"
@@ -200,6 +202,7 @@ function authorView(message) {
     showTag: !imported && !!userTag,
     isCurrentUser: isCurrentUserAuthor(message, currentUser.value),
     isBot: isAuthorBot(message),
+    user: imported ? null : message?.author || null,
     title: botTitle(message),
     badgeTitle: importedTitle(info),
     importerTag: info?.importer_user_tag,

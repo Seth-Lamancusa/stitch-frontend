@@ -519,7 +519,7 @@ import { useStore } from 'vuex';
 import MessageService from '../../services/MessageService.js';
 import BotVersionPicker from '../common/BotVersionPicker.vue';
 import BotVersionIndicator from '../common/BotVersionIndicator.vue';
-import { getAuthorUid } from '../../utils/messageCompat.js';
+import { getAuthorUid, testerFlags } from '../../utils/messageCompat.js';
 // SpeedDialService removed - using Vuex store
 
 const props = defineProps({
@@ -604,6 +604,7 @@ const deduplicateRecipients = (recipientEdges, currentUserUid) => {
         display_name: firstEdge.display_name,
         user_tag: firstEdge.user_tag,
         is_bot: !!(firstEdge.is_bot ?? firstEdge.isBot),
+        ...testerFlags(firstEdge),
         available_versions: firstEdge.available_versions ?? firstEdge.availableVersions ?? null
       };
     
@@ -1085,6 +1086,7 @@ const selectSearchResult = (user) => {
       display_name: user.display_name,
       user_tag: user.user_tag,
       is_bot: !!(user.is_bot ?? user.isBot),
+      ...testerFlags(user),
       available_versions: user.available_versions ?? user.availableVersions ?? null,
       public: true, // Default to public (CC)
       visible: true
@@ -1365,6 +1367,7 @@ const toggleSpeedDialUser = (user) => {
       user_tag: user.user_tag,
       // Speed dial users may include bot fields; if not, the UI will fall back to Default.
       is_bot: isBot,
+      ...testerFlags(user),
       available_versions: user.available_versions ?? user.availableVersions ?? managedMatch?.available_versions ?? managedMatch?.availableVersions ?? null
     });
   }
