@@ -121,8 +121,16 @@
                     :class="{ 'draft-speed-dial-card--selected': isSpeedDialUserSelected(u) }"
                   >
                     <button type="button" class="draft-speed-dial-info" @click="toggleSpeedDialUser(u)">
-                      <span class="draft-speed-dial-name">{{ u.display_name }}</span>
-                      <span class="draft-speed-dial-tag">@{{ u.user_tag }}</span>
+                      <img
+                        v-if="speedDialUserIcon(u)"
+                        class="draft-speed-dial-avatar"
+                        :src="speedDialUserIcon(u)"
+                        alt=""
+                      />
+                      <span class="draft-speed-dial-text">
+                        <span class="draft-speed-dial-name">{{ u.display_name }}</span>
+                        <span class="draft-speed-dial-tag">@{{ u.user_tag }}</span>
+                      </span>
                     </button>
                     <div class="draft-speed-dial-controls">
                       <label class="draft-speed-dial-checkbox">
@@ -177,8 +185,16 @@
                       :class="{ 'draft-speed-dial-card--selected': isSpeedDialUserSelected(u) }"
                     >
                       <button type="button" class="draft-speed-dial-info" @click="toggleSpeedDialUser(u)">
-                        <span class="draft-speed-dial-name">{{ u.display_name }}</span>
-                        <span class="draft-speed-dial-tag">@{{ u.user_tag }}</span>
+                        <img
+                          v-if="speedDialUserIcon(u)"
+                          class="draft-speed-dial-avatar"
+                          :src="speedDialUserIcon(u)"
+                          alt=""
+                        />
+                        <span class="draft-speed-dial-text">
+                          <span class="draft-speed-dial-name">{{ u.display_name }}</span>
+                          <span class="draft-speed-dial-tag">@{{ u.user_tag }}</span>
+                        </span>
                       </button>
                       <div class="draft-speed-dial-controls">
                         <label class="draft-speed-dial-checkbox">
@@ -452,6 +468,11 @@ const speedDialLoading = reactive({});
 
 function isSpeedDialUserSelected(u) {
   return (replyRecipients.value || []).some((r) => r.uid === u.uid);
+}
+
+function speedDialUserIcon(u) {
+  const value = u?.icon;
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 function isInSpeedDial(uid) {
@@ -1075,15 +1096,33 @@ const openSettingsModal = () => {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
   padding: 0;
   border: none;
   background: none;
   color: inherit;
   cursor: pointer;
   text-align: left;
+}
+
+.draft-speed-dial-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #fff;
+}
+
+.draft-speed-dial-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 .draft-speed-dial-name {

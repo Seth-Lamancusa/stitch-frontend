@@ -12,7 +12,11 @@ import AttachmentService from '@/services/AttachmentService.js';
 import { USER_TAG_HINT, USER_TAG_MAX, canonicalUserTag, sanitizeUserTagInput, userTagError } from '@/utils/userTag';
 
 const props = defineProps({
-  isOpen: Boolean
+  isOpen: Boolean,
+  scrollTo: {
+    type: String,
+    default: ''
+  }
 });
 
 const emit = defineEmits(['close']);
@@ -253,11 +257,42 @@ const onOverlayClick = () => {
   closeModal();
 };
 
+const modalContentEl = ref(null);
+const contactSectionEl = ref(null);
+const emailVerificationEl = ref(null);
+
+const scrollContactSectionIntoView = () => {
+  const scroller = modalContentEl.value;
+  const section = contactSectionEl.value;
+  if (!scroller || !section) return;
+
+  const padding = 8;
+  const scrollerRect = scroller.getBoundingClientRect();
+  const sectionRect = section.getBoundingClientRect();
+  let scrollTop = scroller.scrollTop + (sectionRect.top - scrollerRect.top) - padding;
+
+  const verify = emailVerificationEl.value;
+  if (verify) {
+    const delta = scrollTop - scroller.scrollTop;
+    const verifyBottom = verify.getBoundingClientRect().bottom - delta;
+    const visibleBottom = scrollerRect.bottom - padding;
+    if (verifyBottom > visibleBottom) {
+      scrollTop += verifyBottom - visibleBottom;
+    }
+  }
+
+  scroller.scrollTop = Math.max(0, scrollTop);
+};
+
 // Reset form whenever modal is opened
-watch(() => props.isOpen, (isOpen) => {
+watch(() => props.isOpen, async (isOpen) => {
   if (isOpen) {
     resetForm();
     loadManagersAndManagedUsers();
+    if (props.scrollTo === 'contact') {
+      await nextTick();
+      scrollContactSectionIntoView();
+    }
   }
 });
 
@@ -1666,7 +1701,7 @@ const deleteAccount = async () => {
           <button class="close-button" @click="closeModal">×</button>
         </div>
         
-        <div class="modal-content">
+        <div class="modal-content" ref="modalContentEl">
           <section class="form-section">
             <div class="section-header">
               <h4>Profile basics</h4>
@@ -1893,7 +1928,7 @@ const deleteAccount = async () => {
             <div class="field-error" v-if="botCapabilitiesError">{{ botCapabilitiesError }}</div>
           </section>
 
-          <section class="form-section">
+          <section class="form-section" ref="contactSectionEl">
             <div class="section-header">
               <h4>Contact & notifications</h4>
               <p>Verified channels can receive security alerts and automation events.</p>
@@ -1920,7 +1955,7 @@ const deleteAccount = async () => {
                   @blur="validateEmail"
                 />
               <div class="field-error" v-if="emailError">{{ emailError }}</div>
-              <div class="verification-stack warn" v-if="!isEmailVerified && hasSavedEmail">
+              <div class="verification-stack warn" ref="emailVerificationEl" v-if="!isEmailVerified && hasSavedEmail">
                 <span class="verify-label">Unverified</span>
                 <div class="verification-actions">
                   <button class="verify-btn" @click="sendEmailCode" :disabled="requestingEmailCode || emailCooldown > 0">{{ requestingEmailCode ? 'Sending…' : (emailCooldown > 0 ? `Resend in ${emailCooldown}s` : 'Send Code') }}</button>

@@ -6,19 +6,59 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { useStore } from 'vuex'
 import RegisterModal from '@/components/modals/RegisterModal.vue'
 
 const openModal = ref(false)
 const router = useRouter()
+const route = useRoute()
+const store = useStore()
+
+const authReady = computed(() => store.getters['auth/authReady'])
+const user = computed(() => store.getters['auth/user'])
+
+const isRegisterHash = () => {
+  const h = (route.hash || window.location.hash || '').toLowerCase()
+  return h === '#register'
+}
+
+const clearRegisterHash = () => {
+  if (!isRegisterHash()) return
+  try {
+    router.replace({ path: route.path, query: route.query, hash: '' })
+  } catch {
+    history.replaceState(null, '', window.location.pathname + window.location.search)
+  }
+}
+
+const syncFromHash = () => {
+  if (!authReady.value || user.value) return
+  if (isRegisterHash()) {
+    openModal.value = true
+  }
+}
 
 const open = () => { openModal.value = true }
-const close = () => { openModal.value = false }
+const close = () => {
+  openModal.value = false
+  clearRegisterHash()
+}
 const onSuccess = async () => {
+  clearRegisterHash()
   await new Promise(r => setTimeout(r, 200))
   router.push('/inbox')
 }
+
+watch([authReady, user, () => route.hash, () => route.fullPath], syncFromHash, { immediate: true })
+onMounted(() => {
+  window.addEventListener('hashchange', syncFromHash)
+  syncFromHash()
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('hashchange', syncFromHash)
+})
 </script>
 
 <style scoped>

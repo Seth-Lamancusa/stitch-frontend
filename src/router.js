@@ -6,14 +6,6 @@ import NewThreadView from './views/app_views/NewThreadView.vue';
 import GraphView from './views/app_views/GraphView.vue';
 import SearchView from './views/app_views/SearchView.vue';
 import ChannelsView from './views/app_views/ChannelsView.vue';
-import HomeView from './views/info_views/HomeView.vue';
-import AboutView from './views/info_views/AboutView.vue';
-import ArchitectureView from './views/info_views/ArchitectureView.vue';
-import TermsView from './views/info_views/TermsView.vue';
-import HowView from './views/info_views/HowView.vue';
-import StitchBotsView from './views/info_views/StitchBotsView.vue';
-import ChatsView from './views/info_views/ChatsView.vue';
-import FeaturesView from './views/info_views/FeaturesView.vue';
 import MessageListView from './views/app_views/MessageListView.vue';
 import PasswordResetView from './views/app_views/PasswordResetView.vue';
 import SurveyView from './views/app_views/SurveyView.vue';
@@ -22,18 +14,33 @@ import AdminMetricsView from './views/app_views/AdminMetricsView.vue';
 import AdminAdmissionsView from './views/app_views/AdminAdmissionsView.vue';
 import store from './store';
 import { P } from './auth/constants.js';
-import { APP_HOST } from './config/appConfig.js';
 
 import StitchPlaygroundView from './views/app_views/StitchPlaygroundView.vue';
 
-// The old marketing page still lives at /home. Root follows the app on the
-// deployed host and on local dev; other hosts keep the legacy page.
-const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+const MARKETING_ORIGIN = 'https://stitch.fyi';
+const MARKETING_REDIRECTS = {
+  '/home': `${MARKETING_ORIGIN}/`,
+  '/about': `${MARKETING_ORIGIN}/about.html`,
+  '/terms': `${MARKETING_ORIGIN}/legal.html`,
+  '/legal': `${MARKETING_ORIGIN}/legal.html`,
+  '/bots': `${MARKETING_ORIGIN}/models.html`,
+  '/models': `${MARKETING_ORIGIN}/models.html`,
+  '/how': `${MARKETING_ORIGIN}/product.html`,
+  '/features': `${MARKETING_ORIGIN}/product.html`,
+  '/architecture': `${MARKETING_ORIGIN}/product.html`,
+  '/chats': `${MARKETING_ORIGIN}/product.html`,
+  '/pricing': `${MARKETING_ORIGIN}/pricing.html`,
+  '/roadmap': `${MARKETING_ORIGIN}/roadmap.html`,
+  '/join': `${MARKETING_ORIGIN}/join.html`,
+  '/contact': `${MARKETING_ORIGIN}/contact.html`,
+};
 
-function rootPath() {
-  const host = window.location.hostname;
-  if (host === APP_HOST || LOCAL_HOSTS.has(host)) return '/history';
-  return '/home';
+function rootPath(to) {
+  return {
+    path: '/history',
+    query: to?.query || {},
+    hash: to?.hash || window.location.hash || '',
+  };
 }
 
 const routes = [
@@ -48,6 +55,14 @@ const routes = [
   {
     path: '/',
     redirect: rootPath
+  },
+  {
+    path: '/register',
+    redirect: (to) => ({
+      path: '/history',
+      query: to.query,
+      hash: '#register',
+    })
   },
   {
     path: '/search',
@@ -74,43 +89,6 @@ const routes = [
     meta: {
       title: 'Weekly survey'
     }
-  },
-  {
-    path: '/home',
-    name: 'home',
-    component: HomeView
-  },
-  {
-    path: '/about',
-    name: 'about',
-    component: AboutView
-  },
-  {
-    path: '/architecture',
-    component: ArchitectureView
-  },
-  {
-    path: '/terms',
-    component: TermsView
-  },
-  {
-    path: '/how',
-    component: HowView
-  },
-  {
-    path: '/bots',
-    name: 'bots',
-    component: StitchBotsView
-  },
-  {
-    path: '/chats',
-    name: 'chats',
-    component: ChatsView
-  },
-  {
-    path: '/features',
-    name: 'features',
-    component: FeaturesView
   },
   {
     path: '/inbox',
@@ -203,16 +181,14 @@ const router = createRouter({
   routes
 });
 
-// Navigation guard to prevent Vue router from handling backend-only routes
+// Navigation guard to send marketing paths to stitch.fyi
 router.beforeEach(async (to, from, next) => {
-  // List of routes that should bypass Vue router and go directly to backend
-  const backendOnlyRoutes = ['/metrics'];
-  
-  if (backendOnlyRoutes.includes(to.path)) {
-    // Force a full page navigation to the backend
-    window.location.href = to.path;
-    return;
+  const marketingTarget = MARKETING_REDIRECTS[to.path];
+  if (marketingTarget) {
+    window.location.replace(marketingTarget + (to.hash || ''));
+    return false;
   }
+
   // Ensure auth is initialized before permission checks
   try {
     if (!store.getters['auth/authReady']) {

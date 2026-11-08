@@ -96,20 +96,21 @@ const onOverlayClick = () => {
 
 watch(() => props.isOpen, (open) => {
   if (open) {
-    email.value = ''
+    const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+    email.value = (params?.get('email') || '').trim()
     phone.value = ''
     endpoint.value = ''
-    userTag.value = ''
+    userTag.value = sanitizeUserTagInput(params?.get('username') || params?.get('tag') || '')
     displayName.value = ''
     password.value = ''
     showPassword.value = false
     busy.value = false
     error.value = ''
     notify.value = { email: false, phone: false, endpoint: false }
-    tagError.value = ''
+    tagError.value = userTag.value ? userTagError(userTag.value) : ''
     isPrivate.value = false
   }
-})
+}, { immediate: true })
 
 const onClose = () => emit('close')
 

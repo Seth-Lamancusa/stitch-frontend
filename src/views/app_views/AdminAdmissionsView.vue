@@ -8,7 +8,8 @@
       <div class="page-header">
         <h1 class="page-title">Join lists</h1>
         <p class="page-description">
-          Who is on each list, whether they can register, and whether they have API access.
+          Who is on each list, the note they left, whether they can register, and whether they have API access.
+          Admit opens registration on a platform list. On an API list it grants API access, and on API beta it also marks them as a tester.
         </p>
       </div>
 
@@ -50,8 +51,10 @@
               <th scope="col">Email</th>
               <th scope="col">{{ current.nameLabel }}</th>
               <th scope="col">Joined</th>
+              <th scope="col">Note</th>
               <th scope="col">Can register</th>
               <th scope="col">API access</th>
+              <th scope="col"><span class="sr-only">Admit</span></th>
             </tr>
           </thead>
           <tbody>
@@ -59,8 +62,24 @@
               <td>{{ row.email }}</td>
               <td>{{ row.label || '—' }}</td>
               <td>{{ formatWhen(row.requested_at) }}</td>
+              <td class="note-cell">{{ row.note || '—' }}</td>
               <td>{{ row.registration_open ? 'Yes' : 'No' }}</td>
               <td>{{ row.api_allowed ? 'Yes' : 'No' }}</td>
+              <td class="action-cell">
+                <button
+                  v-if="!gateOpen(row)"
+                  type="button"
+                  class="list-btn admit-btn"
+                  :disabled="admitting === row.email"
+                  :aria-label="`${admitLabel} ${row.email}`"
+                  @click="admit(row)"
+                >
+                  {{ admitting === row.email ? 'Admitting…' : admitLabel }}
+                </button>
+                <p v-if="actionError && actionError.email === row.email" class="row-error" role="alert">
+                  {{ actionError.message }}
+                </p>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -81,7 +100,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import TabViewLayout from '../../components/layouts/TabViewLayout.vue';
-import { getAdmissionList } from '../../services/AdminService.js';
+import { admitAdmission, getAdmissionList } from '../../services/AdminService.js';
 
 const lists = [
   { id: 'platform_waitlist', label: 'Platform waitlist', nameLabel: 'Username' },
@@ -98,12 +117,19 @@ const rows = ref([]);
 const total = ref(0);
 const loading = ref(false);
 const error = ref('');
+const admitting = ref('');
+const actionError = ref(null);
 
 const current = computed(() => lists.find((item) => item.id === selected.value) || lists[0]);
+const admitLabel = computed(() => (current.value.id.startsWith('api_') ? 'Admit to API' : 'Admit to platform'));
 const rangeStart = computed(() => (rows.value.length ? page.value * pageSize + 1 : 0));
 const rangeEnd = computed(() => page.value * pageSize + rows.value.length);
 const hasNext = computed(() => rangeEnd.value < total.value);
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
+
+function gateOpen(row) {
+  return current.value.id.startsWith('api_') ? Boolean(row.api_allowed) : Boolean(row.registration_open);
+}
 
 function formatWhen(value) {
   if (!value) return '—';
@@ -116,6 +142,7 @@ function choose(id) {
   if (id === selected.value && page.value === 0) return;
   selected.value = id;
   page.value = 0;
+  actionError.value = null;
   fetchData();
 }
 
@@ -124,6 +151,31 @@ function go(next) {
   if (next > page.value && !hasNext.value) return;
   page.value = next;
   fetchData();
+}
+
+async function admit(row) {
+  const listName = selected.value;
+  const email = row.email;
+  actionError.value = null;
+  admitting.value = email;
+  try {
+    const updated = await admitAdmission(listName, email);
+    if (selected.value !== listName) return;
+    const index = rows.value.findIndex((item) => item.email === email);
+    if (index >= 0 && updated && typeof updated === 'object') {
+      const next = rows.value.slice();
+      next[index] = { ...next[index], ...updated, email };
+      rows.value = next;
+    }
+  } catch (err) {
+    if (selected.value !== listName) return;
+    actionError.value = {
+      email,
+      message: err.response?.data?.detail || err.message || 'Could not admit this address',
+    };
+  } finally {
+    if (admitting.value === email) admitting.value = '';
+  }
 }
 
 async function fetchData() {
@@ -157,7 +209,7 @@ onMounted(fetchData);
 <style scoped>
 .admin-admissions-view {
   padding: 8px;
-  max-width: 960px;
+  max-width: 1100px;
   margin: 0 auto;
 }
 
@@ -287,5 +339,41 @@ onMounted(fetchData);
 .admissions-table th {
   font-weight: 600;
   background: var(--color-surface, #f5f5f5);
+}
+
+.note-cell {
+  max-width: 280px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.action-cell {
+  white-space: nowrap;
+}
+
+.admit-btn {
+  background: var(--color-primary, #333);
+  color: var(--color-primary-inverse, #fff);
+  border-color: var(--color-primary, #333);
+}
+
+.row-error {
+  margin: 0.35rem 0 0 0;
+  color: #721c24;
+  font-size: 0.75rem;
+  white-space: normal;
+  max-width: 160px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>

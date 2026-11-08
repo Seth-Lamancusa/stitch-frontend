@@ -29,3 +29,17 @@ export function getAdmissionList(listName, page = {}) {
     .get('/admin/admissions', { params: { list: listName, offset, limit } })
     .then((res) => res.data || { list: listName, total: 0, offset, limit, rows: [] });
 }
+
+/**
+ * Open the gate for one address on the list the admin is viewing.
+ * Platform lists open registration. API lists grant API access. API beta also
+ * marks the address as an API tester.
+ * @param {string} listName
+ * @param {string} email
+ * @returns {Promise<{ email: string, label: string|null, requested_at: string|null, note: string|null, registration_open: boolean, api_allowed: boolean }>}
+ */
+export function admitAdmission(listName, email) {
+  return apiClient
+    .post('/admin/admissions', { list: listName, email })
+    .then((res) => res.data);
+}

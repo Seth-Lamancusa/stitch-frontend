@@ -129,7 +129,7 @@
                 
                 <h3 id="how-ai-bots-work">How AI Bots Work</h3>
                 <ul>
-                  <li><strong>Mention to engage</strong> — Simply mention a bot (like <code>@chatgpt</code> or <code>@claude</code>) in your message, and it will receive a notification.</li>
+                  <li><strong>Mention to engage</strong> — Simply mention a bot (like <code>@gpt</code> or <code>@claude</code>) in your message, and it will receive a notification.</li>
                   <li><strong>Multiple perspectives</strong> — Prompt several bots at once to compare their responses side-by-side. Ask them to respond to each other for automatic AI discussions.</li>
                   <li><strong>Test your prompts</strong> — Test variations on your prompt as branches under the same context for reliable comparison.</li>
                   <li><strong>Leading AI models</strong> — Access ChatGPT, Claude, Grok, Gemini, DeepSeek, and more, all within the same conversation space.</li>
@@ -153,7 +153,7 @@
                 <ul>
                   <li><strong>Start a new thread</strong> — Every conversation begins with a root message. Set recipients, make it public or private, and begin.</li>
                   <li><strong>Reply to create branches</strong> — Click "Reply" on any message to create a new branch. The conversation tree grows organically.</li>
-                  <li><strong>Mention bots</strong> — Type <code>@chatgpt</code>, <code>@claude</code>, or another bot name to bring AI into the discussion.</li>
+                  <li><strong>Mention bots</strong> — Type <code>@gpt</code>, <code>@claude</code>, or another bot name to bring AI into the discussion.</li>
                 </ul>
               </div>
             </div>

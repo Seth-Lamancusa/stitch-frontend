@@ -2,9 +2,9 @@
   <div class="app-layout app-canvas">
     <div class="app-header">
       <div class="branding">
-        <router-link to="/home" class="logo-link" @click.prevent="onLogoClick">
+        <a href="https://stitch.fyi" class="logo-link" title="Stitch home">
           <img src="@/assets/stitch_logo.png" alt="Stitch" class="logo-image" />
-        </router-link>
+        </a>
       </div>
       
       <!-- Navigation Tabs - desktop only -->
@@ -286,13 +286,14 @@
     <div class="main-content">
       <div v-if="user && authReady && !isEmailVerified && !isDelegated && !(user && user.is_managed)" class="verify-banner">
         <span>Verify your email to unlock messaging & notifications.</span>
-        <a class="verify-link" href="#" @click.prevent="openProfileModal">Verify now</a>
+        <a class="verify-link" href="#" @click.prevent="openProfileModal('contact')">Verify now</a>
       </div>
       <slot></slot>
     </div>
     
     <ProfileEditModal 
       :isOpen="isProfileModalOpen" 
+      :scrollTo="profileScrollTo"
       @close="closeProfileModal" 
     />
     <DevModal 
@@ -386,6 +387,7 @@ const unreadCount = computed(() => store.getters['messages/getUnreadMessageCount
 const isUnreadCountLoading = computed(() => store.getters['messages/isLoading']('fetchingUnreadCount'));
 const isLoggingIn = ref(false);
 const isProfileModalOpen = ref(false);
+const profileScrollTo = ref('');
 const isApiKeysModalOpen = ref(false);
 const isPrincipalMenuOpen = ref(false);
 const principalMenuWrapperRef = ref(null);
@@ -813,14 +815,16 @@ watch(
   { immediate: true }
 );
 
-const openProfileModal = () => {
+const openProfileModal = (scrollTo) => {
   if (user.value && !isSwitchingPrincipal.value) {
+    profileScrollTo.value = typeof scrollTo === 'string' ? scrollTo : '';
     isProfileModalOpen.value = true;
   }
 };
 
 const closeProfileModal = () => {
   isProfileModalOpen.value = false;
+  profileScrollTo.value = '';
 };
 
 // Removed click-driven tab syncing; route is now the single source of truth
@@ -837,16 +841,6 @@ const closeApiKeysModal = () => {
 
 const openSettingsModal = () => {
   store.dispatch('ui/setSettingsModalOpen', true);
-};
-
-const onLogoClick = (event) => {
-  console.log('[TabViewLayout] Stitch logo clicked → navigating to /home');
-  try {
-    router.push('/home');
-  } catch (e) {
-    console.warn('[TabViewLayout] router.push to /home failed, falling back to replace', e);
-    router.replace('/home');
-  }
 };
 
 // Global create button handlers
