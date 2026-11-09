@@ -11,7 +11,6 @@ import {
   chooseBranchChild,
   contextWalkIds,
   explicitDefaultOutgoing,
-  outgoingChildPool,
   resolvedBranchParent,
   uniqueIds,
 } from '../branchContext.js'
@@ -231,7 +230,8 @@ export default {
           mergedChildIds = [...new Set([...existingMessage.child_ids, ...mergedChildIds])];
         }
 
-        // For branch validation, we must consider both replies AND stitch links.
+        // An existing branch_child may be a reply or a stitch the user already opened.
+        // Automatic replacement below uses replies only.
         const stitchChildIds = message.stitch_child_ids || existingMessage.stitch_child_ids || [];
         const allPotentialChildren = [...new Set([...mergedChildIds, ...stitchChildIds])];
 
@@ -290,34 +290,33 @@ export default {
               return 0;
             });
             
-            // Prefer the last reply, or fall back to the last stitch if no replies exist in this specific merge
-            mergedMessage.branch_child = orderedIds.length > 0 ? orderedIds[orderedIds.length - 1] : stitchChildIds[stitchChildIds.length - 1];
+            // Replies only. A stitch is not an automatic continuation.
+            mergedMessage.branch_child = orderedIds.length > 0 ? orderedIds[orderedIds.length - 1] : null;
           } else {
-            // No custom order - use most recent by timestamp
-            const childMessages = allPotentialChildren
+            // No custom order - use most recent loaded reply, then the last reply id
+            const childMessages = mergedChildIds
               .map(childId => state.messages[childId])
               .filter(child => child)
               .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-            mergedMessage.branch_child = childMessages.length > 0 ? 
-              childMessages[childMessages.length - 1].id : 
-              allPotentialChildren[allPotentialChildren.length - 1];
+            mergedMessage.branch_child = childMessages.length > 0 ?
+              childMessages[childMessages.length - 1].id :
+              (mergedChildIds.length > 0 ? mergedChildIds[mergedChildIds.length - 1] : null);
           }
         } else if (hasChildren) {
-          // Keep existing selection if it's still valid (in replies OR stitches)
+          // Keep an existing selection, including a stitch chosen by Load stitches.
           const isBranchChildValid = allPotentialChildren.includes(currentBranchChild);
           if (isBranchChildValid) {
             mergedMessage.branch_child = currentBranchChild;
           } else if (explicitDefault) {
             mergedMessage.branch_child = explicitDefault;
           } else {
-            // Re-select branch_child respecting pool
-            const childMessages = allPotentialChildren
+            const childMessages = mergedChildIds
               .map(childId => state.messages[childId])
               .filter(child => child)
               .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-            mergedMessage.branch_child = childMessages.length > 0 ? 
-              childMessages[childMessages.length - 1].id : 
-              allPotentialChildren[allPotentialChildren.length - 1];
+            mergedMessage.branch_child = childMessages.length > 0 ?
+              childMessages[childMessages.length - 1].id :
+              (mergedChildIds.length > 0 ? mergedChildIds[mergedChildIds.length - 1] : null);
           }
         } else {
           mergedMessage.branch_child = null;
@@ -1451,16 +1450,15 @@ export default {
         if (wasParentBranchChild && parentMessage) {
           // Get updated parent after REMOVE_MESSAGE_CASCADE might have modified it
           const updatedParent = state.messages[parentId];
-          const remaining = outgoingChildPool(updatedParent).filter(id => id !== messageId);
+          const replyIds = (updatedParent?.child_ids || []).filter(id => id !== messageId);
+          const explicitDefault = explicitDefaultOutgoing(updatedParent);
+          const nextDefault = explicitDefault && explicitDefault !== messageId ? explicitDefault : null;
 
-          if (updatedParent && remaining.length > 0) {
-            const explicitDefault = explicitDefaultOutgoing(updatedParent);
-            const orderedChildIds = getters.getChildIds(parentId);
-            const newBranchChildId = (explicitDefault && explicitDefault !== messageId)
-              ? explicitDefault
-              : (orderedChildIds.length > 0
-                ? orderedChildIds[orderedChildIds.length - 1]
-                : remaining[remaining.length - 1]);
+          if (updatedParent && (nextDefault || replyIds.length > 0)) {
+            const orderedReplies = getters.getChildIds(parentId)
+              .filter(id => replyIds.some(replyId => sameId(replyId, id)));
+            const newBranchChildId = nextDefault
+              || (orderedReplies.length > 0 ? orderedReplies[orderedReplies.length - 1] : replyIds[replyIds.length - 1]);
 
             commit('SET_BRANCH_CHILD', { 
               messageId: parentId, 

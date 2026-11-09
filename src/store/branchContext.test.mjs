@@ -32,6 +32,8 @@ assert.equal(resolvedBranchParent({ branch_parent: 's', parent_id: 'q' }), 's');
 
 assert.equal(chooseBranchChild({ ...messages.m, default_outgoing: 'b' }, messages), 'b');
 assert.equal(chooseBranchChild(messages.m, messages), 'c');
+assert.equal(chooseBranchChild({ id: 'm', child_ids: [], stitch_child_ids: ['b'] }, messages), null);
+assert.equal(chooseBranchChild({ id: 'm', child_ids: ['a'], stitch_child_ids: ['c'] }, { c: messages.c }), null);
 
 assert.deepEqual(uniqueIds(['s', 's', '', null, 't', 's']), ['s', 't']);
 assert.deepEqual(uniqueIds(undefined), []);

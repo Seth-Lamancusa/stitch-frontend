@@ -53,7 +53,9 @@ export function continuationIds(message, isUnloaded) {
 export function chooseBranchChild(message, messages) {
   const explicit = explicitDefaultOutgoing(message);
   if (explicit) return explicit;
-  const pool = outgoingChildPool(message);
+  // Automatic continuation follows replies. A stitch is shown only after an
+  // explicit choice, such as Load stitches setting branch_child.
+  const pool = message?.child_ids || [];
   const loaded = pool
     .map(id => messages && messages[id])
     .filter(Boolean)
