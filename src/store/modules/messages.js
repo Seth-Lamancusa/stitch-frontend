@@ -926,13 +926,25 @@ export default {
       const stored = (id) => !!(state.messages[id] || state.messages[String(id)]);
       const missing = contextIds.filter(id => !stored(id));
       if (missing.length) {
-        await Promise.all(missing.map(async (id) => {
+        const mockIds = missing.filter(id => String(id).startsWith('msg_'));
+        const realIds = missing.filter(id => !String(id).startsWith('msg_'));
+        if (mockIds.length) {
+          await Promise.all(mockIds.map(async (id) => {
+            try {
+              await dispatch('loadMessage', id);
+            } catch (error) {
+              console.error('[messages] stored context message failed', { messageId, contextId: id, error });
+            }
+          }));
+        }
+        if (realIds.length) {
           try {
-            await dispatch('loadMessage', id);
+            const loaded = await MessageService.getMessagesByIds(realIds);
+            if (loaded.length) commit('SET_MESSAGES', loaded);
           } catch (error) {
-            console.error('[messages] stored context message failed', { messageId, contextId: id, error });
+            console.error('[messages] stored context batch failed', { messageId, error });
           }
-        }));
+        }
       }
 
       const failedIds = contextIds.filter(id => !stored(id));

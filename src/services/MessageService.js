@@ -81,6 +81,41 @@ export default {
     return response.data
   },
 
+  // Depth-0 traversal read for many ids. The server accepts 200 per request.
+  async getMessagesByIds(ids) {
+    const unique = []
+    const seen = new Set()
+    for (const id of ids || []) {
+      if (id == null || id === '') continue
+      const key = String(id)
+      if (seen.has(key)) continue
+      seen.add(key)
+      unique.push(key)
+    }
+    if (!unique.length) return []
+
+    const headers = getAuthHeaders()
+    const loaded = []
+    let lastError = null
+    const limit = 200
+    for (let start = 0; start < unique.length; start += limit) {
+      const chunk = unique.slice(start, start + limit)
+      try {
+        const response = await apiClient.get('/messages/by-ids', {
+          headers,
+          params: { ids: chunk.join(',') },
+        })
+        const rows = Array.isArray(response.data) ? response.data : []
+        loaded.push(...rows)
+      } catch (error) {
+        lastError = error
+        console.error('[MessageService] getMessagesByIds failed', { count: chunk.length, error })
+      }
+    }
+    if (!loaded.length && lastError) throw lastError
+    return loaded
+  },
+
   async sendAnnotation({ targetId, content, part = null }) {
     // The server copies the host's public flag, recipients, and channels.
     const messageData = {

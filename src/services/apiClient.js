@@ -6,7 +6,7 @@ import logger from './logger'
 // Centralized Axios client for public SPA — cookie sessions only
 const apiClient = axios.create({
   baseURL: '/v1',
-  timeout: 15000,
+  timeout: 60000,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
