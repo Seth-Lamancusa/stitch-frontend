@@ -159,6 +159,12 @@ export default {
     return apiClient.patch(`/messages/${id}/default_outgoing`, { default_outgoing: defaultOutgoing }, { headers })
   },
 
+  // Set or clear the default incoming parent. null clears it.
+  async updateDefaultIncoming(id, defaultIncoming) {
+    const headers = getAuthHeaders()
+    return apiClient.patch(`/messages/${id}/default_incoming`, { default_incoming: defaultIncoming }, { headers })
+  },
+
   // Unified search: content (q) and tags
   async search({ q = null, tags = [], match = 'any', skip = 0, limit = 15, from = null, to = null } = {}) {
     const headers = getAuthHeaders()

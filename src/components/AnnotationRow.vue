@@ -56,6 +56,17 @@
             class="import-source-link"
           >🔗</a>
         </span>
+        <button
+          type="button"
+          class="annotation-open-thread"
+          title="Open in thread"
+          aria-label="Open in thread"
+          @click.stop="openInThread(annotation)"
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M3 8h9.5M8.5 4.25 12.75 8 8.5 11.75" />
+          </svg>
+        </button>
       </div>
       <div class="annotation-text">
         <AnnotatedBody
@@ -105,6 +116,17 @@
               class="import-source-link"
             >🔗</a>
           </span>
+          <button
+            type="button"
+            class="annotation-open-thread"
+            title="Open in thread"
+            aria-label="Open in thread"
+            @click.stop="openInThread(reply)"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M3 8h9.5M8.5 4.25 12.75 8 8.5 11.75" />
+            </svg>
+          </button>
         </div>
         <div class="annotation-text">
           <AnnotatedBody
@@ -160,6 +182,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useStore } from 'vuex'
 import AnnotatedBody from './AnnotatedBody.vue'
 import FormattedContent from './FormattedContent/index.vue'
@@ -178,6 +201,7 @@ const props = defineProps({
 })
 
 const store = useStore()
+const router = useRouter()
 const open = ref(false)
 const hover = ref(false)
 const confirming = ref(false)
@@ -302,6 +326,16 @@ function toggle() {
   open.value = !open.value
 }
 
+async function openInThread(message) {
+  const id = message?.id
+  if (!id) return
+  try {
+    await router.push(`/messages/${id}`)
+  } catch (error) {
+    console.error('[annotation] open in thread failed', error)
+  }
+}
+
 async function onDelete() {
   if (deleting.value) return
   if (!confirming.value) {
@@ -390,8 +424,8 @@ async function onDelete() {
   align-items: baseline;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 7px;
-  margin-bottom: 2px;
+  margin-top: 11px;
+  margin-bottom: 6px;
   color: var(--color-text);
   font-size: var(--font-size-xs);
   letter-spacing: 0.01em;
@@ -430,6 +464,33 @@ async function onDelete() {
   opacity: 1;
 }
 
+.annotation-open-thread {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  align-self: center;
+  width: 18px;
+  height: 18px;
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.annotation-open-thread svg {
+  width: 12px;
+  height: 12px;
+}
+
+.annotation-open-thread:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
 .annotation-reply {
   margin-top: 10px;
 }
@@ -462,6 +523,18 @@ async function onDelete() {
 .annotation-card .annotation-text :deep(.formatted-content) {
   color: var(--color-text);
   font-size: calc(var(--message-font-size, 1.125rem) - 0.25rem);
+}
+
+/* Message rules use a 32px margin. Inside an annotation that gap dwarfs the
+   smaller type, so keep a hairline and only a few pixels of space around it.
+   Paragraph margins collapse with the rule, so pull those in too. */
+.annotation-text :deep(hr) {
+  height: 1px;
+  margin: 4px 0;
+}
+
+.annotation-text :deep(p:has(+ hr)) {
+  margin-bottom: 4px;
 }
 
 .annotation-text :deep(.message-parts > .message-part:not(:last-child)) {

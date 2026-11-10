@@ -330,6 +330,26 @@ const canSetDefaultOutgoing = computed(() => {
   return outgoing.includes(props.message.id);
 });
 
+const incomingParentIds = computed(() => {
+  const ids = [];
+  if (props.message.parent_id) ids.push(props.message.parent_id);
+  for (const id of props.message.stitch_parent_ids || []) {
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
+});
+
+const isDefaultIncoming = computed(() => {
+  const parentId = derivedParentId.value;
+  return !!(parentId && props.message.default_incoming && props.message.default_incoming === parentId);
+});
+
+const canSetDefaultIncoming = computed(() => {
+  if (!store.getters['auth/canUpdateReplyOrder'](props.message)) return false;
+  const parentId = derivedParentId.value;
+  return !!parentId && incomingParentIds.value.includes(parentId);
+});
+
 async function viewStoredContext() {
   try {
     const result = await store.dispatch('messages/viewMessageContext', props.message.id);
@@ -396,6 +416,15 @@ const menuActions = computed(() => {
       run: toggleDefaultOutgoing
     });
   }
+  if (canSetDefaultIncoming.value) {
+    items.splice(items.length - 1, 0, {
+      id: 'set-default-incoming',
+      emoji: '⭐',
+      text: isDefaultIncoming.value ? 'Clear default incoming' : 'Set default incoming',
+      close: true,
+      run: toggleDefaultIncoming
+    });
+  }
   if (canDelete.value) {
     items.push({
       id: 'delete',
@@ -435,6 +464,14 @@ function findSimilar() {
   router.push({ path: '/search', query: { similar_to: props.message.id } });
 }
 
+function keepMessageLists(updated, existing) {
+  if (updated.parent_id === undefined) updated.parent_id = existing.parent_id;
+  if (!Array.isArray(updated.child_ids)) updated.child_ids = existing.child_ids || [];
+  if (!Array.isArray(updated.stitch_child_ids)) updated.stitch_child_ids = existing.stitch_child_ids || [];
+  if (!Array.isArray(updated.stitch_parent_ids)) updated.stitch_parent_ids = existing.stitch_parent_ids || [];
+  return updated;
+}
+
 async function toggleDefaultOutgoing() {
   const parentId = props.activeParentId || props.message.parent_id;
   const parent = columnParent.value;
@@ -443,16 +480,28 @@ async function toggleDefaultOutgoing() {
   try {
     const response = await MessageService.updateDefaultOutgoing(parentId, next);
     if (response?.data?.id) {
-      const updated = response.data;
       const existing = store.getters['messages/getMessage'](parentId) || {};
-      if (updated.parent_id === undefined) updated.parent_id = existing.parent_id;
-      if (!Array.isArray(updated.child_ids)) updated.child_ids = existing.child_ids || [];
-      if (!Array.isArray(updated.stitch_child_ids)) updated.stitch_child_ids = existing.stitch_child_ids || [];
-      store.commit('messages/SET_MESSAGE', updated);
+      store.commit('messages/SET_MESSAGE', keepMessageLists(response.data, existing));
     }
   } catch (error) {
     console.error('[FunctionMessageRow] Failed to update default outgoing', error);
     store.commit('ui/SET_ERROR', 'Failed to update default outgoing');
+  }
+}
+
+async function toggleDefaultIncoming() {
+  const parentId = derivedParentId.value;
+  if (!parentId || !incomingParentIds.value.includes(parentId)) return;
+  const next = isDefaultIncoming.value ? null : parentId;
+  try {
+    const response = await MessageService.updateDefaultIncoming(props.message.id, next);
+    if (response?.data?.id) {
+      const existing = store.getters['messages/getMessage'](props.message.id) || {};
+      store.commit('messages/SET_MESSAGE', keepMessageLists(response.data, existing));
+    }
+  } catch (error) {
+    console.error('[FunctionMessageRow] Failed to update default incoming', error);
+    store.commit('ui/SET_ERROR', 'Failed to update default incoming');
   }
 }
 

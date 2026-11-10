@@ -1056,6 +1056,22 @@ export default {
       return report.messages;
     },
 
+    // One request for the visible default path in either direction.
+    // Up uses default_incoming, then parent_id. Down uses default_outgoing,
+    // reply or stitch, then the latest reply once that default runs out.
+    async loadDefaultPath({ dispatch }, { messageId, up = 0, down = 0 } = {}) {
+      if (!messageId) return [];
+      return dispatch('loadTraversal', {
+        messageId,
+        up_depth: up,
+        down_depth: down,
+        get_replies: true,
+        get_children: false,
+        default_path_only: true,
+        fallback_latest: true,
+      });
+    },
+
     // One request for the whole downward chain. Hops use default_outgoing, then
     // the latest reply, and the server returns that path together.
     async loadDefaultOutgoingChain({ dispatch }, messageId) {
@@ -1164,11 +1180,11 @@ export default {
       return dispatch('loadTraversal', { messageId, up_depth, down_depth: 0, get_replies, get_children });
     },
 
-    // Reload the loaded reply chain. The client graph cannot discover replies that
-    // arrived while it was cached, so the server walks from the deepest loaded reply
-    // on the visible spine. Stitch links are not part of that spine. up_depth is the
-    // number of reply ancestors already in the store, capped at LOAD_RADIUS, plus one
-    // hop of reply bodies past the leaf.
+    // Reload the loaded chain. The client graph cannot discover replies that
+    // arrived while it was cached, so the server walks from the deepest loaded
+    // message on the visible spine, including a stitch the default path stepped
+    // through. up_depth is the number of reply ancestors already in the store,
+    // capped at LOAD_RADIUS, plus one hop of reply bodies past the leaf.
     async refreshLoadedReplyChain({ dispatch, state }, { messageId } = {}) {
       if (!messageId || !state.messages[messageId]) return [];
 
@@ -1177,8 +1193,6 @@ export default {
       while (leaf) {
         const nextId = leaf.branch_child;
         if (!nextId || !state.messages[nextId]) break;
-        const replyIds = new Set((leaf.child_ids || []).map(id => String(id)));
-        if (!replyIds.has(String(nextId))) break;
         if (seenDown.has(String(nextId))) break;
         seenDown.add(String(nextId));
         leaf = state.messages[nextId];

@@ -209,6 +209,18 @@
           </div>
 
         <div v-if="!inListView" class="header-row-right">
+          <button
+            v-if="message.type === 'annotation' && message.parent_id"
+            type="button"
+            class="annotation-parent-thread"
+            title="Open reply parent in thread"
+            aria-label="Open reply parent in thread"
+            @click.stop="openReplyParentInThread"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M13 8H3.5M7.5 4.25 3.25 8 7.5 11.75" />
+            </svg>
+          </button>
           <span
             v-if="isDefaultOutgoingChild"
             class="default-outgoing-mark"
@@ -589,6 +601,28 @@ export default {
       return !!(parent && parent.default_outgoing && parent.default_outgoing === props.message.id);
     };
 
+    const incomingParentIds = () => {
+      const ids = [];
+      if (props.message.parent_id) ids.push(props.message.parent_id);
+      for (const id of props.message.stitch_parent_ids || []) {
+        if (id && !ids.includes(id)) ids.push(id);
+      }
+      return ids;
+    };
+
+    const isShownDefaultIncoming = () => {
+      const parentId = columnParentId();
+      return !!(parentId && props.message.default_incoming && props.message.default_incoming === parentId);
+    };
+
+    const keepMessageLists = (updated, existing) => {
+      if (updated.parent_id === undefined) updated.parent_id = existing.parent_id;
+      if (!Array.isArray(updated.child_ids)) updated.child_ids = existing.child_ids || [];
+      if (!Array.isArray(updated.stitch_child_ids)) updated.stitch_child_ids = existing.stitch_child_ids || [];
+      if (!Array.isArray(updated.stitch_parent_ids)) updated.stitch_parent_ids = existing.stitch_parent_ids || [];
+      return updated;
+    };
+
     const toggleDefaultOutgoing = async () => {
       const parentId = columnParentId();
       const parent = columnParent();
@@ -597,16 +631,28 @@ export default {
       try {
         const response = await MessageService.updateDefaultOutgoing(parentId, next);
         if (response?.data?.id) {
-          const updated = response.data;
           const existing = store.getters['messages/getMessage'](parentId) || {};
-          if (updated.parent_id === undefined) updated.parent_id = existing.parent_id;
-          if (!Array.isArray(updated.child_ids)) updated.child_ids = existing.child_ids || [];
-          if (!Array.isArray(updated.stitch_child_ids)) updated.stitch_child_ids = existing.stitch_child_ids || [];
-          store.commit('messages/SET_MESSAGE', updated);
+          store.commit('messages/SET_MESSAGE', keepMessageLists(response.data, existing));
         }
       } catch (e) {
         console.error('[MessageNode] Failed to update default outgoing', e);
         store.commit('ui/SET_ERROR', 'Failed to update default outgoing');
+      }
+    };
+
+    const toggleDefaultIncoming = async () => {
+      const parentId = columnParentId();
+      if (!parentId || !incomingParentIds().includes(parentId)) return;
+      const next = isShownDefaultIncoming() ? null : parentId;
+      try {
+        const response = await MessageService.updateDefaultIncoming(props.message.id, next);
+        if (response?.data?.id) {
+          const existing = store.getters['messages/getMessage'](props.message.id) || {};
+          store.commit('messages/SET_MESSAGE', keepMessageLists(response.data, existing));
+        }
+      } catch (e) {
+        console.error('[MessageNode] Failed to update default incoming', e);
+        store.commit('ui/SET_ERROR', 'Failed to update default incoming');
       }
     };
 
@@ -787,10 +833,27 @@ export default {
         handler: toggleDefaultOutgoing,
         condition: () => {
           if (props.inListView) return false;
+          // default_outgoing lives on the parent, so only that message's author or manager.
           const parent = columnParent();
           if (!parent || !store.getters['auth/canUpdateReplyOrder'](parent)) return false;
           const outgoing = [...(parent.child_ids || []), ...(parent.stitch_child_ids || [])];
           return outgoing.includes(props.message.id);
+        }
+      },
+      {
+        id: 'set-default-incoming',
+        emoji: '⭐',
+        text: isShownDefaultIncoming() ? 'Clear default incoming' : 'Set default incoming',
+        desktopVisible: false,
+        mobileVisible: false,
+        adminOnly: false,
+        handler: toggleDefaultIncoming,
+        condition: () => {
+          if (props.inListView) return false;
+          // default_incoming lives on this message, so only this message's author or manager.
+          if (!store.getters['auth/canUpdateReplyOrder'](props.message)) return false;
+          const parentId = columnParentId();
+          return !!parentId && incomingParentIds().includes(parentId);
         }
       },
       {
@@ -1522,6 +1585,15 @@ export default {
       emit('refreshReplies', props.message.id);
     };
 
+    const openReplyParentInThread = async () => {
+      const parentId = props.message.parent_id;
+      if (props.message.type !== 'annotation' || !parentId) return;
+      try {
+        await router.push(`/messages/${parentId}`);
+      } catch (error) {
+        console.error('[MessageNode] open reply parent failed', error);
+      }
+    };
 
     // Check if this message has siblings that can be navigated to
     const hasSiblings = computed(() => {
@@ -2145,6 +2217,7 @@ export default {
       isDefaultOutgoingChild,
       shouldShowLinkSwitcher,
       handleSwitchParent,
+      openReplyParentInThread,
       isCentered,
       // Props for template access
       message: toRef(props, 'message'),
@@ -2628,6 +2701,31 @@ export default {
 
 .header-row--author .badges-row-left {
   flex: 0 0 auto;
+}
+
+.annotation-parent-thread {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.annotation-parent-thread svg {
+  width: 12px;
+  height: 12px;
+}
+
+.annotation-parent-thread:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
 }
 
 .default-outgoing-mark {

@@ -234,7 +234,7 @@ const phases = [
     id: 'menu',
     title: 'Subcontextual Menu (⋯)',
     description:
-      'Opens extra node tools: Copy text, Copy link, Refresh replies, 🪡 Stitch (connect messages across threads), Center view, Order replies, Set default outgoing, and Similar search.'
+      'Opens extra node tools: Copy text, Copy link, Refresh replies, 🪡 Stitch (connect messages across threads), Center view, Order replies, Set default outgoing, Set default incoming, and Similar search.'
   },
   {
     id: 'navigation',

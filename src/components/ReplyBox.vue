@@ -108,7 +108,7 @@
           <input 
             ref="fileInput"
             type="file" 
-            accept="application/pdf,image/*,text/plain,audio/*,.txt,.py,.pdf,.jpg,.jpeg,.png,.gif,.webp,.mp3,.wav,.ogg,.flac,.aac,.mp4,.m4a"
+            accept="application/pdf,image/*,text/plain,text/markdown,audio/*,.txt,.py,.md,.markdown,.pdf,.jpg,.jpeg,.png,.gif,.webp,.mp3,.wav,.ogg,.flac,.aac,.mp4,.m4a"
             multiple
             style="display: none"
             @change="handleFileSelect"
@@ -584,12 +584,8 @@ const replyHeaderText = computed(() => {
 });
 
 // Methods
-const emitOpenProfile = () => {
-  emit('open-profile');
-};
-
 const handleVerifyClick = () => {
-  emitOpenProfile();
+  emit('open-profile', 'contact');
   // Auto-close the reply box
   hideBottomSheet();
 };

@@ -296,7 +296,9 @@
       <reply-box
         :is-new-thread="true"
         :can-interact="canInteract"
+        :is-authenticated="!!user"
         ref="replyBox"
+        @open-profile="openProfileModal"
         @send-success="handleSendSuccess"
         @send-error="handleSendError"
       />
@@ -318,6 +320,7 @@
       <!-- Profile Edit Modal -->
       <ProfileEditModal 
         :isOpen="isProfileModalOpen" 
+        :scrollTo="profileScrollTo"
         @close="closeProfileModal" 
       />
     </template>
@@ -356,6 +359,7 @@ const loadingSubmessage = ref('This will only take a moment');
 // Add login state
 const isLoggingIn = ref(false);
 const isProfileModalOpen = ref(false);
+const profileScrollTo = ref('');
 
 // Computed properties from store
 const user = computed(() => store.getters['auth/user']);
@@ -684,14 +688,16 @@ const handleSendError = (error) => {
 // Login handled by LoginButton component
 
 // Profile modal methods
-const openProfileModal = () => {
+const openProfileModal = (scrollTo) => {
   if (user.value) {
+    profileScrollTo.value = typeof scrollTo === 'string' ? scrollTo : '';
     isProfileModalOpen.value = true;
   }
 };
 
 const closeProfileModal = () => {
   isProfileModalOpen.value = false;
+  profileScrollTo.value = '';
 };
 
 const openSettingsModal = () => {

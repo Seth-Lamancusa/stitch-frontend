@@ -10,6 +10,8 @@ const ALLOWED_TYPES = [
   'image/gif',
   'image/webp',
   'text/plain',
+  'text/markdown',
+  'text/x-markdown',
   'text/x-python',
   'text/x-python-script',
   'text/x-script.python',
@@ -40,15 +42,17 @@ const validateFile = (file) => {
   // Check file type
   const fileType = file.type.toLowerCase()
   const ext = (file.name || '').toLowerCase().split('.').pop()
+  const isMarkdown = ext === 'md' || ext === 'markdown' || fileType === 'text/markdown' || fileType === 'text/x-markdown'
   const isValidType =
     ALLOWED_TYPES.some(type => fileType === type) ||
-    // Some browsers report empty/generic MIME types for code files; fall back to extension.
+    // Some browsers report empty/generic MIME types for code and markdown files.
     ext === 'py' ||
-                       fileType.startsWith('image/') ||
-                       fileType.startsWith('audio/')
+    isMarkdown ||
+    fileType.startsWith('image/') ||
+    fileType.startsWith('audio/')
   
   if (!isValidType) {
-    throw new Error(`File type not supported. Please upload a PDF, text file (.txt/.py), image, or audio file`)
+    throw new Error(`File type not supported. Please upload a PDF, text file (.txt/.py/.md), image, or audio file`)
   }
   
   return true
@@ -58,6 +62,14 @@ export default {
   async uploadFile(file, { onUploadProgress } = {}) {
     // Validate file before upload
     validateFile(file)
+
+    const ext = (file.name || '').toLowerCase().split('.').pop()
+    const fileType = (file.type || '').toLowerCase()
+    const markdownName = ext === 'md' || ext === 'markdown'
+    const genericType = !fileType || fileType === 'application/octet-stream' || fileType.startsWith('text/')
+    if ((markdownName && genericType && fileType !== 'text/markdown') || fileType === 'text/x-markdown') {
+      file = new File([file], file.name, { type: 'text/markdown', lastModified: file.lastModified })
+    }
     
     const formData = new FormData()
     formData.append('file', file)

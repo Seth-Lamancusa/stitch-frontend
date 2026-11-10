@@ -240,6 +240,7 @@
     <!-- Profile Edit Modal -->
     <ProfileEditModal 
       :isOpen="isProfileModalOpen" 
+      :scrollTo="profileScrollTo"
       @close="closeProfileModal" 
     />
     <FeedbackButton />
@@ -270,7 +271,7 @@ import LoginButton from '@buttons/LoginButton.vue'
 import { useCompactThread } from '../../composables/useCompactThread.js';
 import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
 import { contentText, getAuthorDisplayName, getAuthorUserTag } from '../../utils/messageCompat.js';
-import { activeContextWalk, branchRowKey, continuationIds, earlierParentIds, resolvedBranchParent, uniqueIds } from '../../store/branchContext.js';
+import { activeContextWalk, branchRowKey, continuationIds, earlierParentIds, missingVisibleHop, resolvedBranchParent, uniqueIds, visibleOutgoingId } from '../../store/branchContext.js';
 import { messageUrl } from '../../config/appConfig.js';
 
 // import BranchNavigator from '../../components/BranchNavigator.vue';
@@ -284,6 +285,7 @@ const { signInWithGoogle, logout } = useAuthentication();
 // Add login state
 const isLoggingIn = ref(false);
 const isProfileModalOpen = ref(false);
+const profileScrollTo = ref('');
 
 // Refs
 const messageList = ref(null);
@@ -652,7 +654,10 @@ const snapshotDown = (messages) => {
     return { edgeId: tail.id, phase: 'exhausted' };
   }
   const missingReply = (tail.child_ids || []).some(id => id != null && !storedMessage(id));
-  return { edgeId: tail.id, phase: missingReply ? 'idle' : 'exhausted' };
+  const nextId = visibleOutgoingId(tail);
+  const nextIsReply = (tail.child_ids || []).some(id => sameEdgeId(id, nextId));
+  const missingDefaultHop = nextId && !nextIsReply && !storedMessage(nextId);
+  return { edgeId: tail.id, phase: (missingReply || missingDefaultHop) ? 'idle' : 'exhausted' };
 };
 
 // The page moved the visible edge, or it did not. A missing id on the same
@@ -967,6 +972,22 @@ const loadInitialContent = async (targetMessageId, reason = 'mount') => {
         get_children: true,
       });
       trace.direct = summarizeTraversal(direct, targetMessageId);
+    }
+
+    const center = store.getters['messages/getMessage'](targetMessageId);
+    const cached = store.state.messages.messages;
+    if (
+      center
+      && (
+        missingVisibleHop(center, cached, 'up', LOAD_RADIUS)
+        || missingVisibleHop(center, cached, 'down', LOAD_RADIUS)
+      )
+    ) {
+      await store.dispatch('messages/loadDefaultPath', {
+        messageId: targetMessageId,
+        up: LOAD_RADIUS,
+        down: LOAD_RADIUS,
+      });
     }
 
     await nextTick();
@@ -1553,10 +1574,21 @@ const loadMoreParents = async () => {
     const leave = await endContextWalk(requestedEdgeId);
     if (leave === 'navigated' || generation !== pageGeneration) return;
 
-    await store.dispatch('messages/loadMessageBranchUp', {
-      messageId: requestedEdgeId,
-      depth: LOAD_RADIUS
-    });
+    const head = store.getters['messages/getMessage'](requestedEdgeId);
+    const parentId = head && resolvedBranchParent(head);
+    const parentIsReply = parentId && sameEdgeId(parentId, head.parent_id);
+    if (parentId && !parentIsReply && !storedMessage(parentId)) {
+      await store.dispatch('messages/loadDefaultPath', {
+        messageId: requestedEdgeId,
+        up: LOAD_RADIUS,
+        down: 0,
+      });
+    } else {
+      await store.dispatch('messages/loadMessageBranchUp', {
+        messageId: requestedEdgeId,
+        depth: LOAD_RADIUS
+      });
+    }
     
     // Re-align branch path so newly loaded parents point down to the previous root
     if (firstMessageId) {
@@ -1620,10 +1652,22 @@ const loadMoreChildren = async () => {
     const leave = await endContextWalk(requestedEdgeId);
     if (leave === 'navigated' || generation !== pageGeneration) return;
 
-    await store.dispatch('messages/loadMessageBranchDown', {
-      messageId: requestedEdgeId,
-      depth: LOAD_RADIUS
-    });
+    const tail = store.getters['messages/getMessage'](requestedEdgeId);
+    const nextId = tail && visibleOutgoingId(tail);
+    const nextIsReply = nextId && (tail.child_ids || []).some(id => sameEdgeId(id, nextId));
+    if (nextId && !nextIsReply && !storedMessage(nextId)) {
+      await store.dispatch('messages/loadDefaultPath', {
+        messageId: requestedEdgeId,
+        up: 0,
+        down: LOAD_RADIUS,
+      });
+      await store.dispatch('messages/prepareBranchPath', requestedEdgeId);
+    } else {
+      await store.dispatch('messages/loadMessageBranchDown', {
+        messageId: requestedEdgeId,
+        depth: LOAD_RADIUS
+      });
+    }
     
     
     // Render thread but preserve scroll position AND branch path
@@ -1763,14 +1807,16 @@ watch(() => store.getters['auth/user'], async (newUser, oldUser) => {
 });
 
 // Profile modal methods
-const openProfileModal = () => {
+const openProfileModal = (scrollTo) => {
   if (user.value) {
+    profileScrollTo.value = typeof scrollTo === 'string' ? scrollTo : '';
     isProfileModalOpen.value = true;
   }
 };
 
 const closeProfileModal = () => {
   isProfileModalOpen.value = false;
+  profileScrollTo.value = '';
 };
 
 const contextLabel = computed(() => {

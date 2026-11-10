@@ -4,6 +4,7 @@ import {
   branchRowKey,
   chooseBranchChild,
   contextChainMatches,
+  missingVisibleHop,
   contextWalkIds,
   continuationIds,
   earlierParentIds,
@@ -31,6 +32,27 @@ assert.equal(resolvedBranchParent({ parent_id: 'q' }), 'q');
 assert.equal(resolvedBranchParent({ branch_parent: 's', parent_id: 'q' }), 's');
 
 assert.equal(chooseBranchChild({ ...messages.m, default_outgoing: 'b' }, messages), 'b');
+
+const stitchCenter = {
+  id: 'm',
+  parent_id: 'p',
+  default_incoming: 'sp',
+  stitch_parent_ids: ['sp'],
+  child_ids: ['a'],
+  stitch_child_ids: ['b'],
+  default_outgoing: 'b',
+  branch_child: 'b',
+};
+const loadedAroundStitch = {
+  m: stitchCenter,
+  a: messages.a,
+  p: { id: 'p', parent_id: null },
+};
+assert.equal(missingVisibleHop(stitchCenter, loadedAroundStitch, 'down', 5), 'b');
+assert.equal(missingVisibleHop(stitchCenter, loadedAroundStitch, 'up', 5), 'sp');
+assert.equal(missingVisibleHop(stitchCenter, { ...loadedAroundStitch, b: messages.b, sp: { id: 'sp' } }, 'down', 5), null);
+assert.equal(missingVisibleHop({ id: 'm', branch_parent: null, default_incoming: 'sp', parent_id: 'p' }, loadedAroundStitch, 'up', 5), null);
+assert.equal(missingVisibleHop({ id: 'm', child_ids: ['a'], branch_child: 'a' }, { m: { id: 'm', child_ids: ['a'], branch_child: 'a' }, a: messages.a }, 'down', 5), null);
 assert.equal(chooseBranchChild(messages.m, messages), 'c');
 assert.equal(chooseBranchChild({ id: 'm', child_ids: [], stitch_child_ids: ['b'] }, messages), null);
 assert.equal(chooseBranchChild({ id: 'm', child_ids: ['a'], stitch_child_ids: ['c'] }, { c: messages.c }), null);

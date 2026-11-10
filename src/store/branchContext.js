@@ -13,6 +13,49 @@ export function explicitDefaultOutgoing(message) {
   return outgoingChildPool(message).includes(id) ? id : null;
 }
 
+// The child the visible branch walks into. An existing selection wins.
+// Otherwise default_outgoing, whether that child is a reply or a stitch.
+export function visibleOutgoingId(message) {
+  if (!message) return null;
+  if (message.branch_child) return message.branch_child;
+  return explicitDefaultOutgoing(message);
+}
+
+// The parent the visible branch walks into. A null branch_parent is the top
+// of a context window. Otherwise default_incoming, then the reply parent.
+export function visibleIncomingId(message) {
+  if (!message || message.branch_parent === null) return null;
+  return resolvedBranchParent(message);
+}
+
+function storedMessage(messages, id) {
+  if (!messages || id == null || id === '') return null;
+  return messages[id] || messages[String(id)] || null;
+}
+
+// First hop on the visible branch that is not loaded yet, within radius.
+// Down follows the selected child, then default_outgoing. Up follows
+// default_incoming, then parent_id. A loaded reply chain with no default
+// returns null so the reply loader keeps owning those edges.
+export function missingVisibleHop(message, messages, direction, radius = 20) {
+  let current = message;
+  const seen = new Set();
+  const limit = Math.max(Number(radius) || 0, 0);
+  for (let hop = 0; current && hop < limit; hop += 1) {
+    if (current.id != null) {
+      const key = String(current.id);
+      if (seen.has(key)) return null;
+      seen.add(key);
+    }
+    const nextId = direction === 'up' ? visibleIncomingId(current) : visibleOutgoingId(current);
+    if (nextId == null || nextId === '' || seen.has(String(nextId))) return null;
+    const next = storedMessage(messages, nextId);
+    if (!next) return nextId;
+    current = next;
+  }
+  return null;
+}
+
 export function resolvedBranchParent(message) {
   if (!message) return null;
   if (message.branch_parent !== undefined) return message.branch_parent;
