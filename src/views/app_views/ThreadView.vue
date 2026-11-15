@@ -2047,6 +2047,8 @@ const handleNavigatorJump = (msgId) => {
   flex-direction: column;
   height: var(--app-height, 100vh);
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   position: relative;
   overflow: visible;
 }
@@ -2223,150 +2225,6 @@ const handleNavigatorJump = (msgId) => {
   padding: 0 40px; /* Add horizontal padding to match the design */
 }
 
-.user-controls {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  flex-shrink: 0;
-}
-
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  margin-right: var(--space-sm);
-}
-
-.username-container {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  position: relative;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  transition: background-color var(--transition-fast);
-}
-
-.username-container:hover {
-  background-color: var(--color-hover-overlay);
-}
-
-.username {
-  display: inline-block;
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.user-tag {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-  opacity: 0.8;
-}
-
-.edit-icon {
-  font-size: 12px;
-  opacity: 0.7;
-  color: var(--color-text);
-}
-
-.username-container:hover .edit-icon {
-  opacity: 1;
-}
-
-.logout-btn {
-  background-color: transparent;
-  color: var(--color-text);
-  padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: var(--font-size-xs);
-}
-
-.logout-btn:hover {
-  background-color: var(--color-hover-overlay);
-}
-
-.login-btn {
-  background-color: var(--color-primary);
-  color: var(--color-text-inverse);
-  padding: var(--space-xs) var(--space-sm);
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: var(--font-size-xs);
-  text-decoration: none;
-}
-
-.login-btn:hover {
-  background-color: var(--color-primary-dark);
-}
-
-.login-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.whitelist-badge, .non-whitelist-badge, .guest-badge {
-  display: inline-block;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  text-align: center;
-  line-height: 18px;
-  font-size: 12px;
-  margin-left: var(--space-xs);
-}
-
-.whitelist-badge {
-  background-color: var(--color-primary);
-  color: var(--color-text-inverse);
-}
-
-
-.non-whitelist-badge {
-  background-color: var(--color-warning);
-  color: var(--color-text-inverse);
-}
-
-.guest-badge {
-  background-color: var(--color-surface-light);
-  color: var(--color-text-inverse);
-  border: 1px solid var(--color-border);
-}
-
-.auth-loading-badge {
-  display: inline-block;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  text-align: center;
-  line-height: 18px;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  overflow: hidden;
-  margin-left: var(--space-xs);
-}
-
-.auth-loading-spinner {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: 2px solid rgba(0, 0, 0, 0.1);
-  border-top-color: var(--color-primary);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
 @media (max-width: 1024px) {
   .messages-container {
     flex: 0 0 100%;
@@ -2402,56 +2260,6 @@ const handleNavigatorJump = (msgId) => {
   }
   
   
-  .thread-title {
-    font-size: var(--font-size-md);
-  }
-
-  .user-controls {
-    gap: var(--space-xs);
-    flex-shrink: 0;
-  }
-  
-  .user-info {
-    gap: 2px;
-    margin-right: var(--space-xs);
-    min-width: 0;
-  }
-  
-  .username-container {
-    gap: 2px;
-    padding: 1px 4px;
-    max-width: 100px;
-    min-width: 0;
-  }
-  
-  .username {
-    max-width: 60px;
-    font-size: var(--font-size-xs);
-  }
-  
-  .user-tag {
-    font-size: calc(var(--font-size-xs) - 2px);
-    display: none;
-  }
-  
-  .edit-icon {
-    display: none;
-  }
-  
-  .whitelist-badge, .non-whitelist-badge, .guest-badge, .auth-loading-badge {
-    width: 14px;
-    height: 14px;
-    line-height: 14px;
-    font-size: 10px;
-    margin-left: 2px;
-  }
-  
-  .logout-btn, .login-btn {
-    padding: var(--space-xs) var(--space-sm);
-    font-size: calc(var(--font-size-xs) - 1px);
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
 }
 
   @media (max-width: 480px) {
@@ -2469,42 +2277,5 @@ const handleNavigatorJump = (msgId) => {
     }
 
   
-  .thread-title {
-    font-size: calc(var(--font-size-md) - 1px);
-  }
-
-  .user-controls {
-    gap: 4px;
-    flex-shrink: 0;
-  }
-  
-  .user-info {
-    margin-right: 4px;
-    min-width: 0;
-  }
-  
-  .username-container {
-    max-width: 80px;
-    padding: 1px 2px;
-  }
-  
-  .username {
-    max-width: 50px;
-    font-size: calc(var(--font-size-xs) - 1px);
-  }
-  
-  .whitelist-badge, .non-whitelist-badge, .guest-badge, .auth-loading-badge {
-    width: 12px;
-    height: 12px;
-    line-height: 12px;
-    font-size: 8px;
-    margin-left: 1px;
-  }
-  
-  .logout-btn, .login-btn {
-    padding: 4px 6px;
-    font-size: calc(var(--font-size-xs) - 2px);
-    min-width: 50px;
-  }
 }
 </style>

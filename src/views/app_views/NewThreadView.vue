@@ -721,7 +721,8 @@ const openSettingsModal = () => {
   overflow: auto;
   display: flex;
   justify-content: center;
-  padding: var(--space-lg) var(--space-md) var(--space-xl);
+  /* Composer publishes its height (plus the keyboard) as --stitch-composer-cover. */
+  padding: var(--space-lg) var(--space-md) calc(var(--stitch-composer-cover, 280px) + 16px);
 }
 
 .draft-panel {

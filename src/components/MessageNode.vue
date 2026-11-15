@@ -6,8 +6,7 @@
        'compact': compact,
        'selected': inListView ? selected : isMessageSelected,
        'selection-target': isSelectionMode && !inListView,
-       'dropdown-open': showActionBar || compactToolbarVisible,
-       'collapsed': isCollapsed
+       'dropdown-open': showActionBar || compactToolbarVisible
     }"
     :data-message-id="message.id"
     :data-has-siblings="shouldReserveSiblingNavSpace"
@@ -52,14 +51,13 @@
         :data-debug-has-siblings="hasSiblings"
       />
       <div class="message-header">
-        <!-- Row 1: Author info + datetime -->
-        <div class="header-row header-row--author">
-          <div class="author-row-left">
+        <div class="header-main">
+          <div class="header-identity">
             <!-- Unread thread count badge - only shown in inbox/list view -->
             <span v-if="inListView && message.unread_count_in_thread && message.unread_count_in_thread > 0" class="unread-thread-badge">
               {{ message.unread_count_in_thread }}
             </span>
-          
+
           <div class="author-info">
             <img
               v-if="showAuthorIcon"
@@ -120,9 +118,11 @@
               :recipient-count="deduplicatedRecipients.length"
               :on-recipients="openAddRecipientsModal"
             />
+            </div>
           </div>
 
-            <div v-if="!isCompactThread" class="badges-row-left">
+          <div v-if="!isCompactThread" class="header-tools">
+            <div class="header-chips">
           <!-- Recipients badge -->
           <button 
             v-if="hasRecipients"
@@ -163,7 +163,9 @@
             </svg>
             <span class="badge-count">{{ existingChannels.length }}</span>
           </button>
-          
+            </div>
+
+            <div class="header-status">
           <!-- Envelope icon for recipients - unread (closed) / read (open) -->
           <button 
             v-if="isUserRecipient"
@@ -207,8 +209,9 @@
           </button>
             </div>
           </div>
+        </div>
 
-        <div v-if="!inListView" class="header-row-right">
+        <div v-if="!inListView" class="header-meta">
           <button
             v-if="message.type === 'annotation' && message.parent_id"
             type="button"
@@ -229,15 +232,6 @@
             <DefaultOutgoingStar />
           </span>
           <span class="message-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
-          <button
-            v-if="canCollapse"
-            class="collapse-button collapse-button--top"
-            @click.stop="toggleCollapse('top')"
-            :aria-label="isCollapsed ? 'Expand message' : 'Collapse message'"
-            :title="isCollapsed ? 'Expand' : 'Collapse'"
-          >
-            <span class="collapse-icon">{{ isCollapsed ? '▼' : '▲' }}</span>
-          </button>
           <input
             v-if="selectable || !inListView"
             type="checkbox"
@@ -249,7 +243,6 @@
         </div>
 
         <span v-if="inListView" class="message-timestamp mobile-inline-timestamp">{{ formatTimestamp(message.timestamp) }}</span>
-      </div>
       </div>
       
       <!-- Message body -->
@@ -307,15 +300,8 @@
       <!-- Files -->
       <message-attachments :attachments="message.files" />
 
-      <p
-        v-if="typingLabel && !hideTypingCue"
-        class="typing-cue"
-        :class="{ 'typing-cue--inset': inListView }"
-        aria-live="polite"
-      >{{ typingLabel }}</p>
-
       <CompactHoverToolbar
-        v-if="!inListView && !isSelectionMode && !isCollapsed"
+        v-if="!inListView && !isSelectionMode"
         :visible="isMobile || compactToolbarVisible || revealToolbar"
         :menu-open="revealMenu"
         :primary-actions="compactToolbarActionList"
@@ -325,6 +311,13 @@
       />
       
      </div>
+
+    <p
+      v-if="typingLabel && !hideTypingCue"
+      class="typing-cue"
+      :class="{ 'typing-cue--inset': inListView }"
+      aria-live="polite"
+    >{{ typingLabel }}</p>
 
       <teleport to="body">
         <TagsModal
@@ -956,7 +949,7 @@ export default {
     // Selection mode: any click on the node toggles selection, except links and form fields.
     const handleSelectionClick = (event) => {
       if (!isSelectionMode.value || props.inListView) return;
-      if (event.target.closest('a, input, textarea, select, .add-subject-input-container')) return;
+      if (event.target.closest('a, input, textarea, select, .fc-fence-actions, .add-subject-input-container')) return;
       event.preventDefault();
       event.stopPropagation();
       store.dispatch('navigation/toggleMessageSelection', props.message.id);
@@ -999,57 +992,14 @@ export default {
     const messageContentRef = ref(null);
     const messageNodeRef = ref(null);
     const isMobile = ref(false);
-    
-    // Collapse state
-    const isCollapsed = ref(false);
+
     const hideTypingCue = computed(() => {
       const hoverMenuShowing = !props.inListView
         && !isSelectionMode.value
-        && !isCollapsed.value
         && (isMobile.value || compactToolbarVisible.value || props.revealToolbar);
       return hoverMenuShowing || showActionBar.value;
     });
     const displayContent = computed(() => contentText(props.message?.content));
-
-    const canCollapse = computed(() => {
-      // Enable collapse for messages with content longer than a threshold
-      const text = displayContent.value;
-      return text.length > 200 || text.includes('\n');
-    });
-    
-    // Toggle collapse with scroll-follow animation
-    const toggleCollapse = async (position) => {
-      const nodeEl = messageNodeRef.value;
-      if (!nodeEl) return;
-      
-      // Get the current position of the collapse button relative to viewport
-      const buttonSelector = position === 'top' ? '.collapse-button--top' : '.collapse-button--bottom';
-      const buttonEl = nodeEl.querySelector(buttonSelector);
-      const buttonRect = buttonEl?.getBoundingClientRect();
-      const buttonViewportY = buttonRect ? buttonRect.top + buttonRect.height / 2 : null;
-      
-      // Toggle collapse state
-      isCollapsed.value = !isCollapsed.value;
-      
-      // Wait for DOM to update
-      await nextTick();
-      
-      // After animation, adjust scroll to keep the button at same viewport position
-      if (buttonViewportY !== null && buttonEl) {
-        requestAnimationFrame(() => {
-          const newButtonRect = buttonEl.getBoundingClientRect();
-          const newButtonViewportY = newButtonRect.top + newButtonRect.height / 2;
-          const scrollDelta = newButtonViewportY - buttonViewportY;
-          
-          if (Math.abs(scrollDelta) > 1) {
-            window.scrollBy({
-              top: scrollDelta,
-              behavior: 'smooth'
-            });
-          }
-        });
-      }
-    };
     
     const openLinksModal = () => {
       // Close the ReplyBox if it's open
@@ -2302,9 +2252,6 @@ export default {
       // handleReformat,
       messageContentRef,
       messageNodeRef,
-      isCollapsed,
-      canCollapse,
-      toggleCollapse,
       isReplyRoot,
       hasSiblings,
       showSiblingNavMobile,
@@ -2401,84 +2348,6 @@ export default {
   align-items: center;
 }
 
-/* Collapse buttons */
-.collapse-button {
-  width: auto;
-  min-width: 24px;
-  height: 24px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.6;
-  transition: all 0.2s ease;
-  padding: 0;
-  margin: 0;
-  flex-shrink: 0;
-  z-index: 2;
-}
-
-.collapse-button:hover {
-  opacity: 1;
-  background: var(--color-hover-overlay);
-  border-color: var(--color-border-hover);
-}
-
-.collapse-button--top {
-  margin-left: var(--space-xs, 8px);
-}
-
-.collapse-button--bottom {
-  /* Bottom button styling handled by desktop/mobile variants */
-}
-
-.collapse-button--desktop {
-  margin-left: var(--space-xs, 8px);
-}
-
-.collapse-icon {
-  font-size: 10px;
-  color: var(--color-text-secondary);
-  transition: transform 0.2s ease;
-  line-height: 1;
-}
-
-.message-node.collapsed .collapse-icon {
-  transform: rotate(180deg);
-}
-
-/* Collapsed state */
-.message-node.collapsed .message-content {
-  max-height: 60px;
-  overflow: hidden;
-  position: relative;
-}
-
-.message-node.collapsed .message-content::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 30px;
-  background: linear-gradient(to bottom, transparent, var(--color-surface));
-  pointer-events: none;
-}
-
-.message-node.collapsed .message-body {
-  max-height: 30px;
-  overflow: hidden;
-}
-
-.message-node.collapsed .message-footer,
-.message-node.collapsed .mobile-action-controls,
-.message-node.collapsed .message-attachments {
-  display: none;
-}
-
 /* Ensure all content stretches out nicely */
 .message-node .message-content {
   width: 100%;
@@ -2508,7 +2377,7 @@ export default {
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.5; /* Consistent line height for predictable truncation */
+  line-height: var(--message-line-height, 1.8); /* Consistent line height for predictable truncation */
 }
 
 /* Only show pointer cursor in list view when not in selection mode */
@@ -2562,10 +2431,9 @@ export default {
 }
 
 /* Thread cards sit on a near-black canvas, so a tight dark lift reads without a heavy halo.
-   Bottom padding keeps the downward shadow inside the node so overflow clipping
-   on the thread scroller cannot shave it off. */
+   A small bottom pad keeps the downward shadow from being clipped by the scroller. */
 .message-node:not(.list-view):not(.compact) {
-  padding-bottom: 10px;
+  padding-bottom: 4px;
 }
 
 .message-node:not(.list-view):not(.compact) .message-content {
@@ -2660,47 +2528,51 @@ export default {
 
 .message-header {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-xxs, 4px);
+  align-items: center;
+  gap: 8px;
   margin-bottom: var(--space-xxs, 4px);
-}
-
-.header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-  gap: var(--space-xs, 8px);
-}
-
-.header-row-left,
-.badges-row-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xxs, 4px);
-  flex: 1;
   min-width: 0;
 }
 
-.header-row-right {
+.header-main {
   display: flex;
   align-items: center;
-  gap: var(--space-xs, 6px);
-  flex-shrink: 0;
-  margin-left: auto;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.header-row--author {
-  flex-wrap: nowrap;
+.header-identity {
+  display: flex;
   align-items: center;
-}
-
-.header-row--author .author-info {
+  gap: 4px;
   flex: 0 1 auto;
+  min-width: 0;
 }
 
-.header-row--author .badges-row-left {
-  flex: 0 0 auto;
+.header-tools {
+  display: contents;
+}
+
+.header-chips,
+.header-status,
+.header-meta {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.header-chips {
+  gap: 4px;
+}
+
+.header-status {
+  gap: 2px;
+}
+
+.header-meta {
+  gap: 6px;
+  margin-left: auto;
 }
 
 .annotation-parent-thread {
@@ -2733,14 +2605,6 @@ export default {
   align-items: center;
   line-height: 1;
   color: var(--color-text-secondary);
-}
-
-.author-row-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xxs, 4px);
-  flex: 1;
-  min-width: 0;
 }
 
 .selection-checkbox {
@@ -2786,28 +2650,9 @@ export default {
   box-shadow: 0 0 0 2px var(--color-primary-light);
 }
 
-/* Old author-section - now using header-row structure */
-
-/* Prevent delete button and other icon buttons from wrapping unnecessarily */
 .delete-icon-button,
 .envelope-icon-button {
   flex-shrink: 0;
-  flex-grow: 0;
-  white-space: nowrap;
-  flex-basis: auto;
-}
-
-/* Ensure delete button stays on first line when there's space - give it lower wrap priority */
-.delete-icon-button {
-  order: 1; /* Place delete button after badges but before wrapping */
-}
-
-/* Badges should wrap before icon buttons */
-.recipients-toggle,
-.tags-toggle,
-.channels-toggle,
-.globe-emoji {
-  order: 0; /* Badges wrap first */
 }
 
 .unread-thread-badge {
@@ -3174,7 +3019,7 @@ export default {
   width: 100%;
   color: #fcf7e2; /* Between white and cream, closer to cream (#fffcef) */
   transition: max-height 0.3s ease-out, opacity 0.2s ease;
-  line-height: 1.5;
+  line-height: var(--message-line-height, 1.8);
   font-size: var(--message-font-size, 1.125rem);
   font-family: var(--author-font, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
 }
@@ -3183,6 +3028,7 @@ export default {
   color: #fffdf5;
   font-family: inherit;
   font-size: inherit;
+  line-height: var(--message-line-height, 1.8);
 }
 
 .message-content p {
@@ -3244,20 +3090,8 @@ export default {
     flex-wrap: nowrap;
   }
 
-  .header-row--author {
-    flex-wrap: nowrap;
-  }
-
-  .header-row--author .header-row-right {
-    display: flex;
-  }
-
-  /* Show mobile timestamp beneath the username/buttons, full width */
-  .header-row--author .mobile-inline-timestamp {
+  .mobile-inline-timestamp {
     display: block;
-    flex-basis: 100%;
-    width: 100%;
-    margin-top: 2px;
   }
   
   .message-footer .reply-count {
@@ -3559,24 +3393,69 @@ export default {
 
 @media (max-width: 768px) {
   .message-node {
+    --node-pad-x: 3px;
+    --content-pad-x: 14px;
+    --content-pad-y: 10px;
+    --header-control: 28px;
+    --header-gap: 6px;
     width: 100%;
     position: relative;
     perspective: 1000px;
-    padding-left: 3px; /* Reduced side padding on mobile */
-    padding-right: 3px;
+    padding-left: var(--node-pad-x);
+    padding-right: var(--node-pad-x);
   }
 
-  /* Reserve space for the overlayed sibling navigator so text doesn't overlap it. */
-  .message-node[data-has-siblings="true"] .author-row-left {
-    padding-left: 44px;
+  .message-node.compact {
+    --content-pad-x: 8px;
+    --content-pad-y: 6px;
+  }
+
+  .message-node[data-has-siblings="true"] .message-header {
+    padding-left: calc(var(--header-control) + var(--header-gap));
+  }
+
+  .message-node.compact[data-has-siblings="true"] .message-header {
+    padding-left: calc(var(--header-control) * 2 + var(--header-gap) * 2);
   }
 
   .mobile-sibling-nav-slot {
     display: flex;
     position: absolute;
-    top: 10px;
-    left: 3px;
+    top: calc(var(--node-pad-x) + var(--content-pad-y));
+    left: calc(var(--node-pad-x) + var(--content-pad-x));
     z-index: 20;
+  }
+
+  .mobile-sibling-nav-slot :deep(.mobile-sibling-nav) {
+    flex-direction: column;
+    gap: var(--header-gap);
+  }
+
+  .message-node.compact .mobile-sibling-nav-slot :deep(.mobile-sibling-nav) {
+    flex-direction: row;
+  }
+
+  .mobile-sibling-nav-slot :deep(.mobile-nav-btn) {
+    position: relative;
+    width: var(--header-control);
+    height: var(--header-control);
+    min-width: var(--header-control);
+    min-height: var(--header-control);
+    padding: 0;
+    border-radius: 6px;
+    box-shadow: none;
+  }
+
+  .mobile-sibling-nav-slot :deep(.mobile-nav-btn:hover:not(:disabled)),
+  .mobile-sibling-nav-slot :deep(.mobile-nav-btn:active:not(:disabled)) {
+    transform: none;
+  }
+
+  .mobile-sibling-nav-slot :deep(.mobile-default-mark) {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    margin: 0;
   }
 
   .message-content.animate-nav-next,
@@ -3597,7 +3476,7 @@ export default {
   }
   
   .message-node:not(.list-view):not(.compact) .message-content {
-    padding-bottom: 48px; /* Keep the last line clear of the action bar */
+    padding-bottom: 28px; /* Keep the last line clear of the action bar */
   }
 
   .message-body {
@@ -3605,7 +3484,7 @@ export default {
     overflow-wrap: break-word;
     max-width: 100%;
     font-size: calc(var(--message-font-size, 1.125rem) * 0.94); /* Slightly smaller text on mobile */
-    line-height: 1.4;
+    line-height: 1.68; /* 1.4 × 1.2 */
   }
   
   .message-subject {
@@ -3613,94 +3492,132 @@ export default {
     margin-bottom: 4px;
   }
   
-  .author-row-left {
-    min-width: 0;
-    overflow: hidden;
-    flex: 1 1 auto;
-  }
-
   .author-info {
+    align-items: center;
     flex-wrap: nowrap;
     max-width: 100%;
     min-width: 0;
-    gap: 3px;
+    gap: 4px;
+    margin-right: 0;
   }
-  
+
   .message-author {
     font-size: calc(var(--font-size-sm) - 1px);
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  
+
   .author-user-tag {
     font-size: calc(var(--font-size-xs) - 2px);
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  
+
   .message-header {
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-bottom: 3px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "identity meta";
+    align-items: center;
+    column-gap: 8px;
+    row-gap: var(--header-gap);
+    margin-bottom: 8px;
   }
-  
-  .header-right {
-    gap: 4px;
+
+  .message-header:has(.header-tools) {
+    grid-template-areas:
+      "identity meta"
+      "tools tools";
   }
-  
+
+  .header-main {
+    display: contents;
+  }
+
+  .header-identity {
+    grid-area: identity;
+    min-height: var(--header-control);
+    min-width: 0;
+  }
+
+  .header-meta {
+    grid-area: meta;
+    margin-left: 0;
+    min-height: var(--header-control);
+    gap: 8px;
+  }
+
+  .header-tools {
+    display: flex;
+    grid-area: tools;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    min-height: var(--header-control);
+  }
+
+  .header-chips {
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .header-status {
+    gap: 4px;
+    margin-left: auto;
+  }
+
   .message-timestamp {
-    font-size: calc(var(--font-size-xs) - 2px);
+    font-size: calc(var(--font-size-xs) - 1px);
+    font-variant-numeric: tabular-nums;
   }
-  
-  .header-row {
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-  
-  .author-row-left,
-  .badges-row-left {
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-  
-  .visibility-indicator, .recipients-toggle, .tags-toggle, .channels-toggle {
-    font-size: calc(var(--font-size-xs) - 2px);
-    height: 26px;
-    padding: 0 7px 0 6px;
+
+  .recipients-toggle,
+  .tags-toggle,
+  .channels-toggle {
+    height: var(--header-control);
+    min-width: var(--header-control);
+    padding: 0 7px;
+    border-radius: 6px;
+    font-size: 12px;
   }
 
   .badge-icon {
     width: 14px;
     height: 14px;
   }
-  
-  .envelope-icon-button {
-    width: 20px;
-    height: 20px;
-    padding: 2px;
+
+  .envelope-icon-button,
+  .delete-icon-button,
+  .globe-emoji,
+  .annotation-parent-thread {
+    width: var(--header-control);
+    height: var(--header-control);
+    padding: 0;
+    border-radius: 6px;
   }
-  
-  .envelope-icon {
-    width: 14px;
-    height: 14px;
+
+  .envelope-icon-button:hover,
+  .delete-icon-button:hover,
+  .globe-emoji:hover,
+  .envelope-icon-button:hover .envelope-icon {
+    transform: none;
   }
-  
-  .delete-icon-button {
-    width: 20px;
-    height: 20px;
-    padding: 2px;
-  }
-  
+
+  .envelope-icon,
   .delete-icon {
-    width: 14px;
-    height: 14px;
+    width: 15px;
+    height: 15px;
   }
-  
+
+  .globe-emoji {
+    font-size: 15px;
+  }
+
   .selection-checkbox {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
   }
   
   /* Hide desktop actions on mobile */
@@ -3729,35 +3646,6 @@ export default {
     border: 1px solid var(--color-border);
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-  }
-  
-  /* Hide desktop collapse button on mobile */
-  .collapse-button--desktop {
-    display: none !important;
-  }
-  
-  /* Hide timestamp container on mobile (already shown inline) */
-  /* Mobile collapse button styling - smaller */
-  .collapse-button--mobile {
-    min-width: 20px;
-    height: 20px;
-    padding: 2px;
-  }
-  
-  .collapse-button--mobile .collapse-icon {
-    font-size: 8px;
-  }
-  
-  /* Top collapse button on mobile - smaller */
-  .collapse-button--top {
-    min-width: 20px;
-    height: 20px;
-    padding: 2px;
-    margin-left: 4px;
-  }
-  
-  .collapse-button--top .collapse-icon {
-    font-size: 8px;
   }
   
   /* Mobile reply count - positioned next to reply button */
@@ -3962,8 +3850,17 @@ export default {
 
 @media (max-width: 480px) {
   .message-node {
-    padding-left: 2px; /* Minimal side padding on very small screens */
-    padding-right: 2px;
+    --node-pad-x: 2px;
+  }
+
+  .message-node:not(.compact) {
+    --content-pad-x: 12px;
+    --content-pad-y: 8px;
+  }
+
+  .message-node {
+    padding-left: var(--node-pad-x);
+    padding-right: var(--node-pad-x);
   }
   
   .message-content {
@@ -3972,12 +3869,12 @@ export default {
   }
 
   .message-node:not(.list-view):not(.compact) .message-content {
-    padding-bottom: 44px;
+    padding-bottom: 24px;
   }
   
   .message-body {
     font-size: calc(var(--message-font-size, 1.125rem) * 0.9); /* Smaller text on very small screens */
-    line-height: 1.35;
+    line-height: 1.62; /* 1.35 × 1.2 */
   }
   
   .message-subject {
@@ -3986,26 +3883,11 @@ export default {
   }
   
   .message-header {
-    gap: 3px;
-    margin-bottom: 2px;
+    margin-bottom: 6px;
   }
-  
-  .header-right {
-    gap: 3px;
-  }
-  
-  .author-row-left,
-  .badges-row-left {
-    gap: 3px;
-  }
-  
-  .header-row--author .author-row-left {
-    max-width: none;
-    min-width: 0;
-  }
-  
+
   .author-info {
-    gap: 2px;
+    gap: 4px;
   }
   
   .message-author {
@@ -4020,25 +3902,9 @@ export default {
     font-size: calc(var(--font-size-xs) - 3px);
   }
   
-  .visibility-indicator, .recipients-toggle, .tags-toggle, .channels-toggle {
-    height: 24px;
-    padding: 0 6px 0 5px;
-  }
-  
-  .envelope-icon-button, .delete-icon-button {
+  .selection-checkbox {
     width: 18px;
     height: 18px;
-    padding: 1px;
-  }
-  
-  .envelope-icon, .delete-icon {
-    width: 12px;
-    height: 12px;
-  }
-  
-  .selection-checkbox {
-    width: 14px;
-    height: 14px;
   }
   
   /* Adjust mobile action controls for very narrow screens */
@@ -4074,16 +3940,6 @@ export default {
     min-width: 36px;
     min-height: 36px;
     font-size: calc(var(--font-size-xs) - 2px);
-  }
-  
-  .collapse-button--top, .collapse-button--mobile {
-    min-width: 18px;
-    height: 18px;
-    padding: 1px;
-  }
-  
-  .collapse-button--top .collapse-icon, .collapse-button--mobile .collapse-icon {
-    font-size: 7px;
   }
 }
 

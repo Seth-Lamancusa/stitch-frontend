@@ -1,7 +1,7 @@
 <template>
   <div
     class="message-node function-message"
-    :class="{ 'menu-open': menuOpen, 'compact': compact, 'selected': isMessageSelected, 'selection-target': isSelectionMode, 'reply-target': isSelected, 'has-typing-cue': typingLabel && !menuOpen }"
+    :class="{ 'menu-open': menuOpen, 'compact': compact, 'selected': isMessageSelected, 'selection-target': isSelectionMode, 'reply-target': isSelected }"
     :data-message-id="message.id"
     :data-has-siblings="shouldReserveSiblingNavSpace ? 'true' : 'false'"
     :data-is-reply-root="isReplyRoot ? 'true' : 'false'"
@@ -162,8 +162,8 @@
         :composing-whole="composingWhole"
         @done-whole="composingWhole = false"
       />
-      <p v-if="typingLabel && !menuOpen" class="typing-cue" aria-live="polite">{{ typingLabel }}</p>
     </div>
+    <p v-if="typingLabel && !menuOpen" class="typing-cue" aria-live="polite">{{ typingLabel }}</p>
 
     <teleport to="body">
       <ReplyOrderModal
@@ -656,10 +656,6 @@ onBeforeUnmount(() => {
 
 .function-message.menu-open {
   z-index: 100;
-}
-
-.function-message.has-typing-cue {
-  padding-bottom: 22px;
 }
 
 .fn-body {

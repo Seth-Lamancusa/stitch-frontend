@@ -128,9 +128,11 @@
   --font-size-xl: 1.25rem;   /* 20px */
   --font-size-xxl: 1.5rem;   /* 24px */
 
-  /* Configurable message text size (default 18px / 1.125rem) */
+  /* Configurable message text size (default 18px / 1.125rem, 20% below 22px) */
   --message-font-size: 1.125rem;
   --message-font-size-compact: calc(var(--message-font-size) * 0.9);
+  /* Regular message line spacing (1.5 × 1.2) */
+  --message-line-height: 1.8;
   
   --line-height-tight: 1.2;
   --line-height-normal: 1.5;

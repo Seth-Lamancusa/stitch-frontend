@@ -1100,6 +1100,9 @@ const handleLinkDelete = async (linkData) => {
   max-width: 100%;
   box-sizing: border-box;
   overflow-x: hidden; /* Prevent horizontal scroll */
+  padding-top: 12px;
+  padding-left: 12px;
+  padding-right: 12px;
 }
 
 .message-list-item {

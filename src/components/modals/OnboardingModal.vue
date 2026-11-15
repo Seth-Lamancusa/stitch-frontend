@@ -220,9 +220,9 @@ const phases = [
   },
   {
     id: 'controls',
-    title: 'Default Mark, Collapse & Select',
+    title: 'Default Mark & Select',
     description:
-      'The star marks the default outgoing branch. Use the arrow to collapse long messages or check the box to select multiple nodes to copy.'
+      'The star marks the default outgoing branch. Check the box to select multiple nodes to copy.'
   },
   {
     id: 'actions',
@@ -377,7 +377,6 @@ const onNodeStageClick = (e) => {
     selectPhaseById('metadata');
   } else if (
     el.closest('.default-outgoing-mark') ||
-    el.closest('.collapse-button') ||
     el.closest('.selection-checkbox')
   ) {
     selectPhaseById('controls');
@@ -779,7 +778,6 @@ onBeforeUnmount(() => {
 .real-node-stage :deep(.delete-icon-button),
 .real-node-stage :deep(.add-subject-button),
 .real-node-stage :deep(.default-outgoing-mark),
-.real-node-stage :deep(.collapse-button),
 .real-node-stage :deep(.selection-checkbox),
 .real-node-stage :deep(.compact-hover-toolbar .compact-action-button),
 .real-node-stage :deep(.reply-count) {
@@ -847,9 +845,8 @@ onBeforeUnmount(() => {
   border-radius: 8px;
 }
 
-/* Phase 3: Collapse, Select & Default Mark */
+/* Phase 3: Select & Default Mark */
 .real-node-stage.phase-controls :deep(.default-outgoing-mark),
-.real-node-stage.phase-controls :deep(.collapse-button),
 .real-node-stage.phase-controls :deep(.selection-checkbox) {
   opacity: 1;
   box-shadow: 0 0 0 2px var(--primary-color, #8fbf9f), 0 0 16px rgba(143, 191, 159, 0.35);

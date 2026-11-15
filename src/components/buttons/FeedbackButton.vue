@@ -18,8 +18,9 @@ import { FEEDBACK_MESSAGE_ID } from '@/config/appConfig.js';
 <style scoped>
 .global-feedback-btn {
   position: fixed;
-  bottom: var(--space-xl);
-  left: var(--space-xl);
+  --feedback-inset: var(--space-xl);
+  bottom: var(--feedback-inset);
+  left: var(--feedback-inset);
   z-index: 20;
   isolation: isolate;
   overflow: hidden;
@@ -64,11 +65,11 @@ import { FEEDBACK_MESSAGE_ID } from '@/config/appConfig.js';
 
 @media (max-width: 768px) {
   .global-feedback-btn {
+    --feedback-inset: var(--space-md);
     background-size: 64px;
     width: 52px;
     height: 52px;
-    bottom: 80px;
-    left: var(--space-md);
+    z-index: 120;
   }
 
   .global-feedback-btn .btn-icon {

@@ -6,16 +6,20 @@
       class="reply-backdrop"
     ></div>
     
-    <!-- Bottom sheet -->
+    <!-- Anchor tracks the visual viewport. The sheet only handles open/close motion. -->
+    <div
+      v-if="isReplying || isNewThread"
+      class="reply-sheet-anchor"
+      :style="replyAnchorStyle"
+      ref="replyAnchor"
+    >
     <div 
-      v-if="isReplying || isNewThread" 
       class="reply-sheet"
       :class="{ 
         'reply-sheet--raised': isKeyboardVisible,
         'reply-sheet--visible': isReplying || isNewThread,
         'reply-sheet--closing': isReplyBoxClosing
       }"
-      :style="replySheetStyle"
       ref="replySheet"
       role="dialog"
       aria-labelledby="reply-header"
@@ -49,7 +53,7 @@
         <div class="toolbar-left">
           <!-- Public visibility globe toggle -->
           <button 
-            class="toolbar-control meta-pill visibility-globe-toggle no-drag" 
+            class="toolbar-control meta-pill node-pill visibility-globe-toggle no-drag" 
             @pointerdown.stop.prevent="handleVisibilityToggle('pointer')"
             @click.capture.stop
             @mousedown.stop.prevent
@@ -62,46 +66,57 @@
             aria-label="Toggle public visibility"
             title="Public"
           >
-            <span class="meta-pill__icon">🌐</span>
-            <span class="meta-pill__text">Public</span>
+            <span class="meta-pill__icon" aria-hidden="true">🌐</span>
+            <span class="meta-pill__label">Public</span>
           </button>
           
           <!-- Draft Tags button -->
           <button 
-            class="toolbar-control meta-pill" 
+            class="toolbar-control meta-pill node-pill node-pill--tags" 
             @click="toggleTagsModal"
             :disabled="!canInteract"
             :aria-expanded="showTagsModal"
             aria-label="Manage draft tags"
             title="Tags"
           >
-            <span class="meta-pill__icon"><strong>#</strong></span>
-            <span class="meta-pill__text">Tags ({{ replyTags.length }})</span>
+            <span class="meta-pill__icon meta-pill__hash" aria-hidden="true">#</span>
+            <span class="meta-pill__count">{{ replyTags.length }}</span>
+            <span class="meta-pill__label">Tags ({{ replyTags.length }})</span>
           </button>
           
           <!-- Recipients button -->
           <button 
-            class="toolbar-control meta-pill" 
+            class="toolbar-control meta-pill node-pill node-pill--recipients" 
             @click="toggleRecipientSelector"
             :disabled="!canInteract"
             :aria-expanded="showRecipientSelector"
-            aria-label="Manage recipients"
+            :aria-label="`Manage recipients, ${recipients.length}`"
+            title="Recipients"
           >
-            <span class="meta-pill__icon">👥</span>
-            <span class="meta-pill__text">Recipients ({{ recipients.length }})</span>
+            <svg class="meta-pill__svg" viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="5.5" cy="5" r="2" fill="currentColor"/>
+              <circle cx="11" cy="5.6" r="1.5" fill="currentColor"/>
+              <path fill="currentColor" d="M1.4 12.6c.35-2.15 2.15-3.4 4.1-3.4s3.75 1.25 4.1 3.4H1.4zm7.3-1.15c.35-.2.85-.35 1.45-.35 1.45 0 2.7.85 3.15 2.5h-3.4c-.2-.85-.7-1.55-1.2-2.15z"/>
+            </svg>
+            <span class="meta-pill__count">{{ recipients.length }}</span>
+            <span class="meta-pill__label">Recipients ({{ recipients.length }})</span>
           </button>
           
           <!-- Channels button -->
           <button 
-            class="toolbar-control meta-pill" 
+            class="toolbar-control meta-pill node-pill node-pill--channels" 
             @click="toggleChannelsModal"
             :disabled="!canInteract"
             :aria-expanded="showChannelsModal"
-            aria-label="Manage channels"
+            :aria-label="`Manage channels, ${replyChannels.length}`"
             title="Channels"
           >
-            <span class="meta-pill__icon">📢</span>
-            <span class="meta-pill__text">Channels ({{ replyChannels.length }})</span>
+            <svg class="meta-pill__svg" viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="3.2" cy="8" r="1.35" fill="currentColor"/>
+              <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M6.1 5.15a4.1 4.1 0 0 1 0 5.7M8.7 3.2a7 7 0 0 1 0 9.6"/>
+            </svg>
+            <span class="meta-pill__count">{{ replyChannels.length }}</span>
+            <span class="meta-pill__label">Channels ({{ replyChannels.length }})</span>
           </button>
           
           <!-- Attachment button -->
@@ -114,14 +129,15 @@
             @change="handleFileSelect"
           />
           <button 
-            class="toolbar-control meta-pill"
+            class="toolbar-control meta-pill node-pill node-pill--attach"
             @click="fileInput?.click()"
             :disabled="!canInteract || uploading"
-            aria-label="Attach files"
-            title="Attach files"
+            :aria-label="uploading ? 'Uploading attachments' : `Attach files, ${attachments.length}`"
+            :title="uploading ? 'Uploading...' : 'Attach files'"
           >
-            <span class="meta-pill__icon">📎</span>
-            <span class="meta-pill__text">{{ uploading ? 'Uploading...' : `Attach (${attachments.length})` }}</span>
+            <span class="meta-pill__icon" aria-hidden="true">📎</span>
+            <span class="meta-pill__count">{{ attachments.length }}</span>
+            <span class="meta-pill__label">{{ uploading ? 'Uploading...' : `Attach (${attachments.length})` }}</span>
           </button>
           
           <!-- Prompt moved to MessageNode. Keeping spacing consistent. -->
@@ -228,7 +244,7 @@
                   :key="result.uid"
                   class="mention-dropdown__item"
                   :class="{ 'is-active': index === mentionDropdown.highlightedIndex }"
-                  @mousedown.prevent="selectMentionResult(index)"
+                  @pointerdown.prevent="selectMentionResult(index)"
                 >
                   <span class="mention-dropdown__name">
                     {{ result.display_name || result.user_tag }}
@@ -302,6 +318,7 @@
       </div>
       
 
+    </div>
     </div>
 
     <!-- Recipients modal -->
@@ -390,6 +407,7 @@ const MAX_MESSAGE_CONTENT_LENGTH = 10000;
 // Refs
 const replyTextarea = ref(null);
 const subjectInput = ref(null);
+const replyAnchor = ref(null);
 const replySheet = ref(null);
 const fileInput = ref(null);
 const textareaWrapper = ref(null);
@@ -409,7 +427,9 @@ const uploading = ref(false);
 
 // Bottom sheet state
 const isKeyboardVisible = ref(false);
-const keyboardHeight = ref(0); // Track actual keyboard height for proper positioning
+const keyboardHeight = ref(0); // Distance from the layout bottom to the top of the keyboard
+const keyboardShift = ref(0); // translateY that pins the anchor to the visual viewport
+let mentionCommit = null; // { value, caret, until } — holds a mention insert against a stale mobile input event
 const showSendSuccess = ref(false);
 const isReplyBoxClosing = ref(false);
 
@@ -543,17 +563,12 @@ const mentionDropdownStyle = computed(() => {
   return style;
 });
 
-// Compute dynamic style for reply sheet to handle keyboard offset
-const replySheetStyle = computed(() => {
-  // When keyboard is visible, translate the sheet up by the keyboard height
-  // This ensures the textarea and send button remain visible and clickable
-  if (isKeyboardVisible.value && keyboardHeight.value > 0) {
-    return {
-      '--keyboard-offset': `${keyboardHeight.value}px`
-    };
-  }
+// The anchor is position:fixed to the layout viewport. iOS pans that viewport
+// independently of the keyboard, so follow visualViewport on scroll and resize.
+const replyAnchorStyle = computed(() => {
+  if (!keyboardShift.value) return undefined;
   return {
-    '--keyboard-offset': '0px'
+    transform: `translate3d(0, ${keyboardShift.value}px, 0)`
   };
 });
 
@@ -612,7 +627,6 @@ const handleVisibilityToggle = (source) => {
     } catch (e) {
       replyTextarea.value.focus();
     }
-    isKeyboardVisible.value = true;
   }
 };
 
@@ -628,7 +642,11 @@ const focusTextarea = () => {
   const delay = props.isNewThread ? 450 : 350;
   const tryFocus = () => {
     if (replyTextarea.value) {
-      replyTextarea.value.focus();
+      try {
+        replyTextarea.value.focus({ preventScroll: true });
+      } catch (e) {
+        replyTextarea.value.focus();
+      }
       return true;
     }
     if (!props.isNewThread && showSubject.value && subjectInput.value) {
@@ -701,6 +719,8 @@ const hideBottomSheet = () => {
   // In new thread view the reply box cannot be closed (no X, no outside click)
   if (props.isNewThread) return;
   isKeyboardVisible.value = false;
+  keyboardShift.value = 0;
+  keyboardHeight.value = 0;
 
   if (isReplying.value) {
     isReplyBoxClosing.value = true;
@@ -829,41 +849,23 @@ const scheduleMentionSearch = (query) => {
 // Keyboard handling
 const handleTextareaFocus = () => {
   ensureReplyingActive();
-  
-  // Detect mobile keyboard on focus
-  // The main detection is handled by the visualViewport resize listener,
-  // but we also check here as a fallback for initial focus
-  if (window.innerWidth <= 768 && window.visualViewport) {
-    // Use a timeout to allow keyboard to fully appear
-    setTimeout(() => {
-      const currentHeight = window.visualViewport.height;
-      const fullHeight = window.innerHeight;
-      const heightDiff = fullHeight - currentHeight;
-      
-      if (heightDiff > 150) {
-        isKeyboardVisible.value = true;
-        // Set keyboard height with a small buffer
-        keyboardHeight.value = Math.max(0, heightDiff + 10);
-      }
-    }, 300);
+  // Keyboard pinning listens to visualViewport; nudge it after the keyboard animates in.
+  if (window.innerWidth <= 768) {
+    setTimeout(pinComposerToKeyboard, 50);
+    setTimeout(pinComposerToKeyboard, 300);
   }
 };
 
 const handleTextareaBlur = () => {
-  // Delay closing dropdown to allow clicks on dropdown items
+  // Delay closing the dropdown so a pointer selection can commit first.
   setTimeout(() => {
-    // Check if dropdown is still supposed to be visible (user might have clicked on it)
+    if (mentionCommit && performance.now() < mentionCommit.until) return;
     const activeElement = document.activeElement;
     const isClickingDropdown = activeElement?.closest('.mention-dropdown');
     if (!isClickingDropdown) {
       closeMentionDropdown();
     }
-  }, 150);
-  // Reset keyboard state - delay to allow for clicks on send button etc.
-  setTimeout(() => {
-    isKeyboardVisible.value = false;
-    keyboardHeight.value = 0;
-  }, 100);
+  }, 200);
 };
 
 const handleTextareaKeyDown = (event) => {
@@ -946,7 +948,8 @@ const autoResizeTextarea = () => {
   textarea.style.height = 'auto';
   
   const minHeight = 32; // Compact single line
-  const maxHeight = window.innerHeight * 0.4; // 40vh
+  const visibleHeight = window.visualViewport?.height || window.innerHeight;
+  const maxHeight = window.innerWidth <= 768 ? visibleHeight * 0.28 : window.innerHeight * 0.4;
   const naturalHeight = textarea.scrollHeight;
   const newHeight = Math.min(Math.max(naturalHeight, minHeight), maxHeight);
   
@@ -1115,6 +1118,14 @@ const detectMentionTrigger = (textarea) => {
 };
 
 const handleTextareaInput = (event) => {
+  const pending = mentionCommit;
+  if (pending && performance.now() < pending.until && event.target.value !== pending.value) {
+    // Mobile sometimes delivers the pre-selection buffer after a programmatic insert.
+    event.target.value = pending.value;
+    content.value = pending.value;
+    event.target.setSelectionRange(pending.caret, pending.caret);
+    return;
+  }
   detectMentionTrigger(event.target);
 };
 
@@ -1329,37 +1340,69 @@ const applyFormatting = (kind) => {
   });
 };
 
+const placeMentionCaret = (nextContent, caret) => {
+  const el = replyTextarea.value;
+  if (!el) return;
+  if (el.value !== nextContent) el.value = nextContent;
+  content.value = nextContent;
+  try {
+    el.focus({ preventScroll: true });
+  } catch (e) {
+    el.focus();
+  }
+  el.setSelectionRange(caret, caret);
+  autoResizeTextarea();
+  updateOverlayHtml();
+};
+
 const insertMentionResult = (user) => {
   const textarea = replyTextarea.value;
-  if (!textarea || mentionDropdown.anchorStart === null) return;
+  if (!textarea || mentionDropdown.anchorStart === null || !user?.user_tag) return;
+  const live = textarea.value ?? content.value ?? '';
   const start = mentionDropdown.anchorStart;
-  const end = mentionDropdown.anchorEnd ?? textarea.selectionStart ?? start;
-  const mentionText = `@${user.user_tag}`;
-  const before = content.value.slice(0, start);
-  const after = content.value.slice(end);
-  const insertion = `${mentionText} `;
-  const nextContent = `${before}${insertion}${after}`;
+  const rawEnd = mentionDropdown.anchorEnd ?? textarea.selectionStart ?? start;
+  const end = Math.max(start, Math.min(rawEnd, live.length));
+  const insertion = `@${user.user_tag} `;
+  const nextContent = `${live.slice(0, start)}${insertion}${live.slice(end)}`;
   if (nextContent.length > MAX_MESSAGE_CONTENT_LENGTH) {
     store.commit('ui/SET_ERROR', `Message must be ${MAX_MESSAGE_CONTENT_LENGTH} characters or less.`);
     closeMentionDropdown();
     return;
   }
-  content.value = nextContent;
-  nextTick(() => {
-    const caretPosition = before.length + insertion.length;
-    if (replyTextarea.value) {
-      replyTextarea.value.setSelectionRange(caretPosition, caretPosition);
-    }
-    autoResizeTextarea();
-    updateOverlayHtml();
-    detectMentionTrigger(replyTextarea.value);
-  });
+  const caret = start + insertion.length;
+  // Hold the committed string so a following input event cannot wipe it.
+  mentionCommit = { value: nextContent, caret, until: performance.now() + 600 };
+  suppressNextMentionDetection = true;
+
+  try {
+    textarea.focus({ preventScroll: true });
+  } catch (e) {
+    textarea.focus();
+  }
+
+  let committed = false;
+  try {
+    textarea.setSelectionRange(start, end);
+    committed = document.execCommand('insertText', false, insertion) && textarea.value === nextContent;
+  } catch (e) {
+    committed = false;
+  }
+  if (!committed) {
+    textarea.value = nextContent;
+    content.value = nextContent;
+    textarea.setSelectionRange(caret, caret);
+  } else {
+    content.value = textarea.value;
+    textarea.setSelectionRange(caret, caret);
+  }
+
   ensureMentionRecipient(user);
-  // Track this recipient as added via inline mention
   if (user.user_tag) {
     inlineTrackedRecipients.value.add(user.user_tag.toLowerCase());
   }
   closeMentionDropdown();
+  placeMentionCaret(nextContent, caret);
+  nextTick(() => placeMentionCaret(nextContent, caret));
 };
 
 const selectMentionResult = (index) => {
@@ -2289,46 +2332,81 @@ watch(() => isReplying.value || props.isNewThread, (shouldShow) => {
   }
 }, { immediate: true });
 
-// Handle viewport changes for keyboard detection
-if (typeof window !== 'undefined' && window.visualViewport) {
-  // Store initial viewport height to detect keyboard
-  let initialViewportHeight = window.visualViewport.height;
-  
-  const handleViewportChange = () => {
-    if (window.innerWidth <= 768) {
-      // Calculate the difference between initial viewport and current visual viewport
-      // This gives us the keyboard height more accurately than using screen.height
-      const currentHeight = window.visualViewport.height;
-      const heightDiff = initialViewportHeight - currentHeight;
-      
-      // Keyboard is visible if the viewport shrunk by more than 150px
-      const keyboardIsVisible = heightDiff > 150;
-      isKeyboardVisible.value = keyboardIsVisible;
-      
-      // Store the actual keyboard height for positioning
-      // Add a small buffer (10px) to ensure content isn't cut off
-      keyboardHeight.value = keyboardIsVisible ? Math.max(0, heightDiff + 10) : 0;
-    } else {
+// Pin the composer to the top of the OS keyboard.
+// position:fixed tracks the layout viewport, which iOS pans while the keyboard is open.
+// The gap between that layout bottom and the visual viewport bottom is the keyboard.
+const KEYBOARD_OPEN_PX = 120;
+let coverObserver = null;
+let pinFrame = 0;
+
+const publishComposerCover = () => {
+  const anchor = replyAnchor.value;
+  const showing = isReplying.value || props.isNewThread;
+  if (!anchor || !showing) {
+    document.documentElement.style.removeProperty('--stitch-composer-cover');
+    document.documentElement.style.removeProperty('--stitch-composer-max');
+    return;
+  }
+  const overlap = Math.max(0, -keyboardShift.value);
+  document.documentElement.style.setProperty(
+    '--stitch-composer-cover',
+    `${anchor.offsetHeight + overlap}px`
+  );
+};
+
+const pinComposerToKeyboard = () => {
+  if (pinFrame) cancelAnimationFrame(pinFrame);
+  pinFrame = requestAnimationFrame(() => {
+    pinFrame = 0;
+    const anchor = replyAnchor.value;
+    const mobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (!anchor || !mobile || !vv) {
+      keyboardShift.value = 0;
       isKeyboardVisible.value = false;
       keyboardHeight.value = 0;
+      publishComposerCover();
+      return;
     }
-  };
-  
-  // Update initial height on orientation change or significant resize
-  const handleOrientationChange = () => {
-    // Only update initial height when keyboard is not visible
-    if (!isKeyboardVisible.value) {
-      initialViewportHeight = window.visualViewport.height;
-    }
-  };
-  
-  window.visualViewport.addEventListener('resize', handleViewportChange);
-  window.addEventListener('orientationchange', handleOrientationChange);
-  
-  // Cleanup
+    const shift = Math.round(vv.offsetTop + vv.height - window.innerHeight);
+    const overlap = Math.max(0, -shift);
+    const open = overlap > KEYBOARD_OPEN_PX;
+    isKeyboardVisible.value = open;
+    keyboardHeight.value = open ? overlap : 0;
+    keyboardShift.value = open ? shift : 0;
+    // Leave room above the keyboard for the new-thread recipients list.
+    const cap = Math.max(180, Math.floor(vv.height * 0.58));
+    document.documentElement.style.setProperty('--stitch-composer-max', `${cap}px`);
+    publishComposerCover();
+  });
+};
+
+watch(replyAnchor, (el) => {
+  coverObserver?.disconnect();
+  coverObserver = null;
+  if (!el || typeof ResizeObserver === 'undefined') {
+    publishComposerCover();
+    return;
+  }
+  coverObserver = new ResizeObserver(() => publishComposerCover());
+  coverObserver.observe(el);
+  pinComposerToKeyboard();
+});
+
+if (typeof window !== 'undefined') {
+  const onViewport = () => pinComposerToKeyboard();
+  window.visualViewport?.addEventListener('resize', onViewport);
+  window.visualViewport?.addEventListener('scroll', onViewport);
+  window.addEventListener('orientationchange', onViewport);
+  onMounted(onViewport);
   onBeforeUnmount(() => {
-    window.visualViewport.removeEventListener('resize', handleViewportChange);
-    window.removeEventListener('orientationchange', handleOrientationChange);
+    if (pinFrame) cancelAnimationFrame(pinFrame);
+    coverObserver?.disconnect();
+    window.visualViewport?.removeEventListener('resize', onViewport);
+    window.visualViewport?.removeEventListener('scroll', onViewport);
+    window.removeEventListener('orientationchange', onViewport);
+    document.documentElement.style.removeProperty('--stitch-composer-cover');
+    document.documentElement.style.removeProperty('--stitch-composer-max');
   });
 }
 
@@ -2339,7 +2417,11 @@ defineExpose({
   focus: () => {
     // Prefer message box; only fall back to subject when not new-thread and no textarea
     if (replyTextarea.value) {
-      replyTextarea.value.focus();
+      try {
+        replyTextarea.value.focus({ preventScroll: true });
+      } catch (e) {
+        replyTextarea.value.focus();
+      }
     } else if (!props.isNewThread && showSubject.value && subjectInput.value) {
       subjectInput.value.focus();
     }
@@ -2372,20 +2454,29 @@ defineExpose({
   pointer-events: none; /* Allow clicks to pass through */
 }
 
-/* Bottom sheet: dark panel, a step above the canvas, with the same weave */
-.reply-sheet {
+/* Fixed to the layout viewport. Keyboard offset is applied here, not on the sheet,
+   so open/close motion and keyboard tracking don't share one transform. */
+.reply-sheet-anchor {
   position: fixed;
   left: 16px;
   right: 16px;
-  bottom: -20px; /* Position slightly below the viewport */
+  bottom: 0;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+/* Bottom sheet: dark panel, a step above the canvas, with the same weave */
+.reply-sheet {
+  position: relative;
+  width: 100%;
   isolation: isolate;
+  pointer-events: auto;
   background-color: #1c211f;
   background-image: linear-gradient(180deg, #242a27 0%, #1a1f1d 100%);
   border-top-left-radius: 16px;
   border-top-right-radius: 16px;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.4);
-  z-index: 1000;
-  padding-bottom: calc(env(safe-area-inset-bottom) + 20px); /* Keep safe area padding */
+  padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
   display: flex;
   flex-direction: column;
   max-height: calc(50vh + 20px); /* Account for the extended bottom */
@@ -2419,8 +2510,9 @@ defineExpose({
 }
 
 .reply-sheet--raised {
-  /* Use the dynamically calculated keyboard offset to move the sheet above the keyboard */
-  transform: translateY(calc(-1 * var(--keyboard-offset, 0px)));
+  /* The keyboard covers the home indicator, so don't reserve that inset. */
+  padding-bottom: 10px;
+  transform: translateY(0);
 }
 
 .reply-sheet--closing {
@@ -2574,8 +2666,19 @@ defineExpose({
   line-height: 1;
 }
 
-.meta-pill__text {
+.meta-pill__label {
   font-weight: 500;
+}
+
+.meta-pill__count {
+  display: none;
+}
+
+.meta-pill__svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  display: block;
 }
 
 /* Globe toggle styling */
@@ -3064,17 +3167,119 @@ defineExpose({
   .reply-container {
     display: none !important;
   }
+
+  .reply-sheet-anchor {
+    left: 12px;
+    right: 12px;
+  }
   
   /* Mobile optimizations */
   
   .reply-sheet {
-    left: 12px;
-    right: 12px;
     border-radius: 16px 16px 0 0;
-    bottom: -30px; /* Position even further below on mobile */
-    max-height: calc(50vh + 30px); /* Account for the extended bottom */
-    min-height: auto; /* Let it size to content */
-    height: auto; /* Auto-size to content */
+    max-height: min(50dvh, var(--stitch-composer-max, 50dvh));
+    min-height: auto;
+    height: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .reply-sheet__toolbar {
+    padding: 6px 10px;
+    margin-bottom: 0;
+  }
+
+  .toolbar-left {
+    flex-wrap: nowrap;
+    gap: 6px;
+    width: 100%;
+  }
+
+  /* Same compact pills as a message node: icon and count, no labels. */
+  .meta-pill.node-pill {
+    min-height: 22px;
+    height: 22px;
+    padding: 0 6px 0 5px;
+    gap: 3px;
+    font-size: var(--font-size-xs);
+    border-radius: var(--radius-pill);
+  }
+
+  .meta-pill__label {
+    display: none;
+  }
+
+  .meta-pill__count {
+    display: inline;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    font-weight: 600;
+  }
+
+  .meta-pill__icon {
+    font-size: 13px;
+  }
+
+  .meta-pill__hash {
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .meta-pill__svg {
+    display: block;
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+  }
+
+  .node-pill--tags {
+    background-color: var(--color-secondary-light, rgba(89, 137, 88, 0.2));
+    border-color: rgba(89, 137, 88, 0.5);
+    color: #d8f3d4;
+  }
+
+  .node-pill--channels {
+    background-color: rgba(255, 165, 0, 0.12);
+    border-color: rgba(255, 165, 0, 0.45);
+    color: #FFA500;
+  }
+
+  .node-pill--recipients,
+  .node-pill--attach {
+    background-color: transparent;
+  }
+
+  .md-controls {
+    flex-wrap: nowrap;
+    gap: 4px;
+    margin-top: 6px;
+    margin-bottom: 4px;
+    padding: 0;
+  }
+
+  .md-control {
+    width: auto;
+    height: 32px;
+    flex: 1 1 0;
+    min-width: 0;
+    border-radius: 8px;
+    font-size: 15px;
+  }
+
+  .md-control svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .md-control--code {
+    font-size: 11px;
+  }
+
+  .content-char-count {
+    flex: 0 0 auto;
+    margin-left: 2px;
+    font-size: 10px;
   }
   
   .reply-sheet__header {
@@ -3091,11 +3296,7 @@ defineExpose({
   
   .reply-sheet__textarea-container {
     flex: none; /* Don't expand to fill space on mobile */
-    padding: 0 16px 32px 16px;
-  }
-  
-  .toolbar-left {
-    flex-wrap: wrap;
+    padding: 0 10px 12px 10px;
   }
 }
 
@@ -3105,14 +3306,14 @@ defineExpose({
   }
   
   .reply-sheet__toolbar {
-    padding: 4px 12px 4px;
-    gap: 8px;
-    flex-wrap: wrap;
+    padding: 4px 10px;
+    gap: 6px;
+    flex-wrap: nowrap;
   }
   
   .toolbar-left {
-    flex-wrap: wrap;
-    gap: 8px;
+    flex-wrap: nowrap;
+    gap: 6px;
   }
   
   .visibility-toggle {
@@ -3125,9 +3326,9 @@ defineExpose({
   }
   
   .meta-pill {
-    padding: 6px 8px;
+    padding: 0 6px 0 5px;
     font-size: var(--font-size-xs);
-    min-height: 32px;
+    min-height: 22px;
   }
   
   .textarea-send-button {
@@ -3149,10 +3350,12 @@ defineExpose({
 
 /* Desktop optimizations - keep mobile design but improve desktop UX */
 @media (min-width: 769px) {
-  .reply-sheet {
+  .reply-sheet-anchor {
     left: 40px;
     right: 40px;
-    width: auto;
+  }
+
+  .reply-sheet {
     border-radius: 16px 16px 0 0;
     max-height: 60vh;
     padding: 0;
@@ -3163,13 +3366,20 @@ defineExpose({
   }
   
   .reply-sheet--raised {
-    /* Use the dynamically calculated keyboard offset on desktop as well */
-    transform: translateY(calc(-1 * var(--keyboard-offset, 0px)));
+    transform: translateY(0);
   }
   
   /* Hide mobile touch handle on desktop */
   .reply-sheet__handle {
     display: none;
+  }
+
+  /* Typed message text is 40% larger than the shared small size (0.875rem → 1.225rem). */
+  .reply-sheet__textarea,
+  .reply-overlay {
+    font-size: calc(var(--font-size-sm) * 1.4);
+    /* One line plus the existing 13px/10px padding and 1px borders, with a little slack. */
+    min-height: calc(var(--font-size-sm) * 1.96 + 27px);
   }
 }
 

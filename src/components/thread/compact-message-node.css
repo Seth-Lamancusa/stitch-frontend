@@ -27,7 +27,8 @@
   font-size: calc(var(--font-size-xs) - 1px);
 }
 
-.message-node.compact:not(.list-view) .header-row--author {
+.message-node.compact:not(.list-view) .header-identity,
+.message-node.compact:not(.list-view) .header-meta {
   align-items: center;
 }
 

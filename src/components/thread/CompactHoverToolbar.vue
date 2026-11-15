@@ -148,7 +148,7 @@ onBeforeUnmount(() => {
 .compact-hover-toolbar {
   position: absolute;
   right: 8px;
-  bottom: -16px;
+  bottom: -8px;
   z-index: 6;
   display: inline-flex;
   align-items: center;

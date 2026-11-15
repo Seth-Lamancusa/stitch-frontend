@@ -467,7 +467,7 @@ onUnmounted(() => {
 
 .preview-body {
   color: #fffdf5;
-  line-height: 1.5;
+  line-height: var(--message-line-height, 1.8);
   font-size: var(--message-font-size, 1.125rem);
 }
 

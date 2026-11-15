@@ -5,13 +5,13 @@ const MESSAGE_TEXT_SIZE_KEY = 'messageTextSize'
 
 export const DEFAULT_MESSAGE_TEXT_SIZE = 18
 export const MIN_MESSAGE_TEXT_SIZE = 13
-export const MAX_MESSAGE_TEXT_SIZE = 24
+export const MAX_MESSAGE_TEXT_SIZE = 26
 
 export const MESSAGE_TEXT_SIZE_PRESETS = [
   { id: 'sm', label: 'Small', size: 15 },
   { id: 'md', label: 'Default', size: 18 },
-  { id: 'lg', label: 'Large', size: 20 },
-  { id: 'xl', label: 'Extra Large', size: 22 },
+  { id: 'lg', label: 'Large', size: 24 },
+  { id: 'xl', label: 'Extra Large', size: 26 },
 ]
 
 const PRESET_MAP = {
@@ -20,10 +20,10 @@ const PRESET_MAP = {
   md: 18,
   default: 18,
   medium: 18,
-  lg: 20,
-  large: 20,
-  xl: 22,
-  'extra-large': 22,
+  lg: 24,
+  large: 24,
+  xl: 26,
+  'extra-large': 26,
 }
 
 export function normalizeMessageTextSize(value) {

@@ -4,6 +4,8 @@
  * Formats content with markdown-it.
  */
 import { createFormatter } from './base';
+import { fenceLabelFromInfo } from '../helpers/fenceLabel';
+import { separateParagraphsAfterLists } from '../helpers/listParagraphs';
 import { protectLatexBlocks, protectInlineLatex, protectMermaidBlocks, protectMermaidHtml, restoreProtectedContent } from '../helpers/protection';
 
 // Will need to be installed: npm install markdown-it
@@ -25,6 +27,13 @@ async function getMarkdownIt() {
         linkify: true,
         typographer: true
       });
+      const renderFence = markdownIt.renderer.rules.fence;
+      markdownIt.renderer.rules.fence = (tokens, idx, options, env, slf) => {
+        const html = renderFence(tokens, idx, options, env, slf);
+        const label = fenceLabelFromInfo(tokens[idx].info);
+        if (!label || !html.startsWith('<pre>')) return html;
+        return `<pre data-label="${escapeAttr(label)}">${html.slice('<pre>'.length)}`;
+      };
     } catch (error) {
       console.error('Error loading markdown-it:', error);
       
@@ -43,6 +52,13 @@ async function getMarkdownIt() {
   }
   
   return markdownIt;
+}
+
+function escapeAttr(value) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;');
 }
 
 /**
@@ -66,6 +82,10 @@ export const markdownFormatter = createFormatter(
       processedContent = protectMermaidBlocks(processedContent, context); // Protect any remaining raw blocks
       processedContent = protectLatexBlocks(processedContent, context);
       processedContent = protectInlineLatex(processedContent, context);
+
+      // A line on its own after a bullet, including between two bullets, is
+      // otherwise kept inside the item and inherits the list indent.
+      processedContent = separateParagraphsAfterLists(processedContent);
       
       // Process the content with markdown-it
       const md = await getMarkdownIt();

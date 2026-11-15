@@ -39,7 +39,7 @@ pre {
   border-radius: var(--radius-sm);
   padding: var(--space-md);
   overflow-x: auto;
-  margin: var(--space-md) 0;
+  margin: calc(var(--space-md) + 8px) 0 var(--space-md);
   border: 1px solid var(--color-border);
 }
 
@@ -57,6 +57,141 @@ pre code {
   padding: 0;
   border-radius: 0;
   color: inherit;
+}
+
+.fc-fence {
+  position: relative;
+}
+
+.fc-fence-label {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 2px);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family-code);
+  font-size: 0.72rem;
+  line-height: 1;
+  color: var(--color-text-secondary);
+  pointer-events: none;
+}
+
+.fc-fence-actions {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .fc-fence > pre {
+    padding-right: 4.4rem;
+  }
+
+  .fc-fence-actions {
+    display: flex;
+    gap: 4px;
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 2;
+  }
+
+  .fc-fence-open,
+  .fc-fence-copy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .fc-fence-copy.is-copied {
+    background: var(--color-success);
+    border-color: var(--color-success);
+    color: var(--color-text-inverse);
+  }
+}
+
+.fc-fence-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.fc-fence-modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  background: var(--color-surface);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.fc-fence-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: calc(12px + env(safe-area-inset-top)) 14px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.fc-fence-modal-header h3 {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.fc-fence-modal-close {
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.fc-fence-modal-body {
+  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 14px 16px calc(18px + env(safe-area-inset-bottom));
+  background: var(--color-code-background);
+  color: var(--color-code-text);
+  font-family: var(--font-family-code);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.fc-fence-line {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-height: 1.45em;
 }
 
 /* Overrides for highlight.js */
