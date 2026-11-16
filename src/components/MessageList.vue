@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, onActivated, onDeactivated, ref, next
 import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
 import MessagePreview from './MessagePreview.vue';
+import ModeInfoBox from './ModeInfoBox.vue';
 import DeleteConfirmModal from './modals/DeleteConfirmModal.vue';
 import { isCurrentUserAuthor as isMessageAuthor } from '../utils/messageCompat.js';
 
@@ -189,27 +190,38 @@ const isFilteredByChannel = computed(() => {
   return ['inbox', 'history', 'timeline'].includes(props.mode);
 });
 
-// Get description text for current mode
-const modeDescription = computed(() => {
-  switch (props.mode) {
-    case 'search':
-      return 'Search results show messages visible to you that match your search criteria (tags and content). Results include both public messages and private messages you have access to.';
-    case 'history':
-      return 'History shows the root message of each thread where you have sent at least one message, in any branch. Threads are sorted by your most recent activity, so the threads you\'ve participated in recently appear first.';
-    case 'saved':
-      return 'Saved messages are messages you\'ve bookmarked for easy access later. Use the bookmark button on any message to save it here.';
-    case 'similar':
-      return 'Similar messages are ranked by text overlap with the source message. The source itself is left out.';
-    case 'inbox':
-      return 'Your inbox shows the latest message from each conversation thread where you are involved—either as a recipient or as the author. This gives you a quick overview of all your active conversations.';
-    case 'public':
-      return 'Public shows the root of each public thread, one row per thread. A public reply under a private message starts its own thread. Roots are ordered by when they were created, newest first.';
-    case 'timeline':
-      return 'Timeline shows all messages you have access to in reverse chronological order. This includes public messages, messages you authored, messages you received, and messages in channels you\'re a member of.';
-    default:
-      return null;
+const MODE_INFO = {
+  search: {
+    title: 'Search',
+    text: 'Search results show messages visible to you that match your search criteria (tags and content). Results include both public messages and private messages you have access to.'
+  },
+  history: {
+    title: 'History',
+    text: 'History shows the root message of each thread where you have sent at least one message, in any branch. Threads are sorted by your most recent activity, so the threads you\'ve participated in recently appear first.'
+  },
+  saved: {
+    title: 'Saved',
+    text: 'Saved messages are messages you\'ve bookmarked for easy access later. Use the bookmark button on any message to save it here.'
+  },
+  similar: {
+    title: 'Similar',
+    text: 'Similar messages are ranked by text overlap with the source message. The source itself is left out.'
+  },
+  inbox: {
+    title: 'Inbox',
+    text: 'Your inbox shows the latest message from each conversation thread where you are involved—either as a recipient or as the author. This gives you a quick overview of all your active conversations.'
+  },
+  public: {
+    title: 'Public',
+    text: 'Public shows the root of each public thread, one row per thread. A public reply under a private message starts its own thread. Roots are ordered by when they were created, newest first.'
+  },
+  timeline: {
+    title: 'Timeline',
+    text: 'Timeline shows all messages you have access to in reverse chronological order. This includes public messages, messages you authored, messages you received, and messages in channels you\'re a member of.'
   }
-});
+};
+
+const modeInfo = computed(() => MODE_INFO[props.mode] || null);
 
 // Contextual empty state message based on mode
 const emptyStateMessage = computed(() => {
@@ -277,7 +289,6 @@ const loginPromptMessage = computed(() => {
   return '';
 });
 
-const error = computed(() => store.getters['ui/error']);
 const user = computed(() => store.getters['auth/user']);
 const canInteract = computed(() => store.getters['auth/canInteract']);
 const activePrincipalUid = computed(() => store.getters['auth/activePrincipalUid']);
@@ -290,9 +301,6 @@ const listCacheKey = computed(() => {
 
 const firebaseReady = ref(true);
 const replyCounts = ref({}); // Track reply counts by thread ID
-
-// Add new ref for info box collapsed state
-const isInfoBoxCollapsed = ref(localStorage.getItem('infoBoxCollapsed') === 'true');
 
 // New Thread Modal State
 // Link mode detection
@@ -845,12 +853,6 @@ const handleMessageSelection = (messageId) => {
   emit('selectionChanged', Array.from(selectedMessageIds.value));
 };
 
-// Add function to toggle info box
-const toggleInfoBox = () => {
-  isInfoBoxCollapsed.value = !isInfoBoxCollapsed.value;
-  localStorage.setItem('infoBoxCollapsed', isInfoBoxCollapsed.value);
-};
-
 // Handle link deletion
 const handleLinkDelete = async (linkData) => {
   try {
@@ -925,10 +927,11 @@ const handleLinkDelete = async (linkData) => {
     </div> -->
 
     <!-- Mode description (info box) -->
-    <div v-if="modeDescription && !hideInfoBox" class="mode-description">
-      <span class="info-icon">ℹ</span>
-      <p>{{ modeDescription }}</p>
-    </div>
+    <ModeInfoBox
+      v-if="modeInfo && !hideInfoBox"
+      :title="modeInfo.title"
+      :text="modeInfo.text"
+    />
     <!-- Channel filter indicator: below the info box when a channel is selected -->
     <div v-if="isFilteredByChannel && !hideInfoBox" class="channel-filter-indicator">
       Filtered by channel. Change selection on the Channels tab.

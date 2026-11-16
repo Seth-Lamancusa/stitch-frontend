@@ -103,6 +103,64 @@ function formatResponse(name, output) {
   }
 }
 
+export function functionRunLabel(messages) {
+  const types = new Set((messages || []).map((message) => message?.type));
+  const invocations = types.has('function_invocation');
+  const responses = types.has('function_response');
+  if (invocations && responses) return 'function invocations and responses';
+  if (invocations) return 'function invocations';
+  if (responses) return 'function responses';
+  return '';
+}
+
+// Consecutive function messages on the visible branch. Invocations and
+// responses share one run. A run of one stays a normal row. A longer run
+// is one collapsed box.
+export function conversationSpineRows(messages) {
+  const rows = [];
+  const list = Array.isArray(messages) ? messages : [];
+  let index = 0;
+  while (index < list.length) {
+    const message = list[index];
+    if (!isFunctionMessage(message)) {
+      rows.push({ kind: 'single', message, index });
+      index += 1;
+      continue;
+    }
+    let end = index + 1;
+    while (end < list.length && isFunctionMessage(list[end])) end += 1;
+    if (end - index > 1) {
+      const run = list.slice(index, end);
+      rows.push({
+        kind: 'function-group',
+        label: functionRunLabel(run),
+        messages: run,
+        startIndex: index,
+      });
+    } else {
+      rows.push({ kind: 'single', message, index });
+    }
+    index = end;
+  }
+  return rows;
+}
+
+// Matches SiblingNavigator: position in the parent's ordered children.
+// An unknown id falls back to the branch child, then to the first slot.
+export function siblingNavSides(childIds, messageId, branchChildId) {
+  const ids = Array.isArray(childIds) ? childIds : [];
+  if (ids.length <= 1) return { prev: false, next: false };
+  let position = ids.findIndex((id) => String(id) === String(messageId));
+  if (position === -1 && branchChildId != null) {
+    position = ids.findIndex((id) => String(id) === String(branchChildId));
+  }
+  if (position === -1) position = 0;
+  return {
+    prev: position > 0,
+    next: position < ids.length - 1,
+  };
+}
+
 export function functionCode(message, parent) {
   const content = dictionary(message?.content);
   if (message?.type === 'function_invocation') {

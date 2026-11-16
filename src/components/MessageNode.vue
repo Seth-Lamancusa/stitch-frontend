@@ -300,22 +300,28 @@
       <!-- Files -->
       <message-attachments :attachments="message.files" />
 
+      <p
+        v-if="inListView && typingLabel"
+        class="typing-cue typing-cue--inset"
+        aria-live="polite"
+      >{{ typingLabel }}</p>
+
       <CompactHoverToolbar
-        v-if="!inListView && !isSelectionMode"
-        :visible="isMobile || compactToolbarVisible || revealToolbar"
+        v-if="!inListView && (!isSelectionMode || typingLabel)"
+        :visible="!isSelectionMode && (isMobile || compactToolbarVisible || revealToolbar)"
         :menu-open="revealMenu"
         :primary-actions="compactToolbarActionList"
         :more-actions="compactMoreActionList"
         :reply-count="message.child_ids?.length || 0"
+        :typing-label="showActionBar ? '' : typingLabel"
         @more-open-changed="onCompactMoreOpenChanged"
       />
       
      </div>
 
     <p
-      v-if="typingLabel && !hideTypingCue"
-      class="typing-cue"
-      :class="{ 'typing-cue--inset': inListView }"
+      v-if="typingLabel"
+      class="typing-cue typing-cue--below"
       aria-live="polite"
     >{{ typingLabel }}</p>
 
@@ -668,6 +674,39 @@ export default {
       }
     };
 
+    const displayedBranch = () => {
+      const anchorId = route.params.id;
+      if (!anchorId || props.inListView) return [];
+      return store.getters['messages/getDisplayedBranch'](anchorId) || [];
+    };
+
+    const displayedBranchIndex = () => {
+      const branch = displayedBranch();
+      return branch.findIndex(message => String(message.id) === String(props.message.id));
+    };
+
+    // Hide every visible-branch message on one side of this row. The cached
+    // messages stay put; the thread marker's view button puts them back.
+    const clipVisibleBranch = (side) => {
+      const branch = displayedBranch();
+      const index = displayedBranchIndex();
+      if (index < 0) return;
+      const neighbor = side === 'above' ? branch[index - 1] : branch[index + 1];
+      if (!neighbor) return;
+      store.commit('messages/SET_BRANCH_CLIP', {
+        messageId: props.message.id,
+        side,
+        hiddenId: neighbor.id,
+      });
+      const routeIndex = branch.findIndex(message => String(message.id) === String(route.params.id));
+      const routeFallsOutside = side === 'above' ? routeIndex > -1 && routeIndex < index : routeIndex > index;
+      if (routeFallsOutside) emit('center', props.message.id);
+      store.dispatch('navigation/hideActionBar', props.message.id);
+    };
+
+    const truncateAbove = () => clipVisibleBranch('above');
+    const truncateBelow = () => clipVisibleBranch('below');
+
     const isDefaultOutgoingChild = computed(() => isShownDefaultOutgoing());
     
     const composingWhole = ref(false);
@@ -785,6 +824,30 @@ export default {
       }
       
       ,
+      {
+        id: 'truncate-above',
+        emoji: '⬆️',
+        text: 'Truncate above',
+        desktopVisible: false,
+        mobileVisible: false,
+        adminOnly: false,
+        handler: truncateAbove,
+        condition: () => displayedBranchIndex() > 0
+      },
+      {
+        id: 'truncate-below',
+        emoji: '⬇️',
+        text: 'Truncate below',
+        desktopVisible: false,
+        mobileVisible: false,
+        adminOnly: false,
+        handler: truncateBelow,
+        condition: () => {
+          const index = displayedBranchIndex();
+          const branch = displayedBranch();
+          return index >= 0 && index < branch.length - 1;
+        }
+      },
       {
         id: 'center',
         emoji: '🎯',
@@ -993,12 +1056,6 @@ export default {
     const messageNodeRef = ref(null);
     const isMobile = ref(false);
 
-    const hideTypingCue = computed(() => {
-      const hoverMenuShowing = !props.inListView
-        && !isSelectionMode.value
-        && (isMobile.value || compactToolbarVisible.value || props.revealToolbar);
-      return hoverMenuShowing || showActionBar.value;
-    });
     const displayContent = computed(() => contentText(props.message?.content));
     
     const openLinksModal = () => {
@@ -1497,6 +1554,7 @@ export default {
     const isReplyRoot = computed(() => props.message.parent_id === null || props.message.parent_id === undefined);
  
     const shouldShowLinkSwitcher = computed(() => {
+      if (!store.state.ui.showLinkSwitchers) return false;
       if (props.displayMode !== 'full') return false; // Only show in ThreadView
       return props.showLinkSwitcher;
     });
@@ -2182,7 +2240,6 @@ export default {
       compactMoreActionList,
       compactToolbarVisible,
       typingLabel,
-      hideTypingCue,
       onCompactHoverEnter,
       onCompactHoverLeave,
       onCompactMoreOpenChanged,
@@ -2334,6 +2391,7 @@ export default {
 
 <style scoped>
 .message-node {
+  margin-top: 3px;
   margin-bottom: 0;
   margin-left: auto;
   margin-right: auto;

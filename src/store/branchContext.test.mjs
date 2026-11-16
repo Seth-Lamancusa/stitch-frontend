@@ -3,6 +3,7 @@ import {
   activeContextWalk,
   branchRowKey,
   chooseBranchChild,
+  clipDisplayedBranch,
   contextChainMatches,
   missingVisibleHop,
   contextWalkIds,
@@ -92,5 +93,25 @@ const graph = {
   side: { id: 'side' },
 };
 assert.deepEqual(loadedDescendantIds(graph, 'm', ['c0', 'm']).sort(), ['child', 'grand', 'stitch']);
+
+const clipped = [
+  { id: 'a' },
+  { id: 'b', branch_clip_parent: 'a' },
+  { id: 'c' },
+  { id: 'd', branch_clip_child: 'e' },
+  { id: 'e' },
+];
+assert.deepEqual(clipDisplayedBranch(clipped).map(message => message.id), ['b', 'c', 'd']);
+assert.deepEqual(clipDisplayedBranch([{ id: 'a' }, { id: 'b' }]).map(message => message.id), ['a', 'b']);
+assert.deepEqual(
+  clipDisplayedBranch([
+    { id: 'a', branch_clip_parent: 'z' },
+    { id: 'b', branch_clip_parent: 'a' },
+    { id: 'c', branch_clip_child: 'd' },
+    { id: 'd', branch_clip_child: 'e' },
+    { id: 'e' },
+  ]).map(message => message.id),
+  ['b', 'c']
+);
 
 console.log('branch context ok');

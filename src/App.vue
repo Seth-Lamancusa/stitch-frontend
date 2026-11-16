@@ -7,6 +7,7 @@ import QuickPromptModal from './components/modals/QuickPromptModal.vue';
 import OnboardingModal from './components/modals/OnboardingModal.vue';
 import MobileDisclaimerModal from './components/modals/MobileDisclaimerModal.vue';
 import SettingsModal from './components/modals/SettingsModal.vue';
+import PersistentErrorBar from './components/PersistentErrorBar.vue';
 import WebSocketService from '@/services/ws/WebSocketService';
 
 const router = useRouter();
@@ -68,6 +69,7 @@ onBeforeUnmount(() => {
     <OnboardingModal />
     <SettingsModal />
     <MobileDisclaimerModal />
+    <PersistentErrorBar />
   </div>
 </template>
 

@@ -33,20 +33,6 @@
       <TabGlyph name="saved" :size="40" />
     </router-link>
 
-    <button
-      type="button"
-      class="mobile-tab"
-      :class="{ 'active': overflowIsCurrent }"
-      role="tab"
-      :aria-selected="overflowIsCurrent"
-      aria-haspopup="dialog"
-      :aria-expanded="overflowOpen"
-      :aria-label="overflowLabel"
-      @click="overflowOpen = true"
-    >
-      <TabGlyph :name="overflowTab || 'more'" :size="40" />
-    </button>
-    
     <router-link 
       to="/inbox" 
       class="mobile-tab"
@@ -74,6 +60,20 @@
     >
       <TabGlyph name="search" :size="40" />
     </router-link>
+
+    <button
+      type="button"
+      class="mobile-tab"
+      :class="{ 'active': overflowIsCurrent && !overflowOpen }"
+      role="tab"
+      :aria-selected="overflowIsCurrent && !overflowOpen"
+      aria-haspopup="dialog"
+      :aria-expanded="overflowOpen"
+      :aria-label="overflowLabel"
+      @click="overflowOpen = true"
+    >
+      <TabGlyph :name="overflowGlyph" :size="40" />
+    </button>
   </nav>
 
   <div
@@ -112,23 +112,11 @@ const OVERFLOW_TABS = [
   { name: 'public', label: 'Public', to: '/public' },
   { name: 'channels', label: 'Channels', to: '/channels' },
 ];
-const OVERFLOW_KEY = 'stitch.mobileOverflowTab';
 
 const store = useStore();
 const route = useRoute();
 const router = useRouter();
 const overflowOpen = ref(false);
-
-function readStoredOverflow() {
-  try {
-    const value = localStorage.getItem(OVERFLOW_KEY);
-    return OVERFLOW_TABS.some(tab => tab.name === value) ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-const storedOverflow = ref(readStoredOverflow());
 
 const activeTab = computed(() => {
   const p = route.path || '';
@@ -144,42 +132,30 @@ const activeTab = computed(() => {
 
 const overflowTabs = OVERFLOW_TABS;
 
-const overflowTab = computed(() => {
-  if (OVERFLOW_TABS.some(tab => tab.name === activeTab.value)) return activeTab.value;
-  return storedOverflow.value;
-});
+const currentOverflowTab = computed(() =>
+  OVERFLOW_TABS.find(tab => tab.name === activeTab.value) || null
+);
 
-const overflowIsCurrent = computed(() => overflowTab.value != null && overflowTab.value === activeTab.value);
+const overflowIsCurrent = computed(() => currentOverflowTab.value != null);
 
-const overflowLabel = computed(() => {
-  const tab = OVERFLOW_TABS.find(item => item.name === overflowTab.value);
-  return tab ? tab.label : 'More';
-});
+const overflowGlyph = computed(() =>
+  overflowIsCurrent.value && !overflowOpen.value ? currentOverflowTab.value.name : 'more'
+);
 
-function rememberOverflow(name) {
-  storedOverflow.value = name;
-  try {
-    localStorage.setItem(OVERFLOW_KEY, name);
-  } catch {
-    // Private mode can reject storage. The in-memory choice still stands.
-  }
-}
+const overflowLabel = computed(() =>
+  overflowGlyph.value === 'more' ? 'More' : currentOverflowTab.value.label
+);
 
 function chooseOverflow(name) {
   const tab = OVERFLOW_TABS.find(item => item.name === name);
   overflowOpen.value = false;
   if (!tab) return;
-  rememberOverflow(name);
   if (route.path !== tab.to) router.push(tab.to);
 }
 
 function onOverflowKey(event) {
   if (event.key === 'Escape') overflowOpen.value = false;
 }
-
-watch(activeTab, (tab) => {
-  if (OVERFLOW_TABS.some(item => item.name === tab)) rememberOverflow(tab);
-}, { immediate: true });
 
 watch(overflowOpen, (open) => {
   if (open) window.addEventListener('keydown', onOverflowKey);

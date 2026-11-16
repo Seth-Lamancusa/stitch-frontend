@@ -79,7 +79,7 @@ const password = ref('')
 const showPassword = ref(false)
 const busy = ref(false)
 const error = ref('')
-const notify = ref({ email: false, phone: false, endpoint: false })
+const notify = ref({ email: true, phone: false, endpoint: false })
 const tagError = ref('')
 const isPrivate = ref(false)
 
@@ -106,7 +106,7 @@ watch(() => props.isOpen, (open) => {
     showPassword.value = false
     busy.value = false
     error.value = ''
-    notify.value = { email: false, phone: false, endpoint: false }
+    notify.value = { email: true, phone: false, endpoint: false }
     tagError.value = userTag.value ? userTagError(userTag.value) : ''
     isPrivate.value = false
   }

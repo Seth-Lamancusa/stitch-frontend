@@ -9,11 +9,13 @@ import { continuationId, withoutAnnotation } from '../../utils/annotations.js'
 import {
   activeContextWalk,
   chooseBranchChild,
+  clipDisplayedBranch,
   contextWalkIds,
   explicitDefaultOutgoing,
   resolvedBranchParent,
   uniqueIds,
 } from '../branchContext.js'
+import { reportError } from '../../utils/userErrors.js'
 
 // Latest inbox list fetch. An older response must not commit after a newer one.
 let inboxFetchSerial = 0
@@ -548,6 +550,24 @@ export default {
         ...message,
         branch_parent: parentId
       };
+    },
+    // Hide one side of the visible branch without dropping the cached messages.
+    // hiddenId is the neighbor that View earlier / View later puts back.
+    SET_BRANCH_CLIP(state, { messageId, side, hiddenId }) {
+      const message = state.messages[messageId];
+      if (!message || hiddenId == null) return;
+      const patch = side === 'above'
+        ? { branch_clip_parent: hiddenId }
+        : { branch_clip_child: hiddenId };
+      state.messages[messageId] = { ...message, ...patch };
+    },
+    CLEAR_BRANCH_CLIP(state, { messageId, side }) {
+      const message = state.messages[messageId];
+      if (!message) return;
+      const next = { ...message };
+      if (side === 'above') delete next.branch_clip_parent;
+      else delete next.branch_clip_child;
+      state.messages[messageId] = next;
     },
 
     SET_CONTEXT_VIEW(state, payload) {
@@ -1524,7 +1544,7 @@ export default {
     
     // Universal fetch action that routes to appropriate service based on mode.
     // channelId: optional; when set (global channel selection), inbox/history/timeline are filtered to that channel.
-    async fetchMessages({ commit, state, rootState }, { mode, skip = 0, limit = 15, sourceMessageId = null, showAllLinks = false, channelId = null }) {
+    async fetchMessages({ commit, state, rootState, rootGetters }, { mode, skip = 0, limit = 15, sourceMessageId = null, showAllLinks = false, channelId = null }) {
       try {
         // Use global selected channel when channelId not explicitly passed (for list tabs)
         const effectiveChannelId = channelId ?? rootState.navigation?.selectedChannelId ?? null;
@@ -1661,11 +1681,20 @@ export default {
           console.log(`[Store] ${mode} fetch committed ${messages.length} messages. Store total: ${Object.keys(state.messages).length}`);
         }
         
+        if (skip === 0 && rootGetters['ui/persistentError']?.code === 'list_load_failed') {
+          commit('ui/CLEAR_PERSISTENT_ERROR', null, { root: true });
+        }
         return { messages, has_more, total };
         
       } catch (error) {
         console.error(`[Store] Error in fetchMessages (${mode}):`, error);
-        commit('ui/SET_ERROR', error.message || `Failed to load ${mode} messages`, { root: true });
+        const message = error.message || `Failed to load ${mode} messages`;
+        reportError({ commit }, error, {
+          root: true,
+          persistent: skip === 0,
+          message,
+          code: skip === 0 ? 'list_load_failed' : null,
+        });
         return { messages: [], has_more: false };
       } finally {
         commit('SET_LOADING', { key: 'fetchingMessages', isLoading: false });
@@ -1673,7 +1702,7 @@ export default {
     },
     
     // Fetch chronological messages (for inbox tab main list)
-    async fetchUserMessages({ commit, state, rootState }, { page = 1 } = {}) {
+    async fetchUserMessages({ commit, state, rootState, rootGetters }, { page = 1 } = {}) {
       try {
         // Check if user is authenticated first
         if (!rootState.auth?.user) {
@@ -1730,6 +1759,9 @@ export default {
         }
         
         // Return the response data with has_more flag
+        if (page === 1 && rootGetters['ui/persistentError']?.code === 'list_load_failed') {
+          commit('ui/CLEAR_PERSISTENT_ERROR', null, { root: true });
+        }
         return {
           messages,
           has_more,
@@ -1737,7 +1769,12 @@ export default {
         };
       } catch (error) {
         console.error('[Store] Error in fetchUserMessages:', error);
-        commit('ui/SET_ERROR', error.message || 'Failed to load user messages', { root: true });
+        reportError({ commit }, error, {
+          root: true,
+          persistent: page === 1,
+          message: error.message || 'Failed to load user messages',
+          code: page === 1 ? 'list_load_failed' : null,
+        });
         return {
           messages: [],
           has_more: false
@@ -2392,12 +2429,12 @@ export default {
     // The line on screen. A context view supplies its walk. Otherwise the successor orbit.
     getDisplayedBranch: (state, getters) => (messageId) => {
       const ids = activeContextWalk(state.contextView);
-      if (ids) {
-        return ids
+      const branch = ids
+        ? ids
           .map(id => state.messages[id] || state.messages[String(id)])
-          .filter(Boolean);
-      }
-      return getters.getFullVisibleBranch(messageId);
+          .filter(Boolean)
+        : getters.getFullVisibleBranch(messageId);
+      return clipDisplayedBranch(branch);
     },
 
     // Modified getter - PURE GETTER with no state modifications

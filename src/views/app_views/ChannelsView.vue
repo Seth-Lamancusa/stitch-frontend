@@ -2,10 +2,10 @@
   <TabViewLayout>
     <div class="channels-view">
       <!-- Mode description: explains that channel selection is global (filter + default for new messages) -->
-      <div class="mode-description">
-        <span class="info-icon">ℹ</span>
-        <p>Channels are group discussion spaces. Selecting a channel here applies it everywhere: new messages will be sent in the channel and Inbox, History, and Timeline will be filtered to include only messages sent in the channel.</p>
-      </div>
+      <ModeInfoBox
+        title="Channels"
+        text="Channels are group discussion spaces. Selecting a channel here applies it everywhere: new messages will be sent in the channel and Inbox, History, and Timeline will be filtered to include only messages sent in the channel."
+      />
       
       <!-- Channel selector dropdown -->
       <div class="channel-selector">
@@ -186,6 +186,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute, useRouter } from 'vue-router';
 import TabViewLayout from '../../components/layouts/TabViewLayout.vue';
+import ModeInfoBox from '../../components/ModeInfoBox.vue';
 import UserSearchInput from '../../components/UserSearchInput.vue';
 import ChannelSelectDropdown from '../../components/ChannelSelectDropdown.vue';
 import CreateChannelModal from '../../components/modals/CreateChannelModal.vue';

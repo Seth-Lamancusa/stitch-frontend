@@ -788,6 +788,7 @@ watch(
 );
 
 onMounted(() => {
+  document.documentElement.classList.add('has-mobile-tab-bar');
   document.addEventListener('click', onDocumentClick);
   const el = navigationTabsRef.value;
   if (el && typeof ResizeObserver !== 'undefined') {
@@ -798,6 +799,7 @@ onMounted(() => {
   document.fonts?.ready?.then(() => fitNavigationTabs()).catch(() => {});
 });
 onBeforeUnmount(() => {
+  document.documentElement.classList.remove('has-mobile-tab-bar');
   document.removeEventListener('click', onDocumentClick);
   navigationTabsObserver?.disconnect();
   navigationTabsObserver = null;
@@ -1565,10 +1567,16 @@ const handleGlobalCreateClick = () => {
   }
 }
 
-/* Matched corner controls. Sage fill with a matte wood grain. */
+/* Matched corner controls. Sage fill with a matte wood grain.
+   Absolute to .app-layout so they stay above the footer nav. */
+.app-layout :deep(.global-feedback-btn),
 .global-import-btn,
 .global-create-btn {
-  position: fixed;
+  position: absolute;
+}
+
+.global-import-btn,
+.global-create-btn {
   bottom: var(--space-xl);
   z-index: 10;
   isolation: isolate;
@@ -1637,8 +1645,17 @@ const handleGlobalCreateClick = () => {
   outline-offset: 3px;
 }
 
-/* Mobile responsive for global create and feedback buttons */
+/* Mobile: sit 16px above the footer nav, even on both sides. */
 @media (max-width: 768px) {
+  .app-layout {
+    --tab-fab-bottom: calc(80px + var(--space-md));
+  }
+
+  .app-layout :deep(.global-feedback-btn),
+  .global-create-btn {
+    bottom: var(--tab-fab-bottom);
+  }
+
   .global-import-btn,
   .global-create-btn {
     background-size: 64px;
@@ -1647,7 +1664,6 @@ const handleGlobalCreateClick = () => {
   .global-create-btn {
     width: 52px;
     height: 52px;
-    bottom: 80px; /* Move up to avoid mobile tab bar */
     right: var(--space-md);
   }
 
@@ -1655,7 +1671,7 @@ const handleGlobalCreateClick = () => {
     width: 36px;
     height: 36px;
     right: calc(var(--space-md) + 8px);
-    bottom: calc(80px + 52px + 10px);
+    bottom: calc(var(--tab-fab-bottom) + 52px + 10px);
   }
 
   .global-import-btn .btn-icon {

@@ -10,10 +10,6 @@
       <span class="loading-text">Loading thread...</span>
     </div>
     
-    <div v-else-if="error" class="error-message">
-      {{ error }}
-    </div>
-    
     <!-- Normal thread view - show when we have messages -->
     <template v-else-if="displayedMessages.length > 0">
       <!-- Thread header extracted to component -->
@@ -27,11 +23,13 @@
         :is-copied="isCopied"
         :show-copy-thread-button="showCopyThreadButton"
         :is-thread-copied="isThreadCopied"
+        :show-save-default-button="showSaveDefaultButton"
         @back="backToList()"
         @openGraph="openGraphView"
         @openTreeOptions="openTreeOptionsModal"
         @copy="copySelectedMessages"
         @copyThread="copyThread"
+        @saveDefaultThread="openSaveDefaultModal"
         @exitSelection="exitSelectionMode"
         @logout="logout"
         @openProfile="openProfileModal"
@@ -66,47 +64,76 @@
           <div ref="scrollAnchor" class="scroll-anchor"></div>
         
           <!-- Thread messages - showing single branch -->
-          <template v-for="(message, index) in displayedMessages" :key="branchRowKey(message.id, index, contextWalkActive)">
-            <function-message-row
-              v-if="isFunctionMessage(message) && (message.id === replyingToMessageId && !isReplyMessageLoading || message.id !== replyingToMessageId)"
-              :message="message"
-              :active-parent-id="index > 0 ? displayedMessages[index - 1].id : null"
-              :show-link-switcher="index > 0 || showOriginSwitcherOnFirstMessage"
+          <template v-for="row in spineRows" :key="spineRowKey(row)">
+            <function-message-group
+              v-if="row.kind === 'function-group'"
+              :label="row.label"
+              :expanded="isFunctionGroupExpanded(row)"
               :compact="compactThread"
-              :is-selected="message.id === replyingToMessageId"
-              @delete="confirmDeleteMessage"
-              @showLinks="handleShowLinks"
-              @refreshReplies="refreshRepliesForMessage"
-              @center="handleCenterOnMessage"
-            />
-            <message-node
-              v-else-if="(message.id === replyingToMessageId && !isReplyMessageLoading || 
-                      message.id !== replyingToMessageId)"
-              :message="message"
-              :active-parent-id="index > 0 ? displayedMessages[index - 1].id : null"
-              :show-link-switcher="index > 0 || showOriginSwitcherOnFirstMessage"
-              :displayMode="'full'"
-              :compact="compactThread"
-              :selectable="true"
-              :selected="isMessageSelected(message.id)"
-              :is-selected="message.id === replyingToMessageId"
-              :indent-level="0"
-              :loaded-replies="getLoadedRepliesCount(message.id)"
-              :total-replies="getTotalRepliesCount(message.id)"
-              :can-reply="canInteract"
-              @reply="setReplyingTo(message.id)"
-              @delete="confirmDeleteMessage"
-              @showLinks="handleShowLinks"
-              @refreshReplies="refreshRepliesForMessage"
-              @center="handleCenterOnMessage"
-              @selectionToggled="handleMessageSelection"
-            />
-            
-            <!-- Loading indicator for message being replied to -->
-            <div v-if="message.id === replyingToMessageId && isReplyMessageLoading" class="message-loading">
-              <div class="loading-spinner"></div>
-              <div class="loading-text">Loading message...</div>
-            </div>
+              :show-sibling-hint="siblingHintFor(row).show"
+              :has-prev-sibling="siblingHintFor(row).prev"
+              :has-next-sibling="siblingHintFor(row).next"
+              @expand="setFunctionGroupExpanded(row, true)"
+              @collapse="setFunctionGroupExpanded(row, false)"
+            >
+              <template v-for="(message, offset) in row.messages" :key="branchRowKey(message.id, row.startIndex + offset, contextWalkActive)">
+                <function-message-row
+                  v-if="showSpineMessage(message)"
+                  :message="message"
+                  :active-parent-id="row.startIndex + offset > 0 ? displayedMessages[row.startIndex + offset - 1].id : null"
+                  :show-link-switcher="showOriginSwitcherAt(row.startIndex + offset)"
+                  :compact="compactThread"
+                  :is-selected="message.id === replyingToMessageId"
+                  @delete="confirmDeleteMessage"
+                  @showLinks="handleShowLinks"
+                  @refreshReplies="refreshRepliesForMessage"
+                  @center="handleCenterOnMessage"
+                />
+                <div v-if="message.id === replyingToMessageId && isReplyMessageLoading" class="message-loading">
+                  <div class="loading-spinner"></div>
+                  <div class="loading-text">Loading message...</div>
+                </div>
+              </template>
+            </function-message-group>
+            <template v-else>
+              <function-message-row
+                v-if="isFunctionMessage(row.message) && showSpineMessage(row.message)"
+                :message="row.message"
+                :active-parent-id="row.index > 0 ? displayedMessages[row.index - 1].id : null"
+                :show-link-switcher="showOriginSwitcherAt(row.index)"
+                :compact="compactThread"
+                :is-selected="row.message.id === replyingToMessageId"
+                @delete="confirmDeleteMessage"
+                @showLinks="handleShowLinks"
+                @refreshReplies="refreshRepliesForMessage"
+                @center="handleCenterOnMessage"
+              />
+              <message-node
+                v-else-if="showSpineMessage(row.message)"
+                :message="row.message"
+                :active-parent-id="row.index > 0 ? displayedMessages[row.index - 1].id : null"
+                :show-link-switcher="showOriginSwitcherAt(row.index)"
+                :displayMode="'full'"
+                :compact="compactThread"
+                :selectable="true"
+                :selected="isMessageSelected(row.message.id)"
+                :is-selected="row.message.id === replyingToMessageId"
+                :indent-level="0"
+                :loaded-replies="getLoadedRepliesCount(row.message.id)"
+                :total-replies="getTotalRepliesCount(row.message.id)"
+                :can-reply="canInteract"
+                @reply="setReplyingTo(row.message.id)"
+                @delete="confirmDeleteMessage"
+                @showLinks="handleShowLinks"
+                @refreshReplies="refreshRepliesForMessage"
+                @center="handleCenterOnMessage"
+                @selectionToggled="handleMessageSelection"
+              />
+              <div v-if="row.message.id === replyingToMessageId && isReplyMessageLoading" class="message-loading">
+                <div class="loading-spinner"></div>
+                <div class="loading-text">Loading message...</div>
+              </div>
+            </template>
           </template>
           
           <!-- Bottom of thread marker - only show after scroll is complete -->
@@ -196,6 +223,14 @@
     <!-- Global Notifications -->
     <GlobalNotifications />
 
+    <SaveDefaultThreadModal
+      :show="showSaveDefaultModal"
+      :saving="isSavingDefaultThread"
+      :error="saveDefaultError"
+      @cancel="closeSaveDefaultModal"
+      @confirm="saveDefaultThread"
+    />
+
     <!-- Delete Confirmation Modal -->
     <DeleteConfirmModal 
       :show="showDeleteConfirm"
@@ -253,7 +288,8 @@ import { useStore } from 'vuex';
 import { useRouter, useRoute } from 'vue-router';
 import MessageNode from '../../components/MessageNode.vue';
 import FunctionMessageRow from '../../components/FunctionMessageRow.vue';
-import { isFunctionMessage } from '../../utils/functionMessage.js';
+import FunctionMessageGroup from '../../components/FunctionMessageGroup.vue';
+import { conversationSpineRows, isFunctionMessage, siblingNavSides } from '../../utils/functionMessage.js';
 import AdaptiveMarker from '../../components/AdaptiveMarker.vue';
 import ReplyBox from '../../components/ReplyBox.vue';
 import GlobalNotifications from '../../components/GlobalNotifications.vue';
@@ -263,6 +299,7 @@ import LinksModal from '../../components/modals/LinksModal.vue';
 import RecipientsModal from '../../components/modals/RecipientsModal.vue';
 import TreeOptionsModal from '../../components/modals/TreeOptionsModal.vue';
 import DeleteConfirmModal from '../../components/modals/DeleteConfirmModal.vue';
+import SaveDefaultThreadModal from '../../components/modals/SaveDefaultThreadModal.vue';
 import ProfileEditModal from '../../components/modals/ProfileEditModal.vue';
 import { useAuthentication } from '../../composables/useAuthentication';
 import ThreadHeader from '../../components/ThreadHeader.vue';
@@ -272,7 +309,9 @@ import { useCompactThread } from '../../composables/useCompactThread.js';
 import { dismissMobileKeyboard } from '../../utils/mobileKeyboard.js';
 import { contentText, getAuthorDisplayName, getAuthorUserTag } from '../../utils/messageCompat.js';
 import { activeContextWalk, branchRowKey, continuationIds, earlierParentIds, missingVisibleHop, resolvedBranchParent, uniqueIds, visibleOutgoingId } from '../../store/branchContext.js';
+import { defaultThreadWrites } from '../../utils/defaultThread.js';
 import { messageUrl } from '../../config/appConfig.js';
+import { dismissPersistentError, reportError } from '../../utils/userErrors.js';
 
 // import BranchNavigator from '../../components/BranchNavigator.vue';
 
@@ -349,7 +388,6 @@ const userTag = computed(() => {
   return user.value.user_tag || null;
 });
 
-const error = computed(() => store.getters['ui/error']);
 const showDeleteConfirm = computed(() => store.getters['ui/showDeleteConfirm']);
 const messageToDelete = computed(() => store.getters['ui/messageToDelete']);
 
@@ -408,6 +446,87 @@ const displayedMessages = computed(() => {
   return msgs;
 });
 
+const spineRows = computed(() => conversationSpineRows(displayedMessages.value));
+
+const expandedFunctionGroups = ref(new Set());
+
+function functionGroupKey(row) {
+  return String(row.messages[0].id);
+}
+
+function spineRowKey(row) {
+  if (row.kind === 'function-group') {
+    return `group:${functionGroupKey(row)}:${branchRowKey(row.messages[0].id, row.startIndex, contextWalkActive.value)}`;
+  }
+  return branchRowKey(row.message.id, row.index, contextWalkActive.value);
+}
+
+function showSpineMessage(message) {
+  return message.id !== replyingToMessageId.value || !isReplyMessageLoading.value;
+}
+
+const functionGroupSiblingHints = computed(() => {
+  void store.state.messages.structureVersion;
+  const messages = displayedMessages.value;
+  const hints = new Map();
+  for (const row of spineRows.value) {
+    if (row.kind !== 'function-group') continue;
+    let show = false;
+    let prev = false;
+    let next = false;
+    row.messages.forEach((message, offset) => {
+      const index = row.startIndex + offset;
+      const activeParentId = index > 0 ? messages[index - 1]?.id : null;
+      const parentId = activeParentId != null ? activeParentId : message.parent_id;
+      if (parentId == null) return;
+      show = true;
+      const sides = siblingNavSides(
+        store.getters['messages/getChildIds'](parentId),
+        message.id,
+        store.getters['messages/getBranchChild'](parentId)
+      );
+      prev = prev || sides.prev;
+      next = next || sides.next;
+    });
+    hints.set(functionGroupKey(row), { show, prev, next });
+  }
+  return hints;
+});
+
+function siblingHintFor(row) {
+  return functionGroupSiblingHints.value.get(functionGroupKey(row)) || { show: false, prev: false, next: false };
+}
+
+function isFunctionGroupExpanded(row) {
+  return expandedFunctionGroups.value.has(functionGroupKey(row));
+}
+
+function setFunctionGroupExpanded(row, open) {
+  const key = functionGroupKey(row);
+  const next = new Set(expandedFunctionGroups.value);
+  if (open) next.add(key);
+  else next.delete(key);
+  expandedFunctionGroups.value = next;
+  if (!open) store.dispatch('navigation/hideActionBar');
+}
+
+function expandFunctionGroupsContaining(id) {
+  if (id == null) return false;
+  const target = String(id);
+  const next = new Set(expandedFunctionGroups.value);
+  let changed = false;
+  for (const row of spineRows.value) {
+    if (row.kind !== 'function-group') continue;
+    if (!row.messages.some((message) => String(message.id) === target)) continue;
+    const key = functionGroupKey(row);
+    if (next.has(key)) continue;
+    next.add(key);
+    changed = true;
+  }
+  if (changed) expandedFunctionGroups.value = next;
+  return changed;
+}
+
 const contextWalkActive = computed(() => !!activeContextWalk(store.state.messages.contextView));
 
 const rootMessage = computed(() => {
@@ -453,6 +572,14 @@ const showLoadingState = computed(() => {
   const showCopyThreadButton = computed(() => {
     return !isSelectionMode.value && displayedMessages.value.length > 0;
   });
+
+  const showSaveDefaultButton = computed(() => {
+    return !isSelectionMode.value && canInteract.value && displayedMessages.value.length > 1;
+  });
+
+  const showSaveDefaultModal = ref(false);
+  const isSavingDefaultThread = ref(false);
+  const saveDefaultError = ref('');
 
 // Recipients modal computed properties
 const recipientsModalVisible = computed(() => store.getters['navigation/recipientsModalVisible']);
@@ -526,6 +653,10 @@ const ensureCorrectScroll = async () => {
     isContainerVisible.value = true;
     shouldShowMarkers.value = true;
     return;
+  }
+
+  if (expandFunctionGroupsContaining(targetId)) {
+    await nextTick();
   }
   
   // Find the target message element
@@ -637,7 +768,8 @@ const phaseToMarkerState = (phase) => {
 const snapshotUp = (messages) => {
   const head = messages[0];
   if (!head) return { edgeId: null, phase: 'exhausted' };
-  // A stored context window ends here. Scrolling must not walk into the real parent.
+  // A clip or a stored context window ends here. Scrolling must not walk into the hidden parent.
+  if (head.branch_clip_parent) return { edgeId: head.id, phase: 'exhausted' };
   if (head.branch_parent === null) return { edgeId: head.id, phase: 'exhausted' };
   const parentId = resolvedBranchParent(head);
   if (!parentId || storedMessage(parentId)) {
@@ -649,6 +781,7 @@ const snapshotUp = (messages) => {
 const snapshotDown = (messages) => {
   const tail = messages[messages.length - 1];
   if (!tail) return { edgeId: null, phase: 'exhausted' };
+  if (tail.branch_clip_child) return { edgeId: tail.id, phase: 'exhausted' };
   const anchorId = store.state.messages.contextView?.anchorId;
   if (anchorId && sameEdgeId(tail.id, anchorId)) {
     return { edgeId: tail.id, phase: 'exhausted' };
@@ -692,6 +825,40 @@ const bottomMarkerState = computed(() => phaseToMarkerState(bottomBoundary.value
 // Handle center event from MessageNode
 const handleCenterOnMessage = async (targetId) => {
   await centerOnMessageInUrl(targetId, { replace: true });
+};
+
+// A message already on screen, and how far its top sits from the container top.
+// Prepending or appending must not move that message.
+const captureVisibleAnchor = () => {
+  const container = messageList.value;
+  if (!container) return null;
+  const containerRect = container.getBoundingClientRect();
+  const nodes = container.querySelectorAll('[data-message-id]');
+  for (const node of nodes) {
+    const rect = node.getBoundingClientRect();
+    if (rect.bottom > containerRect.top + 1 && rect.top < containerRect.bottom - 1) {
+      return {
+        id: node.getAttribute('data-message-id'),
+        distanceFromTop: rect.top - containerRect.top,
+      };
+    }
+  }
+  return null;
+};
+
+const restoreVisibleAnchor = async (anchor) => {
+  if (!anchor?.id || !messageList.value) return;
+  await nextTick();
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  const escapedId = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(anchor.id) : anchor.id;
+  const node = messageList.value.querySelector(`[data-message-id="${escapedId}"]`);
+  if (!node) return;
+  const containerRect = messageList.value.getBoundingClientRect();
+  const distance = node.getBoundingClientRect().top - containerRect.top;
+  const adjustment = distance - anchor.distanceFromTop;
+  if (Math.abs(adjustment) > 1) {
+    messageList.value.scrollTop += adjustment;
+  }
 };
 
 // Simplified thread rendering function - used for incremental updates
@@ -999,7 +1166,11 @@ const loadInitialContent = async (targetMessageId, reason = 'mount') => {
   } catch (error) {
     trace.error = error?.message || String(error);
     console.error('[ThreadView] Error loading initial content:', error);
-    store.commit('ui/SET_ERROR', 'Failed to load thread.');
+    reportError(store, error, {
+      persistent: true,
+      message: 'Failed to load thread.',
+      code: 'thread_load_failed',
+    });
     isContainerVisible.value = true;
   } finally {
     const branch = store.getters['messages/getDisplayedBranch'](targetMessageId) || [];
@@ -1007,6 +1178,9 @@ const loadInitialContent = async (targetMessageId, reason = 'mount') => {
     trace.branchLength = branch.length;
     trace.branchHasCenter = branch.some(message => sameMessageId(message, targetMessageId));
     loadReport.value = trace;
+    if (!trace.error && store.getters['ui/persistentError']?.code === 'thread_load_failed') {
+      dismissPersistentError(store);
+    }
     console.log('[ThreadView] load\n' + formatLoadReport(trace));
 
     // Stamp before the first await so a visibility event during scroll setup
@@ -1164,6 +1338,10 @@ watch(displayedMessages, () => {
   checkBranchChange();
 }, { deep: true });
 
+watch(replyingToMessageId, (id) => {
+  if (id != null) expandFunctionGroupsContaining(id);
+});
+
 // The edge moved (page, sibling, or a reply appended onto a dead-end). Take one
 // new snapshot. A fetch in flight owns the record until it settles.
 watch(
@@ -1209,7 +1387,7 @@ const handleContainerClick = (event) => {
   
   // Walk up the DOM tree to check for message-node class
   while (target && target !== event.currentTarget) {
-    if (target.classList && target.classList.contains('message-node')) {
+    if (target.classList && (target.classList.contains('message-node') || target.classList.contains('function-group-toggle') || target.classList.contains('group-sibling-hint'))) {
       isMessageNode = true;
       break;
     }
@@ -1286,6 +1464,112 @@ const exitSelectionMode = () => {
   } catch (error) {
     console.error('Error copying selected messages:', error);
   }
+  };
+
+  const openSaveDefaultModal = () => {
+    if (!showSaveDefaultButton.value || isSavingDefaultThread.value) return;
+    saveDefaultError.value = '';
+    showSaveDefaultModal.value = true;
+  };
+
+  const closeSaveDefaultModal = () => {
+    if (isSavingDefaultThread.value) return;
+    showSaveDefaultModal.value = false;
+    saveDefaultError.value = '';
+  };
+
+  const keepMessageLists = (updated, existing) => {
+    if (updated.parent_id === undefined) updated.parent_id = existing.parent_id;
+    if (!Array.isArray(updated.child_ids)) updated.child_ids = existing.child_ids || [];
+    if (!Array.isArray(updated.stitch_child_ids)) updated.stitch_child_ids = existing.stitch_child_ids || [];
+    if (!Array.isArray(updated.stitch_parent_ids)) updated.stitch_parent_ids = existing.stitch_parent_ids || [];
+    return updated;
+  };
+
+  const applyDefaultWrite = async (write) => {
+    const response = write.field === 'default_outgoing'
+      ? await MessageService.updateDefaultOutgoing(write.messageId, write.value)
+      : await MessageService.updateDefaultIncoming(write.messageId, write.value);
+    const updated = response?.data;
+    if (!updated?.id) throw new Error('No message returned');
+    const existing = store.getters['messages/getMessage'](write.messageId) || {};
+    store.commit('messages/SET_MESSAGE', keepMessageLists(updated, existing));
+  };
+
+  const saveDefaultThread = async (direction) => {
+    if (isSavingDefaultThread.value) return;
+    const messages = displayedMessages.value || [];
+    const { writes, skipped } = defaultThreadWrites(
+      messages,
+      direction,
+      (message) => store.getters['auth/canUpdateReplyOrder'](message)
+    );
+    saveDefaultError.value = '';
+
+    if (writes.length === 0) {
+      if (skipped.permission > 0 && skipped.unchanged === 0) {
+        saveDefaultError.value = "You can only save a default thread on messages you can edit.";
+        return;
+      }
+      if (skipped.permission > 0) {
+        saveDefaultError.value = "The messages you can edit are already the default. The others were left unchanged.";
+        return;
+      }
+      if (skipped.unlinked > 0 && skipped.unchanged === 0) {
+        saveDefaultError.value = "The messages on screen aren't linked, so they can't be saved as a default thread.";
+        return;
+      }
+      store.commit('ui/SET_SUCCESS', 'This thread is already the default.');
+      showSaveDefaultModal.value = false;
+      return;
+    }
+
+    isSavingDefaultThread.value = true;
+    const groups = new Map();
+    for (const write of writes) {
+      const key = String(write.messageId);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(write);
+    }
+    const batches = [...groups.values()];
+    let saved = 0;
+    let failed = 0;
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < batches.length) {
+        const batch = batches[cursor];
+        cursor += 1;
+        for (const write of batch) {
+          try {
+            await applyDefaultWrite(write);
+            saved += 1;
+          } catch (error) {
+            failed += 1;
+            console.error('[ThreadView] Failed to save default thread link', write, error);
+          }
+        }
+      }
+    };
+
+    try {
+      const workers = Math.min(6, batches.length);
+      await Promise.all(Array.from({ length: workers }, () => worker()));
+      if (saved === 0) {
+        saveDefaultError.value = 'Could not save the default thread.';
+        return;
+      }
+      const partial = failed > 0 || skipped.permission > 0;
+      store.commit(
+        'ui/SET_SUCCESS',
+        partial
+          ? 'Saved the default thread. Some messages were left unchanged.'
+          : 'Saved default thread'
+      );
+      showSaveDefaultModal.value = false;
+      saveDefaultError.value = '';
+    } finally {
+      isSavingDefaultThread.value = false;
+    }
   };
 
   const copyThread = () => {
@@ -1829,13 +2113,16 @@ const contextLabel = computed(() => {
 });
 
 const topContextActionLabel = computed(() => {
-  const count = earlierParentIds(displayedMessages.value[0]).length;
+  const head = displayedMessages.value[0];
+  if (head?.branch_clip_parent) return 'View earlier messages';
+  const count = earlierParentIds(head).length;
   if (!count) return '';
   return count === 1 ? 'Load earlier message' : `Load ${count} earlier messages`;
 });
 
 const bottomContextActionLabel = computed(() => {
   const tail = displayedMessages.value[displayedMessages.value.length - 1];
+  if (tail?.branch_clip_child) return 'View later messages';
   const anchorId = store.state.messages.contextView?.anchorId;
   if (!tail || !anchorId || !sameEdgeId(tail.id, anchorId)) return '';
   const count = continuationIds(tail, (id) => !storedMessage(id)).length;
@@ -1880,6 +2167,12 @@ const showOriginSwitcherOnFirstMessage = computed(() => {
   return true;
 });
 
+const showLinkSwitchersPref = computed(() => !!store.state.ui.showLinkSwitchers);
+
+function showOriginSwitcherAt(index) {
+  return showLinkSwitchersPref.value && (index > 0 || showOriginSwitcherOnFirstMessage.value);
+}
+
 const bottomStitchCount = computed(() => {
   if (displayedMessages.value.length === 0) return 0;
   const last = displayedMessages.value[displayedMessages.value.length - 1];
@@ -1905,6 +2198,19 @@ const handleLoadContextBoundary = async (position) => {
   };
 
   try {
+    const edge = position === 'top' ? head : tail;
+    const side = position === 'top' ? 'above' : 'below';
+    const held = side === 'above' ? edge?.branch_clip_parent : edge?.branch_clip_child;
+    if (held) {
+      const anchor = captureVisibleAnchor();
+      store.commit('messages/CLEAR_BRANCH_CLIP', { messageId: edge.id, side });
+      if (generation !== pageGeneration) return;
+      await renderThread(true, true);
+      await restoreVisibleAnchor(anchor);
+      restoreBoundary();
+      return;
+    }
+
     if (position === 'top') {
       const targetId = earlierParentIds(head)[0];
       if (!targetId) {
@@ -1947,8 +2253,7 @@ const handleLoadContextBoundary = async (position) => {
   } catch (err) {
     console.error('[ThreadView] Failed to load context boundary:', err);
     if (generation !== pageGeneration) return;
-    store.commit('ui/SET_ERROR', {
-      code: 'context_boundary_failed',
+    reportError(store, err, {
       message: err?.message || 'Could not load the next message',
     });
     restoreBoundary();

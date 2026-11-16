@@ -52,6 +52,20 @@
             </svg>
             <span class="btn-label">{{ isThreadCopied ? 'Copied' : 'Copy thread' }}</span>
           </button>
+
+          <button
+            v-if="showSaveDefaultButton"
+            type="button"
+            class="header-btn"
+            aria-label="Save default thread"
+            title="Save default thread"
+            @click="$emit('saveDefaultThread')"
+          >
+            <svg class="btn-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true">
+              <path d="M10 3.1 11.8 7.5l4.8.4-3.7 3.1 1.2 4.7L10 13.3 6 15.7l1.2-4.7L3.4 7.9l4.8-.4L10 3.1z" />
+            </svg>
+            <span class="btn-label">Save default thread</span>
+          </button>
         </div>
 
         <p v-if="contextLabel" class="header-context" :title="`Context of ${contextLabel}`">
@@ -146,10 +160,11 @@ const props = defineProps({
   isCopied: { type: Boolean, default: false },
   showCopyThreadButton: { type: Boolean, default: false },
   isThreadCopied: { type: Boolean, default: false },
+  showSaveDefaultButton: { type: Boolean, default: false },
   contextLabel: { type: String, default: '' },
 });
 
-defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'copyThread', 'exitSelection', 'logout', 'openProfile']);
+defineEmits(['back', 'openGraph', 'openTreeOptions', 'copy', 'copyThread', 'saveDefaultThread', 'exitSelection', 'logout', 'openProfile']);
 
 const openSettingsModal = () => {
   store.dispatch('ui/setSettingsModalOpen', true);
@@ -377,7 +392,7 @@ const selectionCountLabel = computed(() => {
   white-space: nowrap;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 940px) {
   .header-bar {
     grid-template-columns: auto auto minmax(0, 1fr);
     grid-template-areas:

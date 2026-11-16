@@ -57,6 +57,11 @@ const resetTextSize = () => {
   store.dispatch('ui/resetMessageTextSize');
 };
 
+const showLinkSwitchers = computed({
+  get: () => store.getters['ui/showLinkSwitchers'],
+  set: (value) => store.dispatch('ui/setShowLinkSwitchers', value),
+});
+
 const selectTheme = (themeId) => {
   selectedTheme.value = themeId;
   try {
@@ -112,6 +117,27 @@ onUnmounted(() => {
         </div>
 
         <div class="modal-content">
+          <section class="panel">
+            <div class="panel-header">
+              <div class="setting-row">
+                <div>
+                  <h4>Link switchers</h4>
+                  <p>Show incoming and parent navigators on messages.</p>
+                </div>
+                <button
+                  type="button"
+                  class="switch"
+                  role="switch"
+                  :aria-checked="showLinkSwitchers ? 'true' : 'false'"
+                  aria-label="Show link switchers"
+                  @click="showLinkSwitchers = !showLinkSwitchers"
+                >
+                  <span class="switch-knob" :class="{ on: showLinkSwitchers }"></span>
+                </button>
+              </div>
+            </div>
+          </section>
+
           <section class="panel">
             <div class="panel-header">
               <div class="panel-header-row">
@@ -315,6 +341,46 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.switch {
+  flex-shrink: 0;
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  cursor: pointer;
+  position: relative;
+}
+
+.switch[aria-checked='true'] {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+  transition: transform var(--transition-fast), background-color var(--transition-fast);
+}
+
+.switch-knob.on {
+  transform: translateX(18px);
+  background: var(--color-text-inverse);
 }
 
 .panel-header h4 {

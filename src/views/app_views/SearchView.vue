@@ -1,10 +1,10 @@
 <template>
   <TabViewLayout>
     <div class="search-view" ref="searchViewRef">
-      <div class="mode-description">
-        <span class="info-icon">ℹ</span>
-        <p>Similar ranks messages you can see by overlap with the source. #tags narrow with any or all. @user keeps messages from that author.</p>
-      </div>
+      <ModeInfoBox
+        title="Search"
+        text="Search finds the exact text you type, newest first. Similar ranks messages you can see by overlap with the source. #tags narrow with any or all. @user keeps messages from that author."
+      />
 
       <div class="search-controls">
         <div v-if="similarToMessageId" class="similar-to-row">
@@ -18,7 +18,7 @@
             v-model="q"
             class="query-input"
             type="text"
-            :placeholder="similarToMessageId ? 'Ranking by the message above' : 'Search content'"
+            :placeholder="similarToMessageId ? 'Ranking by the message above' : 'Exact text in a message'"
             :disabled="!!similarToMessageId"
           />
           <button class="search-btn" type="submit" :disabled="isLoading">
@@ -100,7 +100,7 @@
       <div v-else-if="isLoading" class="empty-state">Searching…</div>
       <div v-else-if="error" class="empty-state">{{ error }}</div>
       <div v-else-if="searched" class="empty-state">No messages matched.</div>
-      <div v-else class="empty-state">Search by content, or filter with #tags and @users.</div>
+      <div v-else class="empty-state">Enter text from a message, or filter with #tags and @users.</div>
     </div>
   </TabViewLayout>
 </template>
@@ -109,6 +109,7 @@
 import { ref, onMounted, onBeforeUnmount, watch, computed, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import TabViewLayout from '../../components/layouts/TabViewLayout.vue';
+import ModeInfoBox from '../../components/ModeInfoBox.vue';
 import MessageList from '../../components/MessageList.vue';
 import MessagePreview from '../../components/MessagePreview.vue';
 import MessageService from '../../services/MessageService.js';

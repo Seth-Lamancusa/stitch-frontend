@@ -1,7 +1,7 @@
 <template>
   <div
     class="message-node function-message"
-    :class="{ 'menu-open': menuOpen, 'compact': compact, 'selected': isMessageSelected, 'selection-target': isSelectionMode, 'reply-target': isSelected }"
+    :class="{ 'menu-open': menuOpen, 'compact': compact, 'selected': isMessageSelected, 'selection-target': isSelectionMode, 'reply-target': isSelected, 'has-typing-cue': typingLabel && !menuOpen }"
     :data-message-id="message.id"
     :data-has-siblings="shouldReserveSiblingNavSpace ? 'true' : 'false'"
     :data-is-reply-root="isReplyRoot ? 'true' : 'false'"
@@ -18,7 +18,7 @@
     </div>
 
     <LinkSwitcher
-      v-if="showLinkSwitcher"
+      v-if="showLinkSwitcher && showLinkSwitchersPref"
       :activeParentId="activeParentId"
       :replyParentId="message.parent_id"
       :stitchParentIds="message.stitch_parent_ids || []"
@@ -145,15 +145,6 @@
       >{{ code }}</pre>
 
       <MessageAttachments v-if="open && message.files?.length" :attachments="message.files" />
-      <button
-        v-if="canAnnotate"
-        type="button"
-        class="fn-annotate"
-        :class="{ 'is-visible': composingWhole || isMobile }"
-        title="Annotate"
-        aria-label="Annotate"
-        @click.stop="composingWhole = true"
-      >+</button>
       <AnnotatedBody
         :message="message"
         :render-parts="false"
@@ -162,8 +153,9 @@
         :composing-whole="composingWhole"
         @done-whole="composingWhole = false"
       />
+      <p v-if="typingLabel && !menuOpen" class="typing-cue" aria-live="polite">{{ typingLabel }}</p>
     </div>
-    <p v-if="typingLabel && !menuOpen" class="typing-cue" aria-live="polite">{{ typingLabel }}</p>
+    <p v-if="typingLabel && !menuOpen" class="typing-cue typing-cue--below" aria-live="polite">{{ typingLabel }}</p>
 
     <teleport to="body">
       <ReplyOrderModal
@@ -243,6 +235,7 @@ const codeRef = ref(null);
 const menuRef = ref(null);
 const menuContainerRef = ref(null);
 
+const showLinkSwitchersPref = computed(() => !!store.state.ui.showLinkSwitchers);
 const currentUser = computed(() => store.getters['auth/user']);
 const isAdmin = computed(() => store.getters['auth/isAdmin']);
 const isSelectionMode = computed(() => store.getters['navigation/isSelectionMode']);
@@ -647,6 +640,7 @@ onBeforeUnmount(() => {
 .function-message {
   width: 100%;
   max-width: 100%;
+  margin-top: 3px;
   margin-left: auto;
   margin-right: auto;
   padding: 0 4px;
@@ -658,40 +652,19 @@ onBeforeUnmount(() => {
   z-index: 100;
 }
 
+.function-message.has-typing-cue {
+  padding-bottom: 22px;
+}
+
+@media (max-width: 768px) {
+  .function-message.has-typing-cue {
+    padding-bottom: 0;
+  }
+}
+
 .fn-body {
   position: relative;
   padding: 2px 12px;
-}
-
-.fn-annotate {
-  position: absolute;
-  right: 8px;
-  bottom: -14px;
-  z-index: 6;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  min-height: 22px;
-  padding: 0 6px;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: var(--color-surface);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-  color: var(--color-text-secondary);
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.18s ease, background-color 0.18s ease, color 0.18s ease;
-}
-
-.function-message:hover .fn-annotate,
-.function-message:focus-within .fn-annotate,
-.fn-annotate.is-visible {
-  opacity: 1;
-  pointer-events: auto;
 }
 
 .function-message.compact .fn-body {

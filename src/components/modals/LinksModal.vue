@@ -19,8 +19,13 @@ const activeTab = ref('incoming');
 const isSelecting = ref(false);
 const linkType = ref(null); // 'incoming' or 'outgoing'
 const selectedMessages = ref(new Set());
-// Saved list, or BM25 similarity against the source message.
-const useSimilar = ref(false);
+// Which list to pick stitches from: saved, BM25 similarity, or timeline.
+const selectorSource = ref('saved');
+const sourceOptions = [
+  { id: 'saved', label: 'Saved', title: 'Your saved messages' },
+  { id: 'similar', label: 'Similar', title: 'Messages ranked by similarity to the source' },
+  { id: 'timeline', label: 'Timeline', title: 'Messages in your timeline, newest first' }
+];
 
 // Toggle for showing all links vs user's links
 const showAllLinks = ref(true);
@@ -45,7 +50,7 @@ const resetForm = () => {
   activeTab.value = 'incoming';
   isSelecting.value = false;
   linkType.value = null;
-  useSimilar.value = false;
+  selectorSource.value = 'saved';
   selectedMessages.value = new Set();
 };
 
@@ -66,7 +71,7 @@ const handleMessageClick = (messageId) => {
 const startAddingLinks = (type) => {
   isSelecting.value = true;
   linkType.value = type; // 'incoming' or 'outgoing'
-  useSimilar.value = false;
+  selectorSource.value = 'saved';
   selectedMessages.value = new Set();
 };
 
@@ -74,11 +79,12 @@ const selectorMode = computed(() => {
   if (!isSelecting.value) {
     return activeTab.value === 'incoming' ? 'incoming-links' : 'outgoing-links';
   }
-  return useSimilar.value ? 'similar' : 'saved';
+  return selectorSource.value;
 });
 
-const toggleSelectorSource = () => {
-  useSimilar.value = !useSimilar.value;
+const setSelectorSource = (source) => {
+  if (selectorSource.value === source) return;
+  selectorSource.value = source;
   selectedMessages.value = new Set();
 };
 
@@ -91,7 +97,7 @@ const handleSelectionChanged = (selectedIds) => {
 const cancelSelection = () => {
   isSelecting.value = false;
   linkType.value = null;
-  useSimilar.value = false;
+  selectorSource.value = 'saved';
   selectedMessages.value = new Set();
 };
 
@@ -178,18 +184,21 @@ const addSelectedLinks = async () => {
           <MessagePreview :message="message" displayMode="single-line" />
         </div>
         
-        <!-- Saved vs similarity, only while picking messages to stitch -->
-        <div v-if="isSelecting" class="selector-source">
-          <div
-            class="toggle-container"
-            :title="useSimilar ? 'Messages ranked by similarity to the source' : 'Your saved messages'"
+        <!-- Saved, similar, or timeline, only while picking messages to stitch -->
+        <div v-if="isSelecting" class="selector-source" role="tablist" aria-label="Message source">
+          <button
+            v-for="option in sourceOptions"
+            :key="option.id"
+            type="button"
+            role="tab"
+            class="source-option"
+            :class="{ active: selectorSource === option.id }"
+            :title="option.title"
+            :aria-selected="selectorSource === option.id"
+            @click.stop="setSelectorSource(option.id)"
           >
-            <span class="toggle-label" :class="{ 'active': !useSimilar }">Saved</span>
-            <div class="toggle-switch" @click.stop="toggleSelectorSource">
-              <div class="toggle-slider" :class="{ 'active': useSimilar }"></div>
-            </div>
-            <span class="toggle-label" :class="{ 'active': useSimilar }">Similar</span>
-          </div>
+            {{ option.label }}
+          </button>
         </div>
 
         <!-- Tab Navigation - only show when not selecting -->
@@ -424,10 +433,36 @@ const addSelectedLinks = async () => {
 .selector-source {
   display: flex;
   justify-content: center;
+  gap: var(--space-xs);
   padding: var(--space-sm) var(--space-lg);
   border-bottom: 1px solid var(--color-border);
   background-color: var(--color-surface);
   flex-shrink: 0;
+}
+
+.source-option {
+  flex: 1;
+  max-width: 160px;
+  padding: var(--space-xs) var(--space-md);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+}
+
+.source-option:hover {
+  color: var(--color-text);
+  background-color: var(--color-hover-overlay);
+}
+
+.source-option.active {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background-color: var(--color-surface);
 }
 
 .tab-navigation {

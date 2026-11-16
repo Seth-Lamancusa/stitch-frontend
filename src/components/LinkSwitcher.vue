@@ -38,7 +38,11 @@
 
 <script setup>
 import { computed } from 'vue';
+import { useStore } from 'vuex';
 import { uniqueIds } from '../store/branchContext.js';
+
+const store = useStore();
+const showLinkSwitchers = computed(() => !!store.state.ui.showLinkSwitchers);
 
 const props = defineProps({
   // The ID of the currently active path from above
@@ -110,6 +114,7 @@ const isCurrentStitch = computed(() => {
 // - OR a “Linked origin” indicator when this message has a stitch parent,
 //   including a reply root whose stitch parent is not the active parent yet.
 const shouldShowIndicator = computed(() => {
+  if (!showLinkSwitchers.value) return false;
   if (isSwitchable.value) return true;
   if (stitchParents.value.length > 0) return true;
   return hasActiveParent.value && isCurrentStitch.value;

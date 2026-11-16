@@ -2,6 +2,7 @@ import { normalizeError } from '../../utils/error.js'
 
 const COMPACT_THREAD_KEY = 'compactThread'
 const MESSAGE_TEXT_SIZE_KEY = 'messageTextSize'
+const SHOW_LINK_SWITCHERS_KEY = 'showLinkSwitchers'
 
 export const DEFAULT_MESSAGE_TEXT_SIZE = 18
 export const MIN_MESSAGE_TEXT_SIZE = 13
@@ -44,6 +45,11 @@ export function applyMessageTextSizeToDom(sizePx) {
   document.documentElement.style.setProperty('--message-font-size-compact', `${compactRem}rem`)
 }
 
+export function applyShowLinkSwitchersToDom(visible) {
+  if (typeof document === 'undefined' || !document.documentElement) return
+  document.documentElement.classList.toggle('hide-link-switchers', !visible)
+}
+
 function readCompactThread() {
   // Compact thread layout is deferred. Clear any saved preference and
   // always use the regular layout until the toggle comes back.
@@ -78,14 +84,33 @@ function persistMessageTextSize(sizePx) {
   }
 }
 
+function readShowLinkSwitchers() {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(SHOW_LINK_SWITCHERS_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function persistShowLinkSwitchers(value) {
+  try {
+    window.localStorage.setItem(SHOW_LINK_SWITCHERS_KEY, value ? 'true' : 'false')
+  } catch {
+    // Ignore quota / private-mode failures
+  }
+}
+
 const initialMessageTextSize = readMessageTextSize()
 applyMessageTextSizeToDom(initialMessageTextSize)
+applyShowLinkSwitchersToDom(readShowLinkSwitchers())
 
 export default {
   namespaced: true,
   
   state: {
     error: null,
+    persistentError: null,
     success: null,
     messageNotification: null,
     showDeleteConfirm: false,
@@ -97,6 +122,7 @@ export default {
     compactThread: readCompactThread(),
     settingsModalOpen: false,
     messageTextSize: initialMessageTextSize,
+    showLinkSwitchers: readShowLinkSwitchers(),
   },
   
   mutations: {
@@ -111,6 +137,21 @@ export default {
         ? { code: error.code || null, message: error.message || 'An error occurred' }
         : normalizeError(error);
       state.error = normalized;
+    },
+
+    SET_PERSISTENT_ERROR(state, error) {
+      if (!error) {
+        state.persistentError = null
+        return
+      }
+      const normalized = typeof error === 'object' && (error.code || error.message)
+        ? { code: error.code || null, message: error.message || 'An error occurred' }
+        : normalizeError(error)
+      state.persistentError = normalized
+    },
+
+    CLEAR_PERSISTENT_ERROR(state) {
+      state.persistentError = null
     },
     
     SET_SUCCESS(state, message) {
@@ -157,6 +198,12 @@ export default {
       state.messageTextSize = normalized
       persistMessageTextSize(normalized)
       applyMessageTextSizeToDom(normalized)
+    },
+
+    SET_SHOW_LINK_SWITCHERS(state, value) {
+      state.showLinkSwitchers = !!value
+      persistShowLinkSwitchers(state.showLinkSwitchers)
+      applyShowLinkSwitchersToDom(state.showLinkSwitchers)
     }
   },
   
@@ -227,11 +274,16 @@ export default {
 
     resetMessageTextSize({ commit }) {
       commit('SET_MESSAGE_TEXT_SIZE', DEFAULT_MESSAGE_TEXT_SIZE)
+    },
+
+    setShowLinkSwitchers({ commit }, value) {
+      commit('SET_SHOW_LINK_SWITCHERS', value)
     }
   },
   
   getters: {
     error: state => state.error,
+    persistentError: state => state.persistentError,
     success: state => state.success,
     messageNotification: state => state.messageNotification,
     showDeleteConfirm: state => state.showDeleteConfirm,
@@ -242,5 +294,6 @@ export default {
     compactThread: state => state.compactThread,
     settingsModalOpen: state => state.settingsModalOpen,
     messageTextSize: state => state.messageTextSize,
+    showLinkSwitchers: state => state.showLinkSwitchers,
   }
 }

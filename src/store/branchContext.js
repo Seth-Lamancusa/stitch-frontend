@@ -140,6 +140,26 @@ export function contextWalkIds(contextIds, anchorId) {
   return ids;
 }
 
+// Drop messages outside a visible-branch clip. The clipped messages stay in the
+// store; branch_clip_parent / branch_clip_child are the hidden neighbor ids.
+// The last clip above wins, then the first clip below it.
+export function clipDisplayedBranch(messages) {
+  const list = Array.isArray(messages) ? messages : [];
+  let start = 0;
+  let end = list.length;
+  for (let i = 0; i < list.length; i += 1) {
+    if (list[i] && list[i].branch_clip_parent) start = i;
+  }
+  for (let i = start; i < list.length; i += 1) {
+    if (list[i] && list[i].branch_clip_child) {
+      end = i + 1;
+      break;
+    }
+  }
+  if (start <= 0 && end >= list.length) return list;
+  return list.slice(start, end);
+}
+
 // Ids to show while a context view is active. Null means follow the successor orbit.
 export function activeContextWalk(contextView) {
   if (!contextView || !Array.isArray(contextView.ids) || contextView.ids.length === 0) return null;

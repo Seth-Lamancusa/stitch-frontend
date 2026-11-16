@@ -1371,6 +1371,8 @@ const formatTimestamp = (timestamp) => {
     gap: 8px;
     flex: 1;
     min-width: 0;
+    margin-top: var(--space-xs);
+    margin-inline: var(--space-xs);
   }
 
   .recipients-toggle,

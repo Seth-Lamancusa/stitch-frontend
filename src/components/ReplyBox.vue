@@ -139,6 +139,21 @@
             <span class="meta-pill__count">{{ attachments.length }}</span>
             <span class="meta-pill__label">{{ uploading ? 'Uploading...' : `Attach (${attachments.length})` }}</span>
           </button>
+
+          <!-- Mobile new-thread: subject is opt-in so the bar doesn't eat the composer -->
+          <button
+            v-if="showSubjectToggle"
+            type="button"
+            class="toolbar-control meta-pill node-pill node-pill--subject"
+            :class="{ active: showSubject }"
+            @click="toggleSubjectField"
+            :disabled="!canInteract"
+            :aria-pressed="showSubject"
+            :aria-label="showSubject ? 'Hide subject' : 'Add subject'"
+            title="Subject"
+          >
+            <span class="subject-pill__label">+ Subject</span>
+          </button>
           
           <!-- Prompt moved to MessageNode. Keeping spacing consistent. -->
         </div>
@@ -414,6 +429,8 @@ const textareaWrapper = ref(null);
 const content = ref('');
 const subject = ref('');
 const showSubject = ref(false); // Controls visibility of subject field
+const subjectFieldRequested = ref(false);
+const isMobileLayout = ref(typeof window !== 'undefined' && window.innerWidth <= 768);
 const isSending = ref(false);
 const showSearchResults = ref(false);
 const highlightOverlay = ref(null);
@@ -528,7 +545,7 @@ const canSendReply = computed(() => {
 const placeholderText = computed(() => {
   // First priority: check if we're creating a new thread
   if (props.isNewThread) {
-    return "Type your message to create a new thread...";
+    return "Type your message";
   }
   
   // Second: check if no message is selected
@@ -573,6 +590,48 @@ const replyAnchorStyle = computed(() => {
 });
 
 // Generate reply header text
+const showSubjectToggle = computed(() => props.isNewThread && isMobileLayout.value);
+
+const syncSubjectField = () => {
+  if (!props.isNewThread) {
+    showSubject.value = false;
+    return;
+  }
+  // Desktop keeps the subject line open. Mobile starts without it.
+  if (!isMobileLayout.value) {
+    showSubject.value = true;
+    return;
+  }
+  showSubject.value = subjectFieldRequested.value || !!subject.value.trim();
+};
+
+const toggleSubjectField = () => {
+  if (!props.canInteract) return;
+  if (showSubject.value && !subject.value.trim()) {
+    subjectFieldRequested.value = false;
+    showSubject.value = false;
+    nextTick(() => {
+      if (!replyTextarea.value) return;
+      try {
+        replyTextarea.value.focus({ preventScroll: true });
+      } catch (e) {
+        replyTextarea.value.focus();
+      }
+    });
+    return;
+  }
+  subjectFieldRequested.value = true;
+  showSubject.value = true;
+  nextTick(() => {
+    subjectInput.value?.focus({ preventScroll: true });
+  });
+};
+
+const updateMobileLayout = () => {
+  isMobileLayout.value = window.innerWidth <= 768;
+  syncSubjectField();
+};
+
 const replyHeaderText = computed(() => {
   if (isAddRecipientsMode.value) {
     return "Add Recipients";
@@ -1959,6 +2018,8 @@ const sendReply = async () => {
     // Clear the input and files
     content.value = '';
     subject.value = '';
+    subjectFieldRequested.value = false;
+    syncSubjectField();
     attachments.value = [];
     replyChannels.value = [];
     setReplyTagsList([]);
@@ -2324,13 +2385,19 @@ const handleClickOutsideSearch = (event) => {
 // Watchers
 watch(() => isReplying.value || props.isNewThread, (shouldShow) => {
   if (shouldShow) {
-    // Reset showSubject based on mode
-    showSubject.value = props.isNewThread;
+    syncSubjectField();
     focusTextarea();
   } else {
     hideBottomSheet();
   }
 }, { immediate: true });
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', updateMobileLayout);
+  onBeforeUnmount(() => {
+    window.removeEventListener('resize', updateMobileLayout);
+  });
+}
 
 // Pin the composer to the top of the OS keyboard.
 // position:fixed tracks the layout viewport, which iOS pans while the keyboard is open.
@@ -2429,6 +2496,8 @@ defineExpose({
   clear: () => {
     content.value = '';
     subject.value = '';
+    subjectFieldRequested.value = false;
+    syncSubjectField();
     nextTick(() => {
       autoResizeTextarea();
     });
@@ -3193,6 +3262,28 @@ defineExpose({
     flex-wrap: nowrap;
     gap: 6px;
     width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .toolbar-left::-webkit-scrollbar {
+    display: none;
+  }
+
+  .node-pill--subject {
+    padding: 0 8px;
+  }
+
+  .node-pill--subject .subject-pill__label {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .node-pill--subject.active {
+    background-color: #3c453f;
+    border-color: #4a534c;
   }
 
   /* Same compact pills as a message node: icon and count, no labels. */

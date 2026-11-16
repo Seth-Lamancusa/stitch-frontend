@@ -125,6 +125,7 @@ import GraphCanvas from '../../components/graph/GraphCanvas.vue';
 import GraphSidePanel from '../../components/graph/GraphSidePanel.vue';
 import LoadThreadModal from '../../components/modals/LoadThreadModal.vue';
 import { getAuthorDisplayName } from '../../utils/messageCompat.js';
+import { reportError } from '../../utils/userErrors.js';
 
 
 export default {
@@ -330,12 +331,12 @@ export default {
           this.$store.commit('graphView/SET_STITCH_DRAWING_MODE', { isDrawing: false });
           await this.refreshGraphFromStore();
         } else {
-          alert('Failed to create stitch link.');
+          reportError(this.$store, null, { message: 'Failed to create stitch link.' });
           this.cancelDrawingStitch();
         }
       } catch (e) {
         console.error('[GraphView] Error creating stitch:', e);
-        alert('Error creating stitch link.');
+        reportError(this.$store, e, { message: 'Failed to create stitch link.' });
         this.cancelDrawingStitch();
       } finally {
         this.isLinking = false;

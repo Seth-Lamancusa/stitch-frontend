@@ -2,47 +2,50 @@
   <div
     ref="toolbarRef"
     class="compact-hover-toolbar"
-    :class="{ 'is-visible': visible }"
+    :class="{ 'is-visible': visible, 'is-typing': showTyping }"
     @click.stop
   >
-    <span class="compact-reply-count" title="Replies">{{ replyCount }} 💬</span>
+    <p v-if="showTyping" class="toolbar-typing-cue" aria-live="polite">{{ typingLabel }}</p>
+    <template v-else>
+      <span class="compact-reply-count" title="Replies">{{ replyCount }} 💬</span>
 
-    <CompactActionButton
-      v-for="action in primaryActions"
-      :key="action.id"
-      :action="action"
-      :show-text="false"
-    />
-
-    <div v-if="moreActions.length" ref="moreWrapRef" class="more-wrap">
-      <button
-        type="button"
-        class="compact-action-button more-button"
-        :class="{ active: moreOpen }"
-        title="More actions"
-        @click.stop="toggleMore"
-      >
-        <span class="action-emoji">⋯</span>
-      </button>
-    </div>
-
-    <div
-      v-if="moreOpen"
-      ref="moreMenuRef"
-      class="more-menu"
-      :class="menuSide"
-    >
       <CompactActionButton
-        v-for="action in moreActions"
+        v-for="action in primaryActions"
         :key="action.id"
         :action="action"
+        :show-text="false"
       />
-    </div>
+
+      <div v-if="moreActions.length" ref="moreWrapRef" class="more-wrap">
+        <button
+          type="button"
+          class="compact-action-button more-button"
+          :class="{ active: moreOpen }"
+          title="More actions"
+          @click.stop="toggleMore"
+        >
+          <span class="action-emoji">⋯</span>
+        </button>
+      </div>
+
+      <div
+        v-if="moreOpen"
+        ref="moreMenuRef"
+        class="more-menu"
+        :class="menuSide"
+      >
+        <CompactActionButton
+          v-for="action in moreActions"
+          :key="action.id"
+          :action="action"
+        />
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup>
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import CompactActionButton from './CompactActionButton.vue'
 import { clampMenuToMessageList, messageListClipBounds } from '../../utils/menuPlacement.js'
 
@@ -51,8 +54,11 @@ const props = defineProps({
   primaryActions: { type: Array, default: () => [] },
   moreActions: { type: Array, default: () => [] },
   replyCount: { type: Number, default: 0 },
-  menuOpen: { type: Boolean, default: false }
+  menuOpen: { type: Boolean, default: false },
+  typingLabel: { type: String, default: '' }
 })
+
+const showTyping = computed(() => !!props.typingLabel && !props.visible)
 
 const emit = defineEmits(['moreOpenChanged'])
 
@@ -129,6 +135,10 @@ watch(
   }
 )
 
+watch(showTyping, (typing) => {
+  if (typing) setMoreOpen(false)
+})
+
 watch(
   () => props.menuOpen,
   (open) => {
@@ -163,9 +173,40 @@ onBeforeUnmount(() => {
   transition: opacity 0.18s ease;
 }
 
-.compact-hover-toolbar.is-visible {
+.compact-hover-toolbar.is-visible,
+.compact-hover-toolbar.is-typing {
   opacity: 1;
   pointer-events: auto;
+}
+
+.toolbar-typing-cue {
+  margin: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.3;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  user-select: none;
+  animation: typing-cue-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toolbar-typing-cue {
+    animation: none;
+    opacity: 0.8;
+  }
+}
+
+@media (max-width: 768px) {
+  .toolbar-typing-cue {
+    display: none;
+  }
+
+  .compact-hover-toolbar.is-typing:not(.is-visible) {
+    opacity: 0;
+    pointer-events: none;
+  }
 }
 
 .compact-reply-count {
