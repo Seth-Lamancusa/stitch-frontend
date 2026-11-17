@@ -3254,16 +3254,20 @@ defineExpose({
   }
 
   .reply-sheet__toolbar {
-    padding: 6px 10px;
+    padding: 8px 10px;
     margin-bottom: 0;
+    min-height: 48px;
+    align-items: center;
   }
 
   .toolbar-left {
+    display: flex;
     flex-wrap: nowrap;
     gap: 6px;
     width: 100%;
     overflow-x: auto;
     scrollbar-width: none;
+    align-items: center;
   }
 
   .toolbar-left::-webkit-scrollbar {
@@ -3336,7 +3340,30 @@ defineExpose({
     color: #FFA500;
   }
 
-  .node-pill--recipients,
+  .node-pill--recipients {
+    /* Larger, colored pill aligned to the right on mobile */
+    order: 99;
+    margin-left: auto;
+    min-height: 32px;
+    height: 32px;
+    padding: 0 12px;
+    gap: 6px;
+    background-color: rgba(79, 140, 255, 0.15);
+    border-color: rgba(79, 140, 255, 0.5);
+    color: #7eb3ff;
+    font-size: 12px;
+  }
+
+  .node-pill--recipients .meta-pill__svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .node-pill--recipients .meta-pill__count {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
   .node-pill--attach {
     background-color: transparent;
   }
@@ -3397,14 +3424,17 @@ defineExpose({
   }
   
   .reply-sheet__toolbar {
-    padding: 4px 10px;
+    padding: 6px 10px;
     gap: 6px;
     flex-wrap: nowrap;
+    min-height: 44px;
+    align-items: center;
   }
   
   .toolbar-left {
     flex-wrap: nowrap;
     gap: 6px;
+    align-items: center;
   }
   
   .visibility-toggle {
@@ -3420,6 +3450,13 @@ defineExpose({
     padding: 0 6px 0 5px;
     font-size: var(--font-size-xs);
     min-height: 22px;
+  }
+
+  /* Recipients pill stays large and right-aligned on small screens */
+  .node-pill--recipients {
+    min-height: 30px;
+    height: 30px;
+    padding: 0 10px;
   }
   
   .textarea-send-button {
