@@ -1275,6 +1275,12 @@ const openSettingsModal = () => {
 }
 
 @media (max-width: 640px) {
+  .new-thread-background {
+    /* On mobile, the replybox is always visible in new thread view.
+       Increase bottom padding to prevent recipients from being obscured. */
+    padding-bottom: calc(var(--stitch-composer-cover, 320px) + 32px);
+  }
+
   .draft-section {
     padding: var(--space-md);
   }
@@ -1427,6 +1433,12 @@ const openSettingsModal = () => {
 
 /* Responsive styles */
 @media (max-width: 768px) {
+  .new-thread-background {
+    /* On mobile/tablet, the replybox is always visible in new thread view.
+       Increase bottom padding to prevent recipients from being obscured. */
+    padding-bottom: calc(var(--stitch-composer-cover, 300px) + 24px);
+  }
+
   .messages-container {
     padding-left: 12px;
     padding-right: 12px;
