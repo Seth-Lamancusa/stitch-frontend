@@ -119,8 +119,9 @@
                     :key="u.uid"
                     class="draft-speed-dial-card"
                     :class="{ 'draft-speed-dial-card--selected': isSpeedDialUserSelected(u) }"
+                    @click="toggleSpeedDialUser(u)"
                   >
-                    <button type="button" class="draft-speed-dial-info" @click="toggleSpeedDialUser(u)">
+                    <button type="button" class="draft-speed-dial-info">
                       <img
                         v-if="speedDialUserIcon(u)"
                         class="draft-speed-dial-avatar"
@@ -133,13 +134,13 @@
                       </span>
                     </button>
                     <div class="draft-speed-dial-controls">
-                      <label class="draft-speed-dial-checkbox">
+                      <span class="draft-speed-dial-checkbox">
                         <input
                           type="checkbox"
                           :checked="isSpeedDialUserSelected(u)"
-                          @click.prevent="toggleSpeedDialUser(u)"
+                          @click.prevent
                         />
-                      </label>
+                      </span>
                       <button
                         type="button"
                         class="draft-speed-dial-tier"
@@ -183,8 +184,9 @@
                       :key="u.uid"
                       class="draft-speed-dial-card draft-speed-dial-card--more"
                       :class="{ 'draft-speed-dial-card--selected': isSpeedDialUserSelected(u) }"
+                      @click="toggleSpeedDialUser(u)"
                     >
-                      <button type="button" class="draft-speed-dial-info" @click="toggleSpeedDialUser(u)">
+                      <button type="button" class="draft-speed-dial-info">
                         <img
                           v-if="speedDialUserIcon(u)"
                           class="draft-speed-dial-avatar"
@@ -197,13 +199,13 @@
                         </span>
                       </button>
                       <div class="draft-speed-dial-controls">
-                        <label class="draft-speed-dial-checkbox">
+                        <span class="draft-speed-dial-checkbox">
                           <input
                             type="checkbox"
                             :checked="isSpeedDialUserSelected(u)"
-                            @click.prevent="toggleSpeedDialUser(u)"
+                            @click.prevent
                           />
-                        </label>
+                        </span>
                         <button
                           type="button"
                           class="draft-speed-dial-tier"
@@ -721,8 +723,11 @@ const openSettingsModal = () => {
   overflow: auto;
   display: flex;
   justify-content: center;
-  /* Composer publishes its height (plus the keyboard) as --stitch-composer-cover. */
-  padding: var(--space-lg) var(--space-md) calc(var(--stitch-composer-cover, 280px) + 16px);
+  /* Composer publishes its height (plus the keyboard) as --stitch-composer-cover.
+     Margin keeps this scrollport above the fixed reply sheet so the sheet
+     cannot cover the recipients panel. */
+  margin-bottom: calc(var(--stitch-composer-cover, 240px) + 12px);
+  padding: var(--space-lg) var(--space-md);
 }
 
 .draft-panel {
@@ -1082,6 +1087,7 @@ const openSettingsModal = () => {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface-light);
+  cursor: pointer;
   transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 

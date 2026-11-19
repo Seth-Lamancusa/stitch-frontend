@@ -23,12 +23,6 @@ const activityHandler = () => {
   WebSocketService.maybeActivityReconnect();
 };
 
-const visibilityHandler = () => {
-  if (document.visibilityState === 'visible') {
-    WebSocketService.maybeActivityReconnect();
-  }
-};
-
 onMounted(async () => {
   window.addEventListener('resize', setAppHeight);
   setAppHeight();
@@ -36,7 +30,6 @@ onMounted(async () => {
   window.addEventListener('keydown', activityHandler);
   window.addEventListener('click', activityHandler);
   window.addEventListener('touchstart', activityHandler);
-  document.addEventListener('visibilitychange', visibilityHandler);
   try {
     await router.isReady();
   } catch (_) {}
@@ -49,7 +42,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', activityHandler);
   window.removeEventListener('click', activityHandler);
   window.removeEventListener('touchstart', activityHandler);
-  document.removeEventListener('visibilitychange', visibilityHandler);
 });
 </script>
 

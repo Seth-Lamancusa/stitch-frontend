@@ -89,6 +89,9 @@ export function useAuthentication() {
         if (detail === 'email_conflict') throw new Error('email_conflict')
         if (detail === 'phone_conflict') throw new Error('phone_conflict')
       }
+      if (info?.detail === 'registration_incomplete' || status >= 500) {
+        throw new Error('registration_incomplete')
+      }
       throw new Error(info.detail || e.message || 'Registration failed')
     }
   }

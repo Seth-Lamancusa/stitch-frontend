@@ -3509,13 +3509,6 @@ export default {
     transform: none;
   }
 
-  .mobile-sibling-nav-slot :deep(.mobile-default-mark) {
-    position: absolute;
-    top: 1px;
-    right: 1px;
-    margin: 0;
-  }
-
   .message-content.animate-nav-next,
   .message-content.animate-nav-prev {
     transition: none !important;
@@ -3524,13 +3517,18 @@ export default {
   .message-content {
     position: relative;
     width: 100%;
-    touch-action: pan-y; /* Allow vertical scrolling but capture horizontal swipes */
+    touch-action: pan-y; /* Vertical thread scroll; horizontal pans stay with the page edge */
     /* Default transition for smoother movement */
     transition: transform 0.02s linear, opacity 0.02s linear;
     z-index: 1;
     background-color: var(--color-surface);
     padding: 10px 14px;
     margin: 0; /* Remove margins since parent now has padding */
+  }
+
+  /* A pan-y ancestor blocks horizontal scrolling of anything inside it. */
+  .message-content:has(.fc-table-scroll) {
+    touch-action: pan-x pan-y;
   }
   
   .message-node:not(.list-view):not(.compact) .message-content {

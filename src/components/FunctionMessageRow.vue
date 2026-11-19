@@ -31,7 +31,6 @@
         :message-id="message.id"
         :parent-id="derivedParentId"
         :mobile-mode="false"
-        compact
       />
 
       <div class="fn-line">
@@ -978,14 +977,18 @@ onBeforeUnmount(() => {
 }
 
 @media (min-width: 769px) {
-  .function-message[data-has-siblings="true"],
-  .function-message[data-has-siblings="true"][data-is-reply-root="true"] {
-    width: calc(100% - 28px);
+  .function-message[data-has-siblings="true"] .fn-body {
+    padding-left: 28px;
+    padding-right: 28px;
   }
 
+  /* Message rails sit on the full thread width: the card is inset 32px and the
+     rail is shifted back by that amount, then 4px of node padding and a 1px
+     card border leave the rail 5px in from the thread edge. fn-body is already
+     4px in, so 1px more lines these rails up with the message ones. */
   .function-message[data-has-siblings="true"] :deep(.sibling-navigator) {
-    width: calc(100% + 28px);
-    left: -14px;
+    left: 1px;
+    width: calc(100% - 2px);
   }
 }
 

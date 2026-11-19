@@ -1,6 +1,28 @@
 <template>
   <div class="function-group" :class="{ compact, 'is-collapsed': !expanded }">
     <div v-if="!expanded" class="function-group-collapsed">
+      <div v-if="showSiblingHint" class="sibling-navigator group-sibling-rails">
+        <button
+          type="button"
+          class="nav-button nav-prev"
+          :class="{ disabled: !hasPrevSibling, 'target-is-stitch': hasPrevStitch }"
+          :title="hasPrevSibling ? 'A function in this group has a previous reply' : 'Expand'"
+          aria-label="Expand"
+          @click="emit('expand')"
+        >
+          <div class="triangle-icon left-triangle"></div>
+        </button>
+        <button
+          type="button"
+          class="nav-button nav-next"
+          :class="{ disabled: !hasNextSibling, 'target-is-stitch': hasNextStitch }"
+          :title="hasNextSibling ? 'A function in this group has a next reply' : 'Expand'"
+          aria-label="Expand"
+          @click="emit('expand')"
+        >
+          <div class="triangle-icon right-triangle"></div>
+        </button>
+      </div>
       <button
         v-if="showSiblingHint"
         type="button"
@@ -80,6 +102,8 @@ const props = defineProps({
   showSiblingHint: { type: Boolean, default: false },
   hasPrevSibling: { type: Boolean, default: false },
   hasNextSibling: { type: Boolean, default: false },
+  hasPrevStitch: { type: Boolean, default: false },
+  hasNextStitch: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['expand', 'collapse']);
@@ -110,8 +134,18 @@ const collapsedAriaLabel = computed(() => {
 .function-group-collapsed {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   max-width: 100%;
+  position: relative;
+}
+
+.group-sibling-rails {
+  display: none;
+}
+
+.group-sibling-rails .nav-button.disabled {
+  cursor: pointer;
 }
 
 .group-sibling-hint {
@@ -197,4 +231,29 @@ const collapsedAriaLabel = computed(() => {
   flex-shrink: 0;
   color: var(--color-text-secondary);
 }
+
+@media (min-width: 769px) {
+  .function-group.is-collapsed {
+    width: 100%;
+    max-width: 100%;
+    align-self: stretch;
+  }
+
+  .function-group.is-collapsed .function-group-collapsed {
+    width: 100%;
+    padding: 0 28px;
+    box-sizing: border-box;
+  }
+
+  .function-group.is-collapsed .group-sibling-hint {
+    display: none;
+  }
+
+  .function-group.is-collapsed .group-sibling-rails {
+    display: block;
+    left: 5px;
+    width: calc(100% - 10px);
+  }
+}
 </style>
+<style scoped src="./sibling-rail.css"></style>

@@ -56,6 +56,14 @@ const WebSocketService = {
   hiddenGraceTimeoutId: null,
   hiddenGraceGeneration: 0,
 
+  // Server drops a session that has not ponged within this window
+  // (HEALTHY_PONG_WINDOW_SECONDS). A frozen tab still reports readyState OPEN.
+  serverHealthyWindowMs: 20 * 1000,
+  probeTimeoutMs: 1500,
+  visibleReconnectDelayMs: 50,
+  visibleReconnectTimer: null,
+  visibleCheckGeneration: 0,
+
   // Network/visibility robustness
   networkVisibilityListenerRegistered: false,
   isOnline: typeof navigator !== 'undefined' ? !!navigator.onLine : true,
@@ -94,14 +102,23 @@ const WebSocketService = {
       }
       this.lastActivityReconnectAt = now;
       const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
-      if (!isOpen) {
-        this.log('Activity detected and WS not open; attempting reconnect');
-        if (this.sessionRestoreInProgress) {
-          this.warn('Skipping activity reconnect during session restore');
-          return;
+      if (isOpen) {
+        const lastTrafficAt = this.client?._lastPongAt || 0;
+        const stale = lastTrafficAt > 0 && (now - lastTrafficAt) >= this.serverHealthyWindowMs;
+        if (stale && this.isAuthenticated()) {
+          this.lastActivityReconnectAt = now;
+          this.log('Activity on a stale WebSocket; checking the connection');
+          this.scheduleVisibleReconnect();
         }
-        if (this.isAuthenticated()) this.safeConnect();
+        return;
       }
+      this.log('Activity detected and WS not open; attempting reconnect');
+      if (this.sessionRestoreInProgress) {
+        this.warn('Skipping activity reconnect during session restore');
+        return;
+      }
+      this.lastActivityReconnectAt = now;
+      if (this.isAuthenticated()) this.safeConnect();
     } catch (e) {
       // no-op
     }
@@ -128,10 +145,10 @@ const WebSocketService = {
       onVisible: () => {
         this.cancelHiddenGraceDisconnect();
         this.resumeIdleAfterHidden();
-        const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
-        if (!isOpen && this.isOnline && this.isAuthenticated()) this.safeConnect();
+        this.scheduleVisibleReconnect();
       },
       onHidden: () => {
+        this.cancelVisibleReconnect();
         this.scheduleHiddenGraceDisconnect();
       },
       onPageHide: () => {
@@ -177,6 +194,7 @@ const WebSocketService = {
   },
   clearClientSideHandlers() {
     this.cancelHiddenGraceDisconnect();
+    this.cancelVisibleReconnect();
     this.idlePausedForHidden = false;
     this.stopPingInterval();
     this.stopIdleTimer();
@@ -486,6 +504,8 @@ const WebSocketService = {
       return this.connectionPromise;
     }
 
+    this.connectStartedAt = Date.now();
+
     if (!this.client) {
       this.client = new WebSocketClient({
         buildUrl: () => {
@@ -508,6 +528,7 @@ const WebSocketService = {
         try { this.backoff?.reset(); } catch (e) {}
         try { store.dispatch('messages/fetchUnreadMessageCount'); } catch (e) {}
         this.isConnecting = false;
+        this.connectStartedAt = null;
       });
 
       this.client.on('json', (data) => {
@@ -591,11 +612,16 @@ const WebSocketService = {
       });
 
       this.client.on('close', (event) => {
+        const closedSocket = event?.target;
+        if (closedSocket && this.client?.socket && closedSocket !== this.client.socket) {
+          return;
+        }
         this.warn('Socket closed', { code: event?.code, reason: event?.reason, wasClean: event?.wasClean });
         this.connection = null;
         this.userId = null;
         this.connectionEstablished = false;
         this.isConnecting = false;
+        this.connectStartedAt = null;
 
         if (event.code === 1008) {
           this.error('Authentication failed (1008). Attempting session restore and reconnect');
@@ -772,6 +798,71 @@ const WebSocketService = {
     this.hiddenGraceTimeoutId = setTimeout(() => {
       this.onHiddenGraceElapsed(generation);
     }, this.hiddenGraceMs);
+  },
+  scheduleVisibleReconnect() {
+    if (this.visibleReconnectTimer) {
+      clearTimeout(this.visibleReconnectTimer);
+      this.visibleReconnectTimer = null;
+    }
+    const generation = ++this.visibleCheckGeneration;
+    this.visibleReconnectTimer = setTimeout(() => {
+      if (generation !== this.visibleCheckGeneration) return;
+      this.visibleReconnectTimer = null;
+      this.ensureLiveOnVisible(generation);
+    }, this.visibleReconnectDelayMs);
+  },
+  cancelVisibleReconnect() {
+    this.visibleCheckGeneration++;
+    if (this.visibleReconnectTimer) {
+      clearTimeout(this.visibleReconnectTimer);
+      this.visibleReconnectTimer = null;
+    }
+  },
+  async ensureLiveOnVisible(generation) {
+    if (generation !== this.visibleCheckGeneration) return;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    if (!this.isOnline || !this.isAuthenticated() || !this.isInitialized) return;
+
+    this.connectionAttempts = 0;
+    try { this.backoff?.reset(); } catch (_) {}
+
+    if (!this.client?.isOpen) {
+      const connecting = this.client?.socket?.readyState === WebSocket.CONNECTING;
+      const startedAt = this.connectStartedAt || 0;
+      if (this.isConnecting && connecting && startedAt && (Date.now() - startedAt) < 5000) {
+        return;
+      }
+      this.log('Tab visible with WebSocket down; reconnecting');
+      this.replaceConnection('Tab visible');
+      return;
+    }
+
+    const lastTrafficAt = this.client._lastPongAt || 0;
+    const stale = lastTrafficAt > 0 && (Date.now() - lastTrafficAt) >= this.serverHealthyWindowMs;
+    if (stale) {
+      this.log('Tab visible and WebSocket is stale; reconnecting');
+      this.replaceConnection('Stale after background');
+      return;
+    }
+
+    try {
+      await this.client.probe(this.probeTimeoutMs);
+    } catch (e) {
+      if (generation !== this.visibleCheckGeneration) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      this.log('Visible liveness probe failed; reconnecting');
+      this.replaceConnection('Liveness probe failed');
+    }
+  },
+  replaceConnection(reason) {
+    try { this.client?.disconnect(1000, reason); } catch (_) {}
+    this.connection = null;
+    this.userId = null;
+    this.connectionEstablished = false;
+    this.isConnecting = false;
+    this.connectionPromise = null;
+    this.connectStartedAt = null;
+    this.safeConnect();
   },
   cancelHiddenGraceDisconnect() {
     this.hiddenGraceGeneration++;

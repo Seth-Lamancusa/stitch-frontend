@@ -13,6 +13,8 @@ export default class NetworkVisibility {
     this._boundVisibility = this._handleVisibility.bind(this);
     this._boundPageShow = this._handlePageShow.bind(this);
     this._boundPageHide = this._handlePageHide.bind(this);
+    this._boundFreeze = this._handleFreeze.bind(this);
+    this._boundResume = this._handleResume.bind(this);
     this._active = false;
   }
 
@@ -25,6 +27,9 @@ export default class NetworkVisibility {
       // Support mobile Safari/backgrounding and BFCache restores
       window.addEventListener('pageshow', this._boundPageShow);
       window.addEventListener('pagehide', this._boundPageHide);
+      // Chrome freezes background pages without another visibility event on thaw.
+      document.addEventListener('freeze', this._boundFreeze);
+      document.addEventListener('resume', this._boundResume);
     } catch (_) {}
     this._active = true;
   }
@@ -37,6 +42,8 @@ export default class NetworkVisibility {
       document.removeEventListener('visibilitychange', this._boundVisibility);
       window.removeEventListener('pageshow', this._boundPageShow);
       window.removeEventListener('pagehide', this._boundPageHide);
+      document.removeEventListener('freeze', this._boundFreeze);
+      document.removeEventListener('resume', this._boundResume);
     } catch (_) {}
     this._active = false;
   }
@@ -65,6 +72,14 @@ export default class NetworkVisibility {
     // Navigation, discard, or bfcache. The document is going away, so this
     // is not the same as a backgrounded tab (visibility hidden).
     try { this.onPageHide(event); } catch (_) {}
+  }
+
+  _handleFreeze() {
+    try { this.onHidden(); } catch (_) {}
+  }
+
+  _handleResume() {
+    try { this.onVisible(); } catch (_) {}
   }
 }
 

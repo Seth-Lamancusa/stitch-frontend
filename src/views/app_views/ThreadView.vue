@@ -73,6 +73,8 @@
               :show-sibling-hint="siblingHintFor(row).show"
               :has-prev-sibling="siblingHintFor(row).prev"
               :has-next-sibling="siblingHintFor(row).next"
+              :has-prev-stitch="siblingHintFor(row).prevStitch"
+              :has-next-stitch="siblingHintFor(row).nextStitch"
               @expand="setFunctionGroupExpanded(row, true)"
               @collapse="setFunctionGroupExpanded(row, false)"
             >
@@ -474,27 +476,39 @@ const functionGroupSiblingHints = computed(() => {
     let show = false;
     let prev = false;
     let next = false;
+    let prevStitch = false;
+    let nextStitch = false;
     row.messages.forEach((message, offset) => {
       const index = row.startIndex + offset;
       const activeParentId = index > 0 ? messages[index - 1]?.id : null;
       const parentId = activeParentId != null ? activeParentId : message.parent_id;
       if (parentId == null) return;
       show = true;
+      const parent = store.getters['messages/getMessage'](parentId);
       const sides = siblingNavSides(
         store.getters['messages/getChildIds'](parentId),
         message.id,
-        store.getters['messages/getBranchChild'](parentId)
+        store.getters['messages/getBranchChild'](parentId),
+        parent?.stitch_child_ids
       );
       prev = prev || sides.prev;
       next = next || sides.next;
+      prevStitch = prevStitch || sides.prevStitch;
+      nextStitch = nextStitch || sides.nextStitch;
     });
-    hints.set(functionGroupKey(row), { show, prev, next });
+    hints.set(functionGroupKey(row), { show, prev, next, prevStitch, nextStitch });
   }
   return hints;
 });
 
 function siblingHintFor(row) {
-  return functionGroupSiblingHints.value.get(functionGroupKey(row)) || { show: false, prev: false, next: false };
+  return functionGroupSiblingHints.value.get(functionGroupKey(row)) || {
+    show: false,
+    prev: false,
+    next: false,
+    prevStitch: false,
+    nextStitch: false,
+  };
 }
 
 function isFunctionGroupExpanded(row) {
@@ -1387,7 +1401,7 @@ const handleContainerClick = (event) => {
   
   // Walk up the DOM tree to check for message-node class
   while (target && target !== event.currentTarget) {
-    if (target.classList && (target.classList.contains('message-node') || target.classList.contains('function-group-toggle') || target.classList.contains('group-sibling-hint'))) {
+    if (target.classList && (target.classList.contains('message-node') || target.classList.contains('function-group') || target.classList.contains('function-group-toggle') || target.classList.contains('group-sibling-hint') || target.classList.contains('nav-button'))) {
       isMessageNode = true;
       break;
     }

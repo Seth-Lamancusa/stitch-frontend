@@ -167,17 +167,18 @@
                 :key="user.uid" 
                 class="speed-dial-card"
                 :class="{ 'speed-dial-selected': isSpeedDialUserSelected(user) }"
+                @click="toggleSpeedDialUser(user)"
               >
-                <div class="speed-dial-info" @click="toggleSpeedDialUser(user)">
+                <div class="speed-dial-info">
                   <span class="speed-dial-name">{{ user.display_name }}</span>
                   <span class="speed-dial-tag">@{{ user.user_tag }}</span>
                 </div>
                 <div class="speed-dial-controls">
-                  <div class="speed-dial-checkbox" @click="toggleSpeedDialUser(user)">
+                  <div class="speed-dial-checkbox">
                     <input 
                       type="checkbox" 
                       :checked="isSpeedDialUserSelected(user)"
-                      @click.stop="toggleSpeedDialUser(user)"
+                      @click.prevent
                     />
                   </div>
                   <button 
@@ -226,17 +227,18 @@
                   :key="user.uid" 
                   class="speed-dial-card expanded-speed-dial-card"
                   :class="{ 'speed-dial-selected': isSpeedDialUserSelected(user) }"
+                  @click="toggleSpeedDialUser(user)"
                 >
-                  <div class="speed-dial-info" @click="toggleSpeedDialUser(user)">
+                  <div class="speed-dial-info">
                     <span class="speed-dial-name">{{ user.display_name }}</span>
                     <span class="speed-dial-tag">@{{ user.user_tag }}</span>
                   </div>
                   <div class="speed-dial-controls">
-                    <div class="speed-dial-checkbox" @click="toggleSpeedDialUser(user)">
+                    <div class="speed-dial-checkbox">
                       <input 
                         type="checkbox" 
                         :checked="isSpeedDialUserSelected(user)"
-                        @click.stop="toggleSpeedDialUser(user)"
+                        @click.prevent
                       />
                     </div>
                     <button 
@@ -2492,6 +2494,7 @@ onBeforeUnmount(() => {
   background-color: var(--color-surface);
   width: 100%;
   min-width: 0;
+  cursor: pointer;
 }
 
 .speed-dial-card:hover {

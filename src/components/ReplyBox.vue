@@ -18,6 +18,7 @@
       :class="{ 
         'reply-sheet--raised': isKeyboardVisible,
         'reply-sheet--visible': isReplying || isNewThread,
+        'reply-sheet--new-thread': isNewThread,
         'reply-sheet--closing': isReplyBoxClosing
       }"
       ref="replySheet"
@@ -1008,7 +1009,11 @@ const autoResizeTextarea = () => {
   
   const minHeight = 32; // Compact single line
   const visibleHeight = window.visualViewport?.height || window.innerHeight;
-  const maxHeight = window.innerWidth <= 768 ? visibleHeight * 0.28 : window.innerHeight * 0.4;
+  let maxHeight = window.innerWidth <= 768 ? visibleHeight * 0.28 : window.innerHeight * 0.4;
+  // On a short new-thread screen the sheet is capped so the recipients panel stays visible.
+  if (props.isNewThread && visibleHeight < 820) {
+    maxHeight = Math.min(maxHeight, visibleHeight * 0.22);
+  }
   const naturalHeight = textarea.scrollHeight;
   const newHeight = Math.min(Math.max(naturalHeight, minHeight), maxHeight);
   
@@ -3471,6 +3476,26 @@ defineExpose({
     font-size: calc(var(--font-size-sm) * 1.4);
     /* One line plus the existing 13px/10px padding and 1px borders, with a little slack. */
     min-height: calc(var(--font-size-sm) * 1.96 + 27px);
+  }
+}
+
+/* New thread: the recipients panel sits behind this sheet. Keep the sheet
+   inside its box, and on short laptops leave a band of that panel visible. */
+.reply-sheet.reply-sheet--new-thread {
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: min(60vh, max(240px, calc(100dvh - 380px)));
+}
+
+@media (max-width: 768px) {
+  .reply-sheet.reply-sheet--new-thread {
+    max-height: min(50dvh, var(--stitch-composer-max, 50dvh), max(180px, calc(100dvh - 320px)));
+  }
+}
+
+@media (max-height: 760px) {
+  .reply-sheet.reply-sheet--new-thread .reply-sheet__textarea {
+    max-height: 22vh;
   }
 }
 

@@ -13,9 +13,6 @@
         <path d="M10 3.5 L5 8 L10 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
       <div v-else class="arrow-icon left-arrow">←</div>
-      <span v-if="defaultMarkSide === 'prev'" class="mobile-default-mark" title="Default outgoing">
-        <DefaultOutgoingStar :size="9" />
-      </span>
     </button>
     
     <button 
@@ -30,9 +27,6 @@
         <path d="M6 3.5 L11 8 L6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
       <div v-else class="arrow-icon right-arrow">→</div>
-      <span v-if="defaultMarkSide === 'next'" class="mobile-default-mark" title="Default outgoing">
-        <DefaultOutgoingStar :size="9" />
-      </span>
     </button>
   </div>
   
@@ -51,9 +45,6 @@
         <path d="M10 3.5 L5 8 L10 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
       <div v-else class="triangle-icon left-triangle"></div>
-      <span v-if="defaultMarkSide === 'prev'" class="default-outgoing-side-mark" title="Default outgoing">
-        <DefaultOutgoingStar :size="9" />
-      </span>
     </button>
     
     <button 
@@ -69,9 +60,6 @@
         <path d="M6 3.5 L11 8 L6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
       <div v-else class="triangle-icon right-triangle"></div>
-      <span v-if="defaultMarkSide === 'next'" class="default-outgoing-side-mark" title="Default outgoing">
-        <DefaultOutgoingStar :size="9" />
-      </span>
     </button>
   </div>
 </template>
@@ -80,7 +68,6 @@
 import { computed } from 'vue';
 import { useStore } from 'vuex';
 import { useRoute, useRouter } from 'vue-router';
-import DefaultOutgoingStar from './DefaultOutgoingStar.vue';
 
 const props = defineProps({
   messageId: {
@@ -160,17 +147,6 @@ const siblings = computed(() => {
   void parent?.reply_order;
   void store.state.messages.childrenByParent?.[String(props.parentId)];
   return store.getters['messages/getChildIds'](props.parentId);
-});
-
-// Link under the arrow on the side where the default sits, when this message is not the default.
-const defaultMarkSide = computed(() => {
-  const parent = parentMessage.value;
-  if (!parent || !parent.default_outgoing || parent.default_outgoing === props.messageId) return null;
-  const ids = siblings.value;
-  const currentIndex = ids.indexOf(props.messageId);
-  const defaultIndex = ids.indexOf(parent.default_outgoing);
-  if (currentIndex < 0 || defaultIndex < 0 || currentIndex === defaultIndex) return null;
-  return defaultIndex < currentIndex ? 'prev' : 'next';
 });
 
 // Find current message position in siblings array (0-indexed)
@@ -301,13 +277,6 @@ const navigate = async (direction) => {
   font-weight: bold;
 }
 
-.mobile-default-mark {
-  display: block;
-  font-size: 10px;
-  line-height: 1;
-  margin-top: 6px;
-}
-
 /* Smaller buttons for very small screens */
 @media (max-width: 480px) {
   .mobile-nav-btn {
@@ -321,248 +290,11 @@ const navigate = async (direction) => {
   }
 }
 
-/* Desktop navigation styles */
-.sibling-navigator {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 5;
-}
-
-
-
-.nav-button {
-  position: absolute;
-  top: 0;
-  height: 100%;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  width: 32px;
-  background-color: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--color-text);
-  transition: all var(--transition-fast);
-  padding: 0;
-  line-height: 1;
-  pointer-events: auto; /* Re-enable pointer events for buttons */
-  z-index: 10; /* Ensure buttons are above other content */
-}
-
-.nav-button::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  width: 32px; /* Match button width */
-  bottom: 0;
-  background-color: transparent;
-  transition: background-color var(--transition-fast);
-  border-radius: var(--radius-md);
-}
-
-/* Position the background for each side */
-.nav-prev::before {
-  left: 0;
-}
-
-.nav-next::before {
-  right: 0;
-}
-
-.nav-button:hover::before {
-  background-color: rgba(243, 236, 220, 0.08);
-}
-
-.nav-button::after {
-  content: '';
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 26px;
-  height: 26px;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-  transition: all var(--transition-fast);
-  z-index: -1;
-}
-
-.nav-button:hover::after {
-  background-color: var(--color-surface-hover);
-  border-color: var(--color-border-light);
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
-}
-
-.nav-prev {
-  left: -10px; /* Flush against the left side */
-}
-
-.nav-prev::after {
-  border-top-right-radius: 7px;
-  border-bottom-right-radius: 7px;
-  border-top-left-radius: var(--radius-md);
-  border-bottom-left-radius: var(--radius-md);
-}
-
-.nav-next {
-  right: -10px; /* Flush against the right side */
-}
-
-.nav-next::after {
-  border-top-left-radius: 7px;
-  border-bottom-left-radius: 7px;
-  border-top-right-radius: var(--radius-md);
-  border-bottom-right-radius: var(--radius-md);
-}
-
-/* Triangle icon styling */
-.triangle-icon {
-  width: 0;
-  height: 0;
-  border-style: solid;
-  position: relative;
-  top: 16px; /* Position at the top where the visual button is */
-  z-index: 1;
-}
-
-.left-triangle {
-  border-width: 6px 9px 6px 0;
-  border-color: transparent var(--color-text-secondary) transparent transparent;
-}
-
-.right-triangle {
-  border-width: 6px 0 6px 9px;
-  border-color: transparent transparent transparent var(--color-text-secondary);
-}
-
-/* Hover styles - not disabled. Reply targets stay in the neutral palette. */
-.nav-button:hover:not(:disabled) .left-triangle {
-  border-color: transparent var(--color-text) transparent transparent;
-}
-
-.nav-button:hover:not(:disabled) .right-triangle {
-  border-color: transparent transparent transparent var(--color-text);
-}
-
-/* Available reply targets light up with a white/grey wash. */
-.nav-button:not(.disabled):not(:disabled)::after {
-  border-color: var(--color-border-light);
-}
-
-.nav-button.nav-prev:not(.disabled):not(:disabled)::after {
-  background: linear-gradient(to right, var(--color-surface), rgba(243, 236, 220, 0.16));
-}
-
-.nav-button.nav-next:not(.disabled):not(:disabled)::after {
-  background: linear-gradient(to left, var(--color-surface), rgba(243, 236, 220, 0.16));
-}
-
-.nav-button.nav-prev:not(.disabled):not(:disabled) .left-triangle {
-  border-color: transparent var(--color-text) transparent transparent;
-}
-
-.nav-button.nav-next:not(.disabled):not(:disabled) .right-triangle {
-  border-color: transparent transparent transparent var(--color-text);
-}
-
-.default-outgoing-side-mark {
-  position: absolute;
-  top: 48px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 10px;
-  line-height: 1;
-  pointer-events: none;
-  z-index: 2;
-}
-
-/* Disabled state - slightly transparent */
-.nav-button.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.nav-button.disabled::after {
-  opacity: 0.5;
-}
-
-.nav-button.disabled::before {
-  display: none;
-}
-
-.loading-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: var(--color-primary);
-  animation: pulse 1.5s infinite;
-  position: relative;
-  top: 16px; /* Position at the top where the visual button is */
-  z-index: 1;
-}
-
-.nav-button.loading {
-  cursor: wait;
-}
-
-.nav-button.loading::before {
-  display: none;
-}
-
-@keyframes pulse {
-  0% { opacity: 0.3; transform: scale(0.8); }
-  50% { opacity: 1; transform: scale(1.1); }
-  100% { opacity: 0.3; transform: scale(0.8); }
-}
-
-
-</style> 
+</style>
+<style scoped src="./sibling-rail.css"></style>
 <style scoped>
-/* Stitched siblings use the sage lit state that reply arrows used to use. */
-.sibling-navigator .nav-button.nav-next.target-is-stitch:not(:disabled)::after {
-  background: linear-gradient(to left, var(--color-surface), var(--color-primary-light));
-  border-color: var(--color-border);
-}
+/* Mobile function rows keep a disclosure-sized chevron. Desktop uses the shared rail. */
 
-.sibling-navigator .nav-button.nav-prev.target-is-stitch:not(:disabled)::after {
-  background: linear-gradient(to right, var(--color-surface), var(--color-primary-light));
-  border-color: var(--color-border);
-}
-
-.sibling-navigator .nav-button.target-is-stitch:not(:disabled) .right-triangle {
-  border-color: transparent transparent transparent var(--color-primary);
-  opacity: 1;
-}
-.sibling-navigator .nav-button.target-is-stitch:not(:disabled) .left-triangle {
-  border-color: transparent var(--color-primary) transparent transparent;
-  opacity: 1;
-}
-
-.sibling-navigator .nav-button.target-is-stitch:hover:not(:disabled)::before {
-  background-color: var(--color-primary-light);
-}
-
-.sibling-navigator .nav-button.nav-next.target-is-stitch:hover:not(:disabled)::after,
-.sibling-navigator .nav-button.nav-prev.target-is-stitch:hover:not(:disabled)::after {
-  background-color: var(--color-primary-light);
-  border-color: var(--color-primary);
-}
-
-.sibling-navigator .nav-button.target-is-stitch:hover:not(:disabled) .right-triangle {
-  border-color: transparent transparent transparent var(--color-primary);
-}
-
-.sibling-navigator .nav-button.target-is-stitch:hover:not(:disabled) .left-triangle {
-  border-color: transparent var(--color-primary) transparent transparent;
-}
-
-/* Function rows: a disclosure-sized chevron, not the full reply rail. */
 .line-chevron {
   width: 14px;
   height: 14px;
@@ -598,14 +330,8 @@ const navigate = async (direction) => {
   opacity: 0.35;
 }
 
-.sibling-navigator.compact .loading-dot,
-.sibling-navigator.compact .default-outgoing-side-mark {
+.sibling-navigator.compact .loading-dot {
   top: 0;
-}
-
-.sibling-navigator.compact .default-outgoing-side-mark {
-  top: 16px;
-  font-size: 9px;
 }
 
 .sibling-navigator.compact .nav-button.target-is-stitch:not(:disabled),

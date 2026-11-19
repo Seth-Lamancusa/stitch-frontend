@@ -34,6 +34,9 @@ async function getMarkdownIt() {
         if (!label || !html.startsWith('<pre>')) return html;
         return `<pre data-label="${escapeAttr(label)}">${html.slice('<pre>'.length)}`;
       };
+      // A wrapper is the scrollport. The table itself stays as wide as its cells.
+      markdownIt.renderer.rules.table_open = () => '<div class="fc-table-scroll"><table>\n';
+      markdownIt.renderer.rules.table_close = () => '</table></div>\n';
     } catch (error) {
       console.error('Error loading markdown-it:', error);
       

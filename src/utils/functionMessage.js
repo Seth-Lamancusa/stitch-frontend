@@ -147,17 +147,23 @@ export function conversationSpineRows(messages) {
 
 // Matches SiblingNavigator: position in the parent's ordered children.
 // An unknown id falls back to the branch child, then to the first slot.
-export function siblingNavSides(childIds, messageId, branchChildId) {
+export function siblingNavSides(childIds, messageId, branchChildId, stitchChildIds) {
   const ids = Array.isArray(childIds) ? childIds : [];
-  if (ids.length <= 1) return { prev: false, next: false };
+  const stitch = new Set((Array.isArray(stitchChildIds) ? stitchChildIds : []).map((id) => String(id)));
+  const none = { prev: false, next: false, prevStitch: false, nextStitch: false };
+  if (ids.length <= 1) return none;
   let position = ids.findIndex((id) => String(id) === String(messageId));
   if (position === -1 && branchChildId != null) {
     position = ids.findIndex((id) => String(id) === String(branchChildId));
   }
   if (position === -1) position = 0;
+  const prevId = position > 0 ? ids[position - 1] : null;
+  const nextId = position < ids.length - 1 ? ids[position + 1] : null;
   return {
-    prev: position > 0,
-    next: position < ids.length - 1,
+    prev: prevId != null,
+    next: nextId != null,
+    prevStitch: prevId != null && stitch.has(String(prevId)),
+    nextStitch: nextId != null && stitch.has(String(nextId)),
   };
 }
 

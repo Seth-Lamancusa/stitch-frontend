@@ -76,14 +76,12 @@ export default class WebSocketClient {
         };
 
         socket.onmessage = (event) => {
+          this._lastPongAt = Date.now();
+          this._emitter.emit('traffic');
           try {
-            if (event.data === 'pong') {
-              this._lastPongAt = Date.now();
-              return;
-            }
+            if (event.data === 'pong') return;
             if (event.data === 'ping') {
               try { socket.send('pong'); } catch (_) {}
-              this._lastPongAt = Date.now();
               return;
             }
             const parsed = JSON.parse(event.data);
@@ -111,6 +109,33 @@ export default class WebSocketClient {
     if (!this.isOpen) throw new Error('WebSocketClient: socket not open');
     const payload = typeof data === 'string' ? data : JSON.stringify(data);
     this.socket.send(payload);
+  }
+
+  // Send a ping and resolve when any frame comes back. A backgrounded tab can
+  // keep readyState OPEN after the server has already dropped the session.
+  probe(timeoutMs = 1500) {
+    if (!this.isOpen) return Promise.reject(new Error('socket not open'));
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const stops = [];
+      const finish = (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        for (const stop of stops) {
+          try { stop(); } catch (_) {}
+        }
+        if (err) reject(err);
+        else resolve();
+      };
+      const timer = setTimeout(() => finish(new Error('probe timeout')), timeoutMs);
+      stops.push(this._emitter.on('traffic', () => finish()));
+      try {
+        this.socket.send('ping');
+      } catch (e) {
+        finish(e instanceof Error ? e : new Error('probe send failed'));
+      }
+    });
   }
 
   disconnect(code = 1000, reason = 'Client disconnect') {

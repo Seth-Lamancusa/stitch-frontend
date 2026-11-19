@@ -1,4 +1,5 @@
 <template>
+  <Teleport to="body">
   <div v-if="isOpen" class="modal-overlay" @pointerdown="onOverlayPointerDown" @click.self="onOverlayClick">
     <div class="modal-container" @click.stop @pointerdown="onContainerPointerDown">
       <div class="modal-header">
@@ -49,17 +50,16 @@
         </div>
       </div>
       <div class="modal-footer">
-        <div style="display:flex; align-items:center; gap: 10px; margin-right:auto;">
-          <label style="display:inline-grid; grid-auto-flow: column; align-items:center; gap:6px; font-size: 12px;">
-            <input type="checkbox" v-model="isPrivate" />
-            <span>Private account</span>
-          </label>
-        </div>
+        <label class="private-toggle">
+          <input type="checkbox" v-model="isPrivate" />
+          <span>Private account</span>
+        </label>
         <button class="primary" :disabled="busy || !canSubmit" :aria-busy="busy ? 'true' : 'false'" type="submit">{{ busy ? 'Creating account…' : 'Create account' }}</button>
       </div>
       </form>
     </div>
   </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -127,6 +127,7 @@ const validateTag = () => {
 }
 
 const submit = async () => {
+  if (busy.value) return
   busy.value = true
   error.value = ''
   try {
@@ -158,6 +159,8 @@ const submit = async () => {
       error.value = 'That email is already in use'
     } else if (code === 'phone_conflict') {
       error.value = 'That phone number is already in use'
+    } else if (code === 'registration_incomplete') {
+      error.value = "We couldn't finish creating your account. Please try again."
     } else if (code === 'multiple_emails_not_allowed') {
       error.value = 'Only one email is allowed per account'
     } else if (code === 'multiple_phones_not_allowed') {
@@ -189,7 +192,8 @@ const onTagInput = () => {
   top: 0; left: 0; width: 100%; height: 100%;
   background-color: rgba(0,0,0,0.75);
   display: flex; justify-content: center; align-items: center;
-  z-index: var(--z-index-modal);
+  z-index: 1000;
+  inset: 0;
   backdrop-filter: blur(2px);
 }
 .modal-container {
@@ -203,22 +207,25 @@ const onTagInput = () => {
 }
 .modal-form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 @keyframes modal-appear { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-.modal-header { padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; }
+.modal-header { padding: var(--space-md) var(--space-lg); border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
 .modal-header h3 { margin: 0; font-size: var(--font-size-lg); color: var(--color-text); font-weight: 600; }
 .close-button { background: none; border: none; font-size: var(--font-size-xl); cursor: pointer; color: var(--color-text-secondary); padding: 4px; border-radius: var(--radius-sm); transition: all var(--transition-fast); height: 24px; width: 24px; display: flex; align-items: center; justify-content: center; }
 .close-button:hover { color: var(--color-text); background-color: var(--color-hover-overlay); }
-.modal-content { padding: var(--space-lg); flex: 1; overflow-y: auto; min-height: 0; }
-.modal-footer { padding: var(--space-md) var(--space-lg); border-top: 1px solid var(--color-border); display: flex; justify-content: flex-end; gap: var(--space-md); flex-shrink: 0; }
-.panel { display: flex; flex-direction: column; gap: var(--space-sm); }
+.modal-content { padding: var(--space-lg); flex: 1; overflow-y: auto; min-height: 0; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.modal-footer { padding: var(--space-md) var(--space-lg); border-top: 1px solid var(--color-border); display: flex; justify-content: flex-end; align-items: center; gap: var(--space-md); flex-shrink: 0; }
+.private-toggle { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; font-size: var(--font-size-xs); color: var(--color-text); cursor: pointer; }
+.private-toggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--color-primary); flex-shrink: 0; }
+.panel { display: flex; flex-direction: column; gap: var(--space-sm); min-width: 0; }
 label { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
-input { padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: var(--font-size-sm); background: var(--color-surface); color: var(--color-text); }
-.password-field { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; }
-.password-field input { padding-right: 36px; }
+.panel input { width: 100%; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: var(--font-size-sm); background: var(--color-surface); color: var(--color-text); }
+.password-field { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; min-width: 0; }
+.password-field input { min-width: 0; }
 .eye-toggle { margin-left: 6px; background: transparent; border: 1px solid var(--color-border); color: var(--color-text-secondary); border-radius: var(--radius-sm); cursor: pointer; padding: 6px 8px; font-size: 14px; }
 .eye-toggle:hover { background: var(--color-hover-overlay); color: var(--color-text); }
 .primary { background: var(--color-primary); color: var(--color-text-inverse); border: none; padding: 8px 12px; border-radius: var(--radius-sm); cursor: pointer; }
-.error { color: var(--color-error); margin-top: var(--space-sm); font-size: var(--font-size-sm); }
-.hint { color: var(--color-text-secondary); margin-top: 0; font-size: var(--font-size-xs); }
+.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.error { color: var(--color-error); margin-top: var(--space-sm); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
+.hint { color: var(--color-text-secondary); margin-top: 0; font-size: var(--font-size-xs); overflow-wrap: anywhere; }
 .notify { display: flex; flex-direction: column; gap: var(--space-xs); margin-top: 0; }
 .notify-label { font-size: var(--font-size-xs); color: var(--color-text-secondary); }
 .notify-buttons { display: flex; gap: var(--space-xs); flex-wrap: wrap; }
@@ -227,10 +234,51 @@ input { padding: 8px 10px; border: 1px solid var(--color-border); border-radius:
 .chip.disabled { opacity: 0.5; cursor: not-allowed; }
 .none-link { background: none; border: none; color: var(--color-text-secondary); text-decoration: underline; font-size: var(--font-size-xs); width: fit-content; padding: 0; cursor: pointer; }
 .hr { margin-top: 0; margin-bottom: 12px; border: none; border-top: 1px solid var(--color-border); }
-@media (max-width: 768px) { .modal-container { width: 95%; height: 80vh; max-height: 80vh; } .modal-content { padding: var(--space-md); } }
 
-@media (max-width: 600px) {
-  .notify-buttons { justify-content: flex-start; }
+@media (max-width: 768px) {
+  .modal-overlay {
+    align-items: stretch;
+    justify-content: stretch;
+    height: 100dvh;
+    max-height: 100dvh;
+    box-sizing: border-box;
+    padding:
+      env(safe-area-inset-top, 0px)
+      env(safe-area-inset-right, 0px)
+      env(safe-area-inset-bottom, 0px)
+      env(safe-area-inset-left, 0px);
+  }
+  .modal-container {
+    width: 100%;
+    max-width: none;
+    height: auto;
+    max-height: none;
+    flex: 1 1 auto;
+    min-height: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .modal-header { padding: 8px 12px 8px 16px; }
+  .close-button { width: 44px; height: 44px; font-size: 28px; }
+  .modal-content { padding: 16px; }
+  label, .hint, .notify-label { font-size: var(--font-size-sm); line-height: 1.4; }
+  .panel input {
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 16px;
+  }
+  .eye-toggle { min-width: 44px; min-height: 44px; margin-left: 8px; font-size: 18px; }
+  .chip { min-height: 40px; padding: 8px 14px; font-size: var(--font-size-sm); }
+  .modal-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 12px 16px 16px;
+  }
+  .private-toggle { margin-right: 0; min-height: 44px; font-size: 16px; }
+  .private-toggle input { width: 22px; height: 22px; }
+  .primary { width: 100%; min-height: 48px; font-size: 16px; }
 }
 </style>
 
