@@ -68,6 +68,9 @@ export default class WebSocketClient {
         this.socket = socket;
 
         socket.onopen = () => {
+          const now = Date.now();
+          this._openedAt = now;
+          this._lastPongAt = now;
           if (this.pingIntervalMs > 0) {
             this._startHeartbeat();
           }

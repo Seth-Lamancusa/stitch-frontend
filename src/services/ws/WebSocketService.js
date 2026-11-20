@@ -57,12 +57,28 @@ const WebSocketService = {
   hiddenGraceGeneration: 0,
 
   // Server drops a session that has not ponged within this window
-  // (HEALTHY_PONG_WINDOW_SECONDS). A frozen tab still reports readyState OPEN.
+  // (HEALTHY_PONG_WINDOW_SECONDS). A frozen tab still reports readyState OPEN,
+  // so a successful-looking socket is not proof the queue is live.
   serverHealthyWindowMs: 20 * 1000,
-  probeTimeoutMs: 1500,
   visibleReconnectDelayMs: 50,
   visibleReconnectTimer: null,
   visibleCheckGeneration: 0,
+  // Coalesce visibility + focus + pageshow into one new socket.
+  forceReconnectCooldownMs: 1000,
+  lastForceReconnectAt: 0,
+  // Set only for idle / hidden-grace disconnects. An unexpected drop while
+  // the page is visible should come back on its own.
+  intentionalDisconnect: false,
+  // Close of the socket we just replaced. That event must not tear down the
+  // replacement connection or schedule a second reconnect.
+  ignoredCloseSocket: null,
+  // While the page is visible, notice sleep and half-open sockets without
+  // waiting for a pointer event. Hidden tabs throttle this timer; a large gap
+  // once the page is visible again means the machine woke.
+  watchdogIntervalMs: 5 * 1000,
+  watchdogTimer: null,
+  lastWatchdogTickAt: 0,
+  connectTimeoutMs: 8 * 1000,
 
   // Network/visibility robustness
   networkVisibilityListenerRegistered: false,
@@ -100,25 +116,22 @@ const WebSocketService = {
       if (now - this.lastActivityReconnectAt < this.activityReconnectCooldownMs) {
         return;
       }
-      this.lastActivityReconnectAt = now;
-      const isOpen = this.connection && this.connection.readyState === WebSocket.OPEN;
-      if (isOpen) {
-        const lastTrafficAt = this.client?._lastPongAt || 0;
-        const stale = lastTrafficAt > 0 && (now - lastTrafficAt) >= this.serverHealthyWindowMs;
-        if (stale && this.isAuthenticated()) {
-          this.lastActivityReconnectAt = now;
-          this.log('Activity on a stale WebSocket; checking the connection');
-          this.scheduleVisibleReconnect();
-        }
-        return;
-      }
-      this.log('Activity detected and WS not open; attempting reconnect');
+      if (!this.isAuthenticated() || !this.isInitialized) return;
       if (this.sessionRestoreInProgress) {
         this.warn('Skipping activity reconnect during session restore');
         return;
       }
+      if (this._connectInFlight(now)) return;
+
+      const clientOpen = !!this.client?.isOpen;
+      const connOpen = this.connection?.readyState === WebSocket.OPEN;
+      if (clientOpen && connOpen && !this._trafficIsStale(now)) return;
+
       this.lastActivityReconnectAt = now;
-      if (this.isAuthenticated()) this.safeConnect();
+      const reason = clientOpen || connOpen
+        ? 'Activity on a stale WebSocket'
+        : 'Activity while WebSocket is down';
+      this.forceReconnect(reason);
     } catch (e) {
       // no-op
     }
@@ -296,6 +309,7 @@ const WebSocketService = {
         
         this.setupActivityListeners();
         this.setupNetworkVisibilityListeners();
+        this.startVisibleWatchdog();
         this.resetIdleTimer();
 
         this.log(`Connecting to WebSocket server for user ${user.uid}`);
@@ -315,6 +329,9 @@ const WebSocketService = {
    */
   cleanup() {
     this.log('Cleanup called');
+    this.stopVisibleWatchdog();
+    this.intentionalDisconnect = false;
+    this.ignoredCloseSocket = null;
     
     // Remove message handler
     this.removeMessageSubscription();
@@ -521,6 +538,8 @@ const WebSocketService = {
       });
 
       this.client.on('open', () => {
+        this.ignoredCloseSocket = null;
+        this.intentionalDisconnect = false;
         this.connection = this.client.socket;
         this.setupActivityListeners();
         this.resetIdleTimer();
@@ -613,10 +632,15 @@ const WebSocketService = {
 
       this.client.on('close', (event) => {
         const closedSocket = event?.target;
+        if (closedSocket && this.ignoredCloseSocket && closedSocket === this.ignoredCloseSocket) {
+          this.ignoredCloseSocket = null;
+          return;
+        }
         if (closedSocket && this.client?.socket && closedSocket !== this.client.socket) {
           return;
         }
         this.warn('Socket closed', { code: event?.code, reason: event?.reason, wasClean: event?.wasClean });
+        const wasEstablished = this.connectionEstablished;
         this.connection = null;
         this.userId = null;
         this.connectionEstablished = false;
@@ -629,22 +653,33 @@ const WebSocketService = {
           return;
         }
 
-        const likelyHandshakeFailure = !this.connectionEstablished && event.code === 1006;
+        const likelyHandshakeFailure = !wasEstablished && event.code === 1006;
         if (likelyHandshakeFailure) {
           this.error('Possible handshake/auth failure (1006). Forcing restore-and-reconnect');
           this.attemptRefreshAndReconnect();
           return;
         }
 
-        const shouldReconnect = !event.wasClean &&
-                               event.code !== 1000 &&
-                               event.code !== 1001 &&
-                               this.isInitialized &&
-                               this.isOnline;
+        // Idle and hidden-grace disconnects are intentional. Everything else
+        // while the page is showing should come back, including a clean 1000.
+        // The server uses 1000 when it drops a session that stopped ponging.
+        if (this.intentionalDisconnect) return;
+
+        const visible = typeof document === 'undefined' || document.visibilityState !== 'hidden';
+        const shouldReconnect = visible && this.isInitialized && this.isOnline;
         if (shouldReconnect) {
           this.connectionAttempts++;
           if (!this.isAuthenticated()) {
             this.warn('Reconnect skipped — not authenticated');
+            return;
+          }
+          if (event.code === 1000 || event.code === 1001) {
+            const justReconnected = this.lastForceReconnectAt && (Date.now() - this.lastForceReconnectAt) < this.forceReconnectCooldownMs;
+            if (justReconnected) {
+              this.scheduleReconnect();
+              return;
+            }
+            this.forceReconnect('Server closed the WebSocket');
             return;
           }
           this.scheduleReconnect();
@@ -668,8 +703,10 @@ const WebSocketService = {
   
   disconnectUser(reason = "User disconnected intentionally") {
     this.log(`DisconnectUser called`);
+    this.intentionalDisconnect = true;
     
     if (this.client && this.client.socket) {
+      this.ignoredCloseSocket = this.client.socket;
       this.log(`Disconnecting user ${this.userId}`);
       
       try {
@@ -681,6 +718,8 @@ const WebSocketService = {
       this.connection = null;
       this.userId = null;
       this.connectionEstablished = false;
+      this.isConnecting = false;
+      this.connectStartedAt = null;
     } else {
       this.log(`No active connection to disconnect`);
     }
@@ -821,40 +860,74 @@ const WebSocketService = {
   async ensureLiveOnVisible(generation) {
     if (generation !== this.visibleCheckGeneration) return;
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    // Always open a new socket. readyState and a ping probe both lie after
+    // sleep: the browser can still report OPEN, and a frame buffered from
+    // before the server dropped the session makes a probe look successful.
+    this.forceReconnect('Page visible');
+  },
+  _pageIsVisible() {
+    return typeof document === 'undefined' || document.visibilityState !== 'hidden';
+  },
+  _connectInFlight(now = Date.now()) {
+    return !!(this.isConnecting && this.connectStartedAt && (now - this.connectStartedAt) < this.connectTimeoutMs);
+  },
+  _trafficIsStale(now = Date.now()) {
+    const lastTrafficAt = this.client?._lastPongAt || this.client?._openedAt || 0;
+    return !lastTrafficAt || (now - lastTrafficAt) >= this.serverHealthyWindowMs;
+  },
+  forceReconnect(reason) {
+    if (!this._pageIsVisible()) return;
     if (!this.isOnline || !this.isAuthenticated() || !this.isInitialized) return;
-
+    const now = Date.now();
+    const recentlyForced = this.lastForceReconnectAt && (now - this.lastForceReconnectAt) < this.forceReconnectCooldownMs;
+    if (recentlyForced && (!!this.client?.isOpen || this.isConnecting)) return;
+    if (!recentlyForced && reason !== 'Page visible' && reason !== 'Timers resumed while the page is visible' && this._connectInFlight(now)) return;
+    this.lastForceReconnectAt = now;
+    this.intentionalDisconnect = false;
     this.connectionAttempts = 0;
     try { this.backoff?.reset(); } catch (_) {}
-
-    if (!this.client?.isOpen) {
-      const connecting = this.client?.socket?.readyState === WebSocket.CONNECTING;
-      const startedAt = this.connectStartedAt || 0;
-      if (this.isConnecting && connecting && startedAt && (Date.now() - startedAt) < 5000) {
-        return;
-      }
-      this.log('Tab visible with WebSocket down; reconnecting');
-      this.replaceConnection('Tab visible');
-      return;
-    }
-
-    const lastTrafficAt = this.client._lastPongAt || 0;
-    const stale = lastTrafficAt > 0 && (Date.now() - lastTrafficAt) >= this.serverHealthyWindowMs;
-    if (stale) {
-      this.log('Tab visible and WebSocket is stale; reconnecting');
-      this.replaceConnection('Stale after background');
-      return;
-    }
-
-    try {
-      await this.client.probe(this.probeTimeoutMs);
-    } catch (e) {
-      if (generation !== this.visibleCheckGeneration) return;
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      this.log('Visible liveness probe failed; reconnecting');
-      this.replaceConnection('Liveness probe failed');
+    this.log('Forcing WebSocket reconnect:', reason);
+    this.replaceConnection(reason);
+  },
+  startVisibleWatchdog() {
+    this.stopVisibleWatchdog();
+    this.lastWatchdogTickAt = Date.now();
+    this.watchdogTimer = setInterval(() => this.onWatchdogTick(), this.watchdogIntervalMs);
+  },
+  stopVisibleWatchdog() {
+    if (this.watchdogTimer) {
+      clearInterval(this.watchdogTimer);
+      this.watchdogTimer = null;
     }
   },
+  onWatchdogTick() {
+    const now = Date.now();
+    const gap = now - (this.lastWatchdogTickAt || now);
+    this.lastWatchdogTickAt = now;
+    if (!this._pageIsVisible()) return;
+    if (!this.isOnline || !this.isAuthenticated() || !this.isInitialized) return;
+
+    if (gap >= this.serverHealthyWindowMs) {
+      this.forceReconnect('Timers resumed while the page is visible');
+      return;
+    }
+
+    const clientOpen = !!this.client?.isOpen;
+    const connOpen = this.connection?.readyState === WebSocket.OPEN;
+    if (clientOpen || connOpen) {
+      if (clientOpen !== connOpen || this._trafficIsStale(now)) {
+        this.forceReconnect('Visible WebSocket is not live');
+      }
+      return;
+    }
+    if (this.intentionalDisconnect) return;
+    if (this._connectInFlight(now)) return;
+    this.forceReconnect('Visible without a live WebSocket');
+  },
   replaceConnection(reason) {
+    const oldSocket = this.client?.socket || null;
+    if (oldSocket) this.ignoredCloseSocket = oldSocket;
+    this.intentionalDisconnect = false;
     try { this.client?.disconnect(1000, reason); } catch (_) {}
     this.connection = null;
     this.userId = null;
@@ -877,6 +950,7 @@ const WebSocketService = {
     const stillHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
     if (!stillHidden) {
       this.resumeIdleAfterHidden();
+      this.forceReconnect('Page visible after hidden grace');
       return;
     }
     this.log('Hidden grace period elapsed, disconnecting WebSocket');

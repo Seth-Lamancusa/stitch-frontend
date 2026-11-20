@@ -15,6 +15,7 @@ export default class NetworkVisibility {
     this._boundPageHide = this._handlePageHide.bind(this);
     this._boundFreeze = this._handleFreeze.bind(this);
     this._boundResume = this._handleResume.bind(this);
+    this._boundFocus = this._handleFocus.bind(this);
     this._active = false;
   }
 
@@ -30,6 +31,7 @@ export default class NetworkVisibility {
       // Chrome freezes background pages without another visibility event on thaw.
       document.addEventListener('freeze', this._boundFreeze);
       document.addEventListener('resume', this._boundResume);
+      window.addEventListener('focus', this._boundFocus);
     } catch (_) {}
     this._active = true;
   }
@@ -44,6 +46,7 @@ export default class NetworkVisibility {
       window.removeEventListener('pagehide', this._boundPageHide);
       document.removeEventListener('freeze', this._boundFreeze);
       document.removeEventListener('resume', this._boundResume);
+      window.removeEventListener('focus', this._boundFocus);
     } catch (_) {}
     this._active = false;
   }
@@ -79,6 +82,12 @@ export default class NetworkVisibility {
   }
 
   _handleResume() {
+    try { this.onVisible(); } catch (_) {}
+  }
+
+  _handleFocus() {
+    // Screen wake and app switch sometimes restore focus without a
+    // visibilitychange. Treat that the same as becoming visible.
     try { this.onVisible(); } catch (_) {}
   }
 }
