@@ -6,9 +6,9 @@
           type="button"
           class="nav-button nav-prev"
           :class="{ disabled: !hasPrevSibling, 'target-is-stitch': hasPrevStitch }"
-          :title="hasPrevSibling ? 'A function in this group has a previous reply' : 'Expand'"
-          aria-label="Expand"
-          @click="emit('expand')"
+          :title="sideTitle('prev')"
+          :aria-label="sideLabel('prev')"
+          @click="onSide('prev')"
         >
           <div class="triangle-icon left-triangle"></div>
         </button>
@@ -16,9 +16,9 @@
           type="button"
           class="nav-button nav-next"
           :class="{ disabled: !hasNextSibling, 'target-is-stitch': hasNextStitch }"
-          :title="hasNextSibling ? 'A function in this group has a next reply' : 'Expand'"
-          aria-label="Expand"
-          @click="emit('expand')"
+          :title="sideTitle('next')"
+          :aria-label="sideLabel('next')"
+          @click="onSide('next')"
         >
           <div class="triangle-icon right-triangle"></div>
         </button>
@@ -28,9 +28,9 @@
         type="button"
         class="group-sibling-hint"
         :class="{ 'is-available': hasPrevSibling }"
-        :title="hasPrevSibling ? 'A function in this group has a previous reply' : 'Expand'"
-        aria-label="Expand"
-        @click="emit('expand')"
+        :title="sideTitle('prev')"
+        :aria-label="sideLabel('prev')"
+        @click="onSide('prev')"
       >
         <svg class="hint-chevron" viewBox="0 0 16 16" aria-hidden="true">
           <path d="M10 3.5 L5 8 L10 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
@@ -53,9 +53,9 @@
         type="button"
         class="group-sibling-hint"
         :class="{ 'is-available': hasNextSibling }"
-        :title="hasNextSibling ? 'A function in this group has a next reply' : 'Expand'"
-        aria-label="Expand"
-        @click="emit('expand')"
+        :title="sideTitle('next')"
+        :aria-label="sideLabel('next')"
+        @click="onSide('next')"
       >
         <svg class="hint-chevron" viewBox="0 0 16 16" aria-hidden="true">
           <path d="M6 3.5 L11 8 L6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
@@ -104,9 +104,40 @@ const props = defineProps({
   hasNextSibling: { type: Boolean, default: false },
   hasPrevStitch: { type: Boolean, default: false },
   hasNextStitch: { type: Boolean, default: false },
+  prevNavigates: { type: Boolean, default: false },
+  nextNavigates: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['expand', 'collapse']);
+const emit = defineEmits(['expand', 'collapse', 'navigate']);
+
+function sideNavigates(direction) {
+  return direction === 'prev' ? props.prevNavigates : props.nextNavigates;
+}
+
+function sideTitle(direction) {
+  if (sideNavigates(direction)) {
+    return direction === 'prev' ? 'Previous reply' : 'Next reply';
+  }
+  const available = direction === 'prev' ? props.hasPrevSibling : props.hasNextSibling;
+  if (available) {
+    return direction === 'prev'
+      ? 'A function in this group has a previous reply'
+      : 'A function in this group has a next reply';
+  }
+  return 'Expand';
+}
+
+function sideLabel(direction) {
+  if (sideNavigates(direction)) {
+    return direction === 'prev' ? 'Previous reply' : 'Next reply';
+  }
+  return 'Expand';
+}
+
+function onSide(direction) {
+  if (sideNavigates(direction)) emit('navigate', direction);
+  else emit('expand');
+}
 
 const collapsedAriaLabel = computed(() => {
   if (!props.hasPrevSibling && !props.hasNextSibling) return undefined;

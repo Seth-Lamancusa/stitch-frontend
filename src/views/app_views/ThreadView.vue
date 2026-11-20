@@ -75,8 +75,11 @@
               :has-next-sibling="siblingHintFor(row).next"
               :has-prev-stitch="siblingHintFor(row).prevStitch"
               :has-next-stitch="siblingHintFor(row).nextStitch"
+              :prev-navigates="!!siblingHintFor(row).uniquePrev"
+              :next-navigates="!!siblingHintFor(row).uniqueNext"
               @expand="setFunctionGroupExpanded(row, true)"
               @collapse="setFunctionGroupExpanded(row, false)"
+              @navigate="navigateFunctionGroupSibling(row, $event)"
             >
               <template v-for="(message, offset) in row.messages" :key="branchRowKey(message.id, row.startIndex + offset, contextWalkActive)">
                 <function-message-row
@@ -478,6 +481,8 @@ const functionGroupSiblingHints = computed(() => {
     let next = false;
     let prevStitch = false;
     let nextStitch = false;
+    const prevTargets = [];
+    const nextTargets = [];
     row.messages.forEach((message, offset) => {
       const index = row.startIndex + offset;
       const activeParentId = index > 0 ? messages[index - 1]?.id : null;
@@ -495,8 +500,18 @@ const functionGroupSiblingHints = computed(() => {
       next = next || sides.next;
       prevStitch = prevStitch || sides.prevStitch;
       nextStitch = nextStitch || sides.nextStitch;
+      if (sides.prev) prevTargets.push({ messageId: message.id, parentId });
+      if (sides.next) nextTargets.push({ messageId: message.id, parentId });
     });
-    hints.set(functionGroupKey(row), { show, prev, next, prevStitch, nextStitch });
+    hints.set(functionGroupKey(row), {
+      show,
+      prev,
+      next,
+      prevStitch,
+      nextStitch,
+      uniquePrev: prevTargets.length === 1 ? prevTargets[0] : null,
+      uniqueNext: nextTargets.length === 1 ? nextTargets[0] : null,
+    });
   }
   return hints;
 });
@@ -508,7 +523,45 @@ function siblingHintFor(row) {
     next: false,
     prevStitch: false,
     nextStitch: false,
+    uniquePrev: null,
+    uniqueNext: null,
   };
+}
+
+async function navigateFunctionGroupSibling(row, direction) {
+  const hint = siblingHintFor(row);
+  const target = direction === 'prev' ? hint.uniquePrev : hint.uniqueNext;
+  if (!target) {
+    setFunctionGroupExpanded(row, true);
+    return;
+  }
+  try {
+    store.dispatch('navigation/clearReplyingTo');
+    const hadWalk = !!store.state.messages.contextView;
+    const success = await store.dispatch('messages/navigateToSibling', {
+      messageId: target.parentId,
+      direction,
+      fromChildId: target.messageId,
+    });
+    if (!success) {
+      setFunctionGroupExpanded(row, true);
+      return;
+    }
+    if (!hadWalk) return;
+    const newBranchChild = store.getters['messages/getBranchChild'](target.parentId);
+    if (!newBranchChild) return;
+    const nav = route.name
+      ? { name: route.name, params: { ...route.params, id: newBranchChild }, query: { ...route.query } }
+      : { path: `/messages/${newBranchChild}`, query: { ...route.query } };
+    try {
+      await router.push(nav);
+    } catch (error) {
+      console.error('[ThreadView] function group sibling navigation failed', error);
+    }
+  } catch (error) {
+    console.error('Error navigating function group sibling:', error);
+    setFunctionGroupExpanded(row, true);
+  }
 }
 
 function isFunctionGroupExpanded(row) {
